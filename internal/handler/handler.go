@@ -22,6 +22,7 @@ import (
 	"github.com/cristianadrielbraun/gofer/internal/mailauth"
 	"github.com/cristianadrielbraun/gofer/internal/models"
 	"github.com/cristianadrielbraun/gofer/internal/netguard"
+	"github.com/cristianadrielbraun/gofer/internal/providerquota"
 	"github.com/cristianadrielbraun/gofer/internal/providers"
 	"github.com/cristianadrielbraun/gofer/internal/storage"
 	"github.com/cristianadrielbraun/gofer/internal/store"
@@ -6279,7 +6280,7 @@ func (h *Handler) handleRefetchBody(w http.ResponseWriter, r *http.Request) {
 
 func (h *Handler) handlePrefetchBody(w http.ResponseWriter, r *http.Request) {
 	idStr := r.PathValue("id")
-	ctx := r.Context()
+	ctx := providerquota.Background(r.Context())
 
 	msgID, info, err := h.getMessageInfo(ctx, idStr)
 	if err != nil {

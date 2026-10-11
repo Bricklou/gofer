@@ -15,6 +15,7 @@ import (
 	"github.com/cristianadrielbraun/gofer/internal/config"
 	"github.com/cristianadrielbraun/gofer/internal/mail/imap"
 	"github.com/cristianadrielbraun/gofer/internal/models"
+	"github.com/cristianadrielbraun/gofer/internal/providerquota"
 	"github.com/cristianadrielbraun/gofer/internal/providers"
 	"github.com/cristianadrielbraun/gofer/internal/storage"
 	"github.com/cristianadrielbraun/gofer/internal/store"
@@ -2079,6 +2080,8 @@ func (o *SyncOrchestrator) SyncAccount(ctx context.Context, accountID string) bo
 }
 
 func (o *SyncOrchestrator) syncAccount(ctx context.Context, accountID string, includeIDLEFolders bool) error {
+	// Syncing yields to what the reader is doing on the same mailbox.
+	ctx = providerquota.Background(ctx)
 	if o.imapScope == nil && !o.db.IsEmailSyncEnabled(ctx, accountID) {
 		return nil
 	}

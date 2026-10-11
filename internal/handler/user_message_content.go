@@ -7,10 +7,13 @@ import (
 	"strconv"
 
 	"github.com/cristianadrielbraun/gofer/internal/mail/message"
+	"github.com/cristianadrielbraun/gofer/internal/providerquota"
 )
 
+// handleUserPrefetchBody downloads a message the reader is likely to open.
+// It yields to requests the reader is waiting on.
 func (h *Handler) handleUserPrefetchBody(w http.ResponseWriter, r *http.Request) {
-	h.handleUserFetchBody(w, r, false)
+	h.handleUserFetchBody(w, r.WithContext(providerquota.Background(r.Context())), false)
 }
 
 func (h *Handler) handleUserRefetchBody(w http.ResponseWriter, r *http.Request) {

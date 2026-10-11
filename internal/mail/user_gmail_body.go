@@ -13,6 +13,7 @@ import (
 	"time"
 
 	mailmessage "github.com/cristianadrielbraun/gofer/internal/mail/message"
+	"github.com/cristianadrielbraun/gofer/internal/providerquota"
 	"github.com/cristianadrielbraun/gofer/internal/retry"
 )
 
@@ -51,7 +52,7 @@ func getUserGmailRaw(ctx context.Context, token, providerID string) ([]byte, err
 	}
 	req.Header.Set("Authorization", "Bearer "+token)
 	req.Header.Set("Accept", "application/json")
-	response, err := http.DefaultClient.Do(req)
+	response, err := providerquota.Do(req)
 	if err != nil {
 		return nil, err
 	}

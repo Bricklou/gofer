@@ -8,19 +8,44 @@ import (
 	"net/url"
 	"strconv"
 	"strings"
+	"sync"
+	"time"
 
 	"github.com/cristianadrielbraun/gofer/internal/mail/imap"
 	"github.com/cristianadrielbraun/gofer/internal/storage"
 )
 
 // Messages synced before sizes were stored have none, so each sync looks up a
-// limited number of them. Newest messages come first.
+// limited number of them, newest first. Gmail charges 5 quota units per lookup
+// against a limit of 6,000 units a minute per mailbox, shared with syncing and
+// reading mail, so size lookups stay at a fifth of it. Outlook allows 10,000
+// requests per 10 minutes per mailbox.
 const (
 	imapSizeBackfillPerFolder  = 5000
 	gmailSizeBackfillPerSync   = 240
-	outlookSizeBackfillPerSync = 400
+	gmailSizeLookupsPerMinute  = 240
+	gmailSizeLookupWorkers     = 4
+	outlookSizeBackfillPerSync = 4000
 	outlookSizeBatchSize       = 20
 )
+
+// After the provider refuses a lookup, for example for going over its quota,
+// size lookups for that account wait this long instead of trying again on the
+// next sync.
+const sizeLookupPause = 15 * time.Minute
+
+var sizeLookupsPausedUntil sync.Map // account ID -> time.Time
+
+func sizeLookupsPaused(accountID string) bool {
+	until, ok := sizeLookupsPausedUntil.Load(accountID)
+	return ok && time.Now().Before(until.(time.Time))
+}
+
+func pauseSizeLookups(accountID string, err error) {
+	if status, ok := providerAPIStatus(err); ok && (status == http.StatusForbidden || status == http.StatusTooManyRequests || status >= http.StatusInternalServerError) {
+		sizeLookupsPausedUntil.Store(accountID, time.Now().Add(sizeLookupPause))
+	}
+}
 
 // Outlook reports the message size only as this MAPI property.
 const outlookMessageSizeProperty = "Integer 0x0E08"
@@ -41,6 +66,9 @@ func (o *SyncOrchestrator) backfillIMAPFolderSizes(ctx context.Context, client *
 }
 
 func (o *SyncOrchestrator) backfillGmailMessageSizes(ctx context.Context, accountID string) {
+	if sizeLookupsPaused(accountID) {
+		return
+	}
 	ids, err := o.gmailRepository().ListProviderMessagesMissingSize(ctx, accountID, gmailSizeBackfillPerSync)
 	if err != nil || len(ids) == 0 {
 		return
@@ -49,27 +77,55 @@ func (o *SyncOrchestrator) backfillGmailMessageSizes(ctx context.Context, accoun
 	if err != nil {
 		return
 	}
-	limiter := newGmailAPIMetadataLimiter(gmailAPIHistoricalMetadataPerMinute, gmailAPIHistoricalMetadataWorkers)
+	limiter := newGmailAPIMetadataLimiter(gmailSizeLookupsPerMinute, gmailSizeLookupWorkers)
 	defer limiter.Stop()
+	lookupCtx, stop := context.WithCancel(ctx)
+	defer stop()
+	jobs := make(chan string)
+	var mu sync.Mutex
+	var wg sync.WaitGroup
 	sizes := make(map[string]int64, len(ids))
-	for _, id := range ids {
-		if err := limiter.Wait(ctx); err != nil {
-			break
-		}
-		size, err := getGmailAPIMessageSize(ctx, token, id)
-		if providerMessageNotFound(err) {
-			sizes[id] = storage.MessageSizeUnavailable
-			continue
-		}
-		if err != nil {
-			log.Printf("gmail message size account=%s: %v", accountID, err)
-			break
-		}
-		if size <= 0 {
-			size = storage.MessageSizeUnavailable
-		}
-		sizes[id] = size
+	for range gmailSizeLookupWorkers {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for id := range jobs {
+				if limiter.Wait(lookupCtx) != nil {
+					return
+				}
+				size, err := getGmailAPIMessageSize(lookupCtx, token, id)
+				if providerMessageNotFound(err) {
+					size, err = storage.MessageSizeUnavailable, nil
+				}
+				if err != nil {
+					if lookupCtx.Err() == nil {
+						log.Printf("gmail message size account=%s: %v", accountID, err)
+						pauseSizeLookups(accountID, err)
+					}
+					// Stop on the first failure, such as a rate limit; the
+					// next sync continues.
+					stop()
+					return
+				}
+				if size <= 0 {
+					size = storage.MessageSizeUnavailable
+				}
+				mu.Lock()
+				sizes[id] = size
+				mu.Unlock()
+			}
+		}()
 	}
+feed:
+	for _, id := range ids {
+		select {
+		case jobs <- id:
+		case <-lookupCtx.Done():
+			break feed
+		}
+	}
+	close(jobs)
+	wg.Wait()
 	if err := o.gmailRepository().SetProviderMessageSizes(ctx, accountID, sizes); err != nil {
 		log.Printf("save gmail message sizes account=%s: %v", accountID, err)
 	}
@@ -89,7 +145,7 @@ func getGmailAPIMessageSize(ctx context.Context, token, providerMessageID string
 
 func (o *SyncOrchestrator) backfillOutlookMessageSizes(ctx context.Context, accountID string) {
 	graphTokens, ok := o.tokenProvider.(graphMailTokenProvider)
-	if !ok {
+	if !ok || sizeLookupsPaused(accountID) {
 		return
 	}
 	ids, err := o.outlookRepository().ListProviderMessagesMissingSize(ctx, accountID, outlookSizeBackfillPerSync)
@@ -105,6 +161,7 @@ func (o *SyncOrchestrator) backfillOutlookMessageSizes(ctx context.Context, acco
 		chunk := ids[start:min(start+outlookSizeBatchSize, len(ids))]
 		if err := fetchOutlookMessageSizes(ctx, token, chunk, sizes); err != nil {
 			log.Printf("outlook message sizes account=%s: %v", accountID, err)
+			pauseSizeLookups(accountID, err)
 			break
 		}
 	}
