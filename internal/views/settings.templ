@@ -4849,6 +4849,7 @@ templ ContactSyncSettings(data models.EditAccountData) {
 							@CardDAVAutodiscoverButton(data.AccountID, fmt.Sprintf("account-contact-sync-fields-%s", data.AccountID), fmt.Sprintf("account-contact-sync-status-%s", data.AccountID))
 						</div>
 						@input.Input(input.Props{Name: "base_url", Type: input.TypeURL, Value: data.ContactSync.BaseURL, Placeholder: "https://dav.example.com/"})
+						<div data-server-check-url class="mt-1.5 hidden space-y-1" aria-live="polite"></div>
 					</div>
 					<label class="sm:col-span-2 flex items-center gap-2 cursor-pointer">
 						@checkbox.Checkbox(checkbox.Props{
@@ -4901,11 +4902,13 @@ templ ContactSyncSettings(data models.EditAccountData) {
 						<div class="sm:col-span-2 rounded-md border border-border bg-background/35 px-3 py-2" data-carddav-addressbook-section data-carddav-manual-addressbook>
 							<label class="text-xs font-medium text-muted-foreground mb-1.5 block">Exact address book URL</label>
 							@input.Input(input.Props{Name: "addressbook_url", Type: input.TypeURL, Value: data.ContactSync.AddressBookURL, Placeholder: "https://dav.example.com/addressbooks/user/default/"})
+							<div data-server-check-url class="mt-1.5 hidden space-y-1" aria-live="polite"></div>
 						</div>
 					} else {
 						<div class="hidden sm:col-span-2 rounded-md border border-border bg-background/35 px-3 py-2" data-carddav-addressbook-section data-carddav-manual-addressbook>
 							<label class="text-xs font-medium text-muted-foreground mb-1.5 block">Exact address book URL</label>
 							@input.Input(input.Props{Name: "addressbook_url", Type: input.TypeURL, Placeholder: "https://dav.example.com/addressbooks/user/default/"})
+							<div data-server-check-url class="mt-1.5 hidden space-y-1" aria-live="polite"></div>
 						</div>
 					}
 				</div>
@@ -4993,6 +4996,7 @@ templ CalendarSyncSettingsPanel(data models.EditAccountData, message string, isE
 							</button>
 						</div>
 						@input.Input(input.Props{Name: "caldav_url", Type: input.TypeURL, Value: data.CalendarSync.CalDAVBaseURL, Placeholder: "https://cdav.migadu.com"})
+						<div data-server-check-url class="mt-1.5 hidden space-y-1" aria-live="polite"></div>
 					</div>
 					<label class="sm:col-span-2 flex cursor-pointer items-center gap-2">
 						@checkbox.Checkbox(checkbox.Props{
@@ -5268,6 +5272,7 @@ templ AddAccountPostCreateStep(data models.EditAccountData) {
 							@CardDAVAutodiscoverButton(accountID, fmt.Sprintf("add-contact-sync-fields-%s", accountID), fmt.Sprintf("add-contact-sync-status-%s", accountID))
 						</div>
 						@input.Input(input.Props{Name: "base_url", Type: input.TypeURL, Placeholder: "https://dav.example.com/"})
+						<div data-server-check-url class="mt-1.5 hidden space-y-1" aria-live="polite"></div>
 					</div>
 					<label class="flex items-center gap-2 cursor-pointer sm:col-span-2">
 						@checkbox.Checkbox(checkbox.Props{
@@ -5291,6 +5296,7 @@ templ AddAccountPostCreateStep(data models.EditAccountData) {
 					<div class="hidden sm:col-span-2 rounded-md border border-border bg-background/35 px-3 py-2" data-carddav-addressbook-section data-carddav-manual-addressbook>
 						<label class="mb-1.5 block text-xs font-medium text-muted-foreground">Exact address book URL</label>
 						@input.Input(input.Props{Name: "addressbook_url", Type: input.TypeURL, Placeholder: "https://dav.example.com/addressbooks/user/default/"})
+						<div data-server-check-url class="mt-1.5 hidden space-y-1" aria-live="polite"></div>
 					</div>
 				</div>
 			</div>

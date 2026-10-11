@@ -273,8 +273,28 @@ function toggleUnencryptedTransportWarning(input) {
 // for the fields' latest values is shown.
 var accountServerCheckField = /^(imap|smtp)_(host|port|tls_mode)$/
 
+// Calendar and contacts server addresses are checked the same way.
+var accountServerCheckURLField = /^(base_url|caldav_url|addressbook_url)$/
+
+function accountServerURLNote(input) {
+  for (var node = input.parentElement, depth = 0; node && depth < 3; node = node.parentElement, depth++) {
+    var note = node.querySelector(":scope > [data-server-check-url]")
+    if (note) return note
+  }
+  return null
+}
+
 function scheduleAccountServerCheck(event) {
   var input = event.target
+  if (input && input.name && input.type === "url" && accountServerCheckURLField.test(input.name)) {
+    var note = accountServerURLNote(input)
+    if (!note) return
+    clearTimeout(note._serverCheckTimer)
+    note._serverCheckTimer = setTimeout(function () {
+      runAccountServerURLCheck(input, note)
+    }, 600)
+    return
+  }
   if (!input || !input.name || !accountServerCheckField.test(input.name)) return
   var form = input.form || (input.closest && input.closest("form"))
   var protocol = input.name.split("_")[0]
@@ -284,6 +304,16 @@ function scheduleAccountServerCheck(event) {
   target._serverCheckTimer = setTimeout(function () {
     runAccountServerCheck(form, protocol, target)
   }, 600)
+}
+
+function runAccountServerURLCheck(input, target) {
+  var address = String(input.value || "").trim()
+  if (!/^https?:\/\/[^/]/i.test(address)) {
+    target._serverCheckKey = ""
+    renderAccountServerCheck(target, [])
+    return
+  }
+  fetchAccountServerCheck(target, new URLSearchParams({ url: address }).toString())
 }
 
 function runAccountServerCheck(form, protocol, target) {
@@ -298,7 +328,10 @@ function runAccountServerCheck(form, protocol, target) {
     renderAccountServerCheck(target, [])
     return
   }
-  var key = new URLSearchParams({ protocol: protocol, host: host, port: port, tls_mode: field("tls_mode") }).toString()
+  fetchAccountServerCheck(target, new URLSearchParams({ protocol: protocol, host: host, port: port, tls_mode: field("tls_mode") }).toString())
+}
+
+function fetchAccountServerCheck(target, key) {
   if (target._serverCheckKey === key) return
   target._serverCheckKey = key
   if (target._serverCheckAbort) target._serverCheckAbort.abort()
@@ -344,6 +377,10 @@ function checkAccountServers(root) {
   root.querySelectorAll("[data-server-check]").forEach(function (target) {
     var form = target.closest("form")
     if (form) runAccountServerCheck(form, target.getAttribute("data-server-check"), target)
+  })
+  root.querySelectorAll("[data-server-check-url]").forEach(function (target) {
+    var input = target.parentElement && target.parentElement.querySelector('input[type="url"]')
+    if (input && accountServerCheckURLField.test(input.name)) runAccountServerURLCheck(input, target)
   })
 }
 

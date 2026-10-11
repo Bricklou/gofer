@@ -91,3 +91,31 @@ func TestAccountServerCheckLinksWhereThePersonCanApprove(t *testing.T) {
 		}
 	}
 }
+
+// Calendar and contacts server addresses get the same note as mail servers.
+func TestAccountServerCheckReportsRefusedDAVAddresses(t *testing.T) {
+	h, db := newAccountOwnershipTestHandler(t)
+	h.auth = auth.NewManager(&auth.Config{Enabled: true, Mode: auth.ModeManaged, BaseURL: "https://gofer.example"}, db)
+	check := func(address string) []accountServerNote {
+		return serverCheck(t, h, url.Values{"url": {address}})
+	}
+
+	for _, address := range []string{"https://8.8.8.8/dav/", "not a url", "ftp://192.168.1.20/", "https:///dav"} {
+		if notes := check(address); len(notes) != 0 {
+			t.Fatalf("%q produced notes %#v", address, notes)
+		}
+	}
+	notes := check("https://192.168.1.20/dav/")
+	if len(notes) != 1 || notes[0].Level != "blocked" || !strings.Contains(notes[0].Text, "HTTPS private target exception for 192.168.1.20:443") {
+		t.Fatalf("unapproved private DAV server = %#v", notes)
+	}
+	if notes := check("http://192.168.1.20:8008/dav/"); len(notes) != 1 || !strings.Contains(notes[0].Text, "HTTP private target exception for 192.168.1.20:8008") {
+		t.Fatalf("private DAV server on its own port = %#v", notes)
+	}
+	if err := db.AddPrivateTargetException(t.Context(), "https", "192.168.1.20", 443, "administrator"); err != nil {
+		t.Fatal(err)
+	}
+	if notes := check("https://192.168.1.20/dav/"); len(notes) != 1 || notes[0].Level != "approved" {
+		t.Fatalf("approved private DAV server = %#v", notes)
+	}
+}

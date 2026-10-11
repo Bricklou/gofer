@@ -6,6 +6,7 @@ import (
 	"log"
 	"net"
 	"net/http"
+	"net/url"
 	"strconv"
 	"strings"
 	"time"
@@ -25,14 +26,18 @@ type accountServerNote struct {
 // handleAccountServerCheck tells the account form, while the person is still
 // filling it in, whether Gofer will refuse the server they entered: one on a
 // private network, or an unencrypted connection, without a mail security
-// exception. It only looks up the server's name and never connects to it.
+// exception. Calendar and contacts servers are checked from their address.
+// It only looks up the server's name and never connects to it.
 func (h *Handler) handleAccountServerCheck(w http.ResponseWriter, r *http.Request) {
 	query := r.URL.Query()
 	protocol := strings.ToLower(strings.TrimSpace(query.Get("protocol")))
 	host := normalizePrivateTargetHost(query.Get("host"))
 	port, portErr := strconv.Atoi(strings.TrimSpace(query.Get("port")))
+	if address := strings.TrimSpace(query.Get("url")); address != "" {
+		protocol, host, port, portErr = davServerEndpoint(address)
+	}
 	notes := []accountServerNote{}
-	if (protocol == "imap" || protocol == "smtp") && validPrivateTargetHost(host) && portErr == nil && port >= 1 && port <= 65535 {
+	if (protocol == "imap" || protocol == "smtp" || protocol == "http" || protocol == "https") && validPrivateTargetHost(host) && portErr == nil && port >= 1 && port <= 65535 {
 		ctx, cancel := context.WithTimeout(r.Context(), 3*time.Second)
 		defer cancel()
 		notes = h.accountServerNotes(ctx, protocol, host, port, strings.ToLower(strings.TrimSpace(query.Get("tls_mode"))))
@@ -40,6 +45,26 @@ func (h *Handler) handleAccountServerCheck(w http.ResponseWriter, r *http.Reques
 	w.Header().Set("Content-Type", "application/json")
 	w.Header().Set("Cache-Control", "no-store")
 	_ = json.NewEncoder(w).Encode(map[string]any{"notes": notes})
+}
+
+// davServerEndpoint returns the scheme, host and port Gofer connects to for a
+// calendar or contacts server address.
+func davServerEndpoint(address string) (string, string, int, error) {
+	parsed, err := url.Parse(address)
+	if err != nil {
+		return "", "", 0, err
+	}
+	scheme := strings.ToLower(parsed.Scheme)
+	port := 443
+	if scheme == "http" {
+		port = 80
+	}
+	if text := parsed.Port(); text != "" {
+		if port, err = strconv.Atoi(text); err != nil {
+			return "", "", 0, err
+		}
+	}
+	return scheme, normalizePrivateTargetHost(parsed.Hostname()), port, nil
 }
 
 func (h *Handler) accountServerNotes(ctx context.Context, protocol, host string, port int, tlsMode string) []accountServerNote {
