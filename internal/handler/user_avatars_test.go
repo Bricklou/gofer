@@ -19,6 +19,7 @@ import (
 	avatarresolver "github.com/cristianadrielbraun/gofer/internal/avatar"
 	"github.com/cristianadrielbraun/gofer/internal/mail"
 	"github.com/cristianadrielbraun/gofer/internal/models"
+	"github.com/cristianadrielbraun/gofer/internal/netguard"
 	"github.com/cristianadrielbraun/gofer/internal/storage"
 )
 
@@ -42,6 +43,7 @@ func TestOwnedAvatarWarmupSharesWorkerAndScopesEvents(t *testing.T) {
 		}
 		return &http.Response{StatusCode: 200, Header: http.Header{"Content-Type": []string{"image/png"}}, Body: io.NopCloser(strings.NewReader("shared-avatar")), Request: r}, nil
 	})
+	t.Cleanup(netguard.UseTransportForTests(http.DefaultTransport))
 	t.Cleanup(func() { http.DefaultTransport = previous })
 	t.Cleanup(func() { releaseOnce.Do(func() { close(release) }); cache.WaitAvatarWorkers() })
 	cache.startAvatarWarmupWorkers(t.Context())
@@ -190,6 +192,7 @@ func TestOwnedAvatarWarmupCancellationJoinsProvider(t *testing.T) {
 		<-r.Context().Done()
 		return nil, r.Context().Err()
 	})
+	t.Cleanup(netguard.UseTransportForTests(http.DefaultTransport))
 	t.Cleanup(func() { http.DefaultTransport = previous })
 	t.Cleanup(cache.WaitAvatarWorkers)
 	cache.startAvatarWarmupWorkers(t.Context())

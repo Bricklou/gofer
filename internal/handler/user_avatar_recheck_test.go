@@ -13,6 +13,7 @@ import (
 
 	"github.com/cristianadrielbraun/gofer/internal/auth"
 	avatarresolver "github.com/cristianadrielbraun/gofer/internal/avatar"
+	"github.com/cristianadrielbraun/gofer/internal/netguard"
 	"github.com/cristianadrielbraun/gofer/internal/storage"
 )
 
@@ -74,6 +75,7 @@ func TestOwnedAvatarSenderRecheckHTTPAndLifecycle(t *testing.T) {
 				}
 				return &http.Response{StatusCode: 200, Header: http.Header{"Content-Type": []string{"image/png"}}, Body: io.NopCloser(strings.NewReader("forced-avatar")), Request: r}, nil
 			})
+			t.Cleanup(netguard.UseTransportForTests(http.DefaultTransport))
 			t.Cleanup(func() { http.DefaultTransport = previous })
 			t.Cleanup(func() { unlock(); cancel(); f.admin.WaitAvatarWorkers() })
 			if err := f.h.userStorage.RecordUserAvatarInterests(t.Context(), "alice", []string{"sender@example.com"}); err != nil {
@@ -154,6 +156,7 @@ func TestOwnedAvatarSenderRecheckRejectsQueuedRevokedActor(t *testing.T) {
 		}
 		return &http.Response{StatusCode: 200, Header: http.Header{"Content-Type": []string{"image/png"}}, Body: io.NopCloser(strings.NewReader("revoked-avatar")), Request: r}, nil
 	})
+	t.Cleanup(netguard.UseTransportForTests(http.DefaultTransport))
 	t.Cleanup(func() { http.DefaultTransport = previous })
 	t.Cleanup(func() { unlock(); f.admin.WaitAvatarWorkers() })
 	for _, email := range []string{"sender@example.com", "orphan@example.com"} {
@@ -213,6 +216,7 @@ func TestOwnedAvatarSenderRecheckQueueSaturationAndDrain(t *testing.T) {
 		<-r.Context().Done()
 		return nil, r.Context().Err()
 	})
+	t.Cleanup(netguard.UseTransportForTests(http.DefaultTransport))
 	t.Cleanup(func() { http.DefaultTransport = previous })
 	t.Cleanup(func() { cancel(); f.admin.WaitAvatarWorkers() })
 	submit := func(n int) *httptest.ResponseRecorder {

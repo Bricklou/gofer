@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"context"
 	cryptorand "crypto/rand"
-	"crypto/tls"
 	"database/sql"
 	"encoding/base64"
 	"encoding/json"
@@ -34,7 +33,6 @@ import (
 	"log"
 	"math/rand"
 	"mime"
-	"net"
 	"net/http"
 	"net/url"
 	"os"
@@ -188,8 +186,11 @@ func New(db *storage.DB, accountStore *config.AccountStore, syncer *mail.SyncOrc
 			return imap.NewClient(ctx, cfg, password)
 		},
 		remoteResourceDownloader: newRemoteResourceDownloader(privateTargetAllowed(db)),
-		providerAvatarHTTPClient: &http.Client{Timeout: 15 * time.Second},
+		// Provider avatar addresses come from provider responses; they never
+		// need a private address.
+		providerAvatarHTTPClient: &http.Client{Timeout: 15 * time.Second, Transport: netguard.NewHTTPTransport(nil)},
 	}
+	setDAVPrivateTargetPolicy(privateTargetAllowed(db))
 	db.SetContactActivityHook(func(event storage.ContactActivityNotification) {
 		if h.syncer == nil {
 			return
@@ -3720,7 +3721,7 @@ func (h *Handler) handleSavePushSubscription(w http.ResponseWriter, r *http.Requ
 	req.Endpoint = strings.TrimSpace(req.Endpoint)
 	req.Keys.P256DH = strings.TrimSpace(req.Keys.P256DH)
 	req.Keys.Auth = strings.TrimSpace(req.Keys.Auth)
-	if req.Endpoint == "" || req.Keys.P256DH == "" || req.Keys.Auth == "" {
+	if req.Endpoint == "" || req.Keys.P256DH == "" || req.Keys.Auth == "" || !validPushEndpoint(req.Endpoint) {
 		http.Error(w, "invalid subscription", http.StatusBadRequest)
 		return
 	}
@@ -4227,43 +4228,10 @@ func (h *Handler) handleAllowRemoteContent(w http.ResponseWriter, r *http.Reques
 // through netguard: private addresses only when an administrator approved
 // them, no proxy from the environment, and each redirect is checked again
 // when it connects.
-func newRemoteResourceDownloader(allowPrivate func(ctx context.Context, protocol, host string, port int) bool) func(context.Context, string) ([]byte, error) {
-	dialer := &net.Dialer{Timeout: 10 * time.Second}
-	dial := func(ctx context.Context, protocol, address string) (net.Conn, error) {
-		host, portText, err := net.SplitHostPort(address)
-		if err != nil {
-			return nil, err
-		}
-		port, err := strconv.Atoi(portText)
-		if err != nil {
-			return nil, err
-		}
-		allowed := allowPrivate != nil && allowPrivate(ctx, protocol, host, port)
-		return netguard.Dial(ctx, dialer, protocol, host, port, allowed)
-	}
+func newRemoteResourceDownloader(allowPrivate netguard.PrivatePolicy) func(context.Context, string) ([]byte, error) {
 	client := &http.Client{
-		Timeout: 10 * time.Second,
-		Transport: &http.Transport{
-			Proxy: nil,
-			DialContext: func(ctx context.Context, _, address string) (net.Conn, error) {
-				return dial(ctx, "http", address)
-			},
-			DialTLSContext: func(ctx context.Context, _, address string) (net.Conn, error) {
-				conn, err := dial(ctx, "https", address)
-				if err != nil {
-					return nil, err
-				}
-				host, _, _ := net.SplitHostPort(address)
-				tlsConn := tls.Client(conn, &tls.Config{ServerName: host, MinVersion: tls.VersionTLS12})
-				if err := tlsConn.HandshakeContext(ctx); err != nil {
-					_ = conn.Close()
-					return nil, err
-				}
-				return tlsConn, nil
-			},
-			ResponseHeaderTimeout:  10 * time.Second,
-			MaxResponseHeaderBytes: 64 << 10,
-		},
+		Timeout:   10 * time.Second,
+		Transport: netguard.NewHTTPTransport(allowPrivate),
 		CheckRedirect: func(req *http.Request, via []*http.Request) error {
 			if len(via) >= 5 {
 				return errors.New("remote resource redirected too many times")
@@ -4299,7 +4267,7 @@ func newRemoteResourceDownloader(allowPrivate func(ctx context.Context, protocol
 }
 
 // privateTargetAllowed reads the administrator's private-target exceptions.
-func privateTargetAllowed(db *storage.DB) func(context.Context, string, string, int) bool {
+func privateTargetAllowed(db *storage.DB) netguard.PrivatePolicy {
 	return func(ctx context.Context, protocol, host string, port int) bool {
 		allowed, err := db.IsPrivateTargetAllowed(ctx, protocol, host, port)
 		if err != nil {

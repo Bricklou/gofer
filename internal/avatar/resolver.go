@@ -9,6 +9,7 @@ import (
 	"io"
 	"net"
 	"net/http"
+	"net/netip"
 	"net/url"
 	"regexp"
 	"strings"
@@ -17,6 +18,8 @@ import (
 
 	"golang.org/x/net/html"
 	"golang.org/x/net/publicsuffix"
+
+	"github.com/cristianadrielbraun/gofer/internal/netguard"
 )
 
 const (
@@ -63,7 +66,9 @@ type inFlightLookup struct {
 
 func NewResolver() *Resolver {
 	return &Resolver{
-		client:       &http.Client{Timeout: 4 * time.Second},
+		// Avatar addresses come from senders' domains, so they never need a
+		// private address; netguard also checks every redirect as it connects.
+		client:       &http.Client{Timeout: 4 * time.Second, Transport: netguard.NewHTTPTransport(nil)},
 		lookupTXT:    net.DefaultResolver.LookupTXT,
 		lookupIPAddr: net.DefaultResolver.LookupIPAddr,
 		cache:        make(map[string]cacheEntry),
@@ -691,13 +696,8 @@ func (r *Resolver) validateRemoteAvatarRedirect(req *http.Request) error {
 }
 
 func isPrivateIP(ip net.IP) bool {
-	if ip == nil {
-		return true
-	}
-	if ip.IsLoopback() || ip.IsPrivate() || ip.IsLinkLocalUnicast() || ip.IsLinkLocalMulticast() || ip.IsUnspecified() || ip.IsMulticast() {
-		return true
-	}
-	return false
+	addr, ok := netip.AddrFromSlice(ip)
+	return !ok || netguard.IsPrivate(addr)
 }
 
 func parseIconLinks(baseURL string, data []byte) []string {

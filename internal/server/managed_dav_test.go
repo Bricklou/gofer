@@ -14,6 +14,7 @@ import (
 
 	"github.com/cristianadrielbraun/gofer/internal/config"
 	"github.com/cristianadrielbraun/gofer/internal/models"
+	"github.com/cristianadrielbraun/gofer/internal/netguard"
 	"github.com/cristianadrielbraun/gofer/internal/storage"
 )
 
@@ -122,6 +123,7 @@ func TestManagedApplicationNativeDAVWorkersHTTPIsolationAndRestart(t *testing.T)
 	// Trust only this local TLS fixture's certificate; requests still use the
 	// production DAV URLs, Basic authentication, HTTP client and XML parsers.
 	http.DefaultTransport = server.Client().Transport
+	t.Cleanup(netguard.UseTransportForTests(http.DefaultTransport))
 	t.Cleanup(func() { http.DefaultTransport = previous })
 	f := newManagedMailFixture(t, func(db *storage.DB, accounts *config.AccountStore, ids map[string]string) {
 		for _, owner := range []string{"alice", "bob"} {

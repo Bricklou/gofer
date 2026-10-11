@@ -13,6 +13,7 @@ import (
 
 	webpush "github.com/SherClockHolmes/webpush-go"
 	"github.com/cristianadrielbraun/gofer/internal/mail"
+	"github.com/cristianadrielbraun/gofer/internal/netguard"
 	"github.com/cristianadrielbraun/gofer/internal/storage"
 )
 
@@ -26,6 +27,11 @@ type Service struct {
 	vapidPrivateKey  string
 	vapidSubject     string
 }
+
+// pushHTTPClient delivers notifications to the push service each browser
+// named when it subscribed. Browsers supply that address, so delivery goes
+// through netguard and never reaches a private network.
+var pushHTTPClient = &http.Client{Timeout: 15 * time.Second, Transport: netguard.NewHTTPTransport(nil)}
 
 func New(db *storage.DB, events *mail.EventBus, vapidPublicKey, vapidPrivateKey, vapidSubject string) *Service {
 	return &Service{
@@ -176,6 +182,7 @@ func (s *Service) sendWebPush(ctx context.Context, userID string, event mail.Eve
 		}
 		pushCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
 		resp, err := s.sendNotification(pushCtx, payload, pushSub, &webpush.Options{
+			HTTPClient:      pushHTTPClient,
 			Subscriber:      s.vapidSubject,
 			VAPIDPublicKey:  s.vapidPublicKey,
 			VAPIDPrivateKey: s.vapidPrivateKey,
@@ -332,6 +339,7 @@ func (s *Service) SendTestPush(ctx context.Context, userID, endpoint string) err
 		Endpoint: target.Endpoint,
 		Keys:     webpush.Keys{Auth: target.Auth, P256dh: target.P256DH},
 	}, &webpush.Options{
+		HTTPClient:      pushHTTPClient,
 		Subscriber:      s.vapidSubject,
 		VAPIDPublicKey:  s.vapidPublicKey,
 		VAPIDPrivateKey: s.vapidPrivateKey,
