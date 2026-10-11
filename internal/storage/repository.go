@@ -6106,7 +6106,7 @@ func (db *DB) findEmailPositionForUser(ctx context.Context, userID, folderID, em
 
 func (db *DB) getRecipients(ctx context.Context, messageID int64, kind string) ([]models.Contact, error) {
 	rows, err := db.Read().QueryContext(ctx,
-		`SELECT name, email FROM message_recipients WHERE message_id = ? AND kind = ? `, messageID, kind)
+		`SELECT name, email FROM message_recipients WHERE message_id = ? AND kind = ? ORDER BY id`, messageID, kind)
 	if err != nil {
 		return nil, err
 	}
@@ -6120,7 +6120,7 @@ func (db *DB) getRecipients(ctx context.Context, messageID int64, kind string) (
 		}
 		c.Initials = initials(c.Name)
 		c.AvatarHash = avatarresolver.GravatarHash(c.Email)
-		contacts = append(contacts, c)
+		contacts = appendUniqueRecipient(contacts, c)
 	}
 	if err := rows.Err(); err != nil {
 		return nil, err
@@ -6132,6 +6132,21 @@ func (db *DB) getRecipients(ctx context.Context, messageID int64, kind string) (
 		db.hydrateContactAvatar(ctx, &contacts[i])
 	}
 	return contacts, nil
+}
+
+// appendUniqueRecipient skips an address the list already has. Older versions
+// could save a message's recipients twice.
+func appendUniqueRecipient(contacts []models.Contact, c models.Contact) []models.Contact {
+	email := strings.ToLower(strings.TrimSpace(c.Email))
+	for i, existing := range contacts {
+		if email != "" && strings.ToLower(strings.TrimSpace(existing.Email)) == email {
+			if strings.TrimSpace(existing.Name) == "" && strings.TrimSpace(c.Name) != "" {
+				contacts[i] = c
+			}
+			return contacts
+		}
+	}
+	return append(contacts, c)
 }
 
 func (db *DB) getMessageLabels(ctx context.Context, messageID int64) ([]models.Label, error) {
@@ -6186,7 +6201,7 @@ func (db *DB) batchGetRecipients(ctx context.Context, msgIDs []int64, kind strin
 		}
 		c.Initials = initials(c.Name)
 		c.AvatarHash = avatarresolver.GravatarHash(c.Email)
-		result[msgID] = append(result[msgID], c)
+		result[msgID] = appendUniqueRecipient(result[msgID], c)
 	}
 	if err := rows.Err(); err != nil {
 		return nil, err
@@ -6676,12 +6691,17 @@ func (db *DB) UpdateMessageThreadHeadersInternal(ctx context.Context, messageID 
 	return tx.Commit()
 }
 
+// UpsertRecipientsInternal replaces the To and Cc recipients of a message.
 func (db *DB) UpsertRecipientsInternal(ctx context.Context, messageID int64, to, cc []Recipient) error {
 	tx, err := db.Write().BeginTx(ctx, nil)
 	if err != nil {
 		return err
 	}
 	defer tx.Rollback()
+
+	if _, err := tx.ExecContext(ctx, `DELETE FROM message_recipients WHERE message_id = ? AND kind IN ('to', 'cc')`, messageID); err != nil {
+		return fmt.Errorf("delete recipients: %w", err)
+	}
 
 	stmt, err := tx.PrepareContext(ctx,
 		`INSERT INTO message_recipients (message_id, kind, name, email) VALUES (?, ?, ?, ?)`)
