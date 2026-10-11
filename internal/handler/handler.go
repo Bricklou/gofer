@@ -1368,8 +1368,12 @@ func remoteImagesDetectScript(emailID string) []byte {
 	return []byte(fmt.Sprintf(`<script>(function(){var id=%q;if(document.querySelector('[data-remote-src],[data-gofer-remote]')){parent.postMessage({type:'remoteContentBlocked',emailId:id},'*')}})();</script>`, emailID))
 }
 
+// emailExternalLinksScript opens links in a new tab. A link to one of the
+// message's own files is handed to Gofer's page instead, which downloads it:
+// browsers refuse downloads started inside the sandboxed frame, and a new tab
+// would be left blank.
 func emailExternalLinksScript() []byte {
-	return []byte(`<script>(function(){function secureLink(link){if(!link)return;var href=(link.getAttribute('href')||'').trim();if(!href||href.charAt(0)==='#'||/^(?:javascript|data):/i.test(href))return;link.setAttribute('target','_blank');if(link.relList){link.relList.add('noopener','noreferrer')}else{link.setAttribute('rel','noopener noreferrer')}}document.querySelectorAll('a[href]').forEach(secureLink);document.addEventListener('click',function(event){var target=event.target;var link=target&&target.closest?target.closest('a[href]'):null;secureLink(link)},true)})();</script>`)
+	return []byte(`<script>(function(){function ownFile(link){try{var u=new URL(link.href);return u.host===location.host&&u.pathname.indexOf('/api/message-file/')===0}catch(e){return false}}function secureLink(link){if(!link)return;var href=(link.getAttribute('href')||'').trim();if(!href||href.charAt(0)==='#'||/^(?:javascript|data):/i.test(href))return;link.setAttribute('target','_blank');if(link.relList){link.relList.add('noopener','noreferrer')}else{link.setAttribute('rel','noopener noreferrer')}}document.querySelectorAll('a[href]').forEach(secureLink);document.addEventListener('click',function(event){var target=event.target;var link=target&&target.closest?target.closest('a[href]'):null;if(link&&ownFile(link)){event.preventDefault();parent.postMessage({type:'emailOpenFile',href:link.href},'*');return}secureLink(link)},true)})();</script>`)
 }
 
 func (h *Handler) handleEmailBody(w http.ResponseWriter, r *http.Request) {

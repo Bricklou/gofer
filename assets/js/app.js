@@ -15386,31 +15386,65 @@ function scrollThreadToSelected() {
 }
 document.body.addEventListener("htmx:afterSettle", scrollThreadToSelected)
 
+// emailBodyFrameFor returns the message frame a message event came from, or
+// null. Messages are only accepted from Gofer's own message frames, and the
+// message they belong to is read from the frame, not from the event.
+function emailBodyFrameFor(source) {
+  if (!source) return null
+  var frames = document.querySelectorAll("[data-email-body-frame]")
+  for (var i = 0; i < frames.length; i++) {
+    if (frames[i].contentWindow === source) return frames[i]
+  }
+  return null
+}
+
+// downloadEmailFile saves one of a message's own files, which the message
+// frame can't do itself.
+function downloadEmailFile(emailId, href) {
+  var url
+  try { url = new URL(String(href || ""), window.location.href) } catch (err) { return }
+  var match = url.pathname.match(/^\/api\/message-file\/(?:inline|remote)\/(\d+)\//)
+  if (url.origin !== window.location.origin || !match || match[1] !== String(emailId)) return
+  var link = document.createElement("a")
+  link.href = url.href
+  link.download = ""
+  link.rel = "noopener"
+  document.body.appendChild(link)
+  link.click()
+  link.remove()
+}
+
 window.addEventListener("message", function (e) {
   if (!e.data || !e.data.type) return
+  var iframe = emailBodyFrameFor(e.source)
+  if (!iframe) return
+  var emailId = iframe.getAttribute("data-email-id") || ""
+  if (!/^\d+$/.test(emailId) || (e.data.emailId !== undefined && String(e.data.emailId) !== emailId)) return
   if (e.data.type === "emailBodyResize") {
-    var iframe = e.data.emailId ? document.querySelector('[data-email-body-frame][data-email-id="' + e.data.emailId + '"]') : document.getElementById("email-body-frame")
-    if (iframe) {
-      iframe.style.height = e.data.height + "px"
-      // A collapsed thread message isn't laid out, so its body reports a height
-      // for no width at all. Expanding it waits for a report at its real width.
-      iframe._bodyMeasuredWidth = iframe.clientWidth
-      iframe.dispatchEvent(new CustomEvent("gofer:body-measured"))
-      iframe.classList.remove("opacity-0")
-      var loader = e.data.emailId ? document.querySelector('[data-email-body-loading="' + e.data.emailId + '"]') : null
-      if (loader) loader.remove()
-      if (e.data.emailId) clearEmailBodyError(e.data.emailId)
-      if (iframe.dataset.translationActive === "true" && typeof window.goferEmailTranslationFrameLoaded === "function") {
-        window.goferEmailTranslationFrameLoaded(e.data.emailId)
-      }
+    var height = Number(e.data.height)
+    if (!isFinite(height) || height < 0) return
+    iframe.style.height = Math.ceil(height) + "px"
+    // A collapsed thread message isn't laid out, so its body reports a height
+    // for no width at all. Expanding it waits for a report at its real width.
+    iframe._bodyMeasuredWidth = iframe.clientWidth
+    iframe.dispatchEvent(new CustomEvent("gofer:body-measured"))
+    iframe.classList.remove("opacity-0")
+    var loader = document.querySelector('[data-email-body-loading="' + emailId + '"]')
+    if (loader) loader.remove()
+    clearEmailBodyError(emailId)
+    if (iframe.dataset.translationActive === "true" && typeof window.goferEmailTranslationFrameLoaded === "function") {
+      window.goferEmailTranslationFrameLoaded(emailId)
     }
   }
-  if (e.data.type === "remoteContentBlocked" && e.data.emailId) {
-    var banner = document.querySelector('[data-remote-content-banner="' + e.data.emailId + '"]')
+  if (e.data.type === "remoteContentBlocked") {
+    var banner = document.querySelector('[data-remote-content-banner="' + emailId + '"]')
     if (banner) banner.classList.remove("hidden")
   }
-  if (e.data.type === "emailBodyError" && e.data.emailId) {
-    showEmailBodyError(e.data)
+  if (e.data.type === "emailBodyError") {
+    showEmailBodyError(Object.assign({}, e.data, { emailId: emailId }))
+  }
+  if (e.data.type === "emailOpenFile") {
+    downloadEmailFile(emailId, e.data.href)
   }
 })
 
