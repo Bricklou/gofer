@@ -122,7 +122,6 @@ load:
 	if !remote {
 		doc = append(doc, remoteImagesDetectScript(id)...)
 	}
-	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	w.Header().Set("Cache-Control", "no-store")
+	setEmailBodyDocumentHeaders(w)
 	_, _ = w.Write(doc)
 }

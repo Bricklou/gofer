@@ -35,6 +35,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"regexp"
 	"slices"
 	"strconv"
 	"strings"
@@ -1429,8 +1430,7 @@ func (h *Handler) handleEmailBody(w http.ResponseWriter, r *http.Request) {
 	}
 	body = message.MarkThreadQuote(body, threadQuoteSources(ctx, h.db, emailID, userID))
 
-	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	w.Header().Set("Cache-Control", "no-store")
+	setEmailBodyDocumentHeaders(w)
 	doc := buildBodyDocument(body, emailResizeScript(emailID), theme, bg, fg, link, original, emailBodyTextSize(r))
 	if !loadRemote {
 		doc = append(doc, remoteImagesDetectScript(emailID)...)
@@ -1438,34 +1438,28 @@ func (h *Handler) handleEmailBody(w http.ResponseWriter, r *http.Request) {
 	w.Write(doc)
 }
 
+// emailCSSColorPattern matches the theme colors the reader sends: hex, or
+// rgb()/rgba() with plain numbers. The value is written into the body
+// document's <style> and <script>, so nothing else may pass.
+var emailCSSColorPattern = regexp.MustCompile(`^(?:#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{6})|rgba?\(\s*\d{1,3}\s*,\s*\d{1,3}\s*,\s*\d{1,3}\s*(?:,\s*(?:\d*\.)?\d+\s*)?\))$`)
+
 func safeEmailCSSColor(value, fallback string) string {
 	value = strings.TrimSpace(value)
-	if value == "" {
+	if !emailCSSColorPattern.MatchString(value) {
 		return fallback
 	}
+	return value
+}
 
-	lower := strings.ToLower(value)
-	if strings.HasPrefix(lower, "#") {
-		hex := lower[1:]
-		if len(hex) != 3 && len(hex) != 6 {
-			return fallback
-		}
-		for _, c := range hex {
-			if (c < '0' || c > '9') && (c < 'a' || c > 'f') {
-				return fallback
-			}
-		}
-		return value
-	}
+// emailBodyDocumentPolicy sandboxes a message body document the same way as
+// the reader's iframe, also when it is opened directly in a tab, so neither
+// the sender's HTML nor anything in the request runs with the reader's session.
+const emailBodyDocumentPolicy = "sandbox allow-scripts allow-popups allow-popups-to-escape-sandbox; frame-ancestors 'self'"
 
-	if (strings.HasPrefix(lower, "rgb(") || strings.HasPrefix(lower, "rgba(")) && strings.HasSuffix(lower, ")") {
-		if strings.ContainsAny(lower, ";{}") {
-			return fallback
-		}
-		return value
-	}
-
-	return fallback
+func setEmailBodyDocumentHeaders(w http.ResponseWriter) {
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	w.Header().Set("Cache-Control", "no-store")
+	w.Header().Set("Content-Security-Policy", emailBodyDocumentPolicy)
 }
 
 func buildDarkModeScript(bgColor, fgColor string) []byte {

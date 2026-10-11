@@ -54,8 +54,7 @@ func (h *Handler) writeEmailBodyError(w http.ResponseWriter, ctx context.Context
 		failure.Detail = err.Error()
 	}
 	payload, _ := json.Marshal(failure) // HTML-escaped, safe inside <script>.
-	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	w.Header().Set("Cache-Control", "no-store")
+	setEmailBodyDocumentHeaders(w)
 	if failure.Kind == "reconnect" {
 		w.Header().Set(accountReconnectHeader, "true")
 	}
