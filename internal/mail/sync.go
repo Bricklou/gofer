@@ -1450,6 +1450,10 @@ func (o *SyncOrchestrator) fullFolderSync(ctx context.Context, client *imap.Clie
 	if changed {
 		return o.resetFolderUIDStateAndSync(ctx, client, accountID, accountProvider, folder, expectedUIDValidity, currentValidity)
 	}
+	if currentValidity > 0 {
+		expectedUIDValidity = currentValidity
+	}
+	o.backfillIMAPFolderSizes(ctx, client, folder, expectedUIDValidity)
 
 	if _, err := o.imapRepository().RefreshFolderUnreadCount(ctx, folder.ID); err != nil {
 		return fmt.Errorf("refresh unread count %s/%s: %w", accountID, folder.RemoteID, err)
@@ -2084,10 +2088,18 @@ func (o *SyncOrchestrator) syncAccount(ctx context.Context, accountID string, in
 	}
 
 	if o.shouldUseOutlookGraphMail(cfg) {
-		return o.syncOutlookGraphAccount(ctx, accountID, includeIDLEFolders)
+		if err := o.syncOutlookGraphAccount(ctx, accountID, includeIDLEFolders); err != nil {
+			return err
+		}
+		o.backfillOutlookMessageSizes(ctx, accountID)
+		return nil
 	}
 	if o.shouldUseGmailAPIMail(cfg) {
-		return o.syncGmailAPIAccount(ctx, accountID, includeIDLEFolders)
+		if err := o.syncGmailAPIAccount(ctx, accountID, includeIDLEFolders); err != nil {
+			return err
+		}
+		o.backfillGmailMessageSizes(ctx, accountID)
+		return nil
 	}
 
 	var idleFolderIDs map[string]bool

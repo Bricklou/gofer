@@ -1419,6 +1419,7 @@ func gmailAPIMessageToProviderSyncs(accountID string, msg gmailAPIMessage, label
 		IsFlagged:         isStarred,
 		IsDraft:           isDraft,
 		HasAttachments:    len(gmailAPIAttachmentRows(msg)) > 0,
+		SizeBytes:         msg.SizeEstimate,
 		Labels:            gmailLabelInputs(accountID, msg.LabelIDs, gmailLabelsForInputs(labelsByID)),
 		LabelsKnown:       true,
 		LabelProvider:     storage.LabelProviderGmail,

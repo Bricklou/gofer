@@ -807,6 +807,7 @@ type SyncMessage struct {
 	LabelProvider    string
 	ToRecipients     []Recipient
 	CCRecipients     []Recipient
+	SizeBytes        int64
 }
 
 type ProviderSyncMessage struct {
@@ -834,6 +835,7 @@ type ProviderSyncMessage struct {
 	ToRecipients      []Recipient
 	CCRecipients      []Recipient
 	BCCRecipients     []Recipient
+	SizeBytes         int64
 }
 
 const (
@@ -1360,14 +1362,15 @@ func (db *DB) UpsertSyncMessages(ctx context.Context, msgs []SyncMessage) error 
 
 	msgStmt, err := tx.PrepareContext(ctx, `
 		INSERT INTO messages (account_id, internet_message_id, message_id_normalized, in_reply_to, "references", normalized_subject, subject, from_name, from_email,
-			date_sent, date_received, snippet, preview_text)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+			date_sent, date_received, snippet, preview_text, size_bytes)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 		ON CONFLICT(account_id, internet_message_id) DO UPDATE SET
 			message_id_normalized = excluded.message_id_normalized,
 			subject = excluded.subject,
 			normalized_subject = excluded.normalized_subject,
 			from_name = excluded.from_name,
 			from_email = excluded.from_email,
+			size_bytes = CASE WHEN excluded.size_bytes > 0 THEN excluded.size_bytes ELSE size_bytes END,
 			date_sent = CASE WHEN ? = 1 AND COALESCE(date_sent, '') != '' THEN date_sent ELSE excluded.date_sent END,
 			date_received = CASE WHEN ? = 1 AND COALESCE(date_received, '') != '' THEN date_received ELSE excluded.date_received END,
 			in_reply_to = excluded.in_reply_to,
@@ -1450,7 +1453,7 @@ func (db *DB) UpsertSyncMessages(ctx context.Context, msgs []SyncMessage) error 
 		}
 		if !preserveLocalDraft {
 			if _, err := msgStmt.ExecContext(ctx, m.AccountID, m.MessageID, messageIDNorm, inReplyTo, m.References, normalizedSubject, m.Subject,
-				m.FromName, m.FromEmail, messageDBDate, messageDBDate, m.Snippet, m.Snippet,
+				m.FromName, m.FromEmail, messageDBDate, messageDBDate, m.Snippet, m.Snippet, m.SizeBytes,
 				boolInt(m.DateSentFallback), boolInt(m.DateSentFallback)); err != nil {
 				return fmt.Errorf("upsert message: %w", err)
 			}
@@ -1553,8 +1556,8 @@ func (db *DB) UpsertProviderSyncMessages(ctx context.Context, msgs []ProviderSyn
 
 	insertStmt, err := tx.PrepareContext(ctx, `
 		INSERT INTO messages (account_id, remote_message_id, internet_message_id, message_id_normalized, in_reply_to, "references", normalized_subject, subject, from_name, from_email,
-			date_sent, date_received, snippet, preview_text, provider_thread_id, has_attachments)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+			date_sent, date_received, snippet, preview_text, provider_thread_id, has_attachments, size_bytes)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
 	if err != nil {
 		return nil, fmt.Errorf("prepare provider msg insert: %w", err)
 	}
@@ -1598,6 +1601,7 @@ func (db *DB) UpsertProviderSyncMessages(ctx context.Context, msgs []ProviderSyn
 			preview_text = ?,
 			provider_thread_id = CASE WHEN ? != '' THEN ? ELSE provider_thread_id END,
 			has_attachments = ?,
+			size_bytes = CASE WHEN ? > 0 THEN ? ELSE size_bytes END,
 			updated_at = CURRENT_TIMESTAMP
 		WHERE id = ?`)
 	if err != nil {
@@ -1711,7 +1715,7 @@ func (db *DB) UpsertProviderSyncMessages(ctx context.Context, msgs []ProviderSyn
 		if wasNew {
 			result, err := insertStmt.ExecContext(ctx,
 				m.AccountID, m.ProviderMessageID, m.InternetMessageID, messageIDNorm, inReplyTo, m.References, normalizedSubject, m.Subject,
-				m.FromName, m.FromEmail, dateSentDB, dateReceivedDB, snippet, snippet, m.ProviderThreadID, boolInt(m.HasAttachments))
+				m.FromName, m.FromEmail, dateSentDB, dateReceivedDB, snippet, snippet, m.ProviderThreadID, boolInt(m.HasAttachments), m.SizeBytes)
 			if err != nil {
 				return nil, fmt.Errorf("insert provider message: %w", err)
 			}
@@ -1730,7 +1734,7 @@ func (db *DB) UpsertProviderSyncMessages(ctx context.Context, msgs []ProviderSyn
 				boolInt(hasDateSent), dateSentDB, dateSentDB,
 				boolInt(hasDateReceived), dateReceivedDB, dateReceivedDB,
 				inReplyTo, m.References, snippet, snippet,
-				m.ProviderThreadID, m.ProviderThreadID, boolInt(m.HasAttachments), msgID); err != nil {
+				m.ProviderThreadID, m.ProviderThreadID, boolInt(m.HasAttachments), m.SizeBytes, m.SizeBytes, msgID); err != nil {
 				return nil, fmt.Errorf("update provider message: %w", err)
 			}
 		}
@@ -5186,7 +5190,7 @@ func emailFilterSQL(filters models.EmailFilters) emailFilterParts {
 		args = append(args, filters.MinSizeBytes)
 	}
 	if filters.MaxSizeBytes > 0 {
-		cteParts = append(cteParts, "m.size_bytes <= ?")
+		cteParts = append(cteParts, "m.size_bytes > 0 AND m.size_bytes <= ?")
 		args = append(args, filters.MaxSizeBytes)
 	}
 	if filters.Tag != "" {
@@ -6102,7 +6106,7 @@ func (db *DB) findEmailPositionForUser(ctx context.Context, userID, folderID, em
 
 func (db *DB) getRecipients(ctx context.Context, messageID int64, kind string) ([]models.Contact, error) {
 	rows, err := db.Read().QueryContext(ctx,
-		`SELECT name, email FROM message_recipients WHERE message_id = ? AND kind = ?`, messageID, kind)
+		`SELECT name, email FROM message_recipients WHERE message_id = ? AND kind = ? `, messageID, kind)
 	if err != nil {
 		return nil, err
 	}
@@ -6523,7 +6527,7 @@ func (db *DB) getEmailOriginalHTMLBody(ctx context.Context, id, userID string) (
 	return data, nil
 }
 
-func (db *DB) UpdateMessageBodyInternal(ctx context.Context, messageID int64, textPath, htmlPath, rawPath string, snippet string) error {
+func (db *DB) UpdateMessageBodyInternal(ctx context.Context, messageID int64, textPath, htmlPath, rawPath string, snippet string, sizeBytes int64) error {
 	tx, err := db.Write().BeginTx(ctx, nil)
 	if err != nil {
 		return err
@@ -6531,8 +6535,9 @@ func (db *DB) UpdateMessageBodyInternal(ctx context.Context, messageID int64, te
 	defer tx.Rollback()
 
 	_, err = tx.ExecContext(ctx,
-		`UPDATE messages SET body_text_path = ?, body_html_path = ?, raw_path = ?, snippet = ?, preview_text = ?, updated_at = CURRENT_TIMESTAMP
-		 WHERE id = ?`, textPath, htmlPath, rawPath, snippet, snippet, messageID)
+		`UPDATE messages SET body_text_path = ?, body_html_path = ?, raw_path = ?, snippet = ?, preview_text = ?,
+		 size_bytes = CASE WHEN ? > 0 THEN ? ELSE size_bytes END, updated_at = CURRENT_TIMESTAMP
+		 WHERE id = ?`, textPath, htmlPath, rawPath, snippet, snippet, sizeBytes, sizeBytes, messageID)
 	if err != nil {
 		return err
 	}

@@ -1822,7 +1822,7 @@ func (h *Handler) storeParsedBody(ctx context.Context, parsed *message.ParsedMes
 		snippet = parsed.Subject
 	}
 
-	if err := h.db.UpdateMessageBodyInternal(ctx, msgID, textPath, htmlPath, parsed.RawPath, snippet); err != nil {
+	if err := h.db.UpdateMessageBodyInternal(ctx, msgID, textPath, htmlPath, parsed.RawPath, snippet, parsed.Size); err != nil {
 		return
 	}
 	if originalHTMLPath != "" {
@@ -4815,7 +4815,7 @@ func (h *Handler) saveComposeDraftFromForm(ctx context.Context, r *http.Request)
 			htmlPath = p
 		}
 	}
-	_ = h.db.UpdateMessageBodyInternal(ctx, msgID, textPath, htmlPath, "", snippet)
+	_ = h.db.UpdateMessageBodyInternal(ctx, msgID, textPath, htmlPath, "", snippet, 0)
 	_ = h.db.ReplaceAttachmentsInternal(ctx, msgID, attachmentRows)
 	toAddrs, _ := message.ParseAddressList(r.FormValue("to"))
 	ccAddrs, _ := message.ParseAddressList(r.FormValue("cc"))
