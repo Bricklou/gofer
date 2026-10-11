@@ -16,6 +16,7 @@ import (
 
 	"github.com/cristianadrielbraun/gofer/internal/auth"
 	"github.com/cristianadrielbraun/gofer/internal/config"
+	"github.com/cristianadrielbraun/gofer/internal/models"
 	"github.com/cristianadrielbraun/gofer/internal/storage"
 )
 
@@ -173,7 +174,7 @@ func TestCalDAVCalendarRefreshPreservesCacheAndAccountScope(t *testing.T) {
 				t.Fatal(err)
 			}
 			if reuseMailbox {
-				if _, err := db.Write().Exec(`UPDATE accounts SET encrypted_password = (SELECT encrypted_password FROM account_caldav_configs WHERE account_id = 'calendar-account') WHERE id = 'calendar-account'`); err != nil {
+				if err := store.UpdateAccount(t.Context(), "calendar-account", &models.CreateAccountRequest{Password: "test-password"}); err != nil {
 					t.Fatal(err)
 				}
 				if err := store.SaveCalDAVConfig(t.Context(), "calendar-user", "calendar-account", server.URL, "", "", true); err != nil {

@@ -113,6 +113,9 @@ func RunShared() {
 		log.Fatalf("failed to ensure default user: %v", err)
 	}
 	log.Printf("boot: default user ensured")
+	if err := accountStore.SecurePasswords(context.Background()); err != nil {
+		log.Fatalf("failed to secure stored mailbox passwords: %v", err)
+	}
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()

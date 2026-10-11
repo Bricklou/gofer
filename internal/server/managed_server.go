@@ -86,6 +86,9 @@ func newManagedApplication(parent context.Context, path string, maxOpen int) (re
 	if err != nil {
 		return nil, err
 	}
+	if err := centralAccounts.SecurePasswords(ctx); err != nil {
+		return nil, err
+	}
 	app.auth = auth.NewManager(authConfig, s.central, auth.Dependencies{BucketHashKey: s.key})
 	if adopted, err := app.auth.AdoptLocalProfileForManagedSetup(ctx); err != nil {
 		return nil, err
