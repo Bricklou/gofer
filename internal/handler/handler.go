@@ -3831,9 +3831,7 @@ func (h *Handler) handleAttachmentDownload(w http.ResponseWriter, r *http.Reques
 	}
 	defer f.Close()
 
-	w.Header().Set("Content-Type", info.ContentType)
-	w.Header().Set("Content-Disposition", fmt.Sprintf(`attachment; filename="%s"`, info.Filename))
-	http.ServeContent(w, r, info.Filename, time.Time{}, f)
+	serveMailFile(w, r, f, info.Filename, info.ContentType, false)
 }
 
 func (h *Handler) handleAttachmentPreview(w http.ResponseWriter, r *http.Request) {
@@ -4025,10 +4023,8 @@ func serveAttachmentPreview(w http.ResponseWriter, r *http.Request, filename, co
 		return
 	}
 	defer f.Close()
-	w.Header().Set("Content-Type", contentType)
-	w.Header().Set("Content-Disposition", fmt.Sprintf(`inline; filename="%s"`, filename))
 	w.Header().Set("Cache-Control", "private, max-age=300")
-	http.ServeContent(w, r, filename, time.Time{}, f)
+	serveMailFile(w, r, f, filename, contentType, true)
 }
 
 func (h *Handler) handleInlineContent(w http.ResponseWriter, r *http.Request) {
@@ -4064,9 +4060,8 @@ func (h *Handler) handleInlineContent(w http.ResponseWriter, r *http.Request) {
 	}
 	defer f.Close()
 
-	w.Header().Set("Content-Type", info.ContentType)
 	w.Header().Set("Cache-Control", "private, max-age=31536000")
-	http.ServeContent(w, r, info.Filename, time.Time{}, f)
+	serveMailFile(w, r, f, info.Filename, info.ContentType, true)
 }
 
 func (h *Handler) handleAllowRemoteContent(w http.ResponseWriter, r *http.Request) {
@@ -4256,7 +4251,7 @@ func (h *Handler) handleRemoteAsset(w http.ResponseWriter, r *http.Request) {
 	defer f.Close()
 
 	w.Header().Set("Cache-Control", "private, max-age=31536000")
-	http.ServeContent(w, r, filename, time.Time{}, f)
+	serveMailFile(w, r, f, filename, remoteAssetContentType(filename), true)
 }
 
 func (h *Handler) handleSSE(w http.ResponseWriter, r *http.Request) {

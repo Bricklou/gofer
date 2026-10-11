@@ -3,11 +3,9 @@ package handler
 import (
 	"database/sql"
 	"errors"
-	"mime"
 	"net/http"
 	"os"
 	"strconv"
-	"time"
 
 	"github.com/cristianadrielbraun/gofer/internal/storage"
 )
@@ -74,15 +72,8 @@ func (h *Handler) userAttachment(w http.ResponseWriter, r *http.Request, inline,
 		return
 	}
 	defer file.Close()
-	w.Header().Set("Content-Type", info.ContentType)
 	w.Header().Set("Cache-Control", "private, no-store")
-	w.Header().Set("X-Content-Type-Options", "nosniff")
-	disposition := "attachment"
-	if inline || preview {
-		disposition = "inline"
-	}
-	w.Header().Set("Content-Disposition", mime.FormatMediaType(disposition, map[string]string{"filename": info.Filename}))
-	http.ServeContent(w, r, info.Filename, time.Time{}, file)
+	serveMailFile(w, r, file, info.Filename, info.ContentType, inline || preview)
 }
 func (h *Handler) handleUserInlineContent(w http.ResponseWriter, r *http.Request) {
 	h.userAttachment(w, r, true, false)

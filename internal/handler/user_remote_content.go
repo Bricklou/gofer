@@ -9,7 +9,6 @@ import (
 	"os"
 	"path/filepath"
 	"strconv"
-	"time"
 
 	"github.com/cristianadrielbraun/gofer/internal/mail/message"
 	"github.com/cristianadrielbraun/gofer/internal/storage"
@@ -173,6 +172,5 @@ func (h *Handler) handleUserRemoteAsset(w http.ResponseWriter, r *http.Request) 
 	}
 	defer file.Close()
 	w.Header().Set("Cache-Control", "private, no-store")
-	w.Header().Set("X-Content-Type-Options", "nosniff")
-	http.ServeContent(w, r, filename, time.Time{}, file)
+	serveMailFile(w, r, file, filename, remoteAssetContentType(filename), true)
 }
