@@ -15431,7 +15431,9 @@ function showEmailBodyError(failure) {
   card.className = "my-2 rounded-lg border border-ink/10 bg-ink/[0.02] px-4 py-3.5"
   var title = document.createElement("p")
   title.className = "text-[13px] font-medium text-ink"
-  title.textContent = failure.kind === "missing" ? "Message unavailable" : "Couldn't load this message"
+  title.textContent = failure.kind === "missing" ? "Message unavailable" :
+    failure.kind === "large" ? "Large message" :
+    failure.kind === "oversize" ? "Message too large" : "Couldn't load this message"
   var message = document.createElement("p")
   message.className = "mt-1 text-xs leading-relaxed text-ink/60"
   message.textContent = failure.message || ""
@@ -15473,7 +15475,44 @@ function showEmailBodyError(failure) {
     settings.textContent = "Open account settings"
     actions.appendChild(settings)
   }
-  if (failure.kind !== "missing") {
+  if (failure.kind === "large") {
+    var full = document.createElement("button")
+    full.type = "button"
+    full.className = buttonClass + " bg-ink/[0.04]"
+    full.textContent = "Show full message"
+    full.addEventListener("click", function () {
+      full.disabled = true
+      full.textContent = "Downloading…"
+      fetch("/api/messages/" + encodeURIComponent(emailId) + "/download-full", { method: "POST" })
+        .then(function (r) {
+          if (r.ok) return null
+          return r.text().then(function (text) {
+            try { return JSON.parse(text).message || text } catch (e) { return text }
+          })
+        })
+        .then(function (problem) {
+          if (problem === null) {
+            // The message view was drawn before its attachments were known.
+            var mailView = document.getElementById("mail-view")
+            if (window.htmx && mailView && mailView.contains(iframe)) {
+              htmx.ajax("GET", mailViewRequestURL(emailId), { target: "#mail-view", swap: "innerHTML" })
+            } else {
+              applyEmailBodyTheme(iframe)
+            }
+            return
+          }
+          message.textContent = String(problem || "").trim() || "This message couldn't be downloaded from the mail server."
+          full.disabled = false
+          full.textContent = "Show full message"
+        })
+        .catch(function () {
+          message.textContent = "This message couldn't be downloaded from the mail server."
+          full.disabled = false
+          full.textContent = "Show full message"
+        })
+    })
+    actions.appendChild(full)
+  } else if (failure.kind !== "missing" && failure.kind !== "oversize") {
     var retry = document.createElement("button")
     retry.type = "button"
     retry.className = buttonClass

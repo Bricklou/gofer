@@ -7,7 +7,9 @@ import (
 	"errors"
 	"log"
 	"net/http"
+	"strconv"
 
+	"github.com/cristianadrielbraun/gofer/internal/mail/message"
 	"github.com/cristianadrielbraun/gofer/internal/providers"
 	"github.com/cristianadrielbraun/gofer/internal/storage"
 )
@@ -18,7 +20,7 @@ import (
 type emailBodyFailure struct {
 	Type      string `json:"type"`
 	EmailID   string `json:"emailId"`
-	Kind      string `json:"kind"` // reconnect, missing or unavailable
+	Kind      string `json:"kind"` // reconnect, missing, large, oversize or unavailable
 	Message   string `json:"message"`
 	Detail    string `json:"detail,omitempty"`
 	AccountID string `json:"accountId,omitempty"`
@@ -32,7 +34,10 @@ type emailBodyFailure struct {
 func (h *Handler) writeEmailBodyError(w http.ResponseWriter, ctx context.Context, owner, emailID, accountID string, err error) {
 	failure := emailBodyFailure{Type: "emailBodyError", EmailID: emailID, Kind: "unavailable", Message: "This message couldn't be downloaded from the mail server."}
 	status := http.StatusServiceUnavailable
+	var tooLarge *message.TooLargeError
 	switch {
+	case errors.As(err, &tooLarge):
+		failure.Kind, failure.Message, status = messageTooLargeFailure(tooLarge)
 	case errors.Is(err, storage.ErrAccountRoute) || errors.Is(err, sql.ErrNoRows):
 		failure.Kind, failure.Message, status = "missing", "This message is no longer available.", http.StatusNotFound
 	case isPermanentOAuthError(err):
@@ -60,4 +65,23 @@ func (h *Handler) writeEmailBodyError(w http.ResponseWriter, ctx context.Context
 	}
 	w.WriteHeader(status)
 	_, _ = w.Write([]byte(`<!DOCTYPE html><html><head><meta charset="utf-8"></head><body><script nonce="` + nonce + `">parent.postMessage(` + string(payload) + `,'*')</script></body></html>`))
+}
+
+// messageTooLargeFailure explains a message that wasn't downloaded because of
+// its size. Kind "large" lets the reader download it anyway.
+func messageTooLargeFailure(err *message.TooLargeError) (kind, text string, status int) {
+	if err.CanDownloadFully() {
+		if err.Size > 0 {
+			return "large", "This message is " + formatMessageSize(err.Size) + ", so it wasn't downloaded automatically.", http.StatusRequestEntityTooLarge
+		}
+		return "large", "This message is larger than " + formatMessageSize(err.Limit) + ", so it wasn't downloaded automatically.", http.StatusRequestEntityTooLarge
+	}
+	if err.Size > 0 {
+		return "oversize", "This message is " + formatMessageSize(err.Size) + ". Gofer can show messages up to " + formatMessageSize(message.MaxDownloadBytes) + ".", http.StatusRequestEntityTooLarge
+	}
+	return "oversize", "This message is larger than the " + formatMessageSize(message.MaxDownloadBytes) + " Gofer can show.", http.StatusRequestEntityTooLarge
+}
+
+func formatMessageSize(size int64) string {
+	return strconv.FormatInt((size+(1<<20)-1)>>20, 10) + " MB"
 }

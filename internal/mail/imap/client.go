@@ -196,6 +196,9 @@ func (c *Client) ConnectionLost() bool {
 // Servers without it reject the command, and some disconnect after repeated
 // rejections; the next SELECT replaces the selection anyway.
 func (c *Client) unselect() {
+	if c.closed {
+		return
+	}
 	if c.client.Caps().Has(imap.CapUnselect) {
 		c.client.Unselect()
 	}

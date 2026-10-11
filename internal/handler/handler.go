@@ -519,6 +519,7 @@ func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("POST /api/mail/sync/cancel", h.handleCancelSyncMail)
 	mux.HandleFunc("GET /api/folders/unread", h.handleFolderUnreadCounts)
 	mux.HandleFunc("POST /api/messages/{id}/prefetch-body", h.handlePrefetchBody)
+	mux.HandleFunc("POST /api/messages/{id}/download-full", h.handleDownloadFullBody)
 	mux.HandleFunc("GET /api/compose/source", h.handleComposeSource)
 	mux.HandleFunc("GET /compose/pane", h.handleComposePane)
 	mux.HandleFunc("POST /compose", h.handleCompose)
@@ -1402,7 +1403,13 @@ func (h *Handler) handleEmailBody(w http.ResponseWriter, r *http.Request) {
 	if msgID > 0 && !h.db.IsBodyFetchedInternal(ctx, msgID) {
 		info, err := h.db.GetMessageFetchInfoForUser(ctx, msgID, userID)
 		if err == nil && info != nil {
-			if parsed, err := h.fetchParsedBody(ctx, msgID, info.AccountID); err == nil {
+			parsed, err := h.fetchParsedBody(message.WithDownloadLimit(ctx, message.AutoDownloadMaxBytes), msgID, info.AccountID)
+			var tooLarge *message.TooLargeError
+			if errors.As(err, &tooLarge) {
+				h.writeEmailBodyError(w, ctx, userID, emailID, info.AccountID, err)
+				return
+			}
+			if err == nil {
 				if original {
 					body = originalBodyFromParsedMessage(parsed, msgID)
 				} else {
@@ -1919,7 +1926,11 @@ func (h *Handler) fetchParsedBody(ctx context.Context, msgID int64, accountID st
 	).Scan(&rawPath)
 
 	if rawPath != "" {
-		if data, err := os.ReadFile(rawPath); err == nil && len(data) > 0 {
+		data, err := message.ReadSavedMessage(ctx, rawPath)
+		if err != nil {
+			return nil, err
+		}
+		if len(data) > 0 {
 			bodyData = data
 		}
 	}
@@ -1949,16 +1960,17 @@ func (h *Handler) fetchBodyRemote(ctx context.Context, msgID int64, info *storag
 	}
 	var graphErr error
 	var gmailErr error
+	var tooLarge *message.TooLargeError
 	if bodyData, attempted, err := h.fetchOutlookGraphMessageMIME(ctx, msgID); attempted {
-		if err == nil {
-			return bodyData, nil
+		if err == nil || errors.As(err, &tooLarge) {
+			return bodyData, err
 		}
 		graphErr = err
 		log.Printf("outlook fetch body account=%s message=%d: %v", info.AccountID, msgID, err)
 	}
 	if bodyData, attempted, err := h.fetchGmailAPIMessageMIME(ctx, msgID); attempted {
-		if err == nil {
-			return bodyData, nil
+		if err == nil || errors.As(err, &tooLarge) {
+			return bodyData, err
 		}
 		gmailErr = err
 		log.Printf("gmail fetch body account=%s message=%d: %v", info.AccountID, msgID, err)
@@ -1978,6 +1990,9 @@ func (h *Handler) fetchBodyRemote(ctx context.Context, msgID int64, info *storag
 		return bodyData, nil
 	}
 	h.closeBodyClient(info.AccountID)
+	if errors.As(err, &tooLarge) {
+		return nil, err
+	}
 	bodyData, err = h.fetchBodyRemoteWithCachedClient(ctx, info.AccountID, info.FolderRemoteID, info.RemoteUID)
 	if err != nil {
 		if gmailErr != nil {
@@ -6269,9 +6284,32 @@ func (h *Handler) handlePrefetchBody(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if !h.db.IsBodyFetchedInternal(ctx, msgID) {
-		h.ensureBodyFetched(ctx, msgID, info.AccountID)
+		h.ensureBodyFetched(message.WithDownloadLimit(ctx, message.AutoDownloadMaxBytes), msgID, info.AccountID)
 	}
 
+	w.WriteHeader(http.StatusNoContent)
+}
+
+// handleDownloadFullBody downloads a message the reader asked to see although
+// it is larger than Gofer downloads on its own.
+func (h *Handler) handleDownloadFullBody(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	msgID, info, err := h.getMessageInfo(ctx, r.PathValue("id"))
+	if err != nil {
+		writeMessageTargetError(w, r, err)
+		return
+	}
+	if !h.db.IsBodyFetchedInternal(ctx, msgID) {
+		parsed, err := h.fetchParsedBody(ctx, msgID, info.AccountID)
+		if err != nil {
+			if !writeMessageTooLarge(w, err) {
+				log.Printf("download full message %d: %v", msgID, err)
+				http.Error(w, "This message couldn't be downloaded from the mail server.", http.StatusServiceUnavailable)
+			}
+			return
+		}
+		h.storeParsedBody(ctx, parsed, msgID, info.AccountID)
+	}
 	w.WriteHeader(http.StatusNoContent)
 }
 

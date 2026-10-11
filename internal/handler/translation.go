@@ -363,7 +363,7 @@ func (h *Handler) messageTranslationSource(ctx context.Context, emailID string, 
 	userID := h.userID(ctx)
 	if !h.db.IsBodyFetchedInternal(ctx, msgID) {
 		if info, err := h.db.GetMessageFetchInfoForUser(ctx, msgID, userID); err == nil && info != nil {
-			if parsed, err := h.fetchParsedBody(ctx, msgID, info.AccountID); err == nil && parsed != nil {
+			if parsed, err := h.fetchParsedBody(mailmessage.WithDownloadLimit(ctx, mailmessage.AutoDownloadMaxBytes), msgID, info.AccountID); err == nil && parsed != nil {
 				h.persistParsedBodyAsync(msgID, info.AccountID, parsed)
 				htmlSource := ""
 				if len(parsed.HTMLBody) > 0 {
