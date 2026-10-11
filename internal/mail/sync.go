@@ -132,6 +132,7 @@ type SyncOrchestrator struct {
 	imapScope           *userIMAPScope
 	userGraphToken      string
 	userGraphRetryErr   error
+	outlookRetryUntil   sync.Map // shared mode: account ID -> time.Time
 	db                  *storage.DB
 	accountStore        *config.AccountStore
 	blobStore           *store.BlobStore
@@ -2091,7 +2092,11 @@ func (o *SyncOrchestrator) syncAccount(ctx context.Context, accountID string, in
 	}
 
 	if o.shouldUseOutlookGraphMail(cfg) {
+		if err := o.sharedOutlookRetryDeferred(accountID); err != nil {
+			return err
+		}
 		if err := o.syncOutlookGraphAccount(ctx, accountID, includeIDLEFolders); err != nil {
+			o.deferSharedOutlookRetry(accountID, err)
 			return err
 		}
 		o.backfillOutlookMessageSizes(ctx, accountID)
