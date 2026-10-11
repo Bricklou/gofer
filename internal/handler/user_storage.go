@@ -69,6 +69,7 @@ func (h *Handler) RegisterUserStorageRoutes(ctx context.Context, mux *http.Serve
 		vapidPublicKey: h.vapidPublicKey, testPush: h.testPush, userBackfillQueue: make(chan userContactBackfillJob, 32),
 		googleTranslator:         h.googleTranslator,
 		remoteResourceDownloader: h.remoteResourceDownloader,
+		messageFileKey:           h.messageFileKey,
 		providerAvatarHTTPClient: h.providerAvatarHTTPClient,
 		avatarWarmupOwner:        h,
 		userBackfills:            make(map[string]struct{}), contactSyncRunning: make(map[string]struct{})}
@@ -211,6 +212,42 @@ func (h *Handler) RegisterUserStorageRoutes(ctx context.Context, mux *http.Serve
 	private("GET /email/{id}", routed.handleEmailPartial)
 	private("GET /email/{id}/body", routed.handleUserEmailBody)
 	private("GET /api/inline-content/{messageID}/{contentID}", routed.handleUserInlineContent)
+	// Signed message-file links carry their owner instead of a session. The
+	// owner gets the same user and file checks as a private route; anything
+	// that fails them looks like a missing file.
+	mux.HandleFunc("GET "+messageFileRoute+"{kind}/{messageID}/{name}", func(w http.ResponseWriter, r *http.Request) {
+		ownerRequest, kind, ok := routed.verifiedMessageFileRequest(r)
+		if !ok || (kind == messageFileRemote && routed.userIMAP == nil) {
+			http.NotFound(w, r)
+			return
+		}
+		owner := routed.userID(ownerRequest.Context())
+		if err := routing.ValidateUser(r.Context(), owner); err != nil {
+			http.NotFound(w, r)
+			return
+		}
+		if routed.blobStore != nil {
+			release, err := routed.blobStore.PinUserFiles(r.Context(), owner)
+			if err != nil {
+				http.Error(w, "user files unavailable", http.StatusServiceUnavailable)
+				return
+			}
+			defer release()
+			if err := routing.ValidateUser(r.Context(), owner); err != nil {
+				http.NotFound(w, r)
+				return
+			}
+		}
+		allowMessageFileEmbedding(w)
+		switch kind {
+		case messageFileWeb:
+			routed.relayRemoteContent(w, ownerRequest)
+		case messageFileRemote:
+			routed.handleUserRemoteAsset(w, ownerRequest)
+		default:
+			routed.handleUserInlineContent(w, ownerRequest)
+		}
+	})
 	private("GET /api/attachments/{id}/download", routed.handleUserAttachmentDownload)
 	private("GET /api/attachments/{id}/preview", routed.handleUserAttachmentPreview)
 	private("GET /search", routed.handleSearch)

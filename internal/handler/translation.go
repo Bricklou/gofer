@@ -167,9 +167,11 @@ func (h *Handler) writeTranslatedBody(w http.ResponseWriter, r *http.Request, re
 	} else {
 		body = []byte(`<pre style="white-space:pre-wrap;word-wrap:break-word;font-family:inherit;margin:0;padding:8px">` + stdhtml.EscapeString(result.Text) + `</pre>`)
 	}
+	id, _ := strconv.ParseInt(emailID, 10, 64)
 	if loadRemote {
-		body = mailmessage.RestoreRemoteImages(body)
+		body = mailmessage.RestoreRemoteContent(body, h.remoteContentLinks(h.userID(r.Context()), id))
 	}
+	body = h.signMessageFileLinks(body, h.userID(r.Context()), id)
 
 	theme := r.URL.Query().Get("theme")
 	bg := r.URL.Query().Get("bg")
@@ -177,7 +179,7 @@ func (h *Handler) writeTranslatedBody(w http.ResponseWriter, r *http.Request, re
 	link := r.URL.Query().Get("link")
 	original := r.URL.Query().Get("mode") == "original"
 
-	nonce := setEmailBodyDocumentHeaders(w, loadRemote)
+	nonce := setEmailBodyDocumentHeaders(w)
 	doc := buildBodyDocument(body, emailResizeScript(emailID), theme, bg, fg, link, original, emailBodyTextSize(r), nonce)
 	if !loadRemote {
 		doc = append(doc, scriptWithNonce(remoteImagesDetectScript(emailID), nonce)...)
@@ -186,7 +188,7 @@ func (h *Handler) writeTranslatedBody(w http.ResponseWriter, r *http.Request, re
 }
 
 func (h *Handler) writeTranslatedEmailError(w http.ResponseWriter, emailID, message string, status int) {
-	nonce := setEmailBodyDocumentHeaders(w, false)
+	nonce := setEmailBodyDocumentHeaders(w)
 	w.WriteHeader(status)
 	body := []byte(`<div style="font:14px -apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;line-height:1.5;padding:8px;color:inherit">` + stdhtml.EscapeString(message) + `</div>`)
 	w.Write(buildBodyDocument(body, emailResizeScript(emailID), "light", "", "", "", false, 14, nonce))

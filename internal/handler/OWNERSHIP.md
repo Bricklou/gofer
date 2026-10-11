@@ -23,6 +23,24 @@ capability and is not an application session. Password-MFA, recovery repair,
 and setup challenges likewise carry no authenticated request user and cannot
 access private repositories before full completion.
 
+## Signed capability routes
+
+- `GET /api/message-file/{kind}/{messageID}/{name}` serves one inline part or
+  saved remote image of a message without a session. A message is shown in a
+  sandboxed frame the browser treats as another site, so its image requests
+  carry no session cookie. When Gofer builds a message page it signs that
+  message's own file addresses with a key that is random for each server
+  start; the signature names the owner, message, kind, and file and expires
+  after twelve hours. The route serves only a file matching a valid
+  signature, as its owner, after the same user and file checks as an owned
+  route; anything else is `404`. Responses stay sandboxed and are never
+  type-sniffed.
+- The `web` kind of the same route relays one remote file of a message the
+  reader chose to load. Its signature also names the remote address, so a
+  link can only fetch what that message's page asked for. The download goes
+  through the same private-network guard and size limit as saved remote
+  images, and the result is served as a message file, typed by its content.
+
 ## Administrator-only operational routes
 
 - Pages under `/admin`, including avatars, contacts, labels, operations, and

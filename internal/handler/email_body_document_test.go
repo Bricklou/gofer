@@ -128,9 +128,13 @@ func TestOwnedEmailBodyRunsOnlyReaderScriptsAndHoldsRemoteContent(t *testing.T) 
 	}); err != nil {
 		t.Fatal(err)
 	}
+	// Allowed remote content comes through Gofer, so the policy stays closed.
 	allowed := body()
-	if policy := assertOnlyNoncedScripts(t, allowed); !strings.Contains(policy, "img-src 'self' data: https: http:") {
-		t.Fatalf("Content-Security-Policy = %q, want remote images allowed", policy)
+	if policy := assertOnlyNoncedScripts(t, allowed); strings.Contains(policy, "http") {
+		t.Fatalf("Content-Security-Policy = %q, want no direct web loads", policy)
+	}
+	if page := allowed.Body.String(); strings.Contains(page, `src="https://`) || !strings.Contains(page, `src="/api/message-file/web/1/`) {
+		t.Fatalf("allowed remote image was not relayed: %s", page)
 	}
 }
 

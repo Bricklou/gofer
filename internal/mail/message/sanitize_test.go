@@ -118,9 +118,22 @@ func TestSanitizeHTMLMarksRemoteContent(t *testing.T) {
 		if !IsRemoteImagesBlocked(out) {
 			t.Errorf("%s: remote content not reported as blocked: %q", name, out)
 		}
-		restored := string(RestoreRemoteImages([]byte(out)))
+		restored := string(RestoreRemoteContent([]byte(out), func(u string) string { return u }))
 		if !strings.Contains(strings.ToLower(restored), "https://track.example/") || IsRemoteImagesBlocked(strings.ReplaceAll(restored, remoteMarkerAttr+`=""`, "")) {
 			t.Errorf("%s: restoring did not bring the remote content back: %q", name, restored)
+		}
+		var loaded []string
+		relayed := string(RestoreRemoteContent([]byte(out), func(u string) string {
+			loaded = append(loaded, u)
+			return "/relay?n=1&amp=2"
+		}))
+		if len(loaded) == 0 || strings.Contains(strings.ToLower(relayed), "track.example") || !strings.Contains(relayed, "/relay?n=1&amp") {
+			t.Errorf("%s: restoring did not send the remote content through the relay: %q", name, relayed)
+		}
+		for _, u := range loaded {
+			if !strings.HasPrefix(strings.ToLower(u), "https://track.example/") {
+				t.Errorf("%s: relay was asked for %q", name, u)
+			}
 		}
 		if again := string(SanitizeHTML([]byte(out))); again != out {
 			t.Errorf("%s: second pass changed %q to %q", name, out, again)

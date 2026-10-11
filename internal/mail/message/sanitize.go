@@ -3,6 +3,7 @@ package message
 import (
 	"bytes"
 	"regexp"
+	"slices"
 	"strings"
 
 	"golang.org/x/net/html"
@@ -12,7 +13,7 @@ import (
 // SanitizeHTML makes a message's HTML safe to show in the reader. The HTML is
 // parsed the way a browser parses it, and rebuilt without scripts, embedded
 // pages, forms, event handlers or dangerous links. Everything it would load
-// from the web is marked instead of loaded; RestoreRemoteImages turns it back
+// from the web is marked instead of loaded; RestoreRemoteContent turns it back
 // on when the reader allows remote content. The reader's Content-Security-
 // Policy enforces the same limits in the browser, so this is the first of two
 // layers rather than the only one.
@@ -375,23 +376,114 @@ func sanitizeCSS(css string) (string, bool) {
 	return css, remote
 }
 
-var (
-	reRestoreImgDouble = regexp.MustCompile(`(?i)(<img\b[^>]*?\s)src\s*=\s*""\s+data-remote-src="([^"]*)"`)
-	reRestoreImgSingle = regexp.MustCompile(`(?i)(<img\b[^>]*?\s)src\s*=\s*''\s+data-remote-src='([^']*)'`)
-	reRestoreAttr      = regexp.MustCompile(`\s` + remoteAttrPrefix + `(src|srcset|background|poster)="`)
-)
+var restoreCSSURL = regexp.MustCompile(`url\("` + remoteCSSURLPrefix + `([^"]*)"\)`)
 
-// RestoreRemoteImages turns marked remote content back on.
-func RestoreRemoteImages(html []byte) []byte {
-	s := string(html)
-	s = reRestoreImgDouble.ReplaceAllString(s, `${1}src="$2"`)
-	s = reRestoreImgSingle.ReplaceAllString(s, `${1}src='$2'`)
-	s = reRestoreAttr.ReplaceAllString(s, ` $1="`)
-	s = strings.ReplaceAll(s, `url("`+remoteCSSURLPrefix, `url("`)
-	s = strings.ReplaceAll(s, `url(&#34;`+remoteCSSURLPrefix, `url(&#34;`)
-	// Bodies sanitized before remote CSS was marked hold empty url()s.
-	s = strings.ReplaceAll(s, `url("")`, ``)
-	return []byte(s)
+// RestoreRemoteContent turns marked remote content back on, with every web
+// address passed through load, which returns the address the reader's browser
+// should fetch instead. Gofer uses it to send remote content through its own
+// server, so the sender never sees the reader's address.
+func RestoreRemoteContent(input []byte, load func(remoteURL string) string) []byte {
+	if len(input) == 0 {
+		return input
+	}
+	restoreCSS := func(css string) string {
+		css = restoreCSSURL.ReplaceAllStringFunc(css, func(match string) string {
+			return `url("` + load(restoreCSSURL.FindStringSubmatch(match)[1]) + `")`
+		})
+		// Bodies sanitized before remote CSS was marked hold empty url()s.
+		return strings.ReplaceAll(css, `url("")`, ``)
+	}
+	restore := func(n *html.Node) {
+		switch n.Type {
+		case html.TextNode:
+			if n.Parent != nil && n.Parent.Type == html.ElementNode && n.Parent.Data == "style" {
+				n.Data = restoreCSS(n.Data)
+			}
+			return
+		case html.ElementNode:
+		default:
+			return
+		}
+		attrs := n.Attr[:0]
+		for _, a := range n.Attr {
+			switch {
+			case a.Key == remoteImageSrcAttr:
+				attrs = slices.DeleteFunc(attrs, func(b html.Attribute) bool { return b.Key == "src" })
+				a = html.Attribute{Key: "src", Val: load(a.Val)}
+			case a.Key == "src" && a.Val == "" && hasAttr(n, remoteImageSrcAttr):
+				continue
+			case strings.HasPrefix(a.Key, remoteAttrPrefix):
+				key := strings.TrimPrefix(a.Key, remoteAttrPrefix)
+				if !restorableRemoteAttributes[key] {
+					break
+				}
+				if key == "srcset" {
+					a = html.Attribute{Key: key, Val: restoreSrcset(a.Val, load)}
+				} else {
+					a = html.Attribute{Key: key, Val: load(a.Val)}
+				}
+			case a.Key == "style":
+				a.Val = restoreCSS(a.Val)
+			}
+			attrs = append(attrs, a)
+		}
+		n.Attr = attrs
+	}
+	var out bytes.Buffer
+	if isFullDocument(input) {
+		doc, err := html.Parse(bytes.NewReader(input))
+		if err != nil {
+			return input
+		}
+		for n := range doc.Descendants() {
+			restore(n)
+		}
+		if err := html.Render(&out, doc); err != nil {
+			return input
+		}
+		return out.Bytes()
+	}
+	body := &html.Node{Type: html.ElementNode, Data: "body", DataAtom: atom.Body}
+	nodes, err := html.ParseFragment(bytes.NewReader(input), body)
+	if err != nil {
+		return input
+	}
+	for _, n := range nodes {
+		body.AppendChild(n)
+	}
+	for n := range body.Descendants() {
+		restore(n)
+	}
+	for c := body.FirstChild; c != nil; c = c.NextSibling {
+		if err := html.Render(&out, c); err != nil {
+			return input
+		}
+	}
+	return out.Bytes()
+}
+
+func hasAttr(n *html.Node, key string) bool {
+	for _, a := range n.Attr {
+		if a.Key == key {
+			return true
+		}
+	}
+	return false
+}
+
+func restoreSrcset(value string, load func(string) string) string {
+	candidates := strings.Split(value, ",")
+	for i, candidate := range candidates {
+		fields := strings.Fields(candidate)
+		if len(fields) == 0 {
+			continue
+		}
+		if _, kind := classifyResource("src", fields[0]); kind == resourceRemote {
+			fields[0] = load(fields[0])
+		}
+		candidates[i] = strings.Join(fields, " ")
+	}
+	return strings.Join(candidates, ", ")
 }
 
 func IsRemoteImagesBlocked(html string) bool {

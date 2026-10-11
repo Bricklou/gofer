@@ -126,14 +126,17 @@ type Handler struct {
 	messageMutationWake        chan struct{}
 	messageMutationIMAPFactory messageMutationIMAPClientFactory
 	remoteResourceDownloader   func(context.Context, string) ([]byte, error)
-	providerAvatarHTTPClient   *http.Client
-	retentionMu                sync.RWMutex
-	retentionState             models.MailRetentionDiagnostics
-	userRetention              *userRetentionWorker
-	authEventRetentionWake     chan struct{}
-	authEventRetentionWorkers  sync.WaitGroup
-	smtpProfileMu              sync.RWMutex
-	smtpProfile                smtpDeliveryProfileState
+	// messageFileKey signs the image addresses in message pages; see
+	// message_file_links.go.
+	messageFileKey            []byte
+	providerAvatarHTTPClient  *http.Client
+	retentionMu               sync.RWMutex
+	retentionState            models.MailRetentionDiagnostics
+	userRetention             *userRetentionWorker
+	authEventRetentionWake    chan struct{}
+	authEventRetentionWorkers sync.WaitGroup
+	smtpProfileMu             sync.RWMutex
+	smtpProfile               smtpDeliveryProfileState
 }
 
 const (
@@ -186,6 +189,7 @@ func New(db *storage.DB, accountStore *config.AccountStore, syncer *mail.SyncOrc
 			return imap.NewClient(ctx, cfg, password)
 		},
 		remoteResourceDownloader: newRemoteResourceDownloader(privateTargetAllowed(db)),
+		messageFileKey:           newMessageFileKey(),
 		// Provider avatar addresses come from provider responses; they never
 		// need a private address.
 		providerAvatarHTTPClient: &http.Client{Timeout: 15 * time.Second, Transport: netguard.NewHTTPTransport(nil)},
@@ -495,6 +499,7 @@ func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/attachments/{id}/download", h.handleAttachmentDownload)
 	mux.HandleFunc("GET /api/attachments/{id}/preview", h.handleAttachmentPreview)
 	mux.HandleFunc("GET /api/inline-content/{messageID}/{contentID}", h.handleInlineContent)
+	mux.HandleFunc("GET "+messageFileRoute+"{kind}/{messageID}/{name}", h.handleSignedMessageFile)
 	mux.HandleFunc("POST /compose/attachments", h.handleComposeAttachmentUpload)
 	mux.HandleFunc("GET /compose/attachments/{id}/preview", h.handleComposeAttachmentPreview)
 	mux.HandleFunc("DELETE /compose/attachments/{id}", h.handleComposeAttachmentDelete)
@@ -1434,11 +1439,12 @@ func (h *Handler) handleEmailBody(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if loadRemote {
-		body = message.RestoreRemoteImages(body)
+		body = message.RestoreRemoteContent(body, h.remoteContentLinks(userID, msgID))
 	}
 	body = message.MarkThreadQuote(body, threadQuoteSources(ctx, h.db, emailID, userID))
+	body = h.signMessageFileLinks(body, userID, msgID)
 
-	nonce := setEmailBodyDocumentHeaders(w, loadRemote)
+	nonce := setEmailBodyDocumentHeaders(w)
 	doc := buildBodyDocument(body, emailResizeScript(emailID), theme, bg, fg, link, original, emailBodyTextSize(r), nonce)
 	if !loadRemote {
 		doc = append(doc, scriptWithNonce(remoteImagesDetectScript(emailID), nonce)...)
@@ -1463,29 +1469,26 @@ func safeEmailCSSColor(value, fallback string) string {
 // the reader's iframe, also when it is opened directly in a tab, so neither
 // the sender's HTML nor anything in the request runs with the reader's session.
 // Only the reader's own scripts carry the response's nonce, so nothing the
-// sender wrote runs at all. Content loads only from Gofer and embedded data,
-// plus the web once the reader allows remote content.
-func emailBodyDocumentPolicy(nonce string, remote bool) string {
-	web := ""
-	if remote {
-		web = " https: http:"
-	}
+// sender wrote runs at all. Content loads only from Gofer and embedded data:
+// remote content the reader allows comes through Gofer too, so the page never
+// contacts the sender's servers.
+func emailBodyDocumentPolicy(nonce string) string {
 	return "sandbox allow-scripts allow-popups allow-popups-to-escape-sandbox; default-src 'none'" +
 		"; script-src 'nonce-" + nonce + "'" +
-		"; style-src 'unsafe-inline'" + web +
-		"; img-src 'self' data:" + web +
-		"; font-src 'self' data:" + web +
-		"; media-src 'self' data:" + web +
+		"; style-src 'unsafe-inline'" +
+		"; img-src 'self' data:" +
+		"; font-src 'self' data:" +
+		"; media-src 'self' data:" +
 		"; form-action 'none'; base-uri 'none'; frame-ancestors 'self'"
 }
 
 // setEmailBodyDocumentHeaders starts a body document response and returns the
 // nonce its own scripts must carry.
-func setEmailBodyDocumentHeaders(w http.ResponseWriter, remote bool) string {
+func setEmailBodyDocumentHeaders(w http.ResponseWriter) string {
 	nonce := cryptorand.Text()
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.Header().Set("Cache-Control", "no-store")
-	w.Header().Set("Content-Security-Policy", emailBodyDocumentPolicy(nonce, remote))
+	w.Header().Set("Content-Security-Policy", emailBodyDocumentPolicy(nonce))
 	return nonce
 }
 

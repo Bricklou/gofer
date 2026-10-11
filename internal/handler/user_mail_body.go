@@ -115,10 +115,11 @@ load:
 		return
 	}
 	if remote {
-		body = message.RestoreRemoteImages(body)
+		body = message.RestoreRemoteContent(body, h.remoteContentLinks(owner, number))
 	}
 	body = message.MarkThreadQuote(body, quoteSources)
-	nonce := setEmailBodyDocumentHeaders(w, remote)
+	body = h.signMessageFileLinks(body, owner, number)
+	nonce := setEmailBodyDocumentHeaders(w)
 	doc := buildBodyDocument(body, emailResizeScript(id), r.URL.Query().Get("theme"), r.URL.Query().Get("bg"), r.URL.Query().Get("fg"), r.URL.Query().Get("link"), original, emailBodyTextSize(r), nonce)
 	if !remote {
 		doc = append(doc, scriptWithNonce(remoteImagesDetectScript(id), nonce)...)
