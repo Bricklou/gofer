@@ -131,6 +131,14 @@ func (s *AccountStore) GetConfig(ctx context.Context, accountID string) (*models
 		if (cfg.IMAPTLSMode == mailtransport.TLSModePlaintext || cfg.SMTPTLSMode == mailtransport.TLSModePlaintext) && !strings.EqualFold(strings.TrimSpace(cfg.AuthMethod), "plain") {
 			return nil, fmt.Errorf("account %s: OAuth authentication is not allowed over a plaintext connection", accountID)
 		}
+		cfg.IMAPAllowPrivate, err = s.policyDB.IsPrivateTargetAllowed(ctx, "imap", cfg.IMAPHost, cfg.IMAPPort)
+		if err != nil {
+			return nil, fmt.Errorf("account %s: check IMAP private target exception: %w", accountID, err)
+		}
+		cfg.SMTPAllowPrivate, err = s.policyDB.IsPrivateTargetAllowed(ctx, "smtp", cfg.SMTPHost, cfg.SMTPPort)
+		if err != nil {
+			return nil, fmt.Errorf("account %s: check SMTP private target exception: %w", accountID, err)
+		}
 	}
 	return &cfg, nil
 }

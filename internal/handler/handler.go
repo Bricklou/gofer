@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	cryptorand "crypto/rand"
+	"crypto/tls"
 	"database/sql"
 	"encoding/base64"
 	"encoding/json"
@@ -21,6 +22,7 @@ import (
 	smtpclient "github.com/cristianadrielbraun/gofer/internal/mail/smtp"
 	"github.com/cristianadrielbraun/gofer/internal/mailauth"
 	"github.com/cristianadrielbraun/gofer/internal/models"
+	"github.com/cristianadrielbraun/gofer/internal/netguard"
 	"github.com/cristianadrielbraun/gofer/internal/providers"
 	"github.com/cristianadrielbraun/gofer/internal/storage"
 	"github.com/cristianadrielbraun/gofer/internal/store"
@@ -32,6 +34,7 @@ import (
 	"log"
 	"math/rand"
 	"mime"
+	"net"
 	"net/http"
 	"net/url"
 	"os"
@@ -184,7 +187,7 @@ func New(db *storage.DB, accountStore *config.AccountStore, syncer *mail.SyncOrc
 		messageMutationIMAPFactory: func(ctx context.Context, cfg *models.AccountConfig, password string) (messageMutationIMAPClient, error) {
 			return imap.NewClient(ctx, cfg, password)
 		},
-		remoteResourceDownloader: downloadRemoteResource,
+		remoteResourceDownloader: newRemoteResourceDownloader(privateTargetAllowed(db)),
 		providerAvatarHTTPClient: &http.Client{Timeout: 15 * time.Second},
 	}
 	db.SetContactActivityHook(func(event storage.ContactActivityNotification) {
@@ -447,6 +450,7 @@ func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("POST /api/contacts/{id}/unify", h.handleUnifyContact)
 	mux.HandleFunc("POST /api/contacts/{id}/delete", h.handleDeleteContact)
 	mux.HandleFunc("POST /api/accounts/discover", h.handleDiscoverAccount)
+	mux.HandleFunc("GET /api/accounts/server-check", h.handleAccountServerCheck)
 	mux.HandleFunc("POST /api/accounts", h.handleCreateAccount)
 	mux.HandleFunc("GET /api/accounts/{id}/edit", h.handleGetEditAccount)
 	mux.HandleFunc("POST /api/accounts/{id}/edit", h.handleUpdateAccount)
@@ -3118,6 +3122,10 @@ func (h *Handler) handleSettingsTab(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if tab == "security" {
+		if h.auth == nil || !h.auth.IsEnabled() {
+			h.renderOpenSecurityTab(w, r)
+			return
+		}
 		h.renderPasswordSecurityTab(w, r, http.StatusOK, nil)
 		return
 	}
@@ -3288,6 +3296,12 @@ func (h *Handler) renderPasswordSecurityTab(w http.ResponseWriter, r *http.Reque
 		MicrosoftLoginAvailable: !managementSurface && h.auth.HasMicrosoftLogin(),
 		OIDCLoginAvailable:      !managementSurface && h.auth.HasOIDCLogin(),
 		OIDCLoginName:           h.auth.OIDCLoginName(),
+	}
+	data.MailSecurity, err = h.ownerMailSecurityData(r)
+	if err != nil {
+		log.Printf("load personal mail security exceptions: %v", err)
+		http.Error(w, "failed to load security settings", http.StatusInternalServerError)
+		return
 	}
 	data.Passkeys = passkeySecurityViewData(summary.Passkeys)
 	data.FederatedIdentities = federatedIdentityViewData(identities)
@@ -4142,7 +4156,7 @@ func (h *Handler) handleAllowRemoteContent(w http.ResponseWriter, r *http.Reques
 	for _, remoteURL := range remoteURLs {
 		download := h.remoteResourceDownloader
 		if download == nil {
-			download = downloadRemoteResource
+			download = newRemoteResourceDownloader(privateTargetAllowed(h.db))
 		}
 		data, err := download(ctx, remoteURL)
 		if err != nil || len(data) == 0 {
@@ -4196,25 +4210,92 @@ func (h *Handler) handleAllowRemoteContent(w http.ResponseWriter, r *http.Reques
 	json.NewEncoder(w).Encode(map[string]string{"status": "ok"})
 }
 
-func downloadRemoteResource(ctx context.Context, url string) ([]byte, error) {
-	client := &http.Client{Timeout: 10 * time.Second}
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
-	if err != nil {
-		return nil, err
+// newRemoteResourceDownloader fetches the remote images a reader chose to
+// load. Their addresses come from the sender, so every connection goes
+// through netguard: private addresses only when an administrator approved
+// them, no proxy from the environment, and each redirect is checked again
+// when it connects.
+func newRemoteResourceDownloader(allowPrivate func(ctx context.Context, protocol, host string, port int) bool) func(context.Context, string) ([]byte, error) {
+	dialer := &net.Dialer{Timeout: 10 * time.Second}
+	dial := func(ctx context.Context, protocol, address string) (net.Conn, error) {
+		host, portText, err := net.SplitHostPort(address)
+		if err != nil {
+			return nil, err
+		}
+		port, err := strconv.Atoi(portText)
+		if err != nil {
+			return nil, err
+		}
+		allowed := allowPrivate != nil && allowPrivate(ctx, protocol, host, port)
+		return netguard.Dial(ctx, dialer, protocol, host, port, allowed)
 	}
-	resp, err := client.Do(req)
-	if err != nil {
-		return nil, err
+	client := &http.Client{
+		Timeout: 10 * time.Second,
+		Transport: &http.Transport{
+			Proxy: nil,
+			DialContext: func(ctx context.Context, _, address string) (net.Conn, error) {
+				return dial(ctx, "http", address)
+			},
+			DialTLSContext: func(ctx context.Context, _, address string) (net.Conn, error) {
+				conn, err := dial(ctx, "https", address)
+				if err != nil {
+					return nil, err
+				}
+				host, _, _ := net.SplitHostPort(address)
+				tlsConn := tls.Client(conn, &tls.Config{ServerName: host, MinVersion: tls.VersionTLS12})
+				if err := tlsConn.HandshakeContext(ctx); err != nil {
+					_ = conn.Close()
+					return nil, err
+				}
+				return tlsConn, nil
+			},
+			ResponseHeaderTimeout:  10 * time.Second,
+			MaxResponseHeaderBytes: 64 << 10,
+		},
+		CheckRedirect: func(req *http.Request, via []*http.Request) error {
+			if len(via) >= 5 {
+				return errors.New("remote resource redirected too many times")
+			}
+			if req.URL.Scheme != "http" && req.URL.Scheme != "https" {
+				return fmt.Errorf("remote resource redirected to unsupported scheme %q", req.URL.Scheme)
+			}
+			return nil
+		},
 	}
-	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("HTTP %d", resp.StatusCode)
+	return func(ctx context.Context, url string) ([]byte, error) {
+		req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+		if err != nil {
+			return nil, err
+		}
+		if req.URL.Scheme != "http" && req.URL.Scheme != "https" {
+			return nil, fmt.Errorf("remote resource has unsupported scheme %q", req.URL.Scheme)
+		}
+		resp, err := client.Do(req)
+		if err != nil {
+			return nil, err
+		}
+		defer resp.Body.Close()
+		if resp.StatusCode != http.StatusOK {
+			return nil, fmt.Errorf("HTTP %d", resp.StatusCode)
+		}
+		data, err := io.ReadAll(io.LimitReader(resp.Body, 5*1024*1024+1))
+		if err == nil && len(data) > 5*1024*1024 {
+			return nil, errors.New("remote resource is too large")
+		}
+		return data, err
 	}
-	data, err := io.ReadAll(io.LimitReader(resp.Body, 5*1024*1024+1))
-	if err == nil && len(data) > 5*1024*1024 {
-		return nil, errors.New("remote resource is too large")
+}
+
+// privateTargetAllowed reads the administrator's private-target exceptions.
+func privateTargetAllowed(db *storage.DB) func(context.Context, string, string, int) bool {
+	return func(ctx context.Context, protocol, host string, port int) bool {
+		allowed, err := db.IsPrivateTargetAllowed(ctx, protocol, host, port)
+		if err != nil {
+			log.Printf("check private target exception for %s %s:%d: %v", protocol, host, port, err)
+			return false
+		}
+		return allowed
 	}
-	return data, err
 }
 
 func validRemoteAssetFilename(filename string) bool {

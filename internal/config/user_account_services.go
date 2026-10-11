@@ -67,6 +67,10 @@ func (s *AccountServiceSnapshot) SMTPConfig(ctx context.Context) (*models.Accoun
 	if cfg.SMTPTLSMode == mailtransport.TLSModePlaintext && !strings.EqualFold(strings.TrimSpace(cfg.AuthMethod), "plain") {
 		return nil, errors.New("SMTP OAuth authentication is not allowed over a plaintext connection")
 	}
+	cfg.SMTPAllowPrivate, err = s.repository.routing.System().IsPrivateTargetAllowed(ctx, "smtp", cfg.SMTPHost, cfg.SMTPPort)
+	if err != nil {
+		return nil, err
+	}
 	return cfg, nil
 }
 

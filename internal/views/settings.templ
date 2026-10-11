@@ -66,6 +66,8 @@ func settingsSectionHeading(section string) (string, string) {
 			return "Compose and display", "Customize compose windows, message lists, signatures, and translation."
 		case "security":
 			return "Security", "Manage sign-in methods, active sessions, and security activity."
+		case "security-open":
+			return "Security", "Choose which mail servers Gofer may connect to. Sign-in settings appear only when Gofer runs with sign-in."
 		case "advanced":
 			return "Advanced", "Configure prefetching, notifications, and email link handling."
 		default:
@@ -3696,6 +3698,7 @@ templ AddAccountDialog() {
 										Placeholder: "imap.example.com",
 										Required:    true,
 									})
+									<div data-server-check="imap" class="mt-1.5 hidden space-y-1" aria-live="polite"></div>
 								</div>
 								<div>
 									<label class="text-xs font-medium text-muted-foreground mb-1.5 block">Port</label>
@@ -3791,6 +3794,7 @@ templ AddAccountDialog() {
 										Placeholder: "smtp.example.com",
 										Required:    true,
 									})
+									<div data-server-check="smtp" class="mt-1.5 hidden space-y-1" aria-live="polite"></div>
 								</div>
 								<div>
 									<label class="text-xs font-medium text-muted-foreground mb-1.5 block">Port</label>
@@ -4095,7 +4099,7 @@ templ UnencryptedTransportWarning(id string, active bool) {
 			@popover.Content(popover.ContentProps{Placement: popover.PlacementBottomStart, Offset: 8, ShowArrow: true, Class: "mobile-sheet w-80 p-3"}) {
 				<div class="flex items-start gap-2.5">
 					@icon.TriangleAlert(icon.Props{Class: "mt-0.5 size-4 shrink-0 text-amber-700 dark:text-amber-300"})
-					<p class="text-xs leading-relaxed text-muted-foreground">Unencrypted connections only work while this exact endpoint remains approved under Admin → Mail security.</p>
+					<p class="text-xs leading-relaxed text-muted-foreground">Unencrypted connections only work while this exact endpoint remains approved under Mail security.</p>
 				</div>
 			}
 		}
@@ -4284,6 +4288,7 @@ templ EditAccountDialog(data models.EditAccountData) {
 											Type:  input.TypeText,
 											Value: data.IMAPHost,
 										})
+										<div data-server-check="imap" class="mt-1.5 hidden space-y-1" aria-live="polite"></div>
 									</div>
 									<div>
 										<label class="text-xs font-medium text-muted-foreground mb-1.5 block">Port</label>
@@ -4379,6 +4384,7 @@ templ EditAccountDialog(data models.EditAccountData) {
 										Type:  input.TypeText,
 										Value: data.SMTPHost,
 									})
+									<div data-server-check="smtp" class="mt-1.5 hidden space-y-1" aria-live="polite"></div>
 								</div>
 								<div>
 									<label class="text-xs font-medium text-muted-foreground mb-1.5 block">Port</label>

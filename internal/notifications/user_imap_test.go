@@ -422,6 +422,9 @@ func (f *userStorageFixture) useIMAPServer(t *testing.T, s *routedIMAPServer) {
 	if err := f.system.AddPlaintextTransportException(t.Context(), "imap", host, port, "alice"); err != nil {
 		t.Fatal(err)
 	}
+	if err := f.system.AddPrivateTargetException(t.Context(), "imap", host, port, "alice"); err != nil {
+		t.Fatal(err)
+	}
 	for _, owner := range []string{"alice", "bob"} {
 		if err := f.accountStore.UpdateAccount(t.Context(), owner, f.accounts[owner].ID, &models.CreateAccountRequest{Provider: "imap", EmailAddress: owner + "@example.com", DisplayName: owner, IMAPHost: host, IMAPPort: port, IMAPTLSMode: "plaintext", SMTPHost: "smtp.example.com", Username: owner, AuthMethod: "plain"}); err != nil {
 			t.Fatal(err)

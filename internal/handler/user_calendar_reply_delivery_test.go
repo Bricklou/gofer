@@ -190,6 +190,9 @@ func ownedReplyDeliveryFixture(t *testing.T, smtpHost string, smtpPort int, befo
 	if err := f.system.AddPlaintextTransportException(t.Context(), "smtp", smtpHost, smtpPort, "fixture"); err != nil {
 		t.Fatal(err)
 	}
+	if err := f.system.AddPrivateTargetException(t.Context(), "smtp", smtpHost, smtpPort, "fixture"); err != nil {
+		t.Fatal(err)
+	}
 	for _, owner := range []string{"alice", "bob"} {
 		id := f.accounts[owner].ID
 		if err := f.h.userAccounts.WithUser(t.Context(), owner, func(local *config.AccountStore, db *storage.DB) error {
