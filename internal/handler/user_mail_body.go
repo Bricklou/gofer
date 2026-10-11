@@ -118,10 +118,10 @@ load:
 		body = message.RestoreRemoteImages(body)
 	}
 	body = message.MarkThreadQuote(body, quoteSources)
-	doc := buildBodyDocument(body, emailResizeScript(id), r.URL.Query().Get("theme"), r.URL.Query().Get("bg"), r.URL.Query().Get("fg"), r.URL.Query().Get("link"), original, emailBodyTextSize(r))
+	nonce := setEmailBodyDocumentHeaders(w, remote)
+	doc := buildBodyDocument(body, emailResizeScript(id), r.URL.Query().Get("theme"), r.URL.Query().Get("bg"), r.URL.Query().Get("fg"), r.URL.Query().Get("link"), original, emailBodyTextSize(r), nonce)
 	if !remote {
-		doc = append(doc, remoteImagesDetectScript(id)...)
+		doc = append(doc, scriptWithNonce(remoteImagesDetectScript(id), nonce)...)
 	}
-	setEmailBodyDocumentHeaders(w)
 	_, _ = w.Write(doc)
 }

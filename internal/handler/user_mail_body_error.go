@@ -54,10 +54,10 @@ func (h *Handler) writeEmailBodyError(w http.ResponseWriter, ctx context.Context
 		failure.Detail = err.Error()
 	}
 	payload, _ := json.Marshal(failure) // HTML-escaped, safe inside <script>.
-	setEmailBodyDocumentHeaders(w)
+	nonce := setEmailBodyDocumentHeaders(w, false)
 	if failure.Kind == "reconnect" {
 		w.Header().Set(accountReconnectHeader, "true")
 	}
 	w.WriteHeader(status)
-	_, _ = w.Write([]byte(`<!DOCTYPE html><html><head><meta charset="utf-8"></head><body><script>parent.postMessage(` + string(payload) + `,'*')</script></body></html>`))
+	_, _ = w.Write([]byte(`<!DOCTYPE html><html><head><meta charset="utf-8"></head><body><script nonce="` + nonce + `">parent.postMessage(` + string(payload) + `,'*')</script></body></html>`))
 }

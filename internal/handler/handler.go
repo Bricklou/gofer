@@ -3,6 +3,7 @@ package handler
 import (
 	"bytes"
 	"context"
+	cryptorand "crypto/rand"
 	"database/sql"
 	"encoding/base64"
 	"encoding/json"
@@ -1351,7 +1352,7 @@ func emailResizeScript(emailID string) []byte {
 }
 
 func remoteImagesDetectScript(emailID string) []byte {
-	return []byte(fmt.Sprintf(`<script>(function(){var id=%q;if(document.querySelector('[data-remote-src]')){parent.postMessage({type:'remoteContentBlocked',emailId:id},'*')}})();</script>`, emailID))
+	return []byte(fmt.Sprintf(`<script>(function(){var id=%q;if(document.querySelector('[data-remote-src],[data-gofer-remote]')){parent.postMessage({type:'remoteContentBlocked',emailId:id},'*')}})();</script>`, emailID))
 }
 
 func emailExternalLinksScript() []byte {
@@ -1430,10 +1431,10 @@ func (h *Handler) handleEmailBody(w http.ResponseWriter, r *http.Request) {
 	}
 	body = message.MarkThreadQuote(body, threadQuoteSources(ctx, h.db, emailID, userID))
 
-	setEmailBodyDocumentHeaders(w)
-	doc := buildBodyDocument(body, emailResizeScript(emailID), theme, bg, fg, link, original, emailBodyTextSize(r))
+	nonce := setEmailBodyDocumentHeaders(w, loadRemote)
+	doc := buildBodyDocument(body, emailResizeScript(emailID), theme, bg, fg, link, original, emailBodyTextSize(r), nonce)
 	if !loadRemote {
-		doc = append(doc, remoteImagesDetectScript(emailID)...)
+		doc = append(doc, scriptWithNonce(remoteImagesDetectScript(emailID), nonce)...)
 	}
 	w.Write(doc)
 }
@@ -1454,12 +1455,37 @@ func safeEmailCSSColor(value, fallback string) string {
 // emailBodyDocumentPolicy sandboxes a message body document the same way as
 // the reader's iframe, also when it is opened directly in a tab, so neither
 // the sender's HTML nor anything in the request runs with the reader's session.
-const emailBodyDocumentPolicy = "sandbox allow-scripts allow-popups allow-popups-to-escape-sandbox; frame-ancestors 'self'"
+// Only the reader's own scripts carry the response's nonce, so nothing the
+// sender wrote runs at all. Content loads only from Gofer and embedded data,
+// plus the web once the reader allows remote content.
+func emailBodyDocumentPolicy(nonce string, remote bool) string {
+	web := ""
+	if remote {
+		web = " https: http:"
+	}
+	return "sandbox allow-scripts allow-popups allow-popups-to-escape-sandbox; default-src 'none'" +
+		"; script-src 'nonce-" + nonce + "'" +
+		"; style-src 'unsafe-inline'" + web +
+		"; img-src 'self' data:" + web +
+		"; font-src 'self' data:" + web +
+		"; media-src 'self' data:" + web +
+		"; form-action 'none'; base-uri 'none'; frame-ancestors 'self'"
+}
 
-func setEmailBodyDocumentHeaders(w http.ResponseWriter) {
+// setEmailBodyDocumentHeaders starts a body document response and returns the
+// nonce its own scripts must carry.
+func setEmailBodyDocumentHeaders(w http.ResponseWriter, remote bool) string {
+	nonce := cryptorand.Text()
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.Header().Set("Cache-Control", "no-store")
-	w.Header().Set("Content-Security-Policy", emailBodyDocumentPolicy)
+	w.Header().Set("Content-Security-Policy", emailBodyDocumentPolicy(nonce, remote))
+	return nonce
+}
+
+// scriptWithNonce lets one of the reader's own scripts run under the body
+// document's policy. It is never applied to message content.
+func scriptWithNonce(script []byte, nonce string) []byte {
+	return bytes.ReplaceAll(script, []byte("<script>"), []byte(`<script nonce="`+nonce+`">`))
 }
 
 func buildDarkModeScript(bgColor, fgColor string) []byte {
@@ -1571,11 +1597,12 @@ func emailBodyTextSize(r *http.Request) int {
 	return 14
 }
 
-func buildBodyDocument(body []byte, resizeScript []byte, theme string, bgColor string, fgColor string, linkColor string, original bool, textSize int) []byte {
+func buildBodyDocument(body []byte, resizeScript []byte, theme string, bgColor string, fgColor string, linkColor string, original bool, textSize int, nonce string) []byte {
+	nonced := func(script []byte) string { return string(scriptWithNonce(script, nonce)) }
 	s := string(body)
 	lower := strings.ToLower(s)
 	isDark := theme == "dark"
-	injection := string(emailExternalLinksScript()) + string(emailQuoteScript()) + string(resizeScript)
+	injection := nonced(emailExternalLinksScript()) + nonced(emailQuoteScript()) + nonced(resizeScript)
 
 	if original {
 		if strings.Contains(lower, "<html") {
@@ -1623,24 +1650,24 @@ func buildBodyDocument(body []byte, resizeScript []byte, theme string, bgColor s
 		lowerAfter := strings.ToLower(s)
 		if idx := strings.LastIndex(lowerAfter, "</body>"); idx != -1 {
 			if isDark {
-				injection = string(buildDarkModeScript(bgColor, fgColor)) + injection
+				injection = nonced(buildDarkModeScript(bgColor, fgColor)) + injection
 			} else {
-				injection = string(buildLightModeScript(bgColor, fgColor, linkColor)) + injection
+				injection = nonced(buildLightModeScript(bgColor, fgColor, linkColor)) + injection
 			}
 			return []byte(s[:idx] + injection + s[idx:])
 		}
 		if isDark {
-			injection = string(buildDarkModeScript(bgColor, fgColor)) + injection
+			injection = nonced(buildDarkModeScript(bgColor, fgColor)) + injection
 		} else {
-			injection = string(buildLightModeScript(bgColor, fgColor, linkColor)) + injection
+			injection = nonced(buildLightModeScript(bgColor, fgColor, linkColor)) + injection
 		}
 		return []byte(s + injection)
 	}
 
 	if isDark {
-		injection = string(buildDarkModeScript(bgColor, fgColor)) + injection
+		injection = nonced(buildDarkModeScript(bgColor, fgColor)) + injection
 	} else {
-		injection = string(buildLightModeScript(bgColor, fgColor, linkColor)) + injection
+		injection = nonced(buildLightModeScript(bgColor, fgColor, linkColor)) + injection
 	}
 	doc := "<!DOCTYPE html><html><head><meta charset=\"utf-8\"><style>" +
 		"html{margin:0;overflow:hidden;color-scheme:" + scheme + ";background:" + bgColor + ";color:" + fgColor + "}" +

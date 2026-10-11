@@ -177,19 +177,19 @@ func (h *Handler) writeTranslatedBody(w http.ResponseWriter, r *http.Request, re
 	link := r.URL.Query().Get("link")
 	original := r.URL.Query().Get("mode") == "original"
 
-	setEmailBodyDocumentHeaders(w)
-	doc := buildBodyDocument(body, emailResizeScript(emailID), theme, bg, fg, link, original, emailBodyTextSize(r))
+	nonce := setEmailBodyDocumentHeaders(w, loadRemote)
+	doc := buildBodyDocument(body, emailResizeScript(emailID), theme, bg, fg, link, original, emailBodyTextSize(r), nonce)
 	if !loadRemote {
-		doc = append(doc, remoteImagesDetectScript(emailID)...)
+		doc = append(doc, scriptWithNonce(remoteImagesDetectScript(emailID), nonce)...)
 	}
 	w.Write(doc)
 }
 
 func (h *Handler) writeTranslatedEmailError(w http.ResponseWriter, emailID, message string, status int) {
-	setEmailBodyDocumentHeaders(w)
+	nonce := setEmailBodyDocumentHeaders(w, false)
 	w.WriteHeader(status)
 	body := []byte(`<div style="font:14px -apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;line-height:1.5;padding:8px;color:inherit">` + stdhtml.EscapeString(message) + `</div>`)
-	w.Write(buildBodyDocument(body, emailResizeScript(emailID), "light", "", "", "", false, 14))
+	w.Write(buildBodyDocument(body, emailResizeScript(emailID), "light", "", "", "", false, 14, nonce))
 }
 
 func (h *Handler) translationProvider(providerName string) (translation.Provider, bool) {
