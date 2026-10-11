@@ -178,7 +178,7 @@ func (h *Handler) handleUserUpdateAccount(w http.ResponseWriter, r *http.Request
 		}
 		w.Header().Set("X-Gofer-Account-ID", id)
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
-		_ = views.WizardStepSuccess("Account updated", id, "edit").Render(r.Context(), w)
+		_ = views.AccountChangesSaved().Render(r.Context(), w)
 		return
 	}
 	if req.Provider != "imap" || req.Provider != existing.Provider || req.AuthMethod != "plain" || existing.AuthMethod != "plain" {
@@ -202,7 +202,7 @@ func (h *Handler) handleUserUpdateAccount(w http.ResponseWriter, r *http.Request
 		return
 	}
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	_ = views.WizardStepSuccess("Account updated", id, "edit").Render(r.Context(), w)
+	_ = views.AccountChangesSaved().Render(r.Context(), w)
 }
 
 func (h *Handler) handleUserAccountColor(w http.ResponseWriter, r *http.Request) {
@@ -320,7 +320,7 @@ func userAccountError(w http.ResponseWriter, r *http.Request, err error) {
 		return
 	}
 	if errors.Is(err, config.ErrMailboxExists) {
-		http.Error(w, "mailbox already exists for this user", http.StatusConflict)
+		http.Error(w, "This mailbox is already connected to Gofer.", http.StatusConflict)
 		return
 	}
 	if isPermanentOAuthError(err) {

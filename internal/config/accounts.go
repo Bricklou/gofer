@@ -682,6 +682,11 @@ func (s *AccountStore) createAccountWithID(ctx context.Context, userID, id strin
 		// UUID reservations. The same email may belong to different user stores.
 		query += ` WHERE NOT EXISTS (SELECT 1 FROM accounts WHERE user_id = ? AND email_address = ? COLLATE NOCASE)`
 		args = append(args, userID, req.EmailAddress)
+	} else {
+		// The ID comes from the mailbox, and an account being deleted was purged
+		// above, so a row with this ID is the same mailbox already connected.
+		query += ` WHERE NOT EXISTS (SELECT 1 FROM accounts WHERE id = ?)`
+		args = append(args, id)
 	}
 	result, err := s.db.Write().ExecContext(ctx, query, args...)
 	if err != nil {

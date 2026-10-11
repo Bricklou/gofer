@@ -451,6 +451,8 @@ func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("POST /api/contacts/{id}/delete", h.handleDeleteContact)
 	mux.HandleFunc("POST /api/accounts/discover", h.handleDiscoverAccount)
 	mux.HandleFunc("GET /api/accounts/server-check", h.handleAccountServerCheck)
+	mux.HandleFunc("POST /api/accounts/test", h.handleTestNewAccount)
+	mux.HandleFunc("POST /api/accounts/{id}/test-changes", h.handleTestAccountChanges)
 	mux.HandleFunc("POST /api/accounts", h.handleCreateAccount)
 	mux.HandleFunc("GET /api/accounts/{id}/edit", h.handleGetEditAccount)
 	mux.HandleFunc("POST /api/accounts/{id}/edit", h.handleUpdateAccount)
@@ -2561,7 +2563,11 @@ func (h *Handler) handleCreateAccount(w http.ResponseWriter, r *http.Request) {
 	account, err := h.accountStore.CreateAccount(r.Context(), h.userID(r.Context()), &req)
 	if err != nil {
 		w.Header().Set("Content-Type", "text/html")
-		views.AccountFormError(fmt.Sprintf("Failed to create account: %v", err)).Render(r.Context(), w)
+		message := fmt.Sprintf("Failed to create account: %v", err)
+		if errors.Is(err, config.ErrMailboxExists) {
+			message = "This mailbox is already connected to Gofer."
+		}
+		views.AccountFormError(message).Render(r.Context(), w)
 		return
 	}
 
@@ -2645,7 +2651,7 @@ func (h *Handler) handleUpdateAccount(w http.ResponseWriter, r *http.Request) {
 	h.syncer.RestartAccount(accountID)
 
 	w.Header().Set("Content-Type", "text/html")
-	views.WizardStepSuccess("Account updated", accountID, "edit").Render(r.Context(), w)
+	views.AccountChangesSaved().Render(r.Context(), w)
 }
 
 func (h *Handler) handleUpdateAccountService(w http.ResponseWriter, r *http.Request) {
@@ -3081,6 +3087,12 @@ func (h *Handler) handleTestAccount(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) writeConnectionTestResults(w http.ResponseWriter, r *http.Request, results []models.ConnectionTestResult, accountID string) {
 	w.Header().Set("Content-Type", "text/html")
 	wizardType := r.URL.Query().Get("wizard")
+	if wizardType == "check" {
+		// The edit wizard's test step for accounts whose mail settings can't be
+		// typed in, such as Gmail or Outlook: it tests the saved connection.
+		writeAccountTestResults(w, r, results)
+		return
+	}
 	if wizardType != "" {
 		views.ConnectionTestResults(results, accountID, wizardType).Render(r.Context(), w)
 		return

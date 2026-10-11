@@ -2,6 +2,7 @@ package config
 
 import (
 	"context"
+	"errors"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -620,5 +621,20 @@ func TestListDeletingAccountIDs(t *testing.T) {
 		if ids[i] != want[i] {
 			t.Fatalf("ids = %#v, want %#v", ids, want)
 		}
+	}
+}
+
+// Connecting a mailbox that is already connected reports it as such, rather
+// than surfacing the database's duplicate-key error.
+func TestCreateAccountReportsAnAlreadyConnectedMailbox(t *testing.T) {
+	ctx := context.Background()
+	db, store := newAccountStoreTestStore(t)
+	seedAccountStoreTestUser(t, ctx, db)
+	if _, err := store.CreateAccount(ctx, "default", secureAccountStoreTestRequest("lena@example.com")); err != nil {
+		t.Fatalf("first CreateAccount() error = %v", err)
+	}
+	_, err := store.CreateAccount(ctx, "default", secureAccountStoreTestRequest("lena@example.com"))
+	if !errors.Is(err, ErrMailboxExists) {
+		t.Fatalf("second CreateAccount() error = %v, want ErrMailboxExists", err)
 	}
 }

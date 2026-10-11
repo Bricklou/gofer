@@ -27,7 +27,9 @@ access private repositories before full completion.
 
 - Pages under `/admin`, including avatars, contacts, labels, operations, and
   security.
-- Security-exception mutations under `/admin/security/*`.
+- Security-exception mutations under `/admin/security/*`. In personal and open
+  mode, where Gofer has a single owner, the same mutations are served under
+  `/settings/security/mail/*` instead; they return `404` in managed mode.
 - `GET /api/admin/mail-operations/status`.
 - `GET /api/system/processing`.
 - Avatar/contact/label diagnostic endpoints and avatar/contact backfill
@@ -60,6 +62,12 @@ constrain every private lookup or mutation to that user:
   lookups must remain user-scoped.
 - Accounts: account discovery/creation/edit/service/color/test/deletion,
   account contact settings, signatures, and `/api/mail/sync*`.
+  `GET /api/accounts/server-check` and `POST /api/accounts/test` take mail
+  server settings typed into the add-account wizard before any account exists;
+  they read only instance mail-security policy, save nothing, and reach servers
+  only through the private-network guard. `POST /api/accounts/{id}/test-changes`
+  does the same for the edit-account wizard, filling a blank password from the
+  current user's own saved account.
 - Account OAuth: `/api/accounts/oauth2/authorize`,
   `/auth/google/mailbox/callback`, and `/auth/microsoft/mailbox/callback` use a
   single-use flow bound to the current user, session, and provider.

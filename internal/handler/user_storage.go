@@ -127,6 +127,8 @@ func (h *Handler) RegisterUserStorageRoutes(ctx context.Context, mux *http.Serve
 				pattern != "GET /api/avatars/{hash}" && pattern != "GET /api/provider-avatar" && pattern != "POST /api/avatars/warmup" &&
 				pattern != "POST /api/accounts/discover" &&
 				pattern != "GET /api/accounts/server-check" &&
+				pattern != "POST /api/accounts/test" &&
+				pattern != "POST /api/accounts/{id}/test-changes" &&
 				pattern != "POST /api/accounts/{id}/test" &&
 				pattern != "POST /api/mail/sync/accounts/{id}/repair" &&
 				pattern != "GET /api/mail-operations" &&
@@ -218,6 +220,8 @@ func (h *Handler) RegisterUserStorageRoutes(ctx context.Context, mux *http.Serve
 	private("GET /api/accounts", routed.handleUserAccounts)
 	private("POST /api/accounts/discover", routed.handleDiscoverAccount)
 	private("GET /api/accounts/server-check", routed.handleAccountServerCheck)
+	private("POST /api/accounts/test", routed.handleTestNewAccount)
+	private("POST /api/accounts/{id}/test-changes", routed.handleTestAccountChanges)
 	private("GET /api/mail-operations", routed.handleMailOperations)
 	private("GET /settings/operations/content", routed.handleSettingsMailOperationsContent)
 	private("GET /settings", routed.handleSettings)
