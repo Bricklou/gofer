@@ -124,6 +124,18 @@ document.addEventListener("DOMContentLoaded", function () {
   setupMailFilters()
   setupMailTableColumnResize()
   setupSSE()
+  // Leaving the page closes its event stream at once. Otherwise the browser
+  // keeps the page it left, stream included, alive for a while in case the
+  // person goes back, and a few page loads fill the six connections it allows
+  // to one site, so new requests wait until old streams time out.
+  window.addEventListener("pagehide", function () {
+    if (!appEventSource) return
+    appEventSource.close()
+    appEventSource = null
+  })
+  window.addEventListener("pageshow", function (event) {
+    if (event.persisted) setupSSE()
+  })
   setupOutgoingSendStatus()
   setupMailOperationActions()
   setupContactAvatarImages()
