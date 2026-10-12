@@ -560,6 +560,7 @@ func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
 func setupAssetsRoutes(mux *http.ServeMux) {
 	isDevelopment := os.Getenv("GO_ENV") != "production"
 	assetServer := http.FileServer(assetFileSystem())
+	compressedAssets := newCompressedAssetCache(assetFileSystem())
 
 	assetHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if strings.HasSuffix(r.URL.Path, ".webmanifest") {
@@ -572,6 +573,9 @@ func setupAssetsRoutes(mux *http.ServeMux) {
 			w.Header().Set("Cache-Control", "no-store")
 		} else {
 			w.Header().Set("Cache-Control", "public, max-age=31536000")
+		}
+		if compressedAssets.serve(w, r, r.URL.Path) {
+			return
 		}
 		assetServer.ServeHTTP(w, r)
 	})

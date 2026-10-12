@@ -20,7 +20,7 @@ tasks:
     desc: Generate templ views and compiled CSS
     cmds:
       - templ generate --ignore-pattern='(^|/)dist(/|$)'
-      - tailwindcss -i ./assets/css/input.css -o ./assets/css/output.css
+      - tailwindcss -i ./assets/css/input.css -o ./assets/css/output.css --minify
 
   build:
     desc: Build for production
