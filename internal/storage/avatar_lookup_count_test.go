@@ -33,3 +33,31 @@ func TestFailedSenderAvatarLookupsCountLookupsNotRows(t *testing.T) {
 		t.Fatalf("failed lookups = %d, %v; want 2", count, err)
 	}
 }
+
+// The wait before the next lookup is read back from the sender's row.
+func TestSenderAvatarLastRetryWait(t *testing.T) {
+	ctx := context.Background()
+	db := newContactsTestDB(t)
+	hash := "0bc83cb571cd1c50ba6f3e8a78ef1346"
+	if wait, err := db.SenderAvatarLastRetryWait(ctx, hash); err != nil || wait != 0 {
+		t.Fatalf("unknown sender wait = %v, %v", wait, err)
+	}
+	if err := db.SaveSenderAvatarMissing(ctx, hash, "news@brand.example", "none", time.Now().Add(48*time.Hour), "missing", "missing"); err != nil {
+		t.Fatal(err)
+	}
+	if wait, err := db.SenderAvatarLastRetryWait(ctx, hash); err != nil || wait < 47*time.Hour || wait > 49*time.Hour {
+		t.Fatalf("wait after nothing found = %v, %v; want about 48h", wait, err)
+	}
+	if err := db.SaveSenderAvatarError(ctx, hash, "news@brand.example", "domain_icon", "refused", time.Now().Add(12*time.Hour), "missing", "missing"); err != nil {
+		t.Fatal(err)
+	}
+	if wait, err := db.SenderAvatarLastRetryWait(ctx, hash); err != nil || wait < 11*time.Hour || wait > 13*time.Hour {
+		t.Fatalf("wait after an error = %v, %v; want about 12h", wait, err)
+	}
+	if err := db.SaveSenderAvatarFound(ctx, hash, "news@brand.example", "domain_icon", "image/png", "", []byte("png"), time.Now().Add(7*24*time.Hour), "missing", "missing"); err != nil {
+		t.Fatal(err)
+	}
+	if wait, err := db.SenderAvatarLastRetryWait(ctx, hash); err != nil || wait != 0 {
+		t.Fatalf("wait after a picture was found = %v, %v; want 0", wait, err)
+	}
+}

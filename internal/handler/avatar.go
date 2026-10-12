@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"net"
 	"net/http"
 	"net/url"
 	"path"
@@ -40,8 +41,14 @@ const (
 	avatarWarmupAttemptLimit    = 12
 	avatarMissingTTL            = 24 * time.Hour
 	avatarFoundTTL              = 7 * 24 * time.Hour
-	avatarErrorRetryAfter       = 6 * time.Hour
-	providerAvatarMaxBytes      = 5 * 1024 * 1024
+	// A sender that keeps having no picture is looked up less and less often:
+	// each failed lookup doubles the wait, up to this.
+	avatarMaxRetryWait = 30 * 24 * time.Hour
+	// A sender on screen gets an early retry after an error only while its
+	// wait is shorter than this, so for its first few failed lookups.
+	avatarForcedRetryMaxWait = 24 * time.Hour
+	avatarErrorRetryAfter    = 6 * time.Hour
+	providerAvatarMaxBytes   = 5 * 1024 * 1024
 )
 
 type avatarWarmupRequest struct {
@@ -794,6 +801,14 @@ func (h *Handler) fetchAndPersistAvatarGuarded(ctx context.Context, hash, email 
 			if errors.Is(err, context.Canceled) {
 				return avatarresolver.Image{}, false, outcomes, err
 			}
+			// A domain that doesn't exist has no picture to find; it isn't a
+			// failure worth retrying soon.
+			if avatarDomainMissing(err) {
+				providerStatuses[provider.name] = "missing"
+				outcomes = append(outcomes, avatarProviderOutcome{provider: provider.name, status: "missing"})
+				_ = h.db.RecordSenderAvatarAttempt(ctx, hash, email, provider.name, "missing", provider.errorMessage(hash, email, err))
+				continue
+			}
 			providerStatuses[provider.name] = "error"
 			outcomes = append(outcomes, avatarProviderOutcome{provider: provider.name, status: "error"})
 			_ = h.db.RecordSenderAvatarAttempt(ctx, hash, email, provider.name, "error", provider.errorMessage(hash, email, err))
@@ -817,16 +832,34 @@ func (h *Handler) fetchAndPersistAvatarGuarded(ctx context.Context, hash, email 
 	if err := validate(); err != nil {
 		return avatarresolver.Image{}, false, outcomes, err
 	}
+	lastWait, err := h.db.SenderAvatarLastRetryWait(ctx, hash)
+	if err != nil {
+		return avatarresolver.Image{}, false, outcomes, err
+	}
 	if lastProviderErr != nil {
-		if err := h.db.SaveSenderAvatarError(ctx, hash, email, lastErrorProvider, lastProviderErr.Error(), time.Now().Add(avatarErrorRetryAfter), avatarStatus(providerStatuses, "gravatar"), avatarStatus(providerStatuses, "bimi")); err != nil {
+		if err := h.db.SaveSenderAvatarError(ctx, hash, email, lastErrorProvider, lastProviderErr.Error(), time.Now().Add(avatarRetryWait(avatarErrorRetryAfter, lastWait)), avatarStatus(providerStatuses, "gravatar"), avatarStatus(providerStatuses, "bimi")); err != nil {
 			return avatarresolver.Image{}, false, outcomes, err
 		}
 		return avatarresolver.Image{}, false, outcomes, lastProviderErr
 	}
-	if err := h.db.SaveSenderAvatarMissing(ctx, hash, email, "none", time.Now().Add(avatarMissingTTL), avatarStatus(providerStatuses, "gravatar"), avatarStatus(providerStatuses, "bimi")); err != nil {
+	if err := h.db.SaveSenderAvatarMissing(ctx, hash, email, "none", time.Now().Add(avatarRetryWait(avatarMissingTTL, lastWait)), avatarStatus(providerStatuses, "gravatar"), avatarStatus(providerStatuses, "bimi")); err != nil {
 		return avatarresolver.Image{}, false, outcomes, err
 	}
 	return avatarresolver.Image{}, false, outcomes, nil
+}
+
+// avatarRetryWait is how long to wait before looking a sender up again after
+// a lookup found no picture: base the first time, then twice the last wait,
+// up to avatarMaxRetryWait. lastWait is 0 when the last lookup found one.
+func avatarRetryWait(base, lastWait time.Duration) time.Duration {
+	return min(max(base, 2*lastWait), avatarMaxRetryWait)
+}
+
+// avatarDomainMissing reports whether a lookup failed because the sender's
+// domain doesn't exist.
+func avatarDomainMissing(err error) bool {
+	var dnsErr *net.DNSError
+	return errors.As(err, &dnsErr) && dnsErr.IsNotFound
 }
 
 func (h *Handler) reuseStoredDomainIconAvatar(ctx context.Context, hash, email, gravatarStatus, bimiStatus string) (avatarresolver.Image, string, bool, error) {
@@ -1355,8 +1388,16 @@ func (h *Handler) avatarWarmupCandidate(ctx context.Context, email, hash string)
 		return storage.SenderAvatarCandidate{}, false, false, false, err
 	}
 	if rec != nil && !senderAvatarRecordDue(*rec) {
-		if rec.Status == "error" && h.allowAvatarWarmupForced(hash) {
-			return storage.SenderAvatarCandidate{EmailHash: hash, Email: email}, true, true, false, nil
+		if rec.Status == "error" {
+			// A sender on screen may be retried early after an error, unless
+			// its lookups keep failing.
+			lastWait, err := h.db.SenderAvatarLastRetryWait(ctx, hash)
+			if err != nil {
+				return storage.SenderAvatarCandidate{}, false, false, false, err
+			}
+			if lastWait < avatarForcedRetryMaxWait && h.allowAvatarWarmupForced(hash) {
+				return storage.SenderAvatarCandidate{EmailHash: hash, Email: email}, true, true, false, nil
+			}
 		}
 		return storage.SenderAvatarCandidate{}, false, false, false, nil
 	}
