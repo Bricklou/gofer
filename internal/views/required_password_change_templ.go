@@ -39,7 +39,7 @@ func RequiredPasswordChangePage(message, csrf, logoutCSRF string) templ.Componen
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 2, "<link rel=\"stylesheet\" href=\"/assets/css/output.css\"></head><body class=\"bg-background text-foreground antialiased surface-desk\"><main class=\"min-h-screen flex items-center justify-center p-4\"><div class=\"w-full max-w-sm space-y-6\"><div><h1 class=\"text-2xl font-bold\">Change your password</h1><p class=\"mt-2 text-sm text-muted-foreground\">Your administrator requires a new password before you can access webmail.</p></div>")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 2, "<link rel=\"stylesheet\" href=\"/assets/css/output.css\"><script src=\"/assets/js/actions.js\"></script></head><body class=\"bg-background text-foreground antialiased surface-desk\"><main class=\"min-h-screen flex items-center justify-center p-4\"><div class=\"w-full max-w-sm space-y-6\"><div><h1 class=\"text-2xl font-bold\">Change your password</h1><p class=\"mt-2 text-sm text-muted-foreground\">Your administrator requires a new password before you can access webmail.</p></div>")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -51,7 +51,7 @@ func RequiredPasswordChangePage(message, csrf, logoutCSRF string) templ.Componen
 			var templ_7745c5c3_Var2 string
 			templ_7745c5c3_Var2, templ_7745c5c3_Err = templ.JoinStringErrs(message)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/required_password_change.templ`, Line: 23, Col: 64}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/required_password_change.templ`, Line: 24, Col: 64}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var2))
 			if templ_7745c5c3_Err != nil {
@@ -69,7 +69,7 @@ func RequiredPasswordChangePage(message, csrf, logoutCSRF string) templ.Componen
 		var templ_7745c5c3_Var3 string
 		templ_7745c5c3_Var3, templ_7745c5c3_Err = templ.JoinStringErrs(csrf)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/required_password_change.templ`, Line: 26, Col: 52}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/required_password_change.templ`, Line: 27, Col: 52}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var3))
 		if templ_7745c5c3_Err != nil {
@@ -108,7 +108,7 @@ func RequiredPasswordChangePage(message, csrf, logoutCSRF string) templ.Componen
 		var templ_7745c5c3_Var5 string
 		templ_7745c5c3_Var5, templ_7745c5c3_Err = templ.JoinStringErrs(logoutCSRF)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/required_password_change.templ`, Line: 46, Col: 58}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/required_password_change.templ`, Line: 47, Col: 58}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var5))
 		if templ_7745c5c3_Err != nil {

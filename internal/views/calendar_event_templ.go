@@ -775,7 +775,7 @@ func CalendarEventGuests(details CalendarEventDetails) templ.Component {
 		ctx = templ.ClearChildren(ctx)
 		attrs := templ.Attributes{}
 		if details.Delivery != nil {
-			attrs = templ.Attributes{"hx-get": calendarEventDetailsURL(details.Event.ID) + "/delivery", "hx-trigger": "every 5s [document.visibilityState === 'visible' && document.getElementById('calendar-event-guests')?.getClientRects().length > 0]", "hx-target": "this", "hx-swap": "outerHTML", "hx-sync": "this:drop", "hx-params": "none"}
+			attrs = templ.Attributes{"hx-get": calendarEventDetailsURL(details.Event.ID) + "/delivery", "hx-trigger": "every 5s", "data-poll-when-visible": "", "hx-target": "this", "hx-swap": "outerHTML", "hx-sync": "this:drop", "hx-params": "none"}
 		}
 		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 39, "<section id=\"calendar-event-guests\" aria-labelledby=\"calendar-event-guests-heading\"")
 		if templ_7745c5c3_Err != nil {

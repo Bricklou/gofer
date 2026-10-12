@@ -62,7 +62,7 @@ func LoginPage(showGoogle, showMicrosoft bool, oidcName string, errorMessage str
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 2, "<link rel=\"stylesheet\" href=\"/assets/css/output.css\"></head><body class=\"bg-background text-foreground antialiased surface-desk\"><div class=\"min-h-screen flex items-center justify-center p-4\"><div class=\"w-full max-w-sm\"><div class=\"text-center mb-10\"><img src=\"/assets/logo.svg\" alt=\"Gofer\" class=\"h-12 w-auto mx-auto\"><p class=\"text-muted-foreground mt-2 text-sm\">A self-hosted email client</p></div>")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 2, "<link rel=\"stylesheet\" href=\"/assets/css/output.css\"><script src=\"/assets/js/actions.js\"></script></head><body class=\"bg-background text-foreground antialiased surface-desk\"><div class=\"min-h-screen flex items-center justify-center p-4\"><div class=\"w-full max-w-sm\"><div class=\"text-center mb-10\"><img src=\"/assets/logo.svg\" alt=\"Gofer\" class=\"h-12 w-auto mx-auto\"><p class=\"text-muted-foreground mt-2 text-sm\">A self-hosted email client</p></div>")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -74,7 +74,7 @@ func LoginPage(showGoogle, showMicrosoft bool, oidcName string, errorMessage str
 			var templ_7745c5c3_Var2 string
 			templ_7745c5c3_Var2, templ_7745c5c3_Err = templ.JoinStringErrs(errorMessage)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/login.templ`, Line: 47, Col: 21}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/login.templ`, Line: 48, Col: 21}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var2))
 			if templ_7745c5c3_Err != nil {
@@ -92,7 +92,7 @@ func LoginPage(showGoogle, showMicrosoft bool, oidcName string, errorMessage str
 		var templ_7745c5c3_Var3 string
 		templ_7745c5c3_Var3, templ_7745c5c3_Err = templ.JoinStringErrs(identifier)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/login.templ`, Line: 57, Col: 26}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/login.templ`, Line: 58, Col: 26}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var3))
 		if templ_7745c5c3_Err != nil {
@@ -269,7 +269,7 @@ func LoginPage(showGoogle, showMicrosoft bool, oidcName string, errorMessage str
 					var templ_7745c5c3_Var9 string
 					templ_7745c5c3_Var9, templ_7745c5c3_Err = templ.JoinStringErrs(oidcName)
 					if templ_7745c5c3_Err != nil {
-						return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/login.templ`, Line: 152, Col: 34}
+						return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/login.templ`, Line: 153, Col: 34}
 					}
 					_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var9))
 					if templ_7745c5c3_Err != nil {
@@ -346,7 +346,7 @@ func LoginMFAContinuationPage(errorMessage string, factors LoginMFAFactors) temp
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 29, "<link rel=\"stylesheet\" href=\"/assets/css/output.css\"></head><body class=\"bg-background text-foreground antialiased surface-desk\"><main class=\"min-h-screen flex items-center justify-center p-4\"><div class=\"w-full max-w-sm\"><div class=\"text-center\"><img src=\"/assets/logo.svg\" alt=\"Gofer\" class=\"h-12 w-auto mx-auto\"> ")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 29, "<link rel=\"stylesheet\" href=\"/assets/css/output.css\"><script src=\"/assets/js/actions.js\"></script></head><body class=\"bg-background text-foreground antialiased surface-desk\"><main class=\"min-h-screen flex items-center justify-center p-4\"><div class=\"w-full max-w-sm\"><div class=\"text-center\"><img src=\"/assets/logo.svg\" alt=\"Gofer\" class=\"h-12 w-auto mx-auto\"> ")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -373,7 +373,7 @@ func LoginMFAContinuationPage(errorMessage string, factors LoginMFAFactors) temp
 			var templ_7745c5c3_Var11 string
 			templ_7745c5c3_Var11, templ_7745c5c3_Err = templ.JoinStringErrs(factors.PrimarySignIn)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/login.templ`, Line: 204, Col: 198}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/login.templ`, Line: 206, Col: 198}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var11))
 			if templ_7745c5c3_Err != nil {
@@ -392,7 +392,7 @@ func LoginMFAContinuationPage(errorMessage string, factors LoginMFAFactors) temp
 			var templ_7745c5c3_Var12 string
 			templ_7745c5c3_Var12, templ_7745c5c3_Err = templ.JoinStringErrs(errorMessage)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/login.templ`, Line: 208, Col: 21}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/login.templ`, Line: 210, Col: 21}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var12))
 			if templ_7745c5c3_Err != nil {
@@ -453,7 +453,7 @@ func LoginMFAContinuationPage(errorMessage string, factors LoginMFAFactors) temp
 			var templ_7745c5c3_Var14 string
 			templ_7745c5c3_Var14, templ_7745c5c3_Err = templ.JoinStringErrs(factors.Username)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/login.templ`, Line: 240, Col: 80}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/login.templ`, Line: 242, Col: 80}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var14))
 			if templ_7745c5c3_Err != nil {
@@ -553,7 +553,7 @@ func RecoveryCodeLoginPage(errorMessage string) templ.Component {
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 50, "<link rel=\"stylesheet\" href=\"/assets/css/output.css\"></head><body class=\"bg-background text-foreground antialiased surface-desk\"><main class=\"min-h-screen flex items-center justify-center p-4\"><div class=\"w-full max-w-sm\"><div class=\"text-center\"><img src=\"/assets/logo.svg\" alt=\"Gofer\" class=\"h-12 w-auto mx-auto\"><h1 class=\"mt-8 text-2xl font-semibold\">Use a recovery code</h1><p class=\"mt-3 text-sm text-muted-foreground\">Enter one of the recovery codes you saved during setup. A successful code starts required authenticator repair before Gofer grants access.</p></div>")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 50, "<link rel=\"stylesheet\" href=\"/assets/css/output.css\"><script src=\"/assets/js/actions.js\"></script></head><body class=\"bg-background text-foreground antialiased surface-desk\"><main class=\"min-h-screen flex items-center justify-center p-4\"><div class=\"w-full max-w-sm\"><div class=\"text-center\"><img src=\"/assets/logo.svg\" alt=\"Gofer\" class=\"h-12 w-auto mx-auto\"><h1 class=\"mt-8 text-2xl font-semibold\">Use a recovery code</h1><p class=\"mt-3 text-sm text-muted-foreground\">Enter one of the recovery codes you saved during setup. A successful code starts required authenticator repair before Gofer grants access.</p></div>")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -565,7 +565,7 @@ func RecoveryCodeLoginPage(errorMessage string) templ.Component {
 			var templ_7745c5c3_Var18 string
 			templ_7745c5c3_Var18, templ_7745c5c3_Err = templ.JoinStringErrs(errorMessage)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/login.templ`, Line: 282, Col: 188}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/login.templ`, Line: 285, Col: 188}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var18))
 			if templ_7745c5c3_Err != nil {
@@ -675,7 +675,7 @@ func RecoveryRepairMFAPage(data RecoveryRepairMFAData) templ.Component {
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 61, "<link rel=\"stylesheet\" href=\"/assets/css/output.css\"></head><body class=\"bg-background text-foreground antialiased surface-desk\"><main class=\"min-h-screen flex items-center justify-center p-4 py-10\"><div class=\"w-full max-w-lg\"><div class=\"text-center mb-8\"><img src=\"/assets/logo.svg\" alt=\"Gofer\" class=\"h-12 w-auto mx-auto\"><p class=\"mt-5 text-xs font-medium uppercase tracking-widest text-warning\">Recovery code accepted</p><h1 class=\"mt-2 text-2xl font-semibold\">Replace your authenticator</h1><p class=\"mt-2 text-sm text-muted-foreground\">Gofer has not created a session. Enroll this replacement authenticator and save a fresh recovery batch before access is restored.</p></div>")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 61, "<link rel=\"stylesheet\" href=\"/assets/css/output.css\"><script src=\"/assets/js/actions.js\"></script></head><body class=\"bg-background text-foreground antialiased surface-desk\"><main class=\"min-h-screen flex items-center justify-center p-4 py-10\"><div class=\"w-full max-w-lg\"><div class=\"text-center mb-8\"><img src=\"/assets/logo.svg\" alt=\"Gofer\" class=\"h-12 w-auto mx-auto\"><p class=\"mt-5 text-xs font-medium uppercase tracking-widest text-warning\">Recovery code accepted</p><h1 class=\"mt-2 text-2xl font-semibold\">Replace your authenticator</h1><p class=\"mt-2 text-sm text-muted-foreground\">Gofer has not created a session. Enroll this replacement authenticator and save a fresh recovery batch before access is restored.</p></div>")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -687,7 +687,7 @@ func RecoveryRepairMFAPage(data RecoveryRepairMFAData) templ.Component {
 			var templ_7745c5c3_Var22 string
 			templ_7745c5c3_Var22, templ_7745c5c3_Err = templ.JoinStringErrs(data.ErrorMessage)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/login.templ`, Line: 339, Col: 199}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/login.templ`, Line: 343, Col: 199}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var22))
 			if templ_7745c5c3_Err != nil {
@@ -705,7 +705,7 @@ func RecoveryRepairMFAPage(data RecoveryRepairMFAData) templ.Component {
 		var templ_7745c5c3_Var23 string
 		templ_7745c5c3_Var23, templ_7745c5c3_Err = templ.JoinStringErrs(data.QRCodeDataURL)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/login.templ`, Line: 343, Col: 36}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/login.templ`, Line: 347, Col: 36}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var23))
 		if templ_7745c5c3_Err != nil {
@@ -718,7 +718,7 @@ func RecoveryRepairMFAPage(data RecoveryRepairMFAData) templ.Component {
 		var templ_7745c5c3_Var24 string
 		templ_7745c5c3_Var24, templ_7745c5c3_Err = templ.JoinStringErrs(data.ManualKey)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/login.templ`, Line: 347, Col: 150}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/login.templ`, Line: 351, Col: 150}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var24))
 		if templ_7745c5c3_Err != nil {
@@ -731,7 +731,7 @@ func RecoveryRepairMFAPage(data RecoveryRepairMFAData) templ.Component {
 		var templ_7745c5c3_Var25 string
 		templ_7745c5c3_Var25, templ_7745c5c3_Err = templ.JoinStringErrs(data.Algorithm)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/login.templ`, Line: 348, Col: 69}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/login.templ`, Line: 352, Col: 69}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var25))
 		if templ_7745c5c3_Err != nil {
@@ -744,7 +744,7 @@ func RecoveryRepairMFAPage(data RecoveryRepairMFAData) templ.Component {
 		var templ_7745c5c3_Var26 string
 		templ_7745c5c3_Var26, templ_7745c5c3_Err = templ.JoinStringErrs(fmt.Sprintf("%d digits", data.Digits))
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/login.templ`, Line: 348, Col: 114}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/login.templ`, Line: 352, Col: 114}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var26))
 		if templ_7745c5c3_Err != nil {
@@ -757,7 +757,7 @@ func RecoveryRepairMFAPage(data RecoveryRepairMFAData) templ.Component {
 		var templ_7745c5c3_Var27 string
 		templ_7745c5c3_Var27, templ_7745c5c3_Err = templ.JoinStringErrs(fmt.Sprintf("%d-second period", data.Period))
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/login.templ`, Line: 348, Col: 166}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/login.templ`, Line: 352, Col: 166}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var27))
 		if templ_7745c5c3_Err != nil {
@@ -852,7 +852,7 @@ func MFAEnrollmentPage(data MFAEnrollmentData) templ.Component {
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 75, "<link rel=\"stylesheet\" href=\"/assets/css/output.css\"></head><body class=\"bg-background text-foreground antialiased surface-desk\"><main class=\"min-h-screen flex items-center justify-center p-4 py-10\"><div class=\"w-full max-w-lg\"><div class=\"text-center mb-8\"><img src=\"/assets/logo.svg\" alt=\"Gofer\" class=\"h-12 w-auto mx-auto\"><p class=\"mt-5 text-xs font-medium uppercase tracking-widest text-warning\">MFA required</p><h1 class=\"mt-2 text-2xl font-semibold\">Set up an authenticator</h1><p class=\"mt-2 text-sm text-muted-foreground\">Your primary sign-in succeeded, but Gofer has not created a session. Set up MFA before continuing to your mailbox.</p></div>")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 75, "<link rel=\"stylesheet\" href=\"/assets/css/output.css\"><script src=\"/assets/js/actions.js\"></script></head><body class=\"bg-background text-foreground antialiased surface-desk\"><main class=\"min-h-screen flex items-center justify-center p-4 py-10\"><div class=\"w-full max-w-lg\"><div class=\"text-center mb-8\"><img src=\"/assets/logo.svg\" alt=\"Gofer\" class=\"h-12 w-auto mx-auto\"><p class=\"mt-5 text-xs font-medium uppercase tracking-widest text-warning\">MFA required</p><h1 class=\"mt-2 text-2xl font-semibold\">Set up an authenticator</h1><p class=\"mt-2 text-sm text-muted-foreground\">Your primary sign-in succeeded, but Gofer has not created a session. Set up MFA before continuing to your mailbox.</p></div>")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -864,7 +864,7 @@ func MFAEnrollmentPage(data MFAEnrollmentData) templ.Component {
 			var templ_7745c5c3_Var31 string
 			templ_7745c5c3_Var31, templ_7745c5c3_Err = templ.JoinStringErrs(data.ErrorMessage)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/login.templ`, Line: 394, Col: 194}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/login.templ`, Line: 399, Col: 194}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var31))
 			if templ_7745c5c3_Err != nil {
@@ -882,7 +882,7 @@ func MFAEnrollmentPage(data MFAEnrollmentData) templ.Component {
 		var templ_7745c5c3_Var32 string
 		templ_7745c5c3_Var32, templ_7745c5c3_Err = templ.JoinStringErrs(data.QRCodeDataURL)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/login.templ`, Line: 398, Col: 36}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/login.templ`, Line: 403, Col: 36}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var32))
 		if templ_7745c5c3_Err != nil {
@@ -895,7 +895,7 @@ func MFAEnrollmentPage(data MFAEnrollmentData) templ.Component {
 		var templ_7745c5c3_Var33 string
 		templ_7745c5c3_Var33, templ_7745c5c3_Err = templ.JoinStringErrs(data.ManualKey)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/login.templ`, Line: 402, Col: 150}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/login.templ`, Line: 407, Col: 150}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var33))
 		if templ_7745c5c3_Err != nil {
@@ -908,7 +908,7 @@ func MFAEnrollmentPage(data MFAEnrollmentData) templ.Component {
 		var templ_7745c5c3_Var34 string
 		templ_7745c5c3_Var34, templ_7745c5c3_Err = templ.JoinStringErrs(data.Algorithm)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/login.templ`, Line: 403, Col: 69}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/login.templ`, Line: 408, Col: 69}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var34))
 		if templ_7745c5c3_Err != nil {
@@ -921,7 +921,7 @@ func MFAEnrollmentPage(data MFAEnrollmentData) templ.Component {
 		var templ_7745c5c3_Var35 string
 		templ_7745c5c3_Var35, templ_7745c5c3_Err = templ.JoinStringErrs(fmt.Sprintf("%d digits", data.Digits))
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/login.templ`, Line: 403, Col: 114}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/login.templ`, Line: 408, Col: 114}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var35))
 		if templ_7745c5c3_Err != nil {
@@ -934,7 +934,7 @@ func MFAEnrollmentPage(data MFAEnrollmentData) templ.Component {
 		var templ_7745c5c3_Var36 string
 		templ_7745c5c3_Var36, templ_7745c5c3_Err = templ.JoinStringErrs(fmt.Sprintf("%d-second period", data.Period))
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/login.templ`, Line: 403, Col: 166}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/login.templ`, Line: 408, Col: 166}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var36))
 		if templ_7745c5c3_Err != nil {
@@ -1029,7 +1029,7 @@ func MFAEnrollmentCodesPage(data MFAEnrollmentCodesData) templ.Component {
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 89, "<link rel=\"stylesheet\" href=\"/assets/css/output.css\"></head><body class=\"bg-background text-foreground antialiased surface-desk\"><main class=\"min-h-screen flex items-center justify-center p-4 py-10\"><div class=\"w-full max-w-lg\"><div class=\"text-center mb-8\"><img src=\"/assets/logo.svg\" alt=\"Gofer\" class=\"h-12 w-auto mx-auto\"><p class=\"mt-5 text-xs font-medium uppercase tracking-widest text-success\">Authenticator verified</p><h1 class=\"mt-2 text-2xl font-semibold\">Save your recovery codes</h1><p class=\"mt-2 text-sm text-muted-foreground\">Save a recovery batch before Gofer commits the authenticator and creates your signed-in session.</p></div>")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 89, "<link rel=\"stylesheet\" href=\"/assets/css/output.css\"><script src=\"/assets/js/actions.js\"></script></head><body class=\"bg-background text-foreground antialiased surface-desk\"><main class=\"min-h-screen flex items-center justify-center p-4 py-10\"><div class=\"w-full max-w-lg\"><div class=\"text-center mb-8\"><img src=\"/assets/logo.svg\" alt=\"Gofer\" class=\"h-12 w-auto mx-auto\"><p class=\"mt-5 text-xs font-medium uppercase tracking-widest text-success\">Authenticator verified</p><h1 class=\"mt-2 text-2xl font-semibold\">Save your recovery codes</h1><p class=\"mt-2 text-sm text-muted-foreground\">Save a recovery batch before Gofer commits the authenticator and creates your signed-in session.</p></div>")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -1041,7 +1041,7 @@ func MFAEnrollmentCodesPage(data MFAEnrollmentCodesData) templ.Component {
 			var templ_7745c5c3_Var40 string
 			templ_7745c5c3_Var40, templ_7745c5c3_Err = templ.JoinStringErrs(data.ErrorMessage)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/login.templ`, Line: 449, Col: 200}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/login.templ`, Line: 455, Col: 200}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var40))
 			if templ_7745c5c3_Err != nil {
@@ -1065,7 +1065,7 @@ func MFAEnrollmentCodesPage(data MFAEnrollmentCodesData) templ.Component {
 				var templ_7745c5c3_Var41 string
 				templ_7745c5c3_Var41, templ_7745c5c3_Err = templ.JoinStringErrs(code)
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/login.templ`, Line: 458, Col: 114}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/login.templ`, Line: 464, Col: 114}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var41))
 				if templ_7745c5c3_Err != nil {
@@ -1094,7 +1094,7 @@ func MFAEnrollmentCodesPage(data MFAEnrollmentCodesData) templ.Component {
 			var templ_7745c5c3_Var42 string
 			templ_7745c5c3_Var42, templ_7745c5c3_Err = templ.JoinStringErrs(data.BatchID)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/login.templ`, Line: 470, Col: 64}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/login.templ`, Line: 476, Col: 64}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var42))
 			if templ_7745c5c3_Err != nil {
@@ -1225,7 +1225,7 @@ func RecoveryRepairCodesPage(data RecoveryRepairCodesData) templ.Component {
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 108, "<link rel=\"stylesheet\" href=\"/assets/css/output.css\"></head><body class=\"bg-background text-foreground antialiased surface-desk\"><main class=\"min-h-screen flex items-center justify-center p-4 py-10\"><div class=\"w-full max-w-lg\"><div class=\"text-center mb-8\"><img src=\"/assets/logo.svg\" alt=\"Gofer\" class=\"h-12 w-auto mx-auto\"><p class=\"mt-5 text-xs font-medium uppercase tracking-widest text-success\">Replacement authenticator verified</p><h1 class=\"mt-2 text-2xl font-semibold\">Save fresh recovery codes</h1><p class=\"mt-2 text-sm text-muted-foreground\">Completing this page replaces the old authenticator and remaining old recovery codes, revokes earlier sessions, and signs you in.</p></div>")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 108, "<link rel=\"stylesheet\" href=\"/assets/css/output.css\"><script src=\"/assets/js/actions.js\"></script></head><body class=\"bg-background text-foreground antialiased surface-desk\"><main class=\"min-h-screen flex items-center justify-center p-4 py-10\"><div class=\"w-full max-w-lg\"><div class=\"text-center mb-8\"><img src=\"/assets/logo.svg\" alt=\"Gofer\" class=\"h-12 w-auto mx-auto\"><p class=\"mt-5 text-xs font-medium uppercase tracking-widest text-success\">Replacement authenticator verified</p><h1 class=\"mt-2 text-2xl font-semibold\">Save fresh recovery codes</h1><p class=\"mt-2 text-sm text-muted-foreground\">Completing this page replaces the old authenticator and remaining old recovery codes, revokes earlier sessions, and signs you in.</p></div>")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -1237,7 +1237,7 @@ func RecoveryRepairCodesPage(data RecoveryRepairCodesData) templ.Component {
 			var templ_7745c5c3_Var47 string
 			templ_7745c5c3_Var47, templ_7745c5c3_Err = templ.JoinStringErrs(data.ErrorMessage)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/login.templ`, Line: 520, Col: 201}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/login.templ`, Line: 527, Col: 201}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var47))
 			if templ_7745c5c3_Err != nil {
@@ -1261,7 +1261,7 @@ func RecoveryRepairCodesPage(data RecoveryRepairCodesData) templ.Component {
 				var templ_7745c5c3_Var48 string
 				templ_7745c5c3_Var48, templ_7745c5c3_Err = templ.JoinStringErrs(code)
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/login.templ`, Line: 529, Col: 114}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/login.templ`, Line: 536, Col: 114}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var48))
 				if templ_7745c5c3_Err != nil {
@@ -1290,7 +1290,7 @@ func RecoveryRepairCodesPage(data RecoveryRepairCodesData) templ.Component {
 			var templ_7745c5c3_Var49 string
 			templ_7745c5c3_Var49, templ_7745c5c3_Err = templ.JoinStringErrs(data.BatchID)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/login.templ`, Line: 541, Col: 64}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/login.templ`, Line: 548, Col: 64}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var49))
 			if templ_7745c5c3_Err != nil {

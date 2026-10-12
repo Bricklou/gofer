@@ -30,7 +30,7 @@ templ MailList(accounts []models.Account, emails []models.Email, activeFolder st
 		if mailListNavigationMode(navigationMode) == "pagination" && scrollCount >= 0 {
 			@MailListPagination(scrollCount, windowStart, len(emails), mailListPaginationPageSize())
 		}
-		<button type="button" class="mobile-compose-fab" onclick="openNewCompose()" aria-label="Compose">
+		<button type="button" class="mobile-compose-fab" data-on-click='["openNewCompose"]' aria-label="Compose">
 			@icon.Pen(icon.Props{Class: "size-5"})
 		</button>
 	</div>

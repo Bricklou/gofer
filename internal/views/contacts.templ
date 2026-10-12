@@ -1595,7 +1595,7 @@ templ ContactsDetail(contact *models.Contact, profile *models.ContactProfile, sh
 		}
 	>
 		if contact != nil || showNew {
-			<button type="button" class="mobile-back-button mb-2 h-9 items-center gap-1.5 self-start rounded-md px-2 text-sm font-semibold text-muted-foreground hover:bg-muted" onclick="closeMobileContactView()">
+			<button type="button" class="mobile-back-button mb-2 h-9 items-center gap-1.5 self-start rounded-md px-2 text-sm font-semibold text-muted-foreground hover:bg-muted" data-on-click='["closeMobileContactView"]'>
 				@icon.ArrowLeft(icon.Props{Class: "size-4"})
 				Contacts
 			</button>
@@ -1962,7 +1962,7 @@ templ ContactEditorHeader(contact *models.Contact, profile *models.ContactProfil
 				</div>
 			</div>
 			<div class="contact-header-actions flex flex-wrap items-center gap-2 xl:justify-end">
-				<button type="button" class="contact-header-back hidden" onclick="closeMobileContactView()" aria-label="Back to contacts">
+				<button type="button" class="contact-header-back hidden" data-on-click='["closeMobileContactView"]' aria-label="Back to contacts">
 					@icon.ArrowLeft(icon.Props{Class: "size-5"})
 				</button>
 				<div class="contact-header-spacer hidden"></div>

@@ -46,7 +46,7 @@ func PasswordResetRequestPage(data PasswordResetRequestData) templ.Component {
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 2, "<link rel=\"stylesheet\" href=\"/assets/css/output.css\"></head><body class=\"bg-background text-foreground antialiased surface-desk\"><main class=\"min-h-screen flex items-center justify-center p-4\"><div class=\"w-full max-w-sm\"><div class=\"text-center mb-8\"><img src=\"/assets/logo.svg\" alt=\"Gofer\" class=\"h-12 w-auto mx-auto\"> ")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 2, "<link rel=\"stylesheet\" href=\"/assets/css/output.css\"><script src=\"/assets/js/actions.js\"></script></head><body class=\"bg-background text-foreground antialiased surface-desk\"><main class=\"min-h-screen flex items-center justify-center p-4\"><div class=\"w-full max-w-sm\"><div class=\"text-center mb-8\"><img src=\"/assets/logo.svg\" alt=\"Gofer\" class=\"h-12 w-auto mx-auto\"> ")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -73,7 +73,7 @@ func PasswordResetRequestPage(data PasswordResetRequestData) templ.Component {
 			var templ_7745c5c3_Var2 string
 			templ_7745c5c3_Var2, templ_7745c5c3_Err = templ.JoinStringErrs(data.Message)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/password_reset_request.templ`, Line: 37, Col: 21}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/password_reset_request.templ`, Line: 38, Col: 21}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var2))
 			if templ_7745c5c3_Err != nil {

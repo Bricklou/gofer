@@ -3,6 +3,7 @@ package views
 import (
 	"bytes"
 	"context"
+	"os"
 	"slices"
 	"strings"
 	"testing"
@@ -644,13 +645,13 @@ func TestAccountDialogsIncludeCalendarServiceSection(t *testing.T) {
 		"Discover calendars",
 		`/api/accounts/calendar-account/calendar/discover`,
 		`data-wizard-service-switch="calendar"`,
-		`handleEditAccountSaveStart(event)`,
-		`handleEditAccountSaveResult(event)`,
+		`data-on-htmx-before-request='["handleEditAccountSaveStart","$event"]'`,
+		`data-on-htmx-after-request='["handleEditAccountSaveResult","$event"]'`,
 		`hx-target="#edit-account-save-status"`,
 		`data-wizard-step="4"`,
 		`data-wizard-step="5"`,
 		`data-wizard-footer-step="5"`,
-		`onclick="editWizardGo(4)"`,
+		`data-on-click='["editWizardGo",4]'`,
 	} {
 		if !strings.Contains(editOut.String(), want) {
 			t.Fatalf("edit account dialog missing Calendar marker %q: %s", want, editOut.String())
@@ -673,7 +674,7 @@ func TestAccountDialogsIncludeCalendarServiceSection(t *testing.T) {
 	}
 	// Editing ends its mail steps with 1.d, which tests before saving; an
 	// account without typed mail settings tests its saved connection there.
-	for _, want := range []string{"Test and save", `id="edit-account-test-results"`, `data-test-url="/api/accounts/calendar-account/test?wizard=check"`, `data-test-typed="false"`, `data-account-test-anyway`, `data-account-test-retest`, `data-account-test-save`, `data-account-test-close`, "Continue to Contacts", "wizardServiceNext(this, 'calendar', 'done')"} {
+	for _, want := range []string{"Test and save", `id="edit-account-test-results"`, `data-test-url="/api/accounts/calendar-account/test?wizard=check"`, `data-test-typed="false"`, `data-account-test-anyway`, `data-account-test-retest`, `data-account-test-save`, `data-account-test-close`, "Continue to Contacts", `data-on-click='["wizardServiceNext","$this","calendar","done"]'`} {
 		if !strings.Contains(editOut.String(), want) {
 			t.Fatalf("edit account wizard missing test-before-save marker %q: %s", want, editOut.String())
 		}
@@ -704,7 +705,7 @@ func TestAccountDialogsIncludeCalendarServiceSection(t *testing.T) {
 			t.Fatalf("add account dialog still has a Finish step (%q): %s", gone, addOut.String())
 		}
 	}
-	for _, want := range []string{`data-add-account-created`, "wizardServiceNext(this, 'calendar', 'done')"} {
+	for _, want := range []string{`data-add-account-created`, `data-on-click='["wizardServiceNext","$this","calendar","done"]'`} {
 		if !strings.Contains(postCreateOut.String(), want) {
 			t.Fatalf("post-create account wizard missing %q: %s", want, postCreateOut.String())
 		}
@@ -728,8 +729,8 @@ func TestAccountDialogsIncludeCalendarServiceSection(t *testing.T) {
 		`/api/accounts/gmail-calendar-account/calendar/discover`,
 		`data-calendar-discovery-form`,
 		`data-calendar-discovery-label`,
-		`handleCalendarDiscoveryStart(event)`,
-		`handleCalendarDiscoveryResult(event)`,
+		`["handleCalendarDiscoveryStart","$event"]`,
+		`["handleCalendarDiscoveryResult","$event"]`,
 		`data-wizard-service-always-active="true"`,
 	} {
 		if !strings.Contains(gmailOut.String(), want) {
@@ -848,15 +849,16 @@ func renderedWizardSwitchForService(html, service string) string {
 }
 
 func TestAccountDiscoveryRequiresExplicitCandidateSelection(t *testing.T) {
-	var out bytes.Buffer
-	if err := AddAccountDialog().Render(context.Background(), &out); err != nil {
-		t.Fatalf("AddAccountDialog.Render() error = %v", err)
+	// The add account dialog's script is in settings-page.js.
+	data, err := os.ReadFile("../../assets/js/settings-page.js")
+	if err != nil {
+		t.Fatal(err)
 	}
-	html := out.String()
-	if strings.Contains(html, "applyMailDiscoveryCandidate(0);") {
+	script := string(data)
+	if strings.Contains(script, "applyMailDiscoveryCandidate(0);") {
 		t.Fatal("mail discovery still automatically applies the first candidate")
 	}
-	if !strings.Contains(html, "Choose a configuration to apply") {
+	if !strings.Contains(script, "Choose a configuration to apply") {
 		t.Fatal("mail discovery does not ask the user to choose a candidate")
 	}
 }

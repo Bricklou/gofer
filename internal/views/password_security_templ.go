@@ -291,14 +291,14 @@ func PasswordSecurityVerificationLayout(uiSettings map[string]string, data Passw
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 6, "</head><body class=\"bg-background text-foreground antialiased surface-desk\" data-ui-settings=\"")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 6, "<script src=\"/assets/js/actions.js\"></script></head><body class=\"bg-background text-foreground antialiased surface-desk\" data-ui-settings=\"")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
 		var templ_7745c5c3_Var5 string
 		templ_7745c5c3_Var5, templ_7745c5c3_Err = templ.JoinStringErrs(uiSettingsJSON(uiSettings))
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/password_security.templ`, Line: 219, Col: 116}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/password_security.templ`, Line: 220, Col: 116}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var5))
 		if templ_7745c5c3_Err != nil {
@@ -422,7 +422,7 @@ func PasswordSecurityVerification(data PasswordSecurityVerificationData) templ.C
 			var templ_7745c5c3_Var9 string
 			templ_7745c5c3_Var9, templ_7745c5c3_Err = templ.JoinStringErrs(passwordSecurityMessageRole(data.MessageIsError))
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/password_security.templ`, Line: 248, Col: 59}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/password_security.templ`, Line: 249, Col: 59}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var9))
 			if templ_7745c5c3_Err != nil {
@@ -448,7 +448,7 @@ func PasswordSecurityVerification(data PasswordSecurityVerificationData) templ.C
 			var templ_7745c5c3_Var11 string
 			templ_7745c5c3_Var11, templ_7745c5c3_Err = templ.JoinStringErrs(data.Message)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/password_security.templ`, Line: 255, Col: 18}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/password_security.templ`, Line: 256, Col: 18}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var11))
 			if templ_7745c5c3_Err != nil {
@@ -499,7 +499,7 @@ func PasswordSecurityVerification(data PasswordSecurityVerificationData) templ.C
 				var templ_7745c5c3_Var14 string
 				templ_7745c5c3_Var14, templ_7745c5c3_Err = templ.JoinStringErrs(data.CSRFTokens["/settings/security/passkeys/step-up/start"])
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/password_security.templ`, Line: 278, Col: 85}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/password_security.templ`, Line: 279, Col: 85}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var14))
 				if templ_7745c5c3_Err != nil {
@@ -512,7 +512,7 @@ func PasswordSecurityVerification(data PasswordSecurityVerificationData) templ.C
 				var templ_7745c5c3_Var15 string
 				templ_7745c5c3_Var15, templ_7745c5c3_Err = templ.JoinStringErrs(data.CSRFTokens["/settings/security/passkeys/step-up/finish"])
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/password_security.templ`, Line: 279, Col: 87}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/password_security.templ`, Line: 280, Col: 87}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var15))
 				if templ_7745c5c3_Err != nil {
@@ -536,7 +536,7 @@ func PasswordSecurityVerification(data PasswordSecurityVerificationData) templ.C
 					var templ_7745c5c3_Var16 string
 					templ_7745c5c3_Var16, templ_7745c5c3_Err = templ.JoinStringErrs(data.CSRFTokens["/settings/security/step-up"])
 					if templ_7745c5c3_Err != nil {
-						return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/password_security.templ`, Line: 292, Col: 95}
+						return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/password_security.templ`, Line: 293, Col: 95}
 					}
 					_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var16))
 					if templ_7745c5c3_Err != nil {
@@ -569,7 +569,7 @@ func PasswordSecurityVerification(data PasswordSecurityVerificationData) templ.C
 				var templ_7745c5c3_Var17 string
 				templ_7745c5c3_Var17, templ_7745c5c3_Err = templ.JoinStringErrs(data.CSRFTokens["/auth/logout"])
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/password_security.templ`, Line: 320, Col: 80}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/password_security.templ`, Line: 321, Col: 80}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var17))
 				if templ_7745c5c3_Err != nil {
@@ -701,7 +701,7 @@ func SecuritySettingsLayout(uiSettings map[string]string, partial templ.Componen
 		var templ_7745c5c3_Var23 string
 		templ_7745c5c3_Var23, templ_7745c5c3_Err = templ.JoinStringErrs(themeStyle(uiSettings))
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/password_security.templ`, Line: 340, Col: 85}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/password_security.templ`, Line: 341, Col: 85}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var23))
 		if templ_7745c5c3_Err != nil {
@@ -731,14 +731,14 @@ func SecuritySettingsLayout(uiSettings map[string]string, partial templ.Componen
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 38, "</head><body class=\"bg-background text-foreground antialiased surface-desk\" data-ui-settings=\"")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 38, "<script src=\"/assets/js/actions.js\"></script></head><body class=\"bg-background text-foreground antialiased surface-desk\" data-ui-settings=\"")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
 		var templ_7745c5c3_Var24 string
 		templ_7745c5c3_Var24, templ_7745c5c3_Err = templ.JoinStringErrs(uiSettingsJSON(uiSettings))
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/password_security.templ`, Line: 351, Col: 116}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/password_security.templ`, Line: 353, Col: 116}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var24))
 		if templ_7745c5c3_Err != nil {
@@ -920,7 +920,7 @@ func PasswordSecuritySettings(data PasswordSecurityData) templ.Component {
 			var templ_7745c5c3_Var30 string
 			templ_7745c5c3_Var30, templ_7745c5c3_Err = templ.JoinStringErrs(passwordSecurityMessageRole(data.MessageIsError))
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/password_security.templ`, Line: 388, Col: 59}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/password_security.templ`, Line: 390, Col: 59}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var30))
 			if templ_7745c5c3_Err != nil {
@@ -946,7 +946,7 @@ func PasswordSecuritySettings(data PasswordSecurityData) templ.Component {
 			var templ_7745c5c3_Var32 string
 			templ_7745c5c3_Var32, templ_7745c5c3_Err = templ.JoinStringErrs(data.Message)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/password_security.templ`, Line: 395, Col: 18}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/password_security.templ`, Line: 397, Col: 18}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var32))
 			if templ_7745c5c3_Err != nil {
@@ -964,7 +964,7 @@ func PasswordSecuritySettings(data PasswordSecurityData) templ.Component {
 		var templ_7745c5c3_Var33 string
 		templ_7745c5c3_Var33, templ_7745c5c3_Err = templ.JoinStringErrs(localLoginIdentifierDisplay(data.LoginUsername))
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/password_security.templ`, Line: 406, Col: 145}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/password_security.templ`, Line: 408, Col: 145}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var33))
 		if templ_7745c5c3_Err != nil {
@@ -987,7 +987,7 @@ func PasswordSecuritySettings(data PasswordSecurityData) templ.Component {
 				var templ_7745c5c3_Var34 string
 				templ_7745c5c3_Var34, templ_7745c5c3_Err = templ.JoinStringErrs(data.CSRFToken)
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/password_security.templ`, Line: 419, Col: 62}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/password_security.templ`, Line: 421, Col: 62}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var34))
 				if templ_7745c5c3_Err != nil {
@@ -1052,7 +1052,7 @@ func PasswordSecuritySettings(data PasswordSecurityData) templ.Component {
 				var templ_7745c5c3_Var35 string
 				templ_7745c5c3_Var35, templ_7745c5c3_Err = templ.JoinStringErrs(federatedIdentityDisplay(identity, data.OIDCLoginName))
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/password_security.templ`, Line: 494, Col: 122}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/password_security.templ`, Line: 496, Col: 122}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var35))
 				if templ_7745c5c3_Err != nil {
@@ -1065,7 +1065,7 @@ func PasswordSecuritySettings(data PasswordSecurityData) templ.Component {
 				var templ_7745c5c3_Var36 string
 				templ_7745c5c3_Var36, templ_7745c5c3_Err = templ.JoinStringErrs(federatedIdentityProviderLabel(identity.Provider, data.OIDCLoginName))
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/password_security.templ`, Line: 496, Col: 80}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/password_security.templ`, Line: 498, Col: 80}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var36))
 				if templ_7745c5c3_Err != nil {
@@ -1078,7 +1078,7 @@ func PasswordSecuritySettings(data PasswordSecurityData) templ.Component {
 				var templ_7745c5c3_Var37 string
 				templ_7745c5c3_Var37, templ_7745c5c3_Err = templ.JoinStringErrs(identity.LinkedAt)
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/password_security.templ`, Line: 496, Col: 115}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/password_security.templ`, Line: 498, Col: 115}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var37))
 				if templ_7745c5c3_Err != nil {
@@ -1096,7 +1096,7 @@ func PasswordSecuritySettings(data PasswordSecurityData) templ.Component {
 					var templ_7745c5c3_Var38 string
 					templ_7745c5c3_Var38, templ_7745c5c3_Err = templ.JoinStringErrs(identity.LastUsedAt)
 					if templ_7745c5c3_Err != nil {
-						return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/password_security.templ`, Line: 498, Col: 50}
+						return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/password_security.templ`, Line: 500, Col: 50}
 					}
 					_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var38))
 					if templ_7745c5c3_Err != nil {
@@ -1119,13 +1119,13 @@ func PasswordSecuritySettings(data PasswordSecurityData) templ.Component {
 					var templ_7745c5c3_Var39 templ.SafeURL
 					templ_7745c5c3_Var39, templ_7745c5c3_Err = templ.JoinURLErrs(templ.URL(identity.UnlinkPath))
 					if templ_7745c5c3_Err != nil {
-						return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/password_security.templ`, Line: 505, Col: 68}
+						return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/password_security.templ`, Line: 507, Col: 68}
 					}
 					_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var39))
 					if templ_7745c5c3_Err != nil {
 						return templ_7745c5c3_Err
 					}
-					templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 70, "\" onsubmit=\"return confirm('Disconnect this sign-in identity? This removes only this identity as a way to sign in to Gofer and does not disconnect any mailbox.')\">")
+					templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 70, "\" data-confirm=\"Disconnect this sign-in identity? This removes only this identity as a way to sign in to Gofer and does not disconnect any mailbox.\">")
 					if templ_7745c5c3_Err != nil {
 						return templ_7745c5c3_Err
 					}
@@ -1137,7 +1137,7 @@ func PasswordSecuritySettings(data PasswordSecurityData) templ.Component {
 						var templ_7745c5c3_Var40 string
 						templ_7745c5c3_Var40, templ_7745c5c3_Err = templ.JoinStringErrs(data.CSRFTokens[identity.UnlinkPath])
 						if templ_7745c5c3_Err != nil {
-							return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/password_security.templ`, Line: 507, Col: 89}
+							return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/password_security.templ`, Line: 509, Col: 89}
 						}
 						_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var40))
 						if templ_7745c5c3_Err != nil {
@@ -1160,7 +1160,7 @@ func PasswordSecuritySettings(data PasswordSecurityData) templ.Component {
 					var templ_7745c5c3_Var41 string
 					templ_7745c5c3_Var41, templ_7745c5c3_Err = templ.JoinStringErrs(identity.UnlinkReason)
 					if templ_7745c5c3_Err != nil {
-						return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/password_security.templ`, Line: 512, Col: 73}
+						return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/password_security.templ`, Line: 514, Col: 73}
 					}
 					_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var41))
 					if templ_7745c5c3_Err != nil {
@@ -1199,7 +1199,7 @@ func PasswordSecuritySettings(data PasswordSecurityData) templ.Component {
 				var templ_7745c5c3_Var42 string
 				templ_7745c5c3_Var42, templ_7745c5c3_Err = templ.JoinStringErrs(data.CSRFTokens["/settings/security/identities/oidc/link"])
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/password_security.templ`, Line: 524, Col: 106}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/password_security.templ`, Line: 526, Col: 106}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var42))
 				if templ_7745c5c3_Err != nil {
@@ -1217,7 +1217,7 @@ func PasswordSecuritySettings(data PasswordSecurityData) templ.Component {
 			var templ_7745c5c3_Var43 string
 			templ_7745c5c3_Var43, templ_7745c5c3_Err = templ.JoinStringErrs(data.OIDCLoginName)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/password_security.templ`, Line: 526, Col: 229}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/password_security.templ`, Line: 528, Col: 229}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var43))
 			if templ_7745c5c3_Err != nil {
@@ -1325,7 +1325,7 @@ func PasswordSecuritySettings(data PasswordSecurityData) templ.Component {
 		var templ_7745c5c3_Var47 string
 		templ_7745c5c3_Var47, templ_7745c5c3_Err = templ.JoinStringErrs(fmt.Sprintf("%d registered", len(data.Passkeys)))
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/password_security.templ`, Line: 555, Col: 167}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/password_security.templ`, Line: 557, Col: 167}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var47))
 		if templ_7745c5c3_Err != nil {
@@ -1348,7 +1348,7 @@ func PasswordSecuritySettings(data PasswordSecurityData) templ.Component {
 				var templ_7745c5c3_Var48 string
 				templ_7745c5c3_Var48, templ_7745c5c3_Err = templ.JoinStringErrs(passkey.Name)
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/password_security.templ`, Line: 562, Col: 80}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/password_security.templ`, Line: 564, Col: 80}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var48))
 				if templ_7745c5c3_Err != nil {
@@ -1361,7 +1361,7 @@ func PasswordSecuritySettings(data PasswordSecurityData) templ.Component {
 				var templ_7745c5c3_Var49 string
 				templ_7745c5c3_Var49, templ_7745c5c3_Err = templ.JoinStringErrs(passkey.Details)
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/password_security.templ`, Line: 564, Col: 26}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/password_security.templ`, Line: 566, Col: 26}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var49))
 				if templ_7745c5c3_Err != nil {
@@ -1374,7 +1374,7 @@ func PasswordSecuritySettings(data PasswordSecurityData) templ.Component {
 				var templ_7745c5c3_Var50 string
 				templ_7745c5c3_Var50, templ_7745c5c3_Err = templ.JoinStringErrs(passkey.CreatedAt)
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/password_security.templ`, Line: 564, Col: 57}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/password_security.templ`, Line: 566, Col: 57}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var50))
 				if templ_7745c5c3_Err != nil {
@@ -1392,7 +1392,7 @@ func PasswordSecuritySettings(data PasswordSecurityData) templ.Component {
 					var templ_7745c5c3_Var51 string
 					templ_7745c5c3_Var51, templ_7745c5c3_Err = templ.JoinStringErrs(passkey.LastUsedAt)
 					if templ_7745c5c3_Err != nil {
-						return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/password_security.templ`, Line: 566, Col: 49}
+						return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/password_security.templ`, Line: 568, Col: 49}
 					}
 					_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var51))
 					if templ_7745c5c3_Err != nil {
@@ -1436,7 +1436,7 @@ func PasswordSecuritySettings(data PasswordSecurityData) templ.Component {
 			var templ_7745c5c3_Var52 string
 			templ_7745c5c3_Var52, templ_7745c5c3_Err = templ.JoinStringErrs(data.CSRFTokens["/settings/security/passkeys/start"])
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/password_security.templ`, Line: 584, Col: 75}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/password_security.templ`, Line: 586, Col: 75}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var52))
 			if templ_7745c5c3_Err != nil {
@@ -1449,7 +1449,7 @@ func PasswordSecuritySettings(data PasswordSecurityData) templ.Component {
 			var templ_7745c5c3_Var53 string
 			templ_7745c5c3_Var53, templ_7745c5c3_Err = templ.JoinStringErrs(data.CSRFTokens["/settings/security/passkeys/finish"])
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/password_security.templ`, Line: 585, Col: 77}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/password_security.templ`, Line: 587, Col: 77}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var53))
 			if templ_7745c5c3_Err != nil {
@@ -1492,7 +1492,7 @@ func PasswordSecuritySettings(data PasswordSecurityData) templ.Component {
 			var templ_7745c5c3_Var54 string
 			templ_7745c5c3_Var54, templ_7745c5c3_Err = templ.JoinStringErrs(totpManagementTitle(data.TOTPManagement.IsReplacement))
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/password_security.templ`, Line: 614, Col: 111}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/password_security.templ`, Line: 616, Col: 111}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var54))
 			if templ_7745c5c3_Err != nil {
@@ -1505,7 +1505,7 @@ func PasswordSecuritySettings(data PasswordSecurityData) templ.Component {
 			var templ_7745c5c3_Var55 string
 			templ_7745c5c3_Var55, templ_7745c5c3_Err = templ.JoinStringErrs(totpManagementDescription(data.TOTPManagement.IsReplacement))
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/password_security.templ`, Line: 615, Col: 113}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/password_security.templ`, Line: 617, Col: 113}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var55))
 			if templ_7745c5c3_Err != nil {
@@ -1518,7 +1518,7 @@ func PasswordSecuritySettings(data PasswordSecurityData) templ.Component {
 			var templ_7745c5c3_Var56 string
 			templ_7745c5c3_Var56, templ_7745c5c3_Err = templ.JoinStringErrs(data.TOTPManagement.QRCodeDataURL)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/password_security.templ`, Line: 618, Col: 51}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/password_security.templ`, Line: 620, Col: 51}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var56))
 			if templ_7745c5c3_Err != nil {
@@ -1531,7 +1531,7 @@ func PasswordSecuritySettings(data PasswordSecurityData) templ.Component {
 			var templ_7745c5c3_Var57 string
 			templ_7745c5c3_Var57, templ_7745c5c3_Err = templ.JoinStringErrs(totpManagementQRCodeAlt(data.TOTPManagement.IsReplacement))
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/password_security.templ`, Line: 618, Col: 118}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/password_security.templ`, Line: 620, Col: 118}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var57))
 			if templ_7745c5c3_Err != nil {
@@ -1544,7 +1544,7 @@ func PasswordSecuritySettings(data PasswordSecurityData) templ.Component {
 			var templ_7745c5c3_Var58 string
 			templ_7745c5c3_Var58, templ_7745c5c3_Err = templ.JoinStringErrs(totpManagementManualKeyLabel(data.TOTPManagement.IsReplacement))
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/password_security.templ`, Line: 623, Col: 195}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/password_security.templ`, Line: 625, Col: 195}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var58))
 			if templ_7745c5c3_Err != nil {
@@ -1557,7 +1557,7 @@ func PasswordSecuritySettings(data PasswordSecurityData) templ.Component {
 			var templ_7745c5c3_Var59 string
 			templ_7745c5c3_Var59, templ_7745c5c3_Err = templ.JoinStringErrs(data.TOTPManagement.ManualKey)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/password_security.templ`, Line: 623, Col: 229}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/password_security.templ`, Line: 625, Col: 229}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var59))
 			if templ_7745c5c3_Err != nil {
@@ -1570,7 +1570,7 @@ func PasswordSecuritySettings(data PasswordSecurityData) templ.Component {
 			var templ_7745c5c3_Var60 string
 			templ_7745c5c3_Var60, templ_7745c5c3_Err = templ.JoinStringErrs(data.TOTPManagement.Algorithm)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/password_security.templ`, Line: 625, Col: 79}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/password_security.templ`, Line: 627, Col: 79}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var60))
 			if templ_7745c5c3_Err != nil {
@@ -1583,7 +1583,7 @@ func PasswordSecuritySettings(data PasswordSecurityData) templ.Component {
 			var templ_7745c5c3_Var61 string
 			templ_7745c5c3_Var61, templ_7745c5c3_Err = templ.JoinStringErrs(fmt.Sprintf("%d digits", data.TOTPManagement.Digits))
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/password_security.templ`, Line: 625, Col: 137}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/password_security.templ`, Line: 627, Col: 137}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var61))
 			if templ_7745c5c3_Err != nil {
@@ -1596,7 +1596,7 @@ func PasswordSecuritySettings(data PasswordSecurityData) templ.Component {
 			var templ_7745c5c3_Var62 string
 			templ_7745c5c3_Var62, templ_7745c5c3_Err = templ.JoinStringErrs(fmt.Sprintf("%d seconds", data.TOTPManagement.Period))
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/password_security.templ`, Line: 625, Col: 202}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/password_security.templ`, Line: 627, Col: 202}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var62))
 			if templ_7745c5c3_Err != nil {
@@ -1614,7 +1614,7 @@ func PasswordSecuritySettings(data PasswordSecurityData) templ.Component {
 				var templ_7745c5c3_Var63 string
 				templ_7745c5c3_Var63, templ_7745c5c3_Err = templ.JoinStringErrs(data.CSRFTokens["/settings/security/totp/confirm"])
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/password_security.templ`, Line: 630, Col: 99}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/password_security.templ`, Line: 632, Col: 99}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var63))
 				if templ_7745c5c3_Err != nil {
@@ -1632,7 +1632,7 @@ func PasswordSecuritySettings(data PasswordSecurityData) templ.Component {
 			var templ_7745c5c3_Var64 string
 			templ_7745c5c3_Var64, templ_7745c5c3_Err = templ.JoinStringErrs(totpManagementCodeLabel(data.TOTPManagement.IsReplacement))
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/password_security.templ`, Line: 633, Col: 142}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/password_security.templ`, Line: 635, Col: 142}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var64))
 			if templ_7745c5c3_Err != nil {
@@ -1645,7 +1645,7 @@ func PasswordSecuritySettings(data PasswordSecurityData) templ.Component {
 			var templ_7745c5c3_Var65 string
 			templ_7745c5c3_Var65, templ_7745c5c3_Err = templ.JoinStringErrs(totpManagementSubmitLabel(data.TOTPManagement.IsReplacement))
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/password_security.templ`, Line: 636, Col: 364}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/password_security.templ`, Line: 638, Col: 364}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var65))
 			if templ_7745c5c3_Err != nil {
@@ -1663,7 +1663,7 @@ func PasswordSecuritySettings(data PasswordSecurityData) templ.Component {
 				var templ_7745c5c3_Var66 string
 				templ_7745c5c3_Var66, templ_7745c5c3_Err = templ.JoinStringErrs(data.CSRFTokens["/settings/security/totp/start"])
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/password_security.templ`, Line: 641, Col: 98}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/password_security.templ`, Line: 643, Col: 98}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var66))
 				if templ_7745c5c3_Err != nil {
@@ -1704,7 +1704,7 @@ func PasswordSecuritySettings(data PasswordSecurityData) templ.Component {
 					var templ_7745c5c3_Var67 string
 					templ_7745c5c3_Var67, templ_7745c5c3_Err = templ.JoinStringErrs(data.CSRFTokens["/settings/security/totp/start"])
 					if templ_7745c5c3_Err != nil {
-						return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/password_security.templ`, Line: 655, Col: 99}
+						return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/password_security.templ`, Line: 657, Col: 99}
 					}
 					_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var67))
 					if templ_7745c5c3_Err != nil {
@@ -1762,7 +1762,7 @@ func PasswordSecuritySettings(data PasswordSecurityData) templ.Component {
 					var templ_7745c5c3_Var68 string
 					templ_7745c5c3_Var68, templ_7745c5c3_Err = templ.JoinStringErrs(data.CSRFTokens["/settings/security/totp/start"])
 					if templ_7745c5c3_Err != nil {
-						return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/password_security.templ`, Line: 675, Col: 98}
+						return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/password_security.templ`, Line: 677, Col: 98}
 					}
 					_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var68))
 					if templ_7745c5c3_Err != nil {
@@ -1795,7 +1795,7 @@ func PasswordSecuritySettings(data PasswordSecurityData) templ.Component {
 		var templ_7745c5c3_Var69 string
 		templ_7745c5c3_Var69, templ_7745c5c3_Err = templ.JoinStringErrs(fmt.Sprintf("%d remaining", data.RecoveryCodesRemaining))
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/password_security.templ`, Line: 691, Col: 175}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/password_security.templ`, Line: 693, Col: 175}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var69))
 		if templ_7745c5c3_Err != nil {
@@ -1823,7 +1823,7 @@ func PasswordSecuritySettings(data PasswordSecurityData) templ.Component {
 					var templ_7745c5c3_Var70 string
 					templ_7745c5c3_Var70, templ_7745c5c3_Err = templ.JoinStringErrs(code)
 					if templ_7745c5c3_Err != nil {
-						return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/password_security.templ`, Line: 700, Col: 138}
+						return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/password_security.templ`, Line: 702, Col: 138}
 					}
 					_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var70))
 					if templ_7745c5c3_Err != nil {
@@ -1856,7 +1856,7 @@ func PasswordSecuritySettings(data PasswordSecurityData) templ.Component {
 				var templ_7745c5c3_Var71 string
 				templ_7745c5c3_Var71, templ_7745c5c3_Err = templ.JoinStringErrs(data.CSRFTokens["/settings/security/recovery/complete"])
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/password_security.templ`, Line: 708, Col: 104}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/password_security.templ`, Line: 710, Col: 104}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var71))
 				if templ_7745c5c3_Err != nil {
@@ -1874,7 +1874,7 @@ func PasswordSecuritySettings(data PasswordSecurityData) templ.Component {
 			var templ_7745c5c3_Var72 string
 			templ_7745c5c3_Var72, templ_7745c5c3_Err = templ.JoinStringErrs(data.RecoveryBatchID)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/password_security.templ`, Line: 710, Col: 71}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/password_security.templ`, Line: 712, Col: 71}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var72))
 			if templ_7745c5c3_Err != nil {
@@ -1892,7 +1892,7 @@ func PasswordSecuritySettings(data PasswordSecurityData) templ.Component {
 				var templ_7745c5c3_Var73 string
 				templ_7745c5c3_Var73, templ_7745c5c3_Err = templ.JoinStringErrs(data.CSRFTokens["/settings/security/recovery/start"])
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/password_security.templ`, Line: 720, Col: 102}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/password_security.templ`, Line: 722, Col: 102}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var73))
 				if templ_7745c5c3_Err != nil {
@@ -1933,7 +1933,7 @@ func PasswordSecuritySettings(data PasswordSecurityData) templ.Component {
 					var templ_7745c5c3_Var74 string
 					templ_7745c5c3_Var74, templ_7745c5c3_Err = templ.JoinStringErrs(data.CSRFTokens["/settings/security/recovery/start"])
 					if templ_7745c5c3_Err != nil {
-						return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/password_security.templ`, Line: 733, Col: 102}
+						return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/password_security.templ`, Line: 735, Col: 102}
 					}
 					_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var74))
 					if templ_7745c5c3_Err != nil {
@@ -1949,7 +1949,7 @@ func PasswordSecuritySettings(data PasswordSecurityData) templ.Component {
 					return templ_7745c5c3_Err
 				}
 				if data.RecoveryCodesRemaining > 0 {
-					templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 167, "<form method=\"post\" action=\"/settings/security/recovery/revoke\" onsubmit=\"return confirm('Revoke every unused recovery code? This cannot be undone.')\">")
+					templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 167, "<form method=\"post\" action=\"/settings/security/recovery/revoke\" data-confirm=\"Revoke every unused recovery code? This cannot be undone.\">")
 					if templ_7745c5c3_Err != nil {
 						return templ_7745c5c3_Err
 					}
@@ -1961,7 +1961,7 @@ func PasswordSecuritySettings(data PasswordSecurityData) templ.Component {
 						var templ_7745c5c3_Var75 string
 						templ_7745c5c3_Var75, templ_7745c5c3_Err = templ.JoinStringErrs(data.CSRFTokens["/settings/security/recovery/revoke"])
 						if templ_7745c5c3_Err != nil {
-							return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/password_security.templ`, Line: 740, Col: 104}
+							return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/password_security.templ`, Line: 742, Col: 104}
 						}
 						_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var75))
 						if templ_7745c5c3_Err != nil {
@@ -2167,7 +2167,7 @@ func PasswordSecuritySettings(data PasswordSecurityData) templ.Component {
 		var templ_7745c5c3_Var82 string
 		templ_7745c5c3_Var82, templ_7745c5c3_Err = templ.JoinStringErrs(securityEventCountLabel(data.SecurityEventCount))
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/password_security.templ`, Line: 798, Col: 176}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/password_security.templ`, Line: 800, Col: 176}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var82))
 		if templ_7745c5c3_Err != nil {
@@ -2362,7 +2362,7 @@ func MailSecuritySettingsCard(data models.MailSecurityAdminData) templ.Component
 			var templ_7745c5c3_Var90 string
 			templ_7745c5c3_Var90, templ_7745c5c3_Err = templ.JoinStringErrs(data.Notice)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/password_security.templ`, Line: 842, Col: 175}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/password_security.templ`, Line: 844, Col: 175}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var90))
 			if templ_7745c5c3_Err != nil {
@@ -2381,7 +2381,7 @@ func MailSecuritySettingsCard(data models.MailSecurityAdminData) templ.Component
 			var templ_7745c5c3_Var91 string
 			templ_7745c5c3_Var91, templ_7745c5c3_Err = templ.JoinStringErrs(data.Error)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/password_security.templ`, Line: 845, Col: 157}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/password_security.templ`, Line: 847, Col: 157}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var91))
 			if templ_7745c5c3_Err != nil {
@@ -2485,7 +2485,7 @@ func SecurityActivityDialogPage(data SecurityActivityPageData) templ.Component {
 				var templ_7745c5c3_Var94 string
 				templ_7745c5c3_Var94, templ_7745c5c3_Err = templ.JoinStringErrs(event.Title)
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/password_security.templ`, Line: 869, Col: 82}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/password_security.templ`, Line: 871, Col: 82}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var94))
 				if templ_7745c5c3_Err != nil {
@@ -2498,7 +2498,7 @@ func SecurityActivityDialogPage(data SecurityActivityPageData) templ.Component {
 				var templ_7745c5c3_Var95 string
 				templ_7745c5c3_Var95, templ_7745c5c3_Err = templ.JoinStringErrs(event.Detail)
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/password_security.templ`, Line: 870, Col: 68}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/password_security.templ`, Line: 872, Col: 68}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var95))
 				if templ_7745c5c3_Err != nil {
@@ -2511,7 +2511,7 @@ func SecurityActivityDialogPage(data SecurityActivityPageData) templ.Component {
 				var templ_7745c5c3_Var96 string
 				templ_7745c5c3_Var96, templ_7745c5c3_Err = templ.JoinStringErrs(event.OccurredAt)
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/password_security.templ`, Line: 872, Col: 27}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/password_security.templ`, Line: 874, Col: 27}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var96))
 				if templ_7745c5c3_Err != nil {
@@ -2529,7 +2529,7 @@ func SecurityActivityDialogPage(data SecurityActivityPageData) templ.Component {
 					var templ_7745c5c3_Var97 string
 					templ_7745c5c3_Var97, templ_7745c5c3_Err = templ.JoinStringErrs(event.Client)
 					if templ_7745c5c3_Err != nil {
-						return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/password_security.templ`, Line: 874, Col: 70}
+						return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/password_security.templ`, Line: 876, Col: 70}
 					}
 					_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var97))
 					if templ_7745c5c3_Err != nil {
@@ -2552,7 +2552,7 @@ func SecurityActivityDialogPage(data SecurityActivityPageData) templ.Component {
 					var templ_7745c5c3_Var98 string
 					templ_7745c5c3_Var98, templ_7745c5c3_Err = templ.JoinStringErrs(event.Status)
 					if templ_7745c5c3_Err != nil {
-						return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/password_security.templ`, Line: 879, Col: 175}
+						return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/password_security.templ`, Line: 881, Col: 175}
 					}
 					_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var98))
 					if templ_7745c5c3_Err != nil {
@@ -2570,7 +2570,7 @@ func SecurityActivityDialogPage(data SecurityActivityPageData) templ.Component {
 					var templ_7745c5c3_Var99 string
 					templ_7745c5c3_Var99, templ_7745c5c3_Err = templ.JoinStringErrs(event.Status)
 					if templ_7745c5c3_Err != nil {
-						return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/password_security.templ`, Line: 881, Col: 153}
+						return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/password_security.templ`, Line: 883, Col: 153}
 					}
 					_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var99))
 					if templ_7745c5c3_Err != nil {
@@ -2593,7 +2593,7 @@ func SecurityActivityDialogPage(data SecurityActivityPageData) templ.Component {
 			var templ_7745c5c3_Var100 string
 			templ_7745c5c3_Var100, templ_7745c5c3_Err = templ.JoinStringErrs(fmt.Sprintf("%d–%d of %d", data.FirstEvent, data.LastEvent, data.TotalEvents))
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/password_security.templ`, Line: 888, Col: 134}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/password_security.templ`, Line: 890, Col: 134}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var100))
 			if templ_7745c5c3_Err != nil {
@@ -2611,7 +2611,7 @@ func SecurityActivityDialogPage(data SecurityActivityPageData) templ.Component {
 				var templ_7745c5c3_Var101 string
 				templ_7745c5c3_Var101, templ_7745c5c3_Err = templ.JoinStringErrs(securityActivityPagePath(data.PreviousPage))
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/password_security.templ`, Line: 891, Col: 237}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/password_security.templ`, Line: 893, Col: 237}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var101))
 				if templ_7745c5c3_Err != nil {
@@ -2634,7 +2634,7 @@ func SecurityActivityDialogPage(data SecurityActivityPageData) templ.Component {
 			var templ_7745c5c3_Var102 string
 			templ_7745c5c3_Var102, templ_7745c5c3_Err = templ.JoinStringErrs(fmt.Sprintf("%d of %d", data.Page, data.TotalPages))
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/password_security.templ`, Line: 895, Col: 140}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/password_security.templ`, Line: 897, Col: 140}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var102))
 			if templ_7745c5c3_Err != nil {
@@ -2652,7 +2652,7 @@ func SecurityActivityDialogPage(data SecurityActivityPageData) templ.Component {
 				var templ_7745c5c3_Var103 string
 				templ_7745c5c3_Var103, templ_7745c5c3_Err = templ.JoinStringErrs(securityActivityPagePath(data.NextPage))
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/password_security.templ`, Line: 897, Col: 233}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/password_security.templ`, Line: 899, Col: 233}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var103))
 				if templ_7745c5c3_Err != nil {
@@ -2719,7 +2719,7 @@ func SecurityManagementCancelForm(data PasswordSecurityData) templ.Component {
 			var templ_7745c5c3_Var105 string
 			templ_7745c5c3_Var105, templ_7745c5c3_Err = templ.JoinStringErrs(data.CSRFTokens["/settings/security/management/cancel"])
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/password_security.templ`, Line: 913, Col: 100}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/password_security.templ`, Line: 915, Col: 100}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var105))
 			if templ_7745c5c3_Err != nil {
@@ -2796,7 +2796,7 @@ func securityActionConfirmationDialog(id, action, csrf, label, description strin
 			var templ_7745c5c3_Var110 string
 			templ_7745c5c3_Var110, templ_7745c5c3_Err = templ.JoinStringErrs(label)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/password_security.templ`, Line: 921, Col: 270}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/password_security.templ`, Line: 923, Col: 270}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var110))
 			if templ_7745c5c3_Err != nil {
@@ -2863,7 +2863,7 @@ func securityActionConfirmationDialog(id, action, csrf, label, description strin
 						var templ_7745c5c3_Var115 string
 						templ_7745c5c3_Var115, templ_7745c5c3_Err = templ.JoinStringErrs(label)
 						if templ_7745c5c3_Err != nil {
-							return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/password_security.templ`, Line: 927, Col: 12}
+							return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/password_security.templ`, Line: 929, Col: 12}
 						}
 						_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var115))
 						if templ_7745c5c3_Err != nil {
@@ -2894,7 +2894,7 @@ func securityActionConfirmationDialog(id, action, csrf, label, description strin
 						var templ_7745c5c3_Var117 string
 						templ_7745c5c3_Var117, templ_7745c5c3_Err = templ.JoinStringErrs(description)
 						if templ_7745c5c3_Err != nil {
-							return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/password_security.templ`, Line: 930, Col: 18}
+							return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/password_security.templ`, Line: 932, Col: 18}
 						}
 						_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var117))
 						if templ_7745c5c3_Err != nil {
@@ -2919,7 +2919,7 @@ func securityActionConfirmationDialog(id, action, csrf, label, description strin
 				var templ_7745c5c3_Var118 templ.SafeURL
 				templ_7745c5c3_Var118, templ_7745c5c3_Err = templ.JoinURLErrs(templ.URL(action))
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/password_security.templ`, Line: 933, Col: 49}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/password_security.templ`, Line: 935, Col: 49}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var118))
 				if templ_7745c5c3_Err != nil {
@@ -2937,7 +2937,7 @@ func securityActionConfirmationDialog(id, action, csrf, label, description strin
 					var templ_7745c5c3_Var119 string
 					templ_7745c5c3_Var119, templ_7745c5c3_Err = templ.JoinStringErrs(csrf)
 					if templ_7745c5c3_Err != nil {
-						return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/password_security.templ`, Line: 935, Col: 51}
+						return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/password_security.templ`, Line: 937, Col: 51}
 					}
 					_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var119))
 					if templ_7745c5c3_Err != nil {
@@ -3011,7 +3011,7 @@ func securityActionConfirmationDialog(id, action, csrf, label, description strin
 					var templ_7745c5c3_Var124 string
 					templ_7745c5c3_Var124, templ_7745c5c3_Err = templ.JoinStringErrs(label)
 					if templ_7745c5c3_Err != nil {
-						return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/password_security.templ`, Line: 941, Col: 273}
+						return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/password_security.templ`, Line: 943, Col: 273}
 					}
 					_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var124))
 					if templ_7745c5c3_Err != nil {
@@ -3099,10 +3099,6 @@ func securityUnavailableAction(id, label, reason string, classes ...string) temp
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
-				templ_7745c5c3_Err = templ.RenderScriptItems(ctx, templ_7745c5c3_Buffer, templ.JSFuncCall("window.tui.popover.open", id))
-				if templ_7745c5c3_Err != nil {
-					return templ_7745c5c3_Err
-				}
 				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 249, "<button type=\"button\" aria-disabled=\"true\" aria-describedby=\"")
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
@@ -3110,18 +3106,22 @@ func securityUnavailableAction(id, label, reason string, classes ...string) temp
 				var templ_7745c5c3_Var129 string
 				templ_7745c5c3_Var129, templ_7745c5c3_Err = templ.JoinStringErrs(id + "-reason")
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/password_security.templ`, Line: 953, Col: 79}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/password_security.templ`, Line: 955, Col: 79}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var129))
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
-				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 250, "\" onclick=\"")
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 250, "\" data-on-click=\"")
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
-				var templ_7745c5c3_Var130 templ.ComponentScript = templ.JSFuncCall("window.tui.popover.open", id)
-				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var130.Call)
+				var templ_7745c5c3_Var130 string
+				templ_7745c5c3_Var130, templ_7745c5c3_Err = templ.JoinStringErrs(onAction("window.tui.popover.open", id))
+				if templ_7745c5c3_Err != nil {
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/password_security.templ`, Line: 955, Col: 137}
+				}
+				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var130))
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
@@ -3145,7 +3145,7 @@ func securityUnavailableAction(id, label, reason string, classes ...string) temp
 				var templ_7745c5c3_Var132 string
 				templ_7745c5c3_Var132, templ_7745c5c3_Err = templ.JoinStringErrs(label)
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/password_security.templ`, Line: 953, Col: 368}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/password_security.templ`, Line: 955, Col: 366}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var132))
 				if templ_7745c5c3_Err != nil {
@@ -3180,7 +3180,7 @@ func securityUnavailableAction(id, label, reason string, classes ...string) temp
 				var templ_7745c5c3_Var134 string
 				templ_7745c5c3_Var134, templ_7745c5c3_Err = templ.JoinStringErrs(reason)
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/password_security.templ`, Line: 956, Col: 11}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/password_security.templ`, Line: 958, Col: 11}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var134))
 				if templ_7745c5c3_Err != nil {
@@ -3242,7 +3242,7 @@ func applicationSignInProviderRow(data PasswordSecurityData, provider, label, ic
 		var templ_7745c5c3_Var136 string
 		templ_7745c5c3_Var136, templ_7745c5c3_Err = templ.JoinStringErrs(provider)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/password_security.templ`, Line: 974, Col: 55}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/password_security.templ`, Line: 976, Col: 55}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var136))
 		if templ_7745c5c3_Err != nil {
@@ -3263,7 +3263,7 @@ func applicationSignInProviderRow(data PasswordSecurityData, provider, label, ic
 		var templ_7745c5c3_Var137 string
 		templ_7745c5c3_Var137, templ_7745c5c3_Err = templ.JoinStringErrs(label)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/password_security.templ`, Line: 978, Col: 60}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/password_security.templ`, Line: 980, Col: 60}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var137))
 		if templ_7745c5c3_Err != nil {
@@ -3296,7 +3296,7 @@ func applicationSignInProviderRow(data PasswordSecurityData, provider, label, ic
 				var templ_7745c5c3_Var138 templ.SafeURL
 				templ_7745c5c3_Var138, templ_7745c5c3_Err = templ.JoinURLErrs(templ.URL(linkPath))
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/password_security.templ`, Line: 988, Col: 54}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/password_security.templ`, Line: 990, Col: 54}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var138))
 				if templ_7745c5c3_Err != nil {
@@ -3309,7 +3309,7 @@ func applicationSignInProviderRow(data PasswordSecurityData, provider, label, ic
 				var templ_7745c5c3_Var139 string
 				templ_7745c5c3_Var139, templ_7745c5c3_Err = templ.JoinStringErrs(data.CSRFTokens[linkPath])
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/password_security.templ`, Line: 989, Col: 74}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/password_security.templ`, Line: 991, Col: 74}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var139))
 				if templ_7745c5c3_Err != nil {
@@ -3322,7 +3322,7 @@ func applicationSignInProviderRow(data PasswordSecurityData, provider, label, ic
 				var templ_7745c5c3_Var140 string
 				templ_7745c5c3_Var140, templ_7745c5c3_Err = templ.JoinStringErrs("Connect " + label + " sign-in")
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/password_security.templ`, Line: 990, Col: 73}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/password_security.templ`, Line: 992, Col: 73}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var140))
 				if templ_7745c5c3_Err != nil {
@@ -3350,7 +3350,7 @@ func applicationSignInProviderRow(data PasswordSecurityData, provider, label, ic
 			var templ_7745c5c3_Var141 string
 			templ_7745c5c3_Var141, templ_7745c5c3_Err = templ.JoinStringErrs(label)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/password_security.templ`, Line: 997, Col: 65}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/password_security.templ`, Line: 999, Col: 65}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var141))
 			if templ_7745c5c3_Err != nil {
@@ -3369,7 +3369,7 @@ func applicationSignInProviderRow(data PasswordSecurityData, provider, label, ic
 			var templ_7745c5c3_Var142 string
 			templ_7745c5c3_Var142, templ_7745c5c3_Err = templ.JoinStringErrs(federatedIdentityDisplay(identity, data.OIDCLoginName))
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/password_security.templ`, Line: 1002, Col: 106}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/password_security.templ`, Line: 1004, Col: 106}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var142))
 			if templ_7745c5c3_Err != nil {
@@ -3382,7 +3382,7 @@ func applicationSignInProviderRow(data PasswordSecurityData, provider, label, ic
 			var templ_7745c5c3_Var143 string
 			templ_7745c5c3_Var143, templ_7745c5c3_Err = templ.JoinStringErrs(label)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/password_security.templ`, Line: 1004, Col: 13}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/password_security.templ`, Line: 1006, Col: 13}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var143))
 			if templ_7745c5c3_Err != nil {
@@ -3395,7 +3395,7 @@ func applicationSignInProviderRow(data PasswordSecurityData, provider, label, ic
 			var templ_7745c5c3_Var144 string
 			templ_7745c5c3_Var144, templ_7745c5c3_Err = templ.JoinStringErrs(identity.LinkedAt)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/password_security.templ`, Line: 1004, Col: 48}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/password_security.templ`, Line: 1006, Col: 48}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var144))
 			if templ_7745c5c3_Err != nil {
@@ -3413,7 +3413,7 @@ func applicationSignInProviderRow(data PasswordSecurityData, provider, label, ic
 				var templ_7745c5c3_Var145 string
 				templ_7745c5c3_Var145, templ_7745c5c3_Err = templ.JoinStringErrs(identity.LastUsedAt)
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/password_security.templ`, Line: 1006, Col: 47}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/password_security.templ`, Line: 1008, Col: 47}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var145))
 				if templ_7745c5c3_Err != nil {
@@ -3490,7 +3490,7 @@ func securitySessionRows(sessions []SecuritySessionData, csrf map[string]string,
 			var templ_7745c5c3_Var147 string
 			templ_7745c5c3_Var147, templ_7745c5c3_Err = templ.JoinStringErrs(session.Client)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/password_security.templ`, Line: 1027, Col: 82}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/password_security.templ`, Line: 1029, Col: 82}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var147))
 			if templ_7745c5c3_Err != nil {
@@ -3503,7 +3503,7 @@ func securitySessionRows(sessions []SecuritySessionData, csrf map[string]string,
 			var templ_7745c5c3_Var148 string
 			templ_7745c5c3_Var148, templ_7745c5c3_Err = templ.JoinStringErrs(session.Authentication)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/password_security.templ`, Line: 1028, Col: 75}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/password_security.templ`, Line: 1030, Col: 75}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var148))
 			if templ_7745c5c3_Err != nil {
@@ -3516,7 +3516,7 @@ func securitySessionRows(sessions []SecuritySessionData, csrf map[string]string,
 			var templ_7745c5c3_Var149 string
 			templ_7745c5c3_Var149, templ_7745c5c3_Err = templ.JoinStringErrs(session.Assurance)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/password_security.templ`, Line: 1028, Col: 100}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/password_security.templ`, Line: 1030, Col: 100}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var149))
 			if templ_7745c5c3_Err != nil {
@@ -3529,7 +3529,7 @@ func securitySessionRows(sessions []SecuritySessionData, csrf map[string]string,
 			var templ_7745c5c3_Var150 string
 			templ_7745c5c3_Var150, templ_7745c5c3_Err = templ.JoinStringErrs(session.SignedInAt)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/password_security.templ`, Line: 1032, Col: 41}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/password_security.templ`, Line: 1034, Col: 41}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var150))
 			if templ_7745c5c3_Err != nil {
@@ -3542,7 +3542,7 @@ func securitySessionRows(sessions []SecuritySessionData, csrf map[string]string,
 			var templ_7745c5c3_Var151 string
 			templ_7745c5c3_Var151, templ_7745c5c3_Err = templ.JoinStringErrs(session.LastActiveAt)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/password_security.templ`, Line: 1036, Col: 45}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/password_security.templ`, Line: 1038, Col: 45}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var151))
 			if templ_7745c5c3_Err != nil {
@@ -3560,7 +3560,7 @@ func securitySessionRows(sessions []SecuritySessionData, csrf map[string]string,
 				var templ_7745c5c3_Var152 string
 				templ_7745c5c3_Var152, templ_7745c5c3_Err = templ.JoinStringErrs(session.EndedAt)
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/password_security.templ`, Line: 1041, Col: 40}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/password_security.templ`, Line: 1043, Col: 40}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var152))
 				if templ_7745c5c3_Err != nil {
@@ -3656,7 +3656,7 @@ func SecuritySessionHistoryPage(sessions []SecuritySessionData, csrf map[string]
 				var templ_7745c5c3_Var154 string
 				templ_7745c5c3_Var154, templ_7745c5c3_Err = templ.JoinStringErrs(fmt.Sprintf("/settings/security/sessions/history?page=%d", page-1))
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/password_security.templ`, Line: 1071, Col: 175}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/password_security.templ`, Line: 1073, Col: 175}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var154))
 				if templ_7745c5c3_Err != nil {
@@ -3679,7 +3679,7 @@ func SecuritySessionHistoryPage(sessions []SecuritySessionData, csrf map[string]
 			var templ_7745c5c3_Var155 string
 			templ_7745c5c3_Var155, templ_7745c5c3_Err = templ.JoinStringErrs(fmt.Sprintf("%d of %d", page-1, totalPages-1))
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/password_security.templ`, Line: 1075, Col: 100}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/password_security.templ`, Line: 1077, Col: 100}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var155))
 			if templ_7745c5c3_Err != nil {
@@ -3697,7 +3697,7 @@ func SecuritySessionHistoryPage(sessions []SecuritySessionData, csrf map[string]
 				var templ_7745c5c3_Var156 string
 				templ_7745c5c3_Var156, templ_7745c5c3_Err = templ.JoinStringErrs(fmt.Sprintf("/settings/security/sessions/history?page=%d", page+1))
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/password_security.templ`, Line: 1077, Col: 175}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/password_security.templ`, Line: 1079, Col: 175}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var156))
 				if templ_7745c5c3_Err != nil {

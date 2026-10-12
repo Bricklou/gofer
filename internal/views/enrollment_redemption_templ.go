@@ -48,7 +48,7 @@ func InvitationEnrollmentPage(data InvitationEnrollmentData) templ.Component {
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 2, "<link rel=\"stylesheet\" href=\"/assets/css/output.css\"></head><body class=\"bg-background text-foreground antialiased surface-desk\"><main class=\"min-h-screen flex items-center justify-center p-4\"><div class=\"w-full max-w-sm\"><div class=\"text-center mb-8\"><img src=\"/assets/logo.svg\" alt=\"Gofer\" class=\"h-12 w-auto mx-auto\"><h1 class=\"mt-6 text-2xl font-semibold\">Accept your Gofer invitation</h1><p class=\"mt-2 text-sm text-muted-foreground\">Use the private invitation token provided by your administrator. It can be used only once.</p></div>")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 2, "<link rel=\"stylesheet\" href=\"/assets/css/output.css\"><script src=\"/assets/js/actions.js\"></script></head><body class=\"bg-background text-foreground antialiased surface-desk\"><main class=\"min-h-screen flex items-center justify-center p-4\"><div class=\"w-full max-w-sm\"><div class=\"text-center mb-8\"><img src=\"/assets/logo.svg\" alt=\"Gofer\" class=\"h-12 w-auto mx-auto\"><h1 class=\"mt-6 text-2xl font-semibold\">Accept your Gofer invitation</h1><p class=\"mt-2 text-sm text-muted-foreground\">Use the private invitation token provided by your administrator. It can be used only once.</p></div>")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -60,7 +60,7 @@ func InvitationEnrollmentPage(data InvitationEnrollmentData) templ.Component {
 			var templ_7745c5c3_Var2 string
 			templ_7745c5c3_Var2, templ_7745c5c3_Err = templ.JoinStringErrs(data.Message)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/enrollment_redemption.templ`, Line: 34, Col: 21}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/enrollment_redemption.templ`, Line: 35, Col: 21}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var2))
 			if templ_7745c5c3_Err != nil {
@@ -210,7 +210,7 @@ func CredentialRedemptionPage(data CredentialRedemptionData) templ.Component {
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 17, "<link rel=\"stylesheet\" href=\"/assets/css/output.css\"></head><body class=\"bg-background text-foreground antialiased surface-desk\"><main class=\"min-h-screen flex items-center justify-center p-4\"><div class=\"w-full max-w-sm\"><div class=\"text-center mb-8\"><img src=\"/assets/logo.svg\" alt=\"Gofer\" class=\"h-12 w-auto mx-auto\"><h1 class=\"mt-6 text-2xl font-semibold\">Reset your Gofer password</h1><p class=\"mt-2 text-sm text-muted-foreground\">Use the private reset token provided by your administrator. It can be used only once.</p></div>")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 17, "<link rel=\"stylesheet\" href=\"/assets/css/output.css\"><script src=\"/assets/js/actions.js\"></script></head><body class=\"bg-background text-foreground antialiased surface-desk\"><main class=\"min-h-screen flex items-center justify-center p-4\"><div class=\"w-full max-w-sm\"><div class=\"text-center mb-8\"><img src=\"/assets/logo.svg\" alt=\"Gofer\" class=\"h-12 w-auto mx-auto\"><h1 class=\"mt-6 text-2xl font-semibold\">Reset your Gofer password</h1><p class=\"mt-2 text-sm text-muted-foreground\">Use the private reset token provided by your administrator. It can be used only once.</p></div>")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -222,7 +222,7 @@ func CredentialRedemptionPage(data CredentialRedemptionData) templ.Component {
 			var templ_7745c5c3_Var7 string
 			templ_7745c5c3_Var7, templ_7745c5c3_Err = templ.JoinStringErrs(data.Message)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/enrollment_redemption.templ`, Line: 139, Col: 21}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/enrollment_redemption.templ`, Line: 141, Col: 21}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var7))
 			if templ_7745c5c3_Err != nil {
@@ -389,7 +389,7 @@ func passwordTokenCompletePage(title string, message string) templ.Component {
 		var templ_7745c5c3_Var13 string
 		templ_7745c5c3_Var13, templ_7745c5c3_Err = templ.JoinStringErrs(title)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/enrollment_redemption.templ`, Line: 219, Col: 25}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/enrollment_redemption.templ`, Line: 221, Col: 25}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var13))
 		if templ_7745c5c3_Err != nil {
@@ -403,14 +403,14 @@ func passwordTokenCompletePage(title string, message string) templ.Component {
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 29, "<link rel=\"stylesheet\" href=\"/assets/css/output.css\"></head><body class=\"bg-background text-foreground antialiased surface-desk\"><main class=\"min-h-screen flex items-center justify-center p-4\"><div class=\"w-full max-w-sm text-center\"><img src=\"/assets/logo.svg\" alt=\"Gofer\" class=\"h-12 w-auto mx-auto\"><div role=\"status\" class=\"mt-8 rounded-lg border border-success/25 bg-success/10 px-5 py-6\"><h1 class=\"text-2xl font-semibold\">")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 29, "<link rel=\"stylesheet\" href=\"/assets/css/output.css\"><script src=\"/assets/js/actions.js\"></script></head><body class=\"bg-background text-foreground antialiased surface-desk\"><main class=\"min-h-screen flex items-center justify-center p-4\"><div class=\"w-full max-w-sm text-center\"><img src=\"/assets/logo.svg\" alt=\"Gofer\" class=\"h-12 w-auto mx-auto\"><div role=\"status\" class=\"mt-8 rounded-lg border border-success/25 bg-success/10 px-5 py-6\"><h1 class=\"text-2xl font-semibold\">")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
 		var templ_7745c5c3_Var14 string
 		templ_7745c5c3_Var14, templ_7745c5c3_Err = templ.JoinStringErrs(title)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/enrollment_redemption.templ`, Line: 228, Col: 48}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/enrollment_redemption.templ`, Line: 231, Col: 48}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var14))
 		if templ_7745c5c3_Err != nil {
@@ -423,7 +423,7 @@ func passwordTokenCompletePage(title string, message string) templ.Component {
 		var templ_7745c5c3_Var15 string
 		templ_7745c5c3_Var15, templ_7745c5c3_Err = templ.JoinStringErrs(message)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/enrollment_redemption.templ`, Line: 229, Col: 61}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/enrollment_redemption.templ`, Line: 232, Col: 61}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var15))
 		if templ_7745c5c3_Err != nil {

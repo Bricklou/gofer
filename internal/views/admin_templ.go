@@ -5633,7 +5633,7 @@ func MailSecurityExceptionsPanel(data models.MailSecurityAdminData) templ.Compon
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 358, "\" class=\"mt-5 space-y-4\" onsubmit=\"return confirm('Allow HTTP mail discovery for this domain? The response can be changed in transit.')\">")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 358, "\" class=\"mt-5 space-y-4\" data-confirm=\"Allow HTTP mail discovery for this domain? The response can be changed in transit.\">")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -5701,7 +5701,7 @@ func MailSecurityExceptionsPanel(data models.MailSecurityAdminData) templ.Compon
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 366, "\" class=\"mt-5 space-y-4\" onsubmit=\"return confirm('Allow credentials and message data to travel without encryption to this endpoint?')\">")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 366, "\" class=\"mt-5 space-y-4\" data-confirm=\"Allow credentials and message data to travel without encryption to this endpoint?\">")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -5769,7 +5769,7 @@ func MailSecurityExceptionsPanel(data models.MailSecurityAdminData) templ.Compon
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 374, "\" class=\"mt-5 space-y-4\" onsubmit=\"return confirm('Allow Gofer to connect to this exact private target?')\">")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 374, "\" class=\"mt-5 space-y-4\" data-confirm=\"Allow Gofer to connect to this exact private target?\">")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -5966,7 +5966,7 @@ func MailSecurityExceptionsPanel(data models.MailSecurityAdminData) templ.Compon
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
-				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 395, "\" onsubmit=\"return confirm('Revoke this security exception? Accounts using it will stop reconnecting.')\">")
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 395, "\" data-confirm=\"Revoke this security exception? Accounts using it will stop reconnecting.\">")
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}

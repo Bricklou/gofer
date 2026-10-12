@@ -160,7 +160,7 @@ func MailSidebarBody(accounts []models.Account, activeFolder string, uiSettings 
 			templ_7745c5c3_Var5 = templ.NopComponent
 		}
 		ctx = templ.ClearChildren(ctx)
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 7, "<div id=\"sidebar-app-body\" class=\"flex min-h-0 flex-1 flex-col\" data-sidebar-app-body=\"mail\"><div class=\"px-4 pb-4\" data-sidebar-create><button id=\"sidebar-compose-btn\" type=\"button\" onclick=\"openNewCompose()\" class=\"btn-skeuo flex cursor-pointer items-center justify-center gap-2 w-full h-10 rounded-lg text-sidebar-primary-foreground font-semibold text-sm\">")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 7, "<div id=\"sidebar-app-body\" class=\"flex min-h-0 flex-1 flex-col\" data-sidebar-app-body=\"mail\"><div class=\"px-4 pb-4\" data-sidebar-create><button id=\"sidebar-compose-btn\" type=\"button\" data-on-click='[\"openNewCompose\"]' class=\"btn-skeuo flex cursor-pointer items-center justify-center gap-2 w-full h-10 rounded-lg text-sidebar-primary-foreground font-semibold text-sm\">")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -1507,7 +1507,7 @@ func SidebarSyncControls(accounts []models.Account, activeApp string) templ.Comp
 					}
 					ctx = templ.InitializeContext(ctx)
 					if len(calendarConfiguredAccounts(accounts)) > 0 {
-						templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 93, "<button type=\"button\" hx-post=\"/api/calendar/sync\" hx-target=\"#main-content\" hx-swap=\"outerHTML\" hx-sync=\"#main-content:drop\" hx-on::config-request=\"configureCalendarSyncRequest(event)\" hx-on::before-request=\"handleCalendarSyncStart(event)\" hx-on::after-request=\"handleCalendarSyncResult(event)\" hx-on::send-abort=\"handleCalendarSyncAbort(event)\" data-calendar-sync-button class=\"inline-flex h-8 w-8 items-center justify-center text-sidebar-foreground transition-colors hover:bg-sidebar-accent hover:text-sidebar-accent-foreground disabled:cursor-wait\" aria-label=\"Refresh calendars\">")
+						templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 93, "<button type=\"button\" hx-post=\"/api/calendar/sync\" hx-target=\"#main-content\" hx-swap=\"outerHTML\" hx-sync=\"#main-content:drop\" data-on-htmx-config-request='[\"configureCalendarSyncRequest\",\"$event\"]' data-on-htmx-before-request='[\"handleCalendarSyncStart\",\"$event\"]' data-on-htmx-after-request='[\"handleCalendarSyncResult\",\"$event\"]' data-on-htmx-send-abort='[\"handleCalendarSyncAbort\",\"$event\"]' data-calendar-sync-button class=\"inline-flex h-8 w-8 items-center justify-center text-sidebar-foreground transition-colors hover:bg-sidebar-accent hover:text-sidebar-accent-foreground disabled:cursor-wait\" aria-label=\"Refresh calendars\">")
 						if templ_7745c5c3_Err != nil {
 							return templ_7745c5c3_Err
 						}
@@ -1664,7 +1664,7 @@ func SidebarSyncControls(accounts []models.Account, activeApp string) templ.Comp
 						if templ_7745c5c3_Err != nil {
 							return templ_7745c5c3_Err
 						}
-						templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 107, "\" hx-target=\"#main-content\" hx-swap=\"outerHTML\" hx-sync=\"#main-content:drop\" hx-on::config-request=\"configureCalendarSyncRequest(event)\" hx-on::before-request=\"handleCalendarSyncStart(event)\" hx-on::after-request=\"handleCalendarSyncResult(event)\" hx-on::send-abort=\"handleCalendarSyncAbort(event)\" data-calendar-sync-button data-calendar-account-sync-button=\"")
+						templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 107, "\" hx-target=\"#main-content\" hx-swap=\"outerHTML\" hx-sync=\"#main-content:drop\" data-on-htmx-config-request='[\"configureCalendarSyncRequest\",\"$event\"]' data-on-htmx-before-request='[\"handleCalendarSyncStart\",\"$event\"]' data-on-htmx-after-request='[\"handleCalendarSyncResult\",\"$event\"]' data-on-htmx-send-abort='[\"handleCalendarSyncAbort\",\"$event\"]' data-calendar-sync-button data-calendar-account-sync-button=\"")
 						if templ_7745c5c3_Err != nil {
 							return templ_7745c5c3_Err
 						}
@@ -1785,7 +1785,7 @@ func SidebarSyncControls(accounts []models.Account, activeApp string) templ.Comp
 					}
 					ctx = templ.InitializeContext(ctx)
 					if activeApp == "contacts" {
-						templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 116, "<button type=\"button\" hx-post=\"/api/settings/contacts/accounts/sync\" hx-swap=\"none\" hx-on::before-request=\"handleContactSidebarSyncStart(event)\" hx-on::after-request=\"handleContactSidebarSyncResult(event)\" data-contact-sidebar-sync-button class=\"inline-flex h-8 w-8 items-center justify-center text-sidebar-foreground transition-colors hover:bg-sidebar-accent hover:text-sidebar-accent-foreground data-[syncing=true]:text-sidebar-accent-foreground\" aria-label=\"Sync all contacts\">")
+						templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 116, "<button type=\"button\" hx-post=\"/api/settings/contacts/accounts/sync\" hx-swap=\"none\" data-on-htmx-before-request='[\"handleContactSidebarSyncStart\",\"$event\"]' data-on-htmx-after-request='[\"handleContactSidebarSyncResult\",\"$event\"]' data-contact-sidebar-sync-button class=\"inline-flex h-8 w-8 items-center justify-center text-sidebar-foreground transition-colors hover:bg-sidebar-accent hover:text-sidebar-accent-foreground data-[syncing=true]:text-sidebar-accent-foreground\" aria-label=\"Sync all contacts\">")
 						if templ_7745c5c3_Err != nil {
 							return templ_7745c5c3_Err
 						}
@@ -1798,7 +1798,7 @@ func SidebarSyncControls(accounts []models.Account, activeApp string) templ.Comp
 							return templ_7745c5c3_Err
 						}
 					} else {
-						templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 118, "<button type=\"button\" hx-post=\"/api/mail/sync\" hx-swap=\"none\" hx-on::before-request=\"handleMailSidebarSyncStart(event)\" hx-on::after-request=\"handleMailSidebarSyncResult(event)\" data-mail-sidebar-sync-button class=\"inline-flex h-8 w-8 items-center justify-center text-sidebar-foreground transition-colors hover:bg-sidebar-accent hover:text-sidebar-accent-foreground data-[syncing=true]:text-sidebar-accent-foreground\" aria-label=\"Force sync all mail, including IDLE folders\">")
+						templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 118, "<button type=\"button\" hx-post=\"/api/mail/sync\" hx-swap=\"none\" data-on-htmx-before-request='[\"handleMailSidebarSyncStart\",\"$event\"]' data-on-htmx-after-request='[\"handleMailSidebarSyncResult\",\"$event\"]' data-mail-sidebar-sync-button class=\"inline-flex h-8 w-8 items-center justify-center text-sidebar-foreground transition-colors hover:bg-sidebar-accent hover:text-sidebar-accent-foreground data-[syncing=true]:text-sidebar-accent-foreground\" aria-label=\"Force sync all mail, including IDLE folders\">")
 						if templ_7745c5c3_Err != nil {
 							return templ_7745c5c3_Err
 						}
@@ -1934,7 +1934,7 @@ func SidebarSyncControls(accounts []models.Account, activeApp string) templ.Comp
 								if templ_7745c5c3_Err != nil {
 									return templ_7745c5c3_Err
 								}
-								templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 128, "\" hx-swap=\"none\" hx-on::before-request=\"handleContactSidebarSyncStart(event)\" hx-on::after-request=\"handleContactSidebarSyncResult(event)\" data-contact-account-sync-button=\"")
+								templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 128, "\" hx-swap=\"none\" data-on-htmx-before-request='[\"handleContactSidebarSyncStart\",\"$event\"]' data-on-htmx-after-request='[\"handleContactSidebarSyncResult\",\"$event\"]' data-contact-account-sync-button=\"")
 								if templ_7745c5c3_Err != nil {
 									return templ_7745c5c3_Err
 								}
@@ -2024,7 +2024,7 @@ func SidebarSyncControls(accounts []models.Account, activeApp string) templ.Comp
 								if templ_7745c5c3_Err != nil {
 									return templ_7745c5c3_Err
 								}
-								templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 137, "\" hx-swap=\"none\" hx-on::before-request=\"handleMailSidebarSyncStart(event)\" hx-on::after-request=\"handleMailSidebarSyncResult(event)\" data-mail-account-sync-button=\"")
+								templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 137, "\" hx-swap=\"none\" data-on-htmx-before-request='[\"handleMailSidebarSyncStart\",\"$event\"]' data-on-htmx-after-request='[\"handleMailSidebarSyncResult\",\"$event\"]' data-mail-account-sync-button=\"")
 								if templ_7745c5c3_Err != nil {
 									return templ_7745c5c3_Err
 								}

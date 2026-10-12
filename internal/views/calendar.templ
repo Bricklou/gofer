@@ -34,6 +34,7 @@ templ CalendarLayout(accounts []models.Account, month CalendarMonthData, uiSetti
 			@timepicker.Script()
 			@toast.Script()
 			@AppSidebarResponsiveStyle()
+			<script src="/assets/js/actions.js"></script>
 		</head>
 		<body class="bg-background text-foreground antialiased surface-desk" data-ui-settings={ uiSettingsJSON(uiSettings) }>
 			@CalendarShell(accounts, month, uiSettings)
@@ -49,6 +50,7 @@ templ CalendarLayout(accounts []models.Account, month CalendarMonthData, uiSetti
 			<script src="/assets/js/virtual-scroll.js"></script>
 			<script src="/assets/js/app.js"></script>
 			<script src="/assets/js/settings.js"></script>
+			<script src="/assets/js/settings-page.js"></script>
 			<script src="/assets/js/ui-settings.js"></script>
 			<script src="/assets/js/resize.js"></script>
 		</body>
@@ -165,7 +167,7 @@ templ CalendarSourceSyncIndicator(source models.AccountCalendarSource, loading b
 templ CalendarMainPane(month CalendarMonthData, uiSettings map[string]string) {
 	<section id="mail-list" class="flex w-full max-lg:!w-full lg:flex flex-col border-r border-border bg-card h-full min-w-0 overflow-hidden" style={ "width:" + mailListWidthCSS(uiSettingGet(uiSettings, "mail_list_width", "50%")) } aria-busy={ strconv.FormatBool(month.Loading) }>
 		@CalendarMainContent(month)
-		<button type="button" class="mobile-compose-fab" onclick="document.querySelector('[data-calendar-create-trigger]').click()" aria-label="New event">
+		<button type="button" class="mobile-compose-fab" data-on-click='["goferClickElement","[data-calendar-create-trigger]"]' aria-label="New event">
 			@icon.CalendarPlus(icon.Props{Class: "size-6"})
 		</button>
 	</section>
@@ -182,14 +184,14 @@ templ CalendarMainContent(month CalendarMonthData) {
 				hx-target="#main-content"
 				hx-swap="outerHTML"
 				hx-sync="#main-content:drop"
-				hx-on::before-request="handleCalendarSyncStart(event)"
-				hx-on::after-request="handleCalendarSyncResult(event)"
-				hx-on::send-abort="handleCalendarSyncAbort(event)"
+				data-on-htmx-before-request='["handleCalendarSyncStart","$event"]'
+				data-on-htmx-after-request='["handleCalendarSyncResult","$event"]'
+				data-on-htmx-send-abort='["handleCalendarSyncAbort","$event"]'
 				data-calendar-auto-sync
 			></div>
 		}
 		if !month.Loading {
-			<div class="hidden" data-calendar-cache-refresh hx-get={ calendarViewURL(month.View, month.DateKey) + "&cache=1" } hx-trigger="calendar-cache-refresh" hx-target="#main-content" hx-select="#main-content" hx-swap="outerHTML" hx-sync="#main-content:drop" hx-on::before-request="configureCalendarCacheRequest(event)"></div>
+			<div class="hidden" data-calendar-cache-refresh hx-get={ calendarViewURL(month.View, month.DateKey) + "&cache=1" } hx-trigger="calendar-cache-refresh" hx-target="#main-content" hx-select="#main-content" hx-swap="outerHTML" hx-sync="#main-content:drop" data-on-htmx-before-request='["configureCalendarCacheRequest","$event"]'></div>
 		}
 		<header class="flex shrink-0 flex-wrap items-center justify-between gap-3 border-b border-border px-4 py-4" inert?={ month.Loading }>
 			<h1 class="min-w-0 truncate text-lg font-bold tracking-tight" style="font-family: var(--font-serif)" data-calendar-title>{ month.MonthLabel }</h1>

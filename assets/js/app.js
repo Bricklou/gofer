@@ -1,3 +1,6 @@
+// Gofer's pages run no inline code, so htmx needn't evaluate any either.
+if (window.htmx) window.htmx.config.allowEval = false
+
 function setupPageRequestOwnership() {
   if (window._goferPageRequestOwnershipReady) return
   window._goferPageRequestOwnershipReady = true
@@ -6454,7 +6457,7 @@ document.addEventListener("DOMContentLoaded", function () {
         '<div class="surface-paper rounded-md flex flex-col h-full overflow-hidden">' +
           '<div class="mail-view-toolbar flex items-center justify-between px-6 py-2.5">' +
             '<div class="mail-view-actions flex items-center gap-1 min-w-0">' +
-              '<button type="button" class="mobile-back-button h-9 w-9 shrink-0 items-center justify-center rounded-md text-ink/60 hover:bg-ink/5" onclick="closeMobileMailView()" aria-label="Back to list">' + mailViewSkeletonIcon("arrow-left", "size-5") + '</button>' +
+              '<button type="button" class="mobile-back-button h-9 w-9 shrink-0 items-center justify-center rounded-md text-ink/60 hover:bg-ink/5" data-on-click=\'["closeMobileMailView"]\' aria-label="Back to list">' + mailViewSkeletonIcon("arrow-left", "size-5") + '</button>' +
               mailViewSkeletonToolbarButton("archive") +
               mailViewSkeletonToolbarButton("trash-2") +
               '<div>' + mailViewSkeletonToolbarButton("shield-alert").replace('<button ', '<button data-mail-action="spam" ') + '</div>' +

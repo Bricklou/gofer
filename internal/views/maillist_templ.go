@@ -123,7 +123,7 @@ func MailList(accounts []models.Account, emails []models.Email, activeFolder str
 				return templ_7745c5c3_Err
 			}
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 7, "<button type=\"button\" class=\"mobile-compose-fab\" onclick=\"openNewCompose()\" aria-label=\"Compose\">")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 7, "<button type=\"button\" class=\"mobile-compose-fab\" data-on-click='[\"openNewCompose\"]' aria-label=\"Compose\">")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}

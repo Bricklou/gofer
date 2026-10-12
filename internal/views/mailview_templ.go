@@ -152,9 +152,9 @@ func MailViewAvatar(contact models.Contact, messageID string, class string, fall
 
 func threadAwareAction(singleFn, threadFn string, email *models.Email) string {
 	if email.ThreadCount > 1 {
-		return fmt.Sprintf("%s('%s')", threadFn, email.ID)
+		return onAction(threadFn, email.ID)
 	}
-	return fmt.Sprintf("%s('%s')", singleFn, email.ID)
+	return onAction(singleFn, email.ID)
 }
 
 func threadAwareLabel(single, thread string, email *models.Email) string {
@@ -169,9 +169,9 @@ func threadAwareLabel(single, thread string, email *models.Email) string {
 func mailViewReadAttributes(email *models.Email, thread []models.ThreadItem) templ.Attributes {
 	read := fmt.Sprintf("%t", mailViewRead(email, thread))
 	if email.ThreadCount > 1 {
-		return templ.Attributes{"onclick": fmt.Sprintf("toggleThreadRead('%s')", email.ID), "data-read-thread": email.ID, "data-read-thread-id": email.ThreadID, "data-is-read": read}
+		return templ.Attributes{"data-on-click": onAction("toggleThreadRead", email.ID), "data-read-thread": email.ID, "data-read-thread-id": email.ThreadID, "data-is-read": read}
 	}
-	return templ.Attributes{"onclick": fmt.Sprintf("toggleRead('%s')", email.ID), "data-read-email": email.ID, "data-is-read": read}
+	return templ.Attributes{"data-on-click": onAction("toggleRead", email.ID), "data-read-email": email.ID, "data-is-read": read}
 }
 
 // mailViewRead reports whether the toolbar shows the message as read: for a thread, when
@@ -192,9 +192,9 @@ func mailViewRead(email *models.Email, thread []models.ThreadItem) bool {
 // toolbar actions. Each thread message keeps its own star in its action row.
 func mailViewStarAttributes(email *models.Email) templ.Attributes {
 	if email.ThreadCount > 1 {
-		return templ.Attributes{"onclick": fmt.Sprintf("toggleThreadStar('%s')", email.ID), "data-star-thread": email.ID, "data-star-thread-id": email.ThreadID}
+		return templ.Attributes{"data-on-click": onAction("toggleThreadStar", email.ID), "data-star-thread": email.ID, "data-star-thread-id": email.ThreadID}
 	}
-	return templ.Attributes{"onclick": fmt.Sprintf("toggleStar('%s')", email.ID), "data-star-email": email.ID}
+	return templ.Attributes{"data-on-click": onAction("toggleStar", email.ID), "data-star-email": email.ID}
 }
 
 // mailViewStarred reports whether the toolbar star is filled: for a thread, when any of
@@ -300,7 +300,7 @@ func MailViewLoading() templ.Component {
 			templ_7745c5c3_Var7 = templ.NopComponent
 		}
 		ctx = templ.ClearChildren(ctx)
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 10, "<div id=\"mail-view\" class=\"hidden lg:flex flex-1 flex-col min-w-0 bg-background surface-desk\" data-mail-reader><div class=\"mail-view-frame flex flex-col h-full\" aria-busy=\"true\" aria-label=\"Loading message\"><div class=\"surface-paper rounded-md flex flex-col h-full overflow-hidden\"><div class=\"mail-view-toolbar flex items-center justify-between px-6 py-2.5\"><div class=\"mail-view-actions flex items-center gap-1 min-w-0\"><button type=\"button\" class=\"mobile-back-button h-9 w-9 shrink-0 items-center justify-center rounded-md text-ink/60 hover:bg-ink/5\" onclick=\"closeMobileMailView()\" aria-label=\"Back to list\">")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 10, "<div id=\"mail-view\" class=\"hidden lg:flex flex-1 flex-col min-w-0 bg-background surface-desk\" data-mail-reader><div class=\"mail-view-frame flex flex-col h-full\" aria-busy=\"true\" aria-label=\"Loading message\"><div class=\"surface-paper rounded-md flex flex-col h-full overflow-hidden\"><div class=\"mail-view-toolbar flex items-center justify-between px-6 py-2.5\"><div class=\"mail-view-actions flex items-center gap-1 min-w-0\"><button type=\"button\" class=\"mobile-back-button h-9 w-9 shrink-0 items-center justify-center rounded-md text-ink/60 hover:bg-ink/5\" data-on-click='[\"closeMobileMailView\"]' aria-label=\"Back to list\">")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -1582,7 +1582,7 @@ func MailViewThreadItemMiniHeader(item *models.ThreadItem) templ.Component {
 					Variant:    button.VariantGhost,
 					Size:       button.SizeIcon,
 					Class:      "h-7 w-7",
-					Attributes: templ.Attributes{"onclick": fmt.Sprintf("toggleStar('%s')", item.ID), "data-star-email": item.ID},
+					Attributes: templ.Attributes{"data-on-click": onAction("toggleStar", item.ID), "data-star-email": item.ID},
 				}).Render(templ.WithChildren(ctx, templ_7745c5c3_Var59), templ_7745c5c3_Buffer)
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
@@ -1674,7 +1674,7 @@ func MailViewThreadItemMiniHeader(item *models.ThreadItem) templ.Component {
 					Variant:    button.VariantGhost,
 					Size:       button.SizeIcon,
 					Class:      mailDeleteActionClass("h-7 w-7", "text-ink/40 hover:text-ink/70 hover:bg-ink/5", mailThreadItemIsTrash(item)),
-					Attributes: templ.Attributes{"onclick": fmt.Sprintf("deleteMessage('%s')", item.ID)},
+					Attributes: templ.Attributes{"data-on-click": onAction("deleteMessage", item.ID)},
 				}).Render(templ.WithChildren(ctx, templ_7745c5c3_Var63), templ_7745c5c3_Buffer)
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
@@ -1780,7 +1780,7 @@ func MailViewThreadItemMiniHeader(item *models.ThreadItem) templ.Component {
 					Variant:    button.VariantGhost,
 					Size:       button.SizeIcon,
 					Class:      "h-7 w-7 text-ink/40 hover:text-ink/70 hover:bg-ink/5",
-					Attributes: templ.Attributes{"onclick": fmt.Sprintf("toggleRead('%s')", item.ID), "data-read-email": item.ID, "data-is-read": fmt.Sprintf("%t", item.IsRead)},
+					Attributes: templ.Attributes{"data-on-click": onAction("toggleRead", item.ID), "data-read-email": item.ID, "data-is-read": fmt.Sprintf("%t", item.IsRead)},
 				}).Render(templ.WithChildren(ctx, templ_7745c5c3_Var67), templ_7745c5c3_Buffer)
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
@@ -2050,7 +2050,7 @@ func mailViewThreadQuickReplyButton(mode string, label string) templ.Component {
 		templ_7745c5c3_Err = button.Button(button.Props{
 			Variant:    button.VariantOutline,
 			Class:      "h-7 px-2 max-lg:w-7 max-lg:px-0 border-ink/10 text-ink/50 hover:text-ink hover:border-ink/20",
-			Attributes: templ.Attributes{"onclick": fmt.Sprintf("handleReply(this, '%s')", mode), "aria-label": label, "title": label},
+			Attributes: templ.Attributes{"data-on-click": onAction("handleReply", actionElement, mode), "aria-label": label, "title": label},
 		}).Render(templ.WithChildren(ctx, templ_7745c5c3_Var76), templ_7745c5c3_Buffer)
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
@@ -2300,7 +2300,7 @@ func EmailBodyStyleCycleButton(emailID string) templ.Component {
 			Size:    button.SizeIcon,
 			Class:   "email-body-mode-cycle h-7 w-7 text-ink/40 hover:text-ink/70 hover:bg-ink/5",
 			Attributes: templ.Attributes{
-				"onclick":                    fmt.Sprintf("toggleEmailBodySchemeById('%s')", emailID),
+				"data-on-click":              onAction("toggleEmailBodySchemeById", emailID),
 				"data-email-body-mode-cycle": emailID,
 				"data-email-body-mode":       "dark",
 				"aria-label":                 "Change email body style",
@@ -2543,7 +2543,7 @@ func MailViewHeader(email *models.Email, thread []models.ThreadItem) templ.Compo
 			templ_7745c5c3_Var95 = templ.NopComponent
 		}
 		ctx = templ.ClearChildren(ctx)
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 144, "<div class=\"mail-view-toolbar flex items-center justify-between px-6 py-2.5\"><div class=\"mail-view-actions flex items-center gap-1 min-w-0\"><button type=\"button\" class=\"mobile-back-button h-9 w-9 shrink-0 items-center justify-center rounded-md text-ink/60 hover:bg-ink/5\" onclick=\"closeMobileMailView()\" aria-label=\"Back to list\">")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 144, "<div class=\"mail-view-toolbar flex items-center justify-between px-6 py-2.5\"><div class=\"mail-view-actions flex items-center gap-1 min-w-0\"><button type=\"button\" class=\"mobile-back-button h-9 w-9 shrink-0 items-center justify-center rounded-md text-ink/60 hover:bg-ink/5\" data-on-click='[\"closeMobileMailView\"]' aria-label=\"Back to list\">")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -2601,7 +2601,7 @@ func MailViewHeader(email *models.Email, thread []models.ThreadItem) templ.Compo
 					Variant:    button.VariantGhost,
 					Size:       button.SizeIcon,
 					Class:      "h-8 w-8 text-ink/40 hover:text-ink/70 hover:bg-ink/5",
-					Attributes: templ.Attributes{"onclick": fmt.Sprintf("archiveThread('%s')", email.ID)},
+					Attributes: templ.Attributes{"data-on-click": onAction("archiveThread", email.ID)},
 				}).Render(templ.WithChildren(ctx, templ_7745c5c3_Var98), templ_7745c5c3_Buffer)
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
@@ -2698,7 +2698,7 @@ func MailViewHeader(email *models.Email, thread []models.ThreadItem) templ.Compo
 					Variant:    button.VariantGhost,
 					Size:       button.SizeIcon,
 					Class:      mailDeleteActionClass("h-8 w-8", "text-ink/40 hover:text-ink/70 hover:bg-ink/5", mailEmailIsTrash(email)),
-					Attributes: templ.Attributes{"onclick": threadAwareAction("deleteMessage", "deleteThread", email)},
+					Attributes: templ.Attributes{"data-on-click": threadAwareAction("deleteMessage", "deleteThread", email)},
 				}).Render(templ.WithChildren(ctx, templ_7745c5c3_Var103), templ_7745c5c3_Buffer)
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
@@ -2808,7 +2808,7 @@ func MailViewHeader(email *models.Email, thread []models.ThreadItem) templ.Compo
 						Variant:    button.VariantGhost,
 						Size:       button.SizeIcon,
 						Class:      "h-8 w-8 border border-amber-500/35 bg-amber-500/12 text-amber-700 shadow-[0_1px_2px_rgba(0,0,0,0.04)] hover:bg-amber-500/20 hover:text-amber-800 dark:border-amber-300/20 dark:bg-amber-300/10 dark:text-amber-300 dark:hover:text-amber-200",
-						Attributes: templ.Attributes{"onclick": threadAwareAction("markNotSpam", "markThreadNotSpam", email), "data-mail-action": "spam"},
+						Attributes: templ.Attributes{"data-on-click": threadAwareAction("markNotSpam", "markThreadNotSpam", email), "data-mail-action": "spam"},
 					}).Render(templ.WithChildren(ctx, templ_7745c5c3_Var109), templ_7745c5c3_Buffer)
 					if templ_7745c5c3_Err != nil {
 						return templ_7745c5c3_Err
@@ -2836,7 +2836,7 @@ func MailViewHeader(email *models.Email, thread []models.ThreadItem) templ.Compo
 						Variant:    button.VariantGhost,
 						Size:       button.SizeIcon,
 						Class:      "h-8 w-8 text-ink/40 hover:text-ink/70 hover:bg-ink/5",
-						Attributes: templ.Attributes{"onclick": threadAwareAction("markSpam", "markThreadSpam", email), "data-mail-action": "spam"},
+						Attributes: templ.Attributes{"data-on-click": threadAwareAction("markSpam", "markThreadSpam", email), "data-mail-action": "spam"},
 					}).Render(templ.WithChildren(ctx, templ_7745c5c3_Var110), templ_7745c5c3_Buffer)
 					if templ_7745c5c3_Err != nil {
 						return templ_7745c5c3_Err
@@ -3174,7 +3174,7 @@ func MailViewHeader(email *models.Email, thread []models.ThreadItem) templ.Compo
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
-				templ_7745c5c3_Err = templ.RenderAttributes(ctx, templ_7745c5c3_Buffer, templ.Attributes{"onclick": fmt.Sprintf("removeLabelMessage(%q, %q, %t)", email.ID, label.Name, email.ThreadCount > 1)})
+				templ_7745c5c3_Err = templ.RenderAttributes(ctx, templ_7745c5c3_Buffer, templ.Attributes{"data-on-click": onAction("removeLabelMessage", email.ID, label.Name, email.ThreadCount > 1)})
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
@@ -3308,7 +3308,7 @@ func MailViewHeader(email *models.Email, thread []models.ThreadItem) templ.Compo
 						}
 						return nil
 					})
-					templ_7745c5c3_Err = dropdown.Item(dropdown.ItemProps{Attributes: templ.Attributes{"onclick": fmt.Sprintf("continueEditingDraft('%s')", email.ID)}}).Render(templ.WithChildren(ctx, templ_7745c5c3_Var134), templ_7745c5c3_Buffer)
+					templ_7745c5c3_Err = dropdown.Item(dropdown.ItemProps{Attributes: templ.Attributes{"data-on-click": onAction("continueEditingDraft", email.ID)}}).Render(templ.WithChildren(ctx, templ_7745c5c3_Var134), templ_7745c5c3_Buffer)
 					if templ_7745c5c3_Err != nil {
 						return templ_7745c5c3_Err
 					}
@@ -3342,7 +3342,7 @@ func MailViewHeader(email *models.Email, thread []models.ThreadItem) templ.Compo
 						}
 						return nil
 					})
-					templ_7745c5c3_Err = dropdown.Item(dropdown.ItemProps{Attributes: templ.Attributes{"onclick": fmt.Sprintf("discardReadPaneDraft('%s')", email.ID)}}).Render(templ.WithChildren(ctx, templ_7745c5c3_Var135), templ_7745c5c3_Buffer)
+					templ_7745c5c3_Err = dropdown.Item(dropdown.ItemProps{Attributes: templ.Attributes{"data-on-click": onAction("discardReadPaneDraft", email.ID)}}).Render(templ.WithChildren(ctx, templ_7745c5c3_Var135), templ_7745c5c3_Buffer)
 					if templ_7745c5c3_Err != nil {
 						return templ_7745c5c3_Err
 					}
@@ -3466,7 +3466,7 @@ func MailViewHeader(email *models.Email, thread []models.ThreadItem) templ.Compo
 					}
 					return nil
 				})
-				templ_7745c5c3_Err = dropdown.Item(dropdown.ItemProps{Attributes: templ.Attributes{"onclick": fmt.Sprintf("promptLabelMessage('%s', %t)", email.ID, email.ThreadCount > 1)}}).Render(templ.WithChildren(ctx, templ_7745c5c3_Var138), templ_7745c5c3_Buffer)
+				templ_7745c5c3_Err = dropdown.Item(dropdown.ItemProps{Attributes: templ.Attributes{"data-on-click": onAction("promptLabelMessage", email.ID, email.ThreadCount > 1)}}).Render(templ.WithChildren(ctx, templ_7745c5c3_Var138), templ_7745c5c3_Buffer)
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
@@ -4856,7 +4856,7 @@ func MailViewReplyBar(email *models.Email) templ.Component {
 		templ_7745c5c3_Err = button.Button(button.Props{
 			Variant:    button.VariantOutline,
 			Class:      "flex-1 h-9 border-ink/10 text-ink/60 hover:text-ink hover:border-ink/20",
-			Attributes: templ.Attributes{"onclick": "handleReply(this, 'reply')"},
+			Attributes: templ.Attributes{"data-on-click": onAction("handleReply", actionElement, "reply")},
 		}).Render(templ.WithChildren(ctx, templ_7745c5c3_Var201), templ_7745c5c3_Buffer)
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
@@ -4890,7 +4890,7 @@ func MailViewReplyBar(email *models.Email) templ.Component {
 		templ_7745c5c3_Err = button.Button(button.Props{
 			Variant:    button.VariantOutline,
 			Class:      "flex-1 h-9 border-ink/10 text-ink/60 hover:text-ink hover:border-ink/20",
-			Attributes: templ.Attributes{"onclick": "handleReply(this, 'reply-all')"},
+			Attributes: templ.Attributes{"data-on-click": onAction("handleReply", actionElement, "reply-all")},
 		}).Render(templ.WithChildren(ctx, templ_7745c5c3_Var202), templ_7745c5c3_Buffer)
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
@@ -4924,7 +4924,7 @@ func MailViewReplyBar(email *models.Email) templ.Component {
 		templ_7745c5c3_Err = button.Button(button.Props{
 			Variant:    button.VariantOutline,
 			Class:      "flex-1 h-9 border-ink/10 text-ink/60 hover:text-ink hover:border-ink/20",
-			Attributes: templ.Attributes{"onclick": "handleReply(this, 'forward')"},
+			Attributes: templ.Attributes{"data-on-click": onAction("handleReply", actionElement, "forward")},
 		}).Render(templ.WithChildren(ctx, templ_7745c5c3_Var203), templ_7745c5c3_Buffer)
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
@@ -4991,7 +4991,7 @@ func MailViewDraftBar(email *models.Email) templ.Component {
 		templ_7745c5c3_Err = button.Button(button.Props{
 			Variant:    button.VariantOutline,
 			Class:      "flex-1 h-9 border-ink/10 text-ink/60 hover:text-ink hover:border-ink/20",
-			Attributes: templ.Attributes{"onclick": fmt.Sprintf("continueEditingDraft('%s')", email.ID)},
+			Attributes: templ.Attributes{"data-on-click": onAction("continueEditingDraft", email.ID)},
 		}).Render(templ.WithChildren(ctx, templ_7745c5c3_Var205), templ_7745c5c3_Buffer)
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
@@ -5025,7 +5025,7 @@ func MailViewDraftBar(email *models.Email) templ.Component {
 		templ_7745c5c3_Err = button.Button(button.Props{
 			Variant:    button.VariantOutline,
 			Class:      "flex-1 h-9 border-ink/10 text-ink/60 hover:text-destructive hover:border-destructive/20",
-			Attributes: templ.Attributes{"onclick": fmt.Sprintf("discardReadPaneDraft('%s')", email.ID)},
+			Attributes: templ.Attributes{"data-on-click": onAction("discardReadPaneDraft", email.ID)},
 		}).Render(templ.WithChildren(ctx, templ_7745c5c3_Var206), templ_7745c5c3_Buffer)
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
@@ -5138,7 +5138,7 @@ func MailViewMobileMenuItems(email *models.Email) templ.Component {
 				}
 				return nil
 			})
-			templ_7745c5c3_Err = dropdown.Item(dropdown.ItemProps{Attributes: templ.Attributes{"onclick": threadAwareAction("markNotSpam", "markThreadNotSpam", email)}}).Render(templ.WithChildren(ctx, templ_7745c5c3_Var209), templ_7745c5c3_Buffer)
+			templ_7745c5c3_Err = dropdown.Item(dropdown.ItemProps{Attributes: templ.Attributes{"data-on-click": threadAwareAction("markNotSpam", "markThreadNotSpam", email)}}).Render(templ.WithChildren(ctx, templ_7745c5c3_Var209), templ_7745c5c3_Buffer)
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
@@ -5178,7 +5178,7 @@ func MailViewMobileMenuItems(email *models.Email) templ.Component {
 				}
 				return nil
 			})
-			templ_7745c5c3_Err = dropdown.Item(dropdown.ItemProps{Attributes: templ.Attributes{"onclick": threadAwareAction("markSpam", "markThreadSpam", email)}}).Render(templ.WithChildren(ctx, templ_7745c5c3_Var211), templ_7745c5c3_Buffer)
+			templ_7745c5c3_Err = dropdown.Item(dropdown.ItemProps{Attributes: templ.Attributes{"data-on-click": threadAwareAction("markSpam", "markThreadSpam", email)}}).Render(templ.WithChildren(ctx, templ_7745c5c3_Var211), templ_7745c5c3_Buffer)
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}

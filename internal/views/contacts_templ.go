@@ -3858,7 +3858,7 @@ func ContactsDetail(contact *models.Contact, profile *models.ContactProfile, sho
 			return templ_7745c5c3_Err
 		}
 		if contact != nil || showNew {
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 169, "<button type=\"button\" class=\"mobile-back-button mb-2 h-9 items-center gap-1.5 self-start rounded-md px-2 text-sm font-semibold text-muted-foreground hover:bg-muted\" onclick=\"closeMobileContactView()\">")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 169, "<button type=\"button\" class=\"mobile-back-button mb-2 h-9 items-center gap-1.5 self-start rounded-md px-2 text-sm font-semibold text-muted-foreground hover:bg-muted\" data-on-click='[\"closeMobileContactView\"]'>")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
@@ -5433,7 +5433,7 @@ func ContactEditorHeader(contact *models.Contact, profile *models.ContactProfile
 				return templ_7745c5c3_Err
 			}
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 301, "</div></div></div><div class=\"contact-header-actions flex flex-wrap items-center gap-2 xl:justify-end\"><button type=\"button\" class=\"contact-header-back hidden\" onclick=\"closeMobileContactView()\" aria-label=\"Back to contacts\">")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 301, "</div></div></div><div class=\"contact-header-actions flex flex-wrap items-center gap-2 xl:justify-end\"><button type=\"button\" class=\"contact-header-back hidden\" data-on-click='[\"closeMobileContactView\"]' aria-label=\"Back to contacts\">")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}

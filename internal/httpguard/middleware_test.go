@@ -251,7 +251,7 @@ func TestMiddlewareRequestBoundary(t *testing.T) {
 			if got := recorder.Header().Get("Access-Control-Allow-Origin"); got != "" {
 				t.Fatalf("Access-Control-Allow-Origin = %q, want empty", got)
 			}
-			if got := recorder.Header().Get("Content-Security-Policy"); got != "frame-ancestors 'self'; object-src 'none'; base-uri 'self'" {
+			if got := recorder.Header().Get("Content-Security-Policy"); got != PagePolicy {
 				t.Fatalf("Content-Security-Policy = %q", got)
 			}
 		})

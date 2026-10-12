@@ -45,7 +45,7 @@ func PersonalSetupPage(data PersonalSetupData) templ.Component {
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 2, "<link rel=\"stylesheet\" href=\"/assets/css/output.css\"></head><body class=\"bg-background text-foreground antialiased surface-desk\"><main class=\"min-h-screen flex items-center justify-center p-4 py-10\"><div class=\"w-full max-w-md\"><div class=\"text-center mb-8\"><img src=\"/assets/logo.svg\" alt=\"Gofer\" class=\"h-12 w-auto mx-auto\"><h1 class=\"mt-6 text-2xl font-semibold\">Protect your personal Gofer</h1><p class=\"mt-2 text-sm text-muted-foreground\">One profile for all your mailboxes. Existing mail and settings stay with this profile.</p></div>")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 2, "<link rel=\"stylesheet\" href=\"/assets/css/output.css\"><script src=\"/assets/js/actions.js\"></script></head><body class=\"bg-background text-foreground antialiased surface-desk\"><main class=\"min-h-screen flex items-center justify-center p-4 py-10\"><div class=\"w-full max-w-md\"><div class=\"text-center mb-8\"><img src=\"/assets/logo.svg\" alt=\"Gofer\" class=\"h-12 w-auto mx-auto\"><h1 class=\"mt-6 text-2xl font-semibold\">Protect your personal Gofer</h1><p class=\"mt-2 text-sm text-muted-foreground\">One profile for all your mailboxes. Existing mail and settings stay with this profile.</p></div>")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -63,7 +63,7 @@ func PersonalSetupPage(data PersonalSetupData) templ.Component {
 					var templ_7745c5c3_Var2 string
 					templ_7745c5c3_Var2, templ_7745c5c3_Err = templ.JoinStringErrs(data.Errors[field])
 					if templ_7745c5c3_Err != nil {
-						return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/personal_setup.templ`, Line: 33, Col: 24}
+						return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/personal_setup.templ`, Line: 34, Col: 24}
 					}
 					_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var2))
 					if templ_7745c5c3_Err != nil {
@@ -87,7 +87,7 @@ func PersonalSetupPage(data PersonalSetupData) templ.Component {
 		var templ_7745c5c3_Var3 string
 		templ_7745c5c3_Var3, templ_7745c5c3_Err = templ.JoinStringErrs(data.Name)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/personal_setup.templ`, Line: 41, Col: 82}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/personal_setup.templ`, Line: 42, Col: 82}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var3))
 		if templ_7745c5c3_Err != nil {
@@ -100,7 +100,7 @@ func PersonalSetupPage(data PersonalSetupData) templ.Component {
 		var templ_7745c5c3_Var4 string
 		templ_7745c5c3_Var4, templ_7745c5c3_Err = templ.JoinStringErrs(data.Username)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/personal_setup.templ`, Line: 45, Col: 139}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/personal_setup.templ`, Line: 46, Col: 139}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var4))
 		if templ_7745c5c3_Err != nil {

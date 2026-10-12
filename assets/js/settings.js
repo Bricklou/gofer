@@ -1157,3 +1157,31 @@ document.addEventListener("click", function (e) {
     })
   }
 })
+
+// Opens the edit account dialog at its first step once it has been loaded.
+function setupEditAccountDialog() {
+  var dlg = document.querySelector("#edit-account-dialog dialog[data-tui-dialog-content]")
+  if (!dlg) return
+
+  if (window.tui && window.tui.dialog) {
+    window.tui.dialog.open("edit-account-dialog")
+  }
+
+  requestAnimationFrame(function () {
+    var track = document.getElementById("edit-wizard-track")
+    if (!track || !dlg.open) return
+
+    track.style.transform = "translateX(0)"
+    if (typeof _editWizStep !== "undefined") _editWizStep = 0
+
+    document.querySelectorAll("#edit-account-dialog [data-account-wizard-step]").forEach(function (item) {
+      item.dataset.active = String(+item.dataset.accountWizardStep === 0)
+    })
+  })
+}
+
+document.addEventListener("htmx:afterSettle", function (e) {
+  if (e.target && e.target.querySelector && e.target.querySelector("#edit-account-dialog")) {
+    setTimeout(setupEditAccountDialog, 20)
+  }
+})
