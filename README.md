@@ -31,7 +31,7 @@ What you can do with it today:
 - **Calendar:** Google Calendar, Outlook, and CalDAV sync, month and week views, upcoming events, and event creation, editing, and deletion, including recurring series and individual occurrences.
 - **Meetings:** guest invitations, RSVP from Calendar or Mail, rich event descriptions, and Google Meet or Microsoft Teams links where the provider supports them.
 - **Security:** encrypted stored credentials, remote content blocked by default, password and external sign-in, and MFA with TOTP or passkeys.
-- **Customization:** themes, layouts, account colors, regional settings, and browser/Web Push notifications.
+- **Customization:** three visual styles (Classic, Minimal, and the retro Express), layouts, account colors, regional settings, and browser/Web Push notifications.
 
 ## still moving
 
@@ -91,6 +91,10 @@ Configure Calendar under **Settings → Accounts**: enable it for an account, di
 ## deployment precautions
 
 For server deployments, use personal or managed authentication, serve the application through an HTTPS reverse proxy, and configure `GOFER_ADDR` and `GOFER_BASE_URL` for your deployment. The listener binds to loopback by default. Set `GOFER_TRUSTED_PROXY_CIDRS` only for your actual proxy peers; use `GOFER_ALLOWED_CIDRS` when you need to restrict client networks.
+
+To sign in over plain HTTP on a home or office network, set `GOFER_BASE_URL` to the server's private address and `GOFER_ALLOW_INSECURE_LAN=true`. Sign-in cookies then travel unencrypted on that network, and Gofer logs a warning at startup; public addresses and host names still require HTTPS.
+
+Gofer doesn't connect to servers on private network addresses unless they are approved. If your mail, calendar, or contacts server is on your local network, approve it under Mail security: in Settings, Security for personal and open installations, or in the admin panel in managed mode.
 
 Runtime data is stored in `data/` by default. Protect the data directory, configuration, and secrets, and back them up together before upgrades. Shared databases apply schema migrations at startup, and managed mode converts them to per-user storage as described above. Going back to an older version may require restoring its matching backup, and the retained shared database does not include changes made after conversion. I recommend testing your providers and access setup before relying on Gofer for anything critical.
 
