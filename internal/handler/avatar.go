@@ -1134,9 +1134,16 @@ func (h *Handler) serveAvatarImage(w http.ResponseWriter, r *http.Request, rec *
 		return
 	}
 
-	contentType := rec.ContentType
-	if contentType == "" {
-		contentType = "image/jpeg"
+	rawType := rec.ContentType
+	if rawType == "" {
+		rawType = "image/jpeg"
+	}
+	// Avatars stored before types were checked may carry whatever the
+	// sender's server sent, so the type is checked again here.
+	contentType, ok := avatarresolver.ImageContentType(rawType)
+	if !ok {
+		http.NotFound(w, r)
+		return
 	}
 	etag := fmt.Sprintf(`"%s-%d-%d"`, rec.EmailHash, rec.ExpiresAt.Unix(), len(data))
 	if r.Header.Get("If-None-Match") == etag {
@@ -1145,9 +1152,7 @@ func (h *Handler) serveAvatarImage(w http.ResponseWriter, r *http.Request, rec *
 	}
 	w.Header().Set("Content-Type", contentType)
 	w.Header().Set("X-Content-Type-Options", "nosniff")
-	if isSVGAvatarContentType(contentType) {
-		w.Header().Set("Content-Security-Policy", "default-src 'none'; img-src 'none'; media-src 'none'; object-src 'none'; script-src 'none'; style-src 'unsafe-inline'; base-uri 'none'; form-action 'none'")
-	}
+	w.Header().Set("Content-Security-Policy", avatarContentSecurityPolicy)
 	w.Header().Set("Cache-Control", "private, max-age=604800, immutable")
 	w.Header().Set("ETag", etag)
 	if rec.ExpiresAtValid {
@@ -1232,6 +1237,7 @@ func (h *Handler) handleProviderAvatarImage(w http.ResponseWriter, r *http.Reque
 
 	w.Header().Set("Content-Type", contentType)
 	w.Header().Set("X-Content-Type-Options", "nosniff")
+	w.Header().Set("Content-Security-Policy", avatarContentSecurityPolicy)
 	w.Header().Set("Cache-Control", "private, max-age=86400")
 	_, _ = w.Write(data)
 }
@@ -1408,10 +1414,9 @@ func (h *Handler) enqueueAvatarWarmupJob(job avatarWarmupJob) bool {
 	}
 }
 
-func isSVGAvatarContentType(contentType string) bool {
-	contentType = strings.ToLower(strings.TrimSpace(strings.Split(contentType, ";")[0]))
-	return contentType == "image/svg+xml" || contentType == "application/svg+xml"
-}
+// Avatars come from senders' servers. Opened on their own they must never run
+// as a page of Gofer, so they are sandboxed and may load nothing.
+const avatarContentSecurityPolicy = "default-src 'none'; script-src 'none'; object-src 'none'; style-src 'unsafe-inline'; base-uri 'none'; form-action 'none'; sandbox"
 
 func (h *Handler) handleAvatarAttempts(w http.ResponseWriter, r *http.Request) {
 	scope, err := h.adminWebmailScope(r.Context(), r.URL.Query().Get("user_id"))

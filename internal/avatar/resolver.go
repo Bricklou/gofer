@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"mime"
 	"net"
 	"net/http"
 	"net/netip"
@@ -83,6 +84,44 @@ func (r *Resolver) ClearCache() {
 	r.mu.Lock()
 	r.cache = make(map[string]cacheEntry)
 	r.mu.Unlock()
+}
+
+// avatarImageTypes are the content types an avatar may be stored and served
+// with.
+var avatarImageTypes = map[string]bool{
+	"image/avif":               true,
+	"image/bmp":                true,
+	"image/gif":                true,
+	"image/jpeg":               true,
+	"image/png":                true,
+	"image/svg+xml":            true,
+	"image/webp":               true,
+	"image/x-icon":             true,
+	"image/vnd.microsoft.icon": true,
+}
+
+// ImageContentType returns the image type a Content-Type header names, or
+// false. The header comes from the sender's own server, so anything but one
+// plain image type is refused: browsers read "image/png, text/html" as a page.
+func ImageContentType(header string) (string, bool) {
+	header = strings.TrimSpace(header)
+	if header == "" || strings.Contains(header, ",") {
+		return "", false
+	}
+	mediaType, _, err := mime.ParseMediaType(header)
+	if err != nil {
+		return "", false
+	}
+	switch mediaType {
+	case "image/jpg":
+		mediaType = "image/jpeg"
+	case "application/svg+xml":
+		mediaType = "image/svg+xml"
+	}
+	if !avatarImageTypes[mediaType] {
+		return "", false
+	}
+	return mediaType, true
 }
 
 func GravatarHash(email string) string {
@@ -346,9 +385,9 @@ func (r *Resolver) fetchHashedAvatar(ctx context.Context, source, rawURL string)
 		return Image{}, false, fmt.Errorf("%s returned %d", source, resp.StatusCode)
 	}
 
-	contentType := resp.Header.Get("Content-Type")
-	if !strings.HasPrefix(strings.ToLower(contentType), "image/") {
-		return Image{}, false, fmt.Errorf("%s returned non-image content type %q", source, contentType)
+	contentType, ok := ImageContentType(resp.Header.Get("Content-Type"))
+	if !ok {
+		return Image{}, false, fmt.Errorf("%s returned non-image content type %q", source, resp.Header.Get("Content-Type"))
 	}
 
 	data, err := io.ReadAll(io.LimitReader(resp.Body, maxImageSize+1))
@@ -611,9 +650,9 @@ func (r *Resolver) fetchRemoteAvatarImage(ctx context.Context, source, rawURL st
 		return Image{}, false, fmt.Errorf("%s returned %d", source, resp.StatusCode)
 	}
 
-	contentType := strings.ToLower(strings.TrimSpace(strings.Split(resp.Header.Get("Content-Type"), ";")[0]))
-	if !strings.HasPrefix(contentType, "image/") {
-		return Image{}, false, fmt.Errorf("%s returned non-image content type %q", source, contentType)
+	contentType, ok := ImageContentType(resp.Header.Get("Content-Type"))
+	if !ok {
+		return Image{}, false, fmt.Errorf("%s returned non-image content type %q", source, resp.Header.Get("Content-Type"))
 	}
 	data, err := io.ReadAll(io.LimitReader(resp.Body, maxImageSize+1))
 	if err != nil {
@@ -622,7 +661,7 @@ func (r *Resolver) fetchRemoteAvatarImage(ctx context.Context, source, rawURL st
 	if len(data) > maxImageSize {
 		return Image{}, false, fmt.Errorf("%s image exceeds %d bytes", source, maxImageSize)
 	}
-	if (contentType == "image/svg+xml" || contentType == "application/svg+xml") && !isSafeSVG(data) {
+	if contentType == "image/svg+xml" && !isSafeSVG(data) {
 		return Image{}, false, fmt.Errorf("%s image is not safe SVG", source)
 	}
 	sourceURL := rawURL
