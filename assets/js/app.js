@@ -4455,6 +4455,8 @@ document.addEventListener("DOMContentLoaded", function () {
       else if (browserNotificationsSupported()) labels[j].textContent = "Browser-tab notifications are available while Gofer is open."
       else labels[j].textContent = "No notification method is available for this browser/origin."
     }
+    // The switch may have been turned off here without a change event.
+    if (window.goferSyncSettingDependents) window.goferSyncSettingDependents()
   }
 
   function setupDesktopNotifications() {

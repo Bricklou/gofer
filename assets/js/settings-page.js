@@ -109,6 +109,29 @@
   goferOnContent('[data-compose-autosave-conditions-value]', function() { syncComposeAutosaveControls(); });
 })();
 
+// Settings that only matter while a switch is on are marked
+// data-setting-depends-on="<switch id>". They are turned off and faded with it.
+(function() {
+  function syncSettingDependents() {
+    document.querySelectorAll('[data-setting-depends-on]').forEach(function(section) {
+      var master = document.getElementById(section.getAttribute('data-setting-depends-on'));
+      if (!master) return;
+      // A switch that can't be used right now (notifications blocked for the
+      // chosen method) leaves its settings open, so they can be changed.
+      var enabled = master.checked || master.disabled;
+      section.classList.toggle('opacity-50', !enabled);
+      section.querySelectorAll('button, input:not([type="hidden"]), select, textarea').forEach(function(control) {
+        control.disabled = !enabled;
+      });
+    });
+  }
+  window.goferSyncSettingDependents = syncSettingDependents;
+  goferOnContent('[data-setting-depends-on]', function() { syncSettingDependents(); });
+  document.addEventListener('change', function(e) {
+    if (e.target && e.target.matches && e.target.matches('input[role="switch"]')) syncSettingDependents();
+  });
+})();
+
 // Appearance tab
 (function() {
   document.addEventListener('click', function(e) {
