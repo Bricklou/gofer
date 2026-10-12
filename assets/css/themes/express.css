@@ -1104,6 +1104,11 @@ html:root[data-theme="express"] :is(.account-wizard-card-footer, .account-wizard
   --xp-icon-paths: hidden;
 }
 
+[data-theme="express"] svg[data-lucide="phone"] {
+  --xp-icon: url("/assets/icons/express/phone.svg");
+  --xp-icon-paths: hidden;
+}
+
 /* An unstarred message's star is a faded grey one. */
 [data-theme="express"] svg[data-lucide="star"]:is(.text-muted-foreground\/30, .text-ink\/30) {
   filter: grayscale(1);
@@ -1273,6 +1278,42 @@ html:root[data-theme="express"] :is(.account-wizard-card-footer, .account-wizard
 [data-theme="express"] svg[data-lucide="lock"],
 [data-theme="express"] svg[data-lucide="lock-keyhole"] {
   --xp-icon: image-set(url("/assets/icons/express/emblem-readonly-16.png") 1x, url("/assets/icons/express/emblem-readonly-32.png") 2x);
+  --xp-icon-paths: hidden;
+}
+
+[data-theme="express"] svg[data-lucide="id-card"] {
+  --xp-icon: image-set(url("/assets/icons/express/x-office-address-book-16.png") 1x, url("/assets/icons/express/x-office-address-book-32.png") 2x);
+  --xp-icon-paths: hidden;
+}
+
+[data-theme="express"] svg[data-lucide="route"],
+[data-theme="express"] svg[data-lucide="cloud-sync"] {
+  --xp-icon: image-set(url("/assets/icons/express/view-refresh-16.png") 1x, url("/assets/icons/express/view-refresh-32.png") 2x);
+  --xp-icon-paths: hidden;
+}
+
+[data-theme="express"] svg[data-lucide="cloud-upload"] {
+  --xp-icon: image-set(url("/assets/icons/express/go-up-16.png") 1x, url("/assets/icons/express/go-up-32.png") 2x);
+  --xp-icon-paths: hidden;
+}
+
+[data-theme="express"] svg[data-lucide="image-plus"] {
+  --xp-icon: image-set(url("/assets/icons/express/image-x-generic-16.png") 1x, url("/assets/icons/express/image-x-generic-32.png") 2x);
+  --xp-icon-paths: hidden;
+}
+
+[data-theme="express"] svg[data-lucide="lightbulb"] {
+  --xp-icon: image-set(url("/assets/icons/express/dialog-information-16.png") 1x, url("/assets/icons/express/dialog-information-32.png") 2x);
+  --xp-icon-paths: hidden;
+}
+
+[data-theme="express"] svg[data-lucide="mail-search"] {
+  --xp-icon: image-set(url("/assets/icons/express/system-search-16.png") 1x, url("/assets/icons/express/system-search-32.png") 2x);
+  --xp-icon-paths: hidden;
+}
+
+[data-theme="express"] svg[data-lucide="plus"] {
+  --xp-icon: image-set(url("/assets/icons/express/list-add-16.png") 1x, url("/assets/icons/express/list-add-32.png") 2x);
   --xp-icon-paths: hidden;
 }
 

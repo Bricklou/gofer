@@ -12,7 +12,7 @@ Each icon keeps its Tango name with its pixel size appended, for example
 `internet-mail-16.png`. The files were copied unchanged apart from removing
 embedded metadata.
 
-`star.svg`, `tag.svg`, `tags.svg`, `mail.svg`, `user.svg`, `map-pin.svg` and
-`clock.svg` are not from Tango, which has no matching icons. They were drawn
+`star.svg`, `tag.svg`, `tags.svg`, `mail.svg`, `user.svg`, `map-pin.svg`,
+`clock.svg` and `phone.svg` are not from Tango, which has no matching icons. They were drawn
 for this project in Tango's style and palette, and are covered by the
 project's own license.
