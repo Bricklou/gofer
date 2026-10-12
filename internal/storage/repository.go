@@ -5288,6 +5288,7 @@ func (db *DB) getThreadMessages(ctx context.Context, accountID, threadID, userID
 		        m.date_received, m.has_attachments,
 		        COALESCE((SELECT is_read FROM message_folder_state WHERE message_id = m.id LIMIT 1), 1),
 		        COALESCE((SELECT is_starred FROM message_folder_state WHERE message_id = m.id LIMIT 1), 0),
+		        COALESCE((SELECT MAX(is_draft) FROM message_folder_state WHERE message_id = m.id AND is_deleted = 0), 0),
 		        COALESCE((SELECT f.name FROM message_folder_state mfs JOIN folders f ON mfs.folder_id = f.id WHERE mfs.message_id = m.id AND mfs.is_deleted = 0 LIMIT 1), ''),
 		        COALESCE((SELECT mfs.folder_id FROM message_folder_state mfs WHERE mfs.message_id = m.id AND mfs.is_deleted = 0 LIMIT 1), ''),
 		        COALESCE((SELECT f.role FROM message_folder_state mfs JOIN folders f ON mfs.folder_id = f.id WHERE mfs.message_id = m.id AND mfs.is_deleted = 0 LIMIT 1), ''),
@@ -5318,12 +5319,13 @@ func (db *DB) getThreadMessages(ctx context.Context, accountID, threadID, userID
 			hasAttach     int
 			isRead        int
 			isStarred     int
+			isDraft       int
 			internetMsgID sql.NullString
 			refs          sql.NullString
 			bodyTextPath  sql.NullString
 		)
 		if err := rows.Scan(&item.ID, &item.AccountID, &item.AccountColor, &item.Subject, &fromName, &fromEmail, &item.Preview,
-			&dateReceived, &hasAttach, &isRead, &isStarred, &item.FolderName, &item.FolderID, &item.FolderRole,
+			&dateReceived, &hasAttach, &isRead, &isStarred, &isDraft, &item.FolderName, &item.FolderID, &item.FolderRole,
 			&internetMsgID, &refs, &bodyTextPath); err != nil {
 			return nil, err
 		}
@@ -5331,6 +5333,7 @@ func (db *DB) getThreadMessages(ctx context.Context, accountID, threadID, userID
 		item.From = contactFromSender(fromName, fromEmail)
 		item.IsRead = isRead == 1
 		item.IsStarred = isStarred == 1
+		item.IsDraft = isDraft == 1
 		item.HasAttachment = hasAttach == 1
 		if internetMsgID.Valid {
 			item.InternetMessageID = internetMsgID.String

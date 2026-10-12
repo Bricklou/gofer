@@ -5202,6 +5202,7 @@ document.addEventListener("DOMContentLoaded", function () {
       }
     }).catch(function () {})
   }
+  window.goferRefreshSidebarUnread = refreshSidebarUnread
 
   function initVirtualScroll() {
     var container = document.getElementById("mail-list-scroll")
@@ -14004,8 +14005,19 @@ function discardReadPaneDraft(emailId) {
   fetch("/api/drafts/" + encodeURIComponent(emailId), { method: "DELETE" })
     .then(function (r) {
       if (!r.ok) throw new Error("Failed to discard draft")
+      if (window.goferRefreshSidebarUnread) window.goferRefreshSidebarUnread()
+      // In a thread, only the draft goes; the rest of the thread stays open.
+      var card = document.querySelector('[data-thread-card="' + CSS.escape(String(emailId)) + '"]')
+      var slot = card && card.closest("[data-thread-slot]")
+      var list = slot && slot.parentElement
+      if (slot && list && list.querySelectorAll("[data-thread-slot]").length > 1) {
+        slot.remove()
+        var remaining = list.querySelectorAll("[data-thread-slot]").length
+        var count = document.querySelector("[data-thread-count]")
+        if (count) count.textContent = remaining === 1 ? "1 message in this thread" : remaining + " messages in this thread"
+        return
+      }
       setMailViewEmpty()
-      refreshSidebarUnread()
     })
     .catch(function (err) {
       showSendStatus("failed", err && err.message ? err.message : "Failed to discard draft")

@@ -5133,6 +5133,15 @@ func (h *Handler) handleGetDraft(w http.ResponseWriter, r *http.Request) {
 		http.NotFound(w, r)
 		return
 	}
+	// A draft picked up from a thread may not have been opened yet, so its
+	// body may not be downloaded. Without it the editor would open with only
+	// the preview text.
+	if msgID, err := strconv.ParseInt(email.ID, 10, 64); err == nil && !h.db.IsBodyFetchedInternal(r.Context(), msgID) {
+		h.ensureBodyFetched(r.Context(), msgID, email.AccountID)
+		if fetched, err := h.db.GetEmailByIDForUser(r.Context(), email.ID, h.userID(r.Context())); err == nil && fetched != nil && fetched.IsDraft {
+			email = fetched
+		}
+	}
 	type draftAttachment struct {
 		ID          int64  `json:"id"`
 		Filename    string `json:"filename"`
