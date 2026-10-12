@@ -1177,7 +1177,7 @@ func CalendarMainContent(month CalendarMonthData) templ.Component {
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 96, "\" class=\"inline-flex h-8 items-center rounded-md border border-border bg-background px-2.5 text-xs font-semibold text-foreground shadow-sm transition-colors hover:bg-accent\">Today</a><div class=\"inline-flex h-8 items-center rounded-md border border-border bg-background shadow-sm\"><a href=\"")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 96, "\" data-calendar-today class=\"inline-flex h-8 items-center rounded-md border border-border bg-background px-2.5 text-xs font-semibold text-foreground shadow-sm transition-colors hover:bg-accent\">Today</a><div class=\"inline-flex h-8 items-center rounded-md border border-border bg-background shadow-sm\"><a href=\"")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}

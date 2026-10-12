@@ -142,7 +142,7 @@
       }
       var isDark = mode.dataset.mode === 'dark';
       document.querySelectorAll('[data-theme-preview]').forEach(function(el) {
-        el.classList.toggle('dark', isDark);
+        el.classList.toggle('dark', isDark && el.getAttribute('data-theme') !== 'express');
       });
       return;
     }

@@ -1,6 +1,7 @@
 @import "tailwindcss";
 @import "./themes/classic.css";
 @import "./themes/minimal.css";
+@import "./themes/express.css";
 
 @custom-variant dark (&:where(.dark, .dark *));
 
@@ -5414,6 +5415,11 @@ body.mail-list-column-resizing {
     grid-column: 2;
     align-self: center;
   }
+}
+
+/* The "no dark mode" tip on Settings' Dark button only applies to Express. */
+html:not([data-theme="express"]) [data-mode-dark-tip] {
+  display: none !important;
 }
 
 /* === SMALL SCREENS: PAGE DIALOGS ===

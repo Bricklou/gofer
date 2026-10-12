@@ -1347,6 +1347,7 @@ templ ContactsListPane(contacts []models.Contact, selected *models.Contact, filt
 				<button
 					type="button"
 					data-contact-list-view-button="cards"
+					aria-pressed={ fmt.Sprintf("%t", contactViewMode(filters.View) == "cards") }
 					aria-label="Cards view"
 					class={
 						"relative z-10 inline-flex h-6 items-center gap-1 px-2 rounded-md text-xs font-medium transition-colors duration-200",
@@ -1360,6 +1361,7 @@ templ ContactsListPane(contacts []models.Contact, selected *models.Contact, filt
 				<button
 					type="button"
 					data-contact-list-view-button="table"
+					aria-pressed={ fmt.Sprintf("%t", contactViewMode(filters.View) == "table") }
 					aria-label="Table view"
 					class={
 						"relative z-10 inline-flex h-6 items-center gap-1 px-2 rounded-md text-xs font-medium transition-colors duration-200",

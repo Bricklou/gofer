@@ -565,6 +565,9 @@ func setupAssetsRoutes(mux *http.ServeMux) {
 		if strings.HasSuffix(r.URL.Path, ".webmanifest") {
 			w.Header().Set("Content-Type", "application/manifest+json; charset=utf-8")
 		}
+		if strings.HasSuffix(r.URL.Path, ".woff2") {
+			w.Header().Set("Content-Type", "font/woff2")
+		}
 		if isDevelopment {
 			w.Header().Set("Cache-Control", "no-store")
 		} else {

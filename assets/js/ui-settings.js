@@ -21,9 +21,15 @@ var GoferSettings;
     } catch (_) {}
   }
 
+  // Express has no dark mode: it always shows light, while the saved choice is
+  // kept for the other styles.
+  function effectiveTheme(theme, style) {
+    return style === "express" ? "light" : theme;
+  }
+
   function applyTheme(theme) {
     var html = document.documentElement;
-    if (theme === "dark") {
+    if (effectiveTheme(theme, html.getAttribute("data-theme")) === "dark") {
       html.classList.add("dark");
     } else {
       html.classList.remove("dark");
@@ -33,6 +39,7 @@ var GoferSettings;
   function applyThemeStyle(style) {
     var html = document.documentElement;
     html.setAttribute("data-theme", style || "classic");
+    applyTheme(_cache.theme || "dark");
   }
 
   function browserTimezone() {
@@ -628,6 +635,11 @@ var GoferSettings;
 
     get: function (key) {
       return _cache[key] || null;
+    },
+
+    // The light or dark mode actually shown, which Express forces to light.
+    effectiveTheme: function () {
+      return effectiveTheme(_cache.theme || "dark", _cache.theme_style || "classic");
     },
 
     set: function (key, value) {

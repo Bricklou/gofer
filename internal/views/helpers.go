@@ -488,7 +488,12 @@ func sidebarTagGroupActive(filters models.EmailFilters, accountID string) bool {
 	return sidebarAccountHasActiveTag(accountID, filters)
 }
 
+// themeClass is the page's light or dark class. Express has no dark mode, so it
+// is always light; the saved choice still applies to the other styles.
 func themeClass(settings map[string]string) string {
+	if themeStyle(settings) == "express" {
+		return ""
+	}
 	if uiSettingGet(settings, "theme", "dark") == "dark" {
 		return "dark"
 	}

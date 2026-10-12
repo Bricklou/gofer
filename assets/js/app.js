@@ -276,6 +276,7 @@ document.addEventListener("DOMContentLoaded", function () {
             buttons[i].classList.toggle("text-foreground", active)
             buttons[i].classList.toggle("text-muted-foreground", !active)
             buttons[i].classList.toggle("hover:text-foreground", !active)
+            buttons[i].setAttribute("aria-pressed", active ? "true" : "false")
           }
           var indicator = group.querySelector("[data-contact-list-view-indicator]")
           if (indicator) indicator.style.transform = mode === "table" ? "translateX(100%)" : "translateX(0)"
@@ -3215,6 +3216,7 @@ document.addEventListener("DOMContentLoaded", function () {
         var active = buttons[i].getAttribute("data-mail-tristate-option") === (value || "")
         buttons[i].classList.toggle("text-foreground", active)
         buttons[i].classList.toggle("text-muted-foreground", !active)
+        buttons[i].setAttribute("aria-pressed", active ? "true" : "false")
       }
     }
 
@@ -5572,6 +5574,7 @@ document.addEventListener("DOMContentLoaded", function () {
           buttons[i].classList.toggle("text-foreground", isActive)
           buttons[i].classList.toggle("text-muted-foreground", !isActive)
           buttons[i].classList.toggle("hover:text-foreground", !isActive)
+          buttons[i].setAttribute("aria-pressed", isActive ? "true" : "false")
         }
         var indicator = group.querySelector("[data-mail-list-view-indicator]")
         if (indicator) {
@@ -6439,7 +6442,7 @@ document.addEventListener("DOMContentLoaded", function () {
   }
 
   function mailViewSkeletonIcon(name, className) {
-    return '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="' + (className || "size-4") + '" aria-hidden="true">' + (MAIL_VIEW_SKELETON_ICONS[name] || "") + '</svg>'
+    return '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" data-lucide="' + name + '" class="' + (className || "size-4") + '" aria-hidden="true">' + (MAIL_VIEW_SKELETON_ICONS[name] || "") + '</svg>'
   }
 
   function mailViewSkeletonToolbarButton(name) {
@@ -8651,6 +8654,8 @@ function handleCalendarContentResult(event) {
 }
 
 var _calendarSelectedDay = null
+// Set by the Today button: the date to select once the calendar showing it loads.
+var _calendarSelectTodayPending = ""
 var _calendarViewSwitchRequest = null
 var _calendarWeekScrollState = null
 var _calendarWeekZoom = 0
@@ -8827,6 +8832,10 @@ function initializeCalendarDaySelection() {
   }
   if (calendar.hasAttribute("data-calendar-loading")) return
   setCalendarViewSwitch(_calendarViewSwitchRequest ? _calendarViewSwitchRequest.goferCalendarViewSwitch : calendar.dataset.calendarView)
+  if (_calendarSelectTodayPending && calendar.querySelector('[data-calendar-day="' + _calendarSelectTodayPending + '"]')) {
+    _calendarSelectedDay = { period: calendar.dataset.calendarPeriod, date: _calendarSelectTodayPending }
+    _calendarSelectTodayPending = ""
+  }
   if (_calendarSelectedDay && _calendarSelectedDay.period !== calendar.dataset.calendarPeriod) _calendarSelectedDay = null
   var selected = _calendarSelectedDay && calendar.querySelector('[data-calendar-day="' + _calendarSelectedDay.date + '"]')
   if (!selected) _calendarSelectedDay = null
@@ -9029,6 +9038,13 @@ function slideCalendarPhoneDay(calendar, fromDate, toDate) {
 document.addEventListener("click", function (event) {
   var trigger = event.target.closest && event.target.closest("[data-calendar-select-day]")
   var calendar = document.getElementById("calendar-main")
+  if (calendar && event.target.closest && event.target.closest("[data-calendar-today]")) {
+    // Only a plain click navigates here; one that opens a new tab does not.
+    if (event.button === 0 && !event.metaKey && !event.ctrlKey && !event.shiftKey && !event.altKey) {
+      _calendarSelectTodayPending = calendar.dataset.calendarTodayDate || ""
+    }
+    return
+  }
   if (trigger && calendar) {
     var scroller = calendar.querySelector("[data-calendar-week-scroll]")
     if (scroller && scroller.clientHeight) _calendarWeekScrollState = { period: calendar.dataset.calendarPeriod, zoom: _calendarWeekZoom, top: scroller.scrollTop, left: scroller.scrollLeft }
@@ -15074,7 +15090,9 @@ function setReadButtonIcon(button, isRead) {
   if (!button) return
   button.dataset.isRead = isRead ? "true" : "false"
   var svg = button.querySelector('svg')
-  if (svg) svg.innerHTML = isRead ? MAIL_READ_ICON : MAIL_UNREAD_ICON
+  if (!svg) return
+  svg.innerHTML = isRead ? MAIL_READ_ICON : MAIL_UNREAD_ICON
+  svg.setAttribute('data-lucide', isRead ? 'mail' : 'mail-open')
 }
 
 // The reader's thread read toggle shows the thread as read only when every message is read.
@@ -15722,7 +15740,7 @@ function allowRemoteContent(emailId, mode) {
 }
 
 function getEmailBodyBaseTheme() {
-  if (window.GoferSettings && GoferSettings.get("theme")) return GoferSettings.get("theme")
+  if (window.GoferSettings && GoferSettings.get("theme")) return GoferSettings.effectiveTheme()
   return document.documentElement.classList.contains("dark") ? "dark" : "light"
 }
 

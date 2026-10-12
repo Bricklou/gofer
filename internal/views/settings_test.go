@@ -862,3 +862,19 @@ func TestAccountDiscoveryRequiresExplicitCandidateSelection(t *testing.T) {
 		t.Fatal("mail discovery does not ask the user to choose a candidate")
 	}
 }
+
+func TestThemeClassKeepsExpressLight(t *testing.T) {
+	for _, tc := range []struct {
+		settings map[string]string
+		want     string
+	}{
+		{map[string]string{"theme": "dark", "theme_style": "classic"}, "dark"},
+		{map[string]string{"theme": "dark", "theme_style": "express"}, ""},
+		{map[string]string{"theme": "light", "theme_style": "express"}, ""},
+		{map[string]string{"theme_style": "minimal"}, "dark"},
+	} {
+		if got := themeClass(tc.settings); got != tc.want {
+			t.Errorf("themeClass(%v) = %q, want %q", tc.settings, got, tc.want)
+		}
+	}
+}

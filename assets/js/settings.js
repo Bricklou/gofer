@@ -848,7 +848,7 @@ window.syncSignatureEditor = syncSignatureEditor
 
 function getActiveThemeMode() {
   if (typeof GoferSettings !== "undefined" && GoferSettings.get) {
-    return GoferSettings.get("theme") || "dark"
+    return GoferSettings.effectiveTheme()
   }
   return document.documentElement.classList.contains("dark") ? "dark" : "light"
 }
@@ -896,9 +896,12 @@ function setupModePickers() {
       var activeButton = picker.querySelector('[data-mode="' + activeMode + '"]') || buttons[0]
       if (!activeButton) return
 
+      var express = document.documentElement.getAttribute("data-theme") === "express"
       buttons.forEach(function (btn) {
         var isActive = btn === activeButton
         btn.className = modeButtonClasses(isActive)
+        btn.setAttribute("aria-pressed", isActive ? "true" : "false")
+        if (btn.dataset.mode === "dark") btn.disabled = express
       })
 
       var pickerRect = picker.getBoundingClientRect()
