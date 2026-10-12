@@ -1056,6 +1056,15 @@ html:root[data-theme="express"] :is(.account-wizard-card-footer, .account-wizard
   --xp-icon-paths: hidden;
 }
 
+/* A picture can't spin like a line icon: the busy refresh icon pulses instead. */
+@keyframes xp-busy-pulse {
+  50% { opacity: 0.45; }
+}
+
+[data-theme="express"] svg[data-lucide="refresh-cw"].animate-spin {
+  animation: xp-busy-pulse 1.2s ease-in-out infinite;
+}
+
 /* Tango has no star or tag; these are drawn for this theme in its style. */
 [data-theme="express"] svg[data-lucide="star"] {
   --xp-icon: url("/assets/icons/express/star.svg");
@@ -1757,6 +1766,106 @@ html:root[data-theme="express"] :is([data-calendar-month-event], [data-calendar-
   [data-theme="express"] #contacts-detail .contact-readonly section > .grid > div:not([data-contact-field-empty]) ~ div:not([data-contact-field-empty]) {
     border-top: none;
   }
+}
+
+/* === PROGRESS BARS === */
+
+/* Progress bars are the Windows 2000 kind: a sunken white track filled with
+   navy blocks. */
+[data-theme="express"] .overflow-hidden:has(> .h-full.bg-primary[style*="width"]) {
+  height: 14px;
+  padding: 2px;
+  border: none;
+  border-radius: 0;
+  background: var(--card);
+  box-shadow: inset 1px 1px 0 var(--xp-mid), inset -1px -1px 0 var(--xp-light);
+}
+
+[data-theme="express"] .overflow-hidden:has(> .h-full.bg-primary[style*="width"]) > .h-full.bg-primary {
+  border-radius: 0;
+  background: repeating-linear-gradient(90deg, var(--xp-select) 0 7px, transparent 7px 9px);
+}
+
+/* === TOASTS === */
+
+/* Notices are small silver alert windows: classic dialog icons, a silver close
+   button, and the time left shown as a sunken progress bar of navy blocks. */
+[data-theme="express"] .gofer-toast-card {
+  border: none;
+  border-radius: 0;
+  background: var(--background);
+  color: var(--foreground);
+  padding: 0.75rem 0.875rem;
+  box-shadow: var(--xp-bevel-out), 2px 2px 0 rgba(0,0,0,0.25);
+}
+
+[data-theme="express"] .gofer-toast-card:has(.gofer-toast-progress-wrap) {
+  padding-bottom: 1.375rem;
+}
+
+[data-theme="express"] .gofer-toast-card .gofer-toast-progress-wrap {
+  top: auto;
+  right: 6px;
+  bottom: 6px;
+  left: 6px;
+  height: 9px;
+  padding: 2px;
+  background: var(--card);
+  box-shadow: inset 1px 1px 0 var(--xp-mid), inset -1px -1px 0 var(--xp-light);
+}
+
+[data-theme="express"] .gofer-toast-card .gofer-toast-progress {
+  background: repeating-linear-gradient(90deg, var(--xp-select) 0 7px, transparent 7px 9px) !important;
+}
+
+[data-theme="express"] .gofer-toast-card .gofer-toast-dismiss {
+  width: 22px;
+  height: 20px;
+  border-radius: 0;
+  background: var(--xp-face);
+  color: var(--foreground);
+  font-weight: 700;
+  box-shadow: var(--xp-bevel-out);
+  transition: none;
+}
+
+[data-theme="express"] .gofer-toast-card .gofer-toast-dismiss:hover {
+  background: var(--xp-face);
+  color: var(--foreground);
+}
+
+[data-theme="express"] .gofer-toast-card .gofer-toast-dismiss:active {
+  box-shadow: var(--xp-bevel-pressed);
+}
+
+[data-theme="express"] .gofer-toast-card [data-gofer-toast-secondary],
+[data-theme="express"] .gofer-toast-card span.underline {
+  color: var(--xp-count);
+  opacity: 1;
+}
+
+[data-theme="express"] .gofer-toast-card svg[data-toast-icon="info"] {
+  background: image-set(url("/assets/icons/express/dialog-information-22.png") 1x, url("/assets/icons/express/dialog-information-48.png") 2x) center / contain no-repeat;
+}
+
+[data-theme="express"] .gofer-toast-card svg[data-toast-icon="info"] > * {
+  visibility: hidden;
+}
+
+[data-theme="express"] .gofer-toast-card svg[data-toast-icon="warning"] {
+  background: image-set(url("/assets/icons/express/dialog-warning-22.png") 1x, url("/assets/icons/express/dialog-warning-48.png") 2x) center / contain no-repeat;
+}
+
+[data-theme="express"] .gofer-toast-card svg[data-toast-icon="warning"] > * {
+  visibility: hidden;
+}
+
+[data-theme="express"] .gofer-toast-card svg[data-toast-icon="error"] {
+  background: image-set(url("/assets/icons/express/dialog-error-22.png") 1x, url("/assets/icons/express/dialog-error-48.png") 2x) center / contain no-repeat;
+}
+
+[data-theme="express"] .gofer-toast-card svg[data-toast-icon="error"] > * {
+  visibility: hidden;
 }
 
 /* === FOLDER PANE === */
