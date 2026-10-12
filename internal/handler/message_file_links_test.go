@@ -20,7 +20,7 @@ func TestSignMessageFileLinksSignsOnlyThisMessagesFiles(t *testing.T) {
 	body := `<img src="/api/inline-content/7/logo%40mail"><a href="/api/inline-content/7/invoice">x</a>` +
 		`<div style="background:url(&#34;/api/remote-assets/7/0123456789abcdef.png&#34;)"></div>` +
 		`<img src="/api/inline-content/8/other">`
-	out := string(h.signMessageFileLinks([]byte(body), "owner", 7))
+	out := string(h.signMessageFileLinks(t.Context(), []byte(body), "owner", 7))
 	if got := len(signedMessageFileURL.FindAllString(out, -1)); got != 3 {
 		t.Fatalf("signed %d links, want 3: %s", got, out)
 	}
@@ -50,7 +50,7 @@ func signedRequest(t *testing.T, h *Handler, link string) *http.Request {
 
 func TestSignedMessageFileLinksRejectTampering(t *testing.T) {
 	h := &Handler{messageFileKey: newMessageFileKey()}
-	link := signedMessageFileURL.FindString(string(h.signMessageFileLinks([]byte(`<img src="/api/inline-content/7/logo">`), "owner", 7)))
+	link := signedMessageFileURL.FindString(string(h.signMessageFileLinks(t.Context(), []byte(`<img src="/api/inline-content/7/logo">`), "owner", 7)))
 	if _, _, ok := h.verifiedMessageFileRequest(signedRequest(t, h, link)); !ok {
 		t.Fatalf("a valid link was refused: %s", link)
 	}
@@ -69,7 +69,7 @@ func TestSignedMessageFileLinksRejectTampering(t *testing.T) {
 			t.Fatalf("tampered %s was accepted: %s", name, bad)
 		}
 	}
-	web := h.remoteContentLinks("owner", 7)("https://images.example/logo.png?size=2")
+	web := h.remoteContentLinks(t.Context(), "owner", 7)("https://images.example/logo.png?size=2")
 	if _, _, ok := h.verifiedMessageFileRequest(signedRequest(t, h, web)); !ok {
 		t.Fatalf("a valid relay link was refused: %s", web)
 	}
@@ -88,7 +88,7 @@ func TestSignedMessageFileLinksRejectTampering(t *testing.T) {
 		t.Fatal("a link from another server start was accepted")
 	}
 	expired := time.Now().Add(-time.Minute).Unix()
-	q := url.Values{"u": {"owner"}, "e": {strconv.FormatInt(expired, 10)}, "s": {h.messageFileSignature(messageFileInline, "owner", 7, "logo", expired)}}
+	q := url.Values{"u": {"owner"}, "e": {strconv.FormatInt(expired, 10)}, "s": {h.messageFileSignature(messageFileInline, "owner", "", 7, "logo", expired)}}
 	if _, _, ok := h.verifiedMessageFileRequest(signedRequest(t, h, messageFileRoute+"inline/7/logo?"+q.Encode())); ok {
 		t.Fatal("an expired link was accepted")
 	}
@@ -115,13 +115,30 @@ func TestSignedMessageFileServesWithoutASession(t *testing.T) {
 	if rec := get(plain); rec.Code == http.StatusOK {
 		t.Fatal("the unsigned address served a file without a session")
 	}
-	link := signedMessageFileURL.FindString(string(h.signMessageFileLinks([]byte(`<img src="`+plain+`">`), "owner", fixture.messageID)))
+	session, err := manager.CreateSession(t.Context(), "owner", "test browser")
+	if err != nil {
+		t.Fatal(err)
+	}
+	signedIn := auth.ContextWithSession(t.Context(), session)
+	link := signedMessageFileURL.FindString(string(h.signMessageFileLinks(signedIn, []byte(`<img src="`+plain+`">`), "owner", fixture.messageID)))
 	rec := get(link)
 	if rec.Code != http.StatusOK || rec.Header().Get("Cross-Origin-Resource-Policy") != "cross-origin" || !strings.HasSuffix(rec.Header().Get("Content-Security-Policy"), "; sandbox") {
 		t.Fatalf("signed link = %d CORP=%q CSP=%q", rec.Code, rec.Header().Get("Cross-Origin-Resource-Policy"), rec.Header().Get("Content-Security-Policy"))
 	}
-	attacker := signedMessageFileURL.FindString(string(h.signMessageFileLinks([]byte(`<img src="`+plain+`">`), "attacker", fixture.messageID)))
+	attacker := signedMessageFileURL.FindString(string(h.signMessageFileLinks(signedIn, []byte(`<img src="`+plain+`">`), "attacker", fixture.messageID)))
 	if rec := get(attacker); rec.Code == http.StatusOK {
 		t.Fatal("a link signed for another person served the owner's file")
+	}
+	// Where people sign in, a link made without a session is refused.
+	unsigned := signedMessageFileURL.FindString(string(h.signMessageFileLinks(t.Context(), []byte(`<img src="`+plain+`">`), "owner", fixture.messageID)))
+	if rec := get(unsigned); rec.Code == http.StatusOK {
+		t.Fatal("a link made without a session served a file")
+	}
+	// Signing out ends the links made for that session.
+	if _, err := manager.RevokeSession(t.Context(), "owner", session.ID, "owner", auth.SessionRevocationLogout); err != nil {
+		t.Fatal(err)
+	}
+	if rec := get(link); rec.Code == http.StatusOK {
+		t.Fatal("a link still served a file after its session signed out")
 	}
 }

@@ -169,9 +169,9 @@ func (h *Handler) writeTranslatedBody(w http.ResponseWriter, r *http.Request, re
 	}
 	id, _ := strconv.ParseInt(emailID, 10, 64)
 	if loadRemote {
-		body = mailmessage.RestoreRemoteContent(body, h.remoteContentLinks(h.userID(r.Context()), id))
+		body = mailmessage.RestoreRemoteContent(body, h.remoteContentLinks(r.Context(), h.userID(r.Context()), id))
 	}
-	body = h.signMessageFileLinks(body, h.userID(r.Context()), id)
+	body = h.signMessageFileLinks(r.Context(), body, h.userID(r.Context()), id)
 
 	theme := r.URL.Query().Get("theme")
 	bg := r.URL.Query().Get("bg")

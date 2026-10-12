@@ -238,7 +238,8 @@ func RunManaged(ctx context.Context, stdout, stderr io.Writer) (err error) {
 	if err != nil {
 		return err
 	}
-	server := &http.Server{Handler: app, BaseContext: func(net.Listener) context.Context { return app.ctx }}
+	server := newHTTPServer(app)
+	server.BaseContext = func(net.Listener) context.Context { return app.ctx }
 	defer server.Close()
 	if _, err := fmt.Fprintf(stdout, "Gofer running on %s\nlistening on %s\ndatabase: %s\nauth: managed\n", app.httpConfig.BaseURL, listener.Addr(), app.storage.central.Path()); err != nil {
 		listener.Close()

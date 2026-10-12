@@ -64,7 +64,9 @@ func (c *Config) isSameOriginRequest(r *http.Request) bool {
 
 func setSecurityHeaders(w http.ResponseWriter) {
 	headers := w.Header()
-	headers.Set("Content-Security-Policy", "frame-ancestors 'self'")
+	// Plugins and a <base> tag can't be used to take over a page; responses
+	// that need a stricter policy, such as message files, set their own.
+	headers.Set("Content-Security-Policy", "frame-ancestors 'self'; object-src 'none'; base-uri 'self'")
 	headers.Set("Cross-Origin-Resource-Policy", "same-origin")
 	headers.Set("Referrer-Policy", "same-origin")
 	headers.Set("X-Content-Type-Options", "nosniff")

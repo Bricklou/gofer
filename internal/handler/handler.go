@@ -1213,6 +1213,9 @@ func serveVCard(w http.ResponseWriter, filename string, contacts []models.Contac
 
 func (h *Handler) handleImportContacts(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
+	// ParseMultipartForm only caps what it keeps in memory; the rest of an
+	// unbounded body would go to temporary files.
+	r.Body = http.MaxBytesReader(w, r.Body, contactImportMaxBytes+(128<<10))
 	if err := r.ParseMultipartForm(contactImportMaxBytes); err != nil {
 		http.Error(w, "invalid vCard import", http.StatusBadRequest)
 		return
@@ -1451,10 +1454,10 @@ func (h *Handler) handleEmailBody(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if loadRemote {
-		body = message.RestoreRemoteContent(body, h.remoteContentLinks(userID, msgID))
+		body = message.RestoreRemoteContent(body, h.remoteContentLinks(r.Context(), userID, msgID))
 	}
 	body = message.MarkThreadQuote(body, threadQuoteSources(ctx, h.db, emailID, userID))
-	body = h.signMessageFileLinks(body, userID, msgID)
+	body = h.signMessageFileLinks(r.Context(), body, userID, msgID)
 
 	nonce := setEmailBodyDocumentHeaders(w)
 	doc := buildBodyDocument(body, emailResizeScript(emailID), theme, bg, fg, link, original, emailBodyTextSize(r), nonce)
@@ -3928,6 +3931,9 @@ func (h *Handler) handleComposeAttachmentUpload(w http.ResponseWriter, r *http.R
 	if h.userMutationState == nil {
 		h.cleanupUnreferencedComposeAttachments(r.Context())
 	}
+	// ParseMultipartForm only caps what it keeps in memory; the rest of an
+	// unbounded body would go to temporary files.
+	r.Body = http.MaxBytesReader(w, r.Body, composeAttachmentMaxBytes+(1<<20))
 	if err := r.ParseMultipartForm(composeAttachmentMaxBytes); err != nil {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusBadRequest)

@@ -199,7 +199,9 @@ func RunShared() {
 	if _, err := setupNotice.WriteTo(os.Stderr); err != nil {
 		log.Fatalf("failed to display setup notice: %v", err)
 	}
-	log.Fatal(http.ListenAndServe(httpConfig.ListenAddr, handler))
+	server := newHTTPServer(handler)
+	server.Addr = httpConfig.ListenAddr
+	log.Fatal(server.ListenAndServe())
 }
 
 func loadOrGenerateVAPIDKeys(privatePath, publicPath string) (string, string) {

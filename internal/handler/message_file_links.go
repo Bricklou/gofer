@@ -2,6 +2,7 @@ package handler
 
 import (
 	"bytes"
+	"context"
 	"crypto/hmac"
 	"crypto/rand"
 	"crypto/sha256"
@@ -22,7 +23,8 @@ import (
 // page: the signature names the owner, the message and the file, and expires.
 // The signed route serves only that file, as its owner, without a session.
 // The signing key is random for each server start, so a restart only means
-// opening the message again.
+// opening the message again. A link also names the session that opened the
+// message and stops working when that session ends, such as at sign-out.
 //
 // Remote content the reader chose to load is signed the same way, as a "web"
 // file named by its address: Gofer downloads it and passes it on, so the
@@ -45,9 +47,9 @@ func newMessageFileKey() []byte {
 	return key
 }
 
-func (h *Handler) messageFileSignature(kind, owner string, messageID int64, name string, expires int64) string {
+func (h *Handler) messageFileSignature(kind, owner, session string, messageID int64, name string, expires int64) string {
 	mac := hmac.New(sha256.New, h.messageFileKey)
-	for _, part := range []string{"gofer-message-file/v1", kind, owner, strconv.FormatInt(messageID, 10), name, strconv.FormatInt(expires, 10)} {
+	for _, part := range []string{"gofer-message-file/v2", kind, owner, session, strconv.FormatInt(messageID, 10), name, strconv.FormatInt(expires, 10)} {
 		mac.Write([]byte(part))
 		mac.Write([]byte{0})
 	}
@@ -60,10 +62,11 @@ var messageFilePath = regexp.MustCompile(`/api/(inline-content|remote-assets)/(\
 // remote images in a body document to signed addresses. Paths that name
 // another message are left alone, so a message can't borrow another one's
 // files.
-func (h *Handler) signMessageFileLinks(body []byte, owner string, messageID int64) []byte {
+func (h *Handler) signMessageFileLinks(ctx context.Context, body []byte, owner string, messageID int64) []byte {
 	if len(h.messageFileKey) == 0 || owner == "" {
 		return body
 	}
+	session := messageFileSession(ctx)
 	expires := messageFileLinkExpiry()
 	return messageFilePath.ReplaceAllFunc(body, func(match []byte) []byte {
 		parts := messageFilePath.FindSubmatch(match)
@@ -82,7 +85,10 @@ func (h *Handler) signMessageFileLinks(body []byte, owner string, messageID int6
 		query := url.Values{
 			"u": {owner},
 			"e": {strconv.FormatInt(expires, 10)},
-			"s": {h.messageFileSignature(kind, owner, id, name, expires)},
+			"s": {h.messageFileSignature(kind, owner, session, id, name, expires)},
+		}
+		if session != "" {
+			query.Set("a", session)
 		}
 		return []byte(messageFileRoute + kind + "/" + string(parts[2]) + "/" + url.PathEscape(name) + "?" + query.Encode())
 	})
@@ -102,8 +108,9 @@ func messageFileWebName(remoteURL string) string {
 
 // remoteContentLinks returns the loader that RestoreRemoteContent passes each
 // remote address of the message through, giving a signed address on Gofer.
-func (h *Handler) remoteContentLinks(owner string, messageID int64) func(string) string {
+func (h *Handler) remoteContentLinks(ctx context.Context, owner string, messageID int64) func(string) string {
 	expires := messageFileLinkExpiry()
+	session := messageFileSession(ctx)
 	return func(remoteURL string) string {
 		if len(h.messageFileKey) == 0 || owner == "" || remoteURL == "" {
 			return ""
@@ -112,7 +119,10 @@ func (h *Handler) remoteContentLinks(owner string, messageID int64) func(string)
 			"u": {owner},
 			"e": {strconv.FormatInt(expires, 10)},
 			"r": {remoteURL},
-			"s": {h.messageFileSignature(messageFileWeb, owner, messageID, remoteURL, expires)},
+			"s": {h.messageFileSignature(messageFileWeb, owner, session, messageID, remoteURL, expires)},
+		}
+		if session != "" {
+			query.Set("a", session)
 		}
 		return messageFileRoute + messageFileWeb + "/" + strconv.FormatInt(messageID, 10) + "/" + messageFileWebName(remoteURL) + "?" + query.Encode()
 	}
@@ -137,8 +147,12 @@ func (h *Handler) verifiedMessageFileRequest(r *http.Request) (*http.Request, st
 			return nil, "", false
 		}
 	}
-	want := h.messageFileSignature(kind, owner, id, signed, expires)
+	session := query.Get("a")
+	want := h.messageFileSignature(kind, owner, session, id, signed, expires)
 	if !hmac.Equal([]byte(strings.ToLower(query.Get("s"))), []byte(want)) {
+		return nil, "", false
+	}
+	if !h.messageFileSessionActive(r.Context(), session, owner) {
 		return nil, "", false
 	}
 	ownerRequest := r.WithContext(auth.ContextWithUser(r.Context(), &auth.User{ID: owner, Username: owner}))
@@ -146,6 +160,28 @@ func (h *Handler) verifiedMessageFileRequest(r *http.Request) (*http.Request, st
 	ownerRequest.SetPathValue("contentID", name)
 	ownerRequest.SetPathValue("filename", name)
 	return ownerRequest, kind, true
+}
+
+// messageFileSession names the session a link is made for, or "" when the
+// server signs nobody in.
+func messageFileSession(ctx context.Context) string {
+	if session := auth.SessionFromContext(ctx); session != nil {
+		return session.ID
+	}
+	return ""
+}
+
+// messageFileSessionActive checks that the session a link was made for is
+// still signed in. Links without one are accepted only where nobody signs in.
+func (h *Handler) messageFileSessionActive(ctx context.Context, session, owner string) bool {
+	if h.auth == nil || !h.auth.IsEnabled() {
+		return true
+	}
+	if session == "" {
+		return false
+	}
+	active, err := h.auth.SessionActive(ctx, session, owner)
+	return err == nil && active
 }
 
 // The frame showing the message counts as another site, so these responses
