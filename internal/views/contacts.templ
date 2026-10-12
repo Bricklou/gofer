@@ -54,24 +54,38 @@ func contactEditAvatarRemoveClass(hasAvatar bool) string {
 	return "hidden"
 }
 
+// contactAvatarPreviewURL is the address of the larger photo shown when a
+// contact's picture is opened. Google photos are fetched through Gofer, which
+// only fetches photos saved for one of the person's contacts, so the address
+// names the saved photo and asks Gofer for its large version.
 func contactAvatarPreviewURL(rawURL string) string {
 	rawURL = strings.TrimSpace(rawURL)
+	if _, ok := GoogleAvatarLargeURL(rawURL); ok {
+		return "/api/provider-avatar?url=" + url.QueryEscape(rawURL) + "&size=large"
+	}
+	return rawURL
+}
+
+// GoogleAvatarLargeURL returns the 1024 pixel version of a Google profile
+// photo address, or false when the address isn't a Google photo.
+func GoogleAvatarLargeURL(rawURL string) (string, bool) {
+	rawURL = strings.TrimSpace(rawURL)
 	if rawURL == "" || strings.HasPrefix(strings.ToLower(rawURL), "data:") {
-		return rawURL
+		return "", false
 	}
 	parsed, err := url.Parse(rawURL)
 	if err != nil || parsed.Scheme == "" || parsed.Host == "" {
-		return rawURL
+		return "", false
 	}
 	host := strings.ToLower(parsed.Hostname())
-	if host == "googleusercontent.com" || strings.HasSuffix(host, ".googleusercontent.com") || host == "ggpht.com" || strings.HasSuffix(host, ".ggpht.com") {
-		parsed.Path = contactGoogleAvatarPreviewPath(parsed.Path)
-		values := parsed.Query()
-		values.Set("sz", "1024")
-		parsed.RawQuery = values.Encode()
-		return parsed.String()
+	if host != "googleusercontent.com" && !strings.HasSuffix(host, ".googleusercontent.com") && host != "ggpht.com" && !strings.HasSuffix(host, ".ggpht.com") {
+		return "", false
 	}
-	return rawURL
+	parsed.Path = contactGoogleAvatarPreviewPath(parsed.Path)
+	values := parsed.Query()
+	values.Set("sz", "1024")
+	parsed.RawQuery = values.Encode()
+	return parsed.String(), true
 }
 
 func contactGoogleAvatarPreviewPath(path string) string {

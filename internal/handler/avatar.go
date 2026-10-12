@@ -20,6 +20,7 @@ import (
 	mail "github.com/cristianadrielbraun/gofer/internal/mail"
 	"github.com/cristianadrielbraun/gofer/internal/models"
 	"github.com/cristianadrielbraun/gofer/internal/storage"
+	"github.com/cristianadrielbraun/gofer/internal/views"
 )
 
 const (
@@ -38,6 +39,7 @@ const (
 	avatarWarmupAttemptWindow   = 7 * 24 * time.Hour
 	avatarWarmupAttemptLimit    = 12
 	avatarMissingTTL            = 24 * time.Hour
+	avatarFoundTTL              = 7 * 24 * time.Hour
 	avatarErrorRetryAfter       = 6 * time.Hour
 	providerAvatarMaxBytes      = 5 * 1024 * 1024
 )
@@ -839,18 +841,21 @@ func (h *Handler) reuseStoredDomainIconAvatarGuarded(ctx context.Context, hash, 
 	if err := validate(); err != nil {
 		return avatarresolver.Image{}, "", false, err
 	}
+	// The reused icon gets a lifetime of its own. Taking over the other
+	// sender's expiry made it due again within minutes, every time.
+	expiresAt := time.Now().Add(avatarFoundTTL)
 	image := avatarresolver.Image{
 		Data:        rec.ImageData,
 		ContentType: rec.ContentType,
-		ExpiresAt:   rec.ExpiresAt,
+		ExpiresAt:   expiresAt,
 		Source:      "domain_icon",
 		SourceURL:   storage.SenderAvatarURL(rec.EmailHash, rec.ExpiresAt),
 	}
-	if err := h.db.SaveSenderAvatarFound(ctx, hash, email, "domain_icon", rec.ContentType, rec.StoragePath, rec.ImageData, rec.ExpiresAt, gravatarStatus, bimiStatus); err != nil {
+	if err := h.db.SaveSenderAvatarFound(ctx, hash, email, "domain_icon", rec.ContentType, rec.StoragePath, rec.ImageData, expiresAt, gravatarStatus, bimiStatus); err != nil {
 		return avatarresolver.Image{}, "", false, err
 	}
 	if h.syncer != nil {
-		h.publishAvatarUpdated(ctx, hash, email, rec.ExpiresAt)
+		h.publishAvatarUpdated(ctx, hash, email, expiresAt)
 	}
 	return image, reusedDomainIconAttemptMessage(email, rec), true, nil
 }
@@ -1019,7 +1024,7 @@ func avatarSourceFile(rawURL string) string {
 func (h *Handler) persistFoundAvatar(ctx context.Context, hash, email string, image avatarresolver.Image, gravatarStatus, bimiStatus string) (avatarresolver.Image, bool, error) {
 	expiresAt := image.ExpiresAt
 	if expiresAt.IsZero() {
-		expiresAt = time.Now().Add(7 * 24 * time.Hour)
+		expiresAt = time.Now().Add(avatarFoundTTL)
 	}
 	image.ExpiresAt = expiresAt
 	storagePath, err := h.blobStore.StoreAvatar(hash, image.ContentType, image.Data)
@@ -1184,6 +1189,16 @@ func (h *Handler) handleProviderAvatarImage(w http.ResponseWriter, r *http.Reque
 		http.NotFound(w, r)
 		return
 	}
+	// Opening a contact's picture asks for the large version of the saved
+	// photo; the saved address is what was checked above.
+	if r.URL.Query().Get("size") == "large" {
+		if large, ok := views.GoogleAvatarLargeURL(rawURL); ok {
+			if parsed, err = url.Parse(large); err != nil {
+				http.Error(w, "invalid provider avatar", http.StatusBadRequest)
+				return
+			}
+		}
+	}
 
 	req, err := http.NewRequestWithContext(r.Context(), http.MethodGet, parsed.String(), nil)
 	if err != nil {
@@ -1328,7 +1343,7 @@ func (h *Handler) avatarWarmupCandidate(ctx context.Context, email, hash string)
 	if err := h.db.UpsertSenderAvatarCandidate(ctx, email); err != nil {
 		return storage.SenderAvatarCandidate{}, false, false, false, err
 	}
-	attempts, err := h.db.CountSenderAvatarAttemptsSince(ctx, hash, time.Now().Add(-avatarWarmupAttemptWindow))
+	attempts, err := h.db.CountFailedSenderAvatarLookupsSince(ctx, hash, time.Now().Add(-avatarWarmupAttemptWindow))
 	if err != nil {
 		return storage.SenderAvatarCandidate{}, false, false, false, err
 	}

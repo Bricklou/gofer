@@ -567,14 +567,23 @@ func (db *DB) RecordSenderAvatarAttempt(ctx context.Context, hash, email, provid
 	return tx.Commit()
 }
 
-func (db *DB) CountSenderAvatarAttemptsSince(ctx context.Context, hash string, since time.Time) (int, error) {
+// CountFailedSenderAvatarLookupsSince counts the lookups for a sender since a
+// time that found no picture. A lookup logs one row for each source it tried,
+// all at the same moment, so rows are grouped by that moment; a lookup that
+// found a picture doesn't count, since only senders without one are retried
+// often.
+func (db *DB) CountFailedSenderAvatarLookupsSince(ctx context.Context, hash string, since time.Time) (int, error) {
 	var count int
 	err := db.Read().QueryRowContext(ctx,
-		`SELECT COUNT(*)
-		 FROM avatar_attempt_logs
-		 WHERE email_hash = ?
-		  AND status IN ('found', 'missing', 'error')
-		  AND created_at >= ?`, strings.ToLower(strings.TrimSpace(hash)), since).Scan(&count)
+		`SELECT COUNT(*) FROM (
+		   SELECT created_at
+		   FROM avatar_attempt_logs
+		   WHERE email_hash = ?
+		    AND status IN ('found', 'missing', 'error')
+		    AND created_at >= ?
+		   GROUP BY created_at
+		   HAVING SUM(status = 'found') = 0
+		 )`, strings.ToLower(strings.TrimSpace(hash)), since).Scan(&count)
 	return count, err
 }
 
