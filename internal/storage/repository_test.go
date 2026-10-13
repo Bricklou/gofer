@@ -181,61 +181,6 @@ func TestUpsertFoldersPreservesRemoteIDWhenProviderRemoteIDChanges(t *testing.T)
 	}
 }
 
-func TestGetFoldersForAccountCountsProviderBackedMessagesSeparately(t *testing.T) {
-	ctx := context.Background()
-	db := newContactsTestDB(t)
-
-	if _, err := db.Write().ExecContext(ctx, `INSERT INTO accounts (id, user_id, provider, email_address) VALUES ('acc', 'default', 'outlook', 'user@example.com')`); err != nil {
-		t.Fatalf("insert account: %v", err)
-	}
-	if err := db.UpsertFolders(ctx, []UpsertFolderInput{{
-		ID:               "acc_inbox",
-		AccountID:        "acc",
-		RemoteID:         "Inbox",
-		ProviderRemoteID: "graph-inbox",
-		Name:             "Inbox",
-		Role:             "inbox",
-		Selectable:       true,
-	}}); err != nil {
-		t.Fatalf("UpsertFolders() error = %v", err)
-	}
-	if err := db.UpsertSyncMessages(ctx, []SyncMessage{{
-		AccountID: "acc",
-		FolderID:  "acc_inbox",
-		RemoteUID: 100,
-		MessageID: "<legacy@example.com>",
-		Subject:   "Legacy",
-		FromEmail: "sender@example.com",
-		DateSent:  time.Now(),
-		IsRead:    true,
-	}}); err != nil {
-		t.Fatalf("UpsertSyncMessages() error = %v", err)
-	}
-	if _, err := db.UpsertProviderSyncMessages(ctx, []ProviderSyncMessage{{
-		AccountID:         "acc",
-		FolderID:          "acc_inbox",
-		ProviderMessageID: "graph-message-1",
-		InternetMessageID: "<graph@example.com>",
-		Subject:           "Graph",
-		FromEmail:         "sender@example.com",
-		DateSent:          time.Now(),
-		IsRead:            true,
-	}}); err != nil {
-		t.Fatalf("UpsertProviderSyncMessages() error = %v", err)
-	}
-
-	folders, err := db.GetFoldersForAccount(ctx, "acc")
-	if err != nil {
-		t.Fatalf("GetFoldersForAccount() error = %v", err)
-	}
-	if len(folders) != 1 {
-		t.Fatalf("GetFoldersForAccount() = %#v, want one folder", folders)
-	}
-	if folders[0].LocalMessageCount != 2 || folders[0].ProviderMessageCount != 1 {
-		t.Fatalf("folder counts local=%d provider=%d, want local 2 and provider-backed 1", folders[0].LocalMessageCount, folders[0].ProviderMessageCount)
-	}
-}
-
 func TestRefreshFolderThreadsForMessagesOnlyRebuildsAffectedThreads(t *testing.T) {
 	ctx := context.Background()
 	db := newContactsTestDB(t)

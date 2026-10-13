@@ -21,6 +21,8 @@ type imapSyncRepository interface {
 	UpdateFolderIncrementalSync(ctx context.Context, folderID string, highestUID uint32, uidValidity uint32, totalCount int) error
 	RefreshFolderUnreadCount(ctx context.Context, folderID string) (int, error)
 	GetLocalUIDs(ctx context.Context, folderID string) (map[uint32]int64, error)
+	IMAPFolderLocalCounts(ctx context.Context, folderID string) (messages, unseen int, err error)
+	SetFolderUIDNext(ctx context.Context, folderID string, uidValidity, uidNext uint32) error
 	RemoveExpungedUIDs(ctx context.Context, folderID string, expungedUIDs []uint32) (int, error)
 	ApplyIMAPFlagChanges(ctx context.Context, folderID string, expectedUIDValidity uint32, updates []storage.FlagUpdate, highestModSeq uint64) (int, error)
 	BatchUpdateFlags(ctx context.Context, folderID string, updates []storage.FlagUpdate) (int, error)
@@ -116,6 +118,17 @@ func (r *userIMAPScope) GetLocalUIDs(ctx context.Context, folderID string) (map[
 	var result map[uint32]int64
 	err := r.call(ctx, func(db *storage.DB) error { var err error; result, err = db.GetLocalUIDs(ctx, folderID); return err })
 	return result, err
+}
+func (r *userIMAPScope) IMAPFolderLocalCounts(ctx context.Context, folderID string) (messages, unseen int, err error) {
+	err = r.call(ctx, func(db *storage.DB) error {
+		var err error
+		messages, unseen, err = db.IMAPFolderLocalCounts(ctx, folderID)
+		return err
+	})
+	return messages, unseen, err
+}
+func (r *userIMAPScope) SetFolderUIDNext(ctx context.Context, folderID string, uidValidity, uidNext uint32) error {
+	return r.call(ctx, func(db *storage.DB) error { return db.SetFolderUIDNext(ctx, folderID, uidValidity, uidNext) })
 }
 func (r *userIMAPScope) RemoveExpungedUIDs(ctx context.Context, folderID string, expungedUIDs []uint32) (int, error) {
 	var result int

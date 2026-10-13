@@ -3512,6 +3512,26 @@ func (db *DB) UpdateFolderSyncState(ctx context.Context, folderID string, highes
 	return err
 }
 
+// IMAPFolderLocalCounts returns how many of the folder's messages have a
+// server UID, and how many of those are unread, through indexes. In a folder
+// that is in sync they equal the server's MESSAGES and UNSEEN.
+func (db *DB) IMAPFolderLocalCounts(ctx context.Context, folderID string) (messages, unseen int, err error) {
+	err = db.Read().QueryRowContext(ctx, `SELECT
+		(SELECT COUNT(*) FROM message_folder_state WHERE folder_id = ? AND remote_uid IS NOT NULL),
+		(SELECT COUNT(*) FROM message_folder_state WHERE folder_id = ? AND is_deleted IN (0, 1) AND is_read = 0 AND remote_uid IS NOT NULL)`,
+		folderID, folderID).Scan(&messages, &unseen)
+	return messages, unseen, err
+}
+
+// SetFolderUIDNext records the server's UIDNEXT after a folder synced
+// without errors, unless the folder's UIDVALIDITY has changed meanwhile.
+func (db *DB) SetFolderUIDNext(ctx context.Context, folderID string, uidValidity, uidNext uint32) error {
+	_, err := db.Write().ExecContext(ctx,
+		`UPDATE folders SET uid_next = ? WHERE id = ? AND COALESCE(uid_validity, 0) = ?`,
+		uidNext, folderID, uidValidity)
+	return err
+}
+
 func (db *DB) UpdateFolderIncrementalSync(ctx context.Context, folderID string, highestUID uint32, uidValidity uint32, totalCount int) error {
 	_, err := db.Write().ExecContext(ctx,
 		`UPDATE folders SET highest_seen_uid = MAX(COALESCE(highest_seen_uid, 0), ?), uid_validity = ?, total_count = ?,
@@ -7473,22 +7493,23 @@ func (db *DB) SyncGmailInboxMembership(ctx context.Context, messageID int64, acc
 }
 
 type FolderSyncInfo struct {
-	ID                              string
-	AccountID                       string
-	RemoteID                        string
-	ProviderRemoteID                string
-	Role                            string
-	UIDValidity                     uint32
-	HighestSeenUID                  uint32
-	HighestModSeq                   uint64
-	LastFullSyncAt                  sqliteNullTime
-	LastIncrementalAt               sqliteNullTime
-	SyncCursor                      string
-	SyncProgressCurrent             int
-	SyncProgressStartedAt           sqliteNullTime
-	TotalCount                      int
-	LocalMessageCount               int
-	ProviderMessageCount            int
+	ID                    string
+	AccountID             string
+	RemoteID              string
+	ProviderRemoteID      string
+	Role                  string
+	UIDValidity           uint32
+	HighestSeenUID        uint32
+	HighestModSeq         uint64
+	LastFullSyncAt        sqliteNullTime
+	LastIncrementalAt     sqliteNullTime
+	SyncCursor            string
+	SyncProgressCurrent   int
+	SyncProgressStartedAt sqliteNullTime
+	TotalCount            int
+	// UIDNext is the server's UIDNEXT when the folder last synced in full,
+	// zero when unknown. A poll compares it with the server's current STATUS.
+	UIDNext                         uint32
 	ProviderCountDriftFirstSeenAt   sqliteNullTime
 	ProviderCountDriftLastSeenAt    sqliteNullTime
 	ProviderCountDriftLocalCount    int
@@ -8089,16 +8110,7 @@ func (db *DB) GetFoldersForAccount(ctx context.Context, accountID string) ([]Fol
 		        COALESCE(f.uid_validity, 0), COALESCE(f.highest_seen_uid, 0), COALESCE(f.highest_modseq, 0),
 		        f.last_full_sync_at, f.last_incremental_sync_at, COALESCE(f.sync_cursor, ''),
 		        COALESCE(f.sync_progress_current, 0), f.sync_progress_started_at,
-		        COALESCE(f.total_count, 0),
-		        COALESCE((SELECT COUNT(*) FROM message_folder_state mfs WHERE mfs.folder_id = f.id AND mfs.is_deleted = 0), 0),
-		        COALESCE((
-		          SELECT COUNT(*)
-		          FROM message_folder_state mfs
-		          JOIN messages m ON m.id = mfs.message_id
-		          WHERE mfs.folder_id = f.id
-		            AND mfs.is_deleted = 0
-		            AND COALESCE(m.remote_message_id, '') != ''
-		        ), 0),
+		        COALESCE(f.total_count, 0), COALESCE(f.uid_next, 0),
 		        f.provider_count_drift_first_seen_at,
 		        f.provider_count_drift_last_seen_at,
 		        COALESCE(f.provider_count_drift_local_count, 0),
@@ -8128,7 +8140,7 @@ func (db *DB) GetFoldersForAccount(ctx context.Context, accountID string) ([]Fol
 			&f.UIDValidity, &f.HighestSeenUID, &f.HighestModSeq,
 			&f.LastFullSyncAt, &f.LastIncrementalAt, &f.SyncCursor,
 			&f.SyncProgressCurrent, &f.SyncProgressStartedAt,
-			&f.TotalCount, &f.LocalMessageCount, &f.ProviderMessageCount,
+			&f.TotalCount, &f.UIDNext,
 			&f.ProviderCountDriftFirstSeenAt, &f.ProviderCountDriftLastSeenAt,
 			&f.ProviderCountDriftLocalCount, &f.ProviderCountDriftRemoteCount,
 			&f.ProviderCountDriftCursor, &f.ProviderCountDriftConfirmations); err != nil {

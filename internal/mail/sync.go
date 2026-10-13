@@ -1349,9 +1349,41 @@ func (o *SyncOrchestrator) senderAvatarURL(ctx context.Context, email string) st
 	return storage.SenderAvatarURL(rec.EmailHash, rec.ExpiresAt)
 }
 
-func (o *SyncOrchestrator) fullFolderSync(ctx context.Context, client *imap.Client, accountID, accountProvider string, folder storage.FolderSyncInfo, folderIndex, folderTotal, idleExcluded int) (syncErr error) {
-	totalHint, _ := o.imapRepository().GetFolderEmailCount(ctx, folder.ID)
+func (o *SyncOrchestrator) fullFolderSync(ctx context.Context, client *imap.Client, accountID, accountProvider string, folder storage.FolderSyncInfo, listed *imap.FolderStatus, folderIndex, folderTotal, idleExcluded int) (syncErr error) {
 	folderName := displayName(folder.RemoteID, folder.Role)
+	status, statusKnown := o.imapFolderStatus(ctx, client, folder, listed)
+	if statusKnown && o.imapFolderUnchanged(ctx, folder, status) {
+		payload := map[string]any{
+			"account_folders_total": folderTotal,
+			"account_folders_done":  folderIndex,
+			"status":                "complete",
+			"unchanged":             true,
+		}
+		if idleExcluded > 0 {
+			payload["idle_folders_excluded"] = idleExcluded
+		}
+		o.publishEvent(Event{
+			Type:       EventSyncComplete,
+			AccountID:  accountID,
+			FolderID:   folder.ID,
+			FolderRole: folder.Role,
+			Payload:    o.folderSyncProgressPayload(ctx, accountID, folderName, accountProvider, payload),
+		})
+		return nil
+	}
+	if statusKnown {
+		// Remember the UIDNEXT seen before this sync once it succeeds. Mail
+		// arriving during the sync has a higher UID, so the next poll still
+		// notices it.
+		defer func() {
+			if syncErr == nil && ctx.Err() == nil {
+				if err := o.imapRepository().SetFolderUIDNext(context.WithoutCancel(ctx), folder.ID, status.UIDValidity, status.UIDNext); err != nil {
+					log.Printf("sync folder %s/%s: save UIDNEXT: %v", accountID, folder.RemoteID, err)
+				}
+			}
+		}()
+	}
+	totalHint, _ := o.imapRepository().GetFolderEmailCount(ctx, folder.ID)
 	startPayload := map[string]any{
 		"account_folders_total": folderTotal,
 		"account_folders_done":  folderIndex - 1,
@@ -1464,6 +1496,53 @@ func (o *SyncOrchestrator) fullFolderSync(ctx context.Context, client *imap.Clie
 	return nil
 }
 
+// imapFlagSweepInterval bounds how long a flag change can go unnoticed on a
+// server without CONDSTORE, where STATUS reveals only the unread count.
+const imapFlagSweepInterval = 15 * time.Minute
+
+// imapFlagSweeps records, per folder ID, when every flag was last read from a
+// server without CONDSTORE. After a restart each folder is swept once.
+var imapFlagSweeps sync.Map
+
+// imapFolderStatus returns the folder's STATUS, from the folder list when the
+// server sent it there, otherwise with one STATUS command.
+func (o *SyncOrchestrator) imapFolderStatus(ctx context.Context, client *imap.Client, folder storage.FolderSyncInfo, listed *imap.FolderStatus) (imap.FolderStatus, bool) {
+	if listed != nil {
+		return *listed, true
+	}
+	if client == nil {
+		return imap.FolderStatus{}, false
+	}
+	status, ok, err := client.FolderStatus(ctx, folder.RemoteID)
+	if err != nil {
+		log.Printf("sync folder %s/%s: status: %v", folder.AccountID, folder.RemoteID, err)
+		return imap.FolderStatus{}, false
+	}
+	return status, ok
+}
+
+// imapFolderUnchanged reports whether the server's STATUS shows nothing a
+// full folder sync would pick up: no new or removed messages and, with
+// CONDSTORE, no flag changes. Without CONDSTORE only the unread count can be
+// compared, so every flag is still read at least every imapFlagSweepInterval.
+func (o *SyncOrchestrator) imapFolderUnchanged(ctx context.Context, folder storage.FolderSyncInfo, status imap.FolderStatus) bool {
+	if folder.UIDNext == 0 || status.UIDValidity != folder.UIDValidity || status.UIDNext != folder.UIDNext {
+		return false
+	}
+	messages, unseen, err := o.imapRepository().IMAPFolderLocalCounts(ctx, folder.ID)
+	if err != nil || messages < 0 || uint32(messages) != status.Messages {
+		return false
+	}
+	if status.HighestModSeq > 0 {
+		return folder.HighestModSeq == status.HighestModSeq
+	}
+	if unseen < 0 || uint32(unseen) != status.Unseen {
+		return false
+	}
+	swept, ok := imapFlagSweeps.Load(folder.ID)
+	return ok && time.Since(swept.(time.Time)) < imapFlagSweepInterval
+}
+
 func (o *SyncOrchestrator) reconcileFolder(ctx context.Context, client *imap.Client, accountID string, folder storage.FolderSyncInfo, expectedUIDValidity, highestUID uint32) (uint32, bool, error) {
 	serverUIDs, currentUIDValidity, changed, err := client.FetchAllUIDs(ctx, folder.RemoteID, expectedUIDValidity)
 	if err != nil {
@@ -1542,6 +1621,9 @@ func (o *SyncOrchestrator) refreshFlags(ctx context.Context, client *imap.Client
 	}
 	if result.UsedCondStore {
 		log.Printf("flags %s/%s: CONDSTORE advanced to %d", accountID, folder.RemoteID, result.HighestModSeq)
+	}
+	if !result.CheckpointValid {
+		imapFlagSweeps.Store(folder.ID, time.Now())
 	}
 	return result.UIDValidity, false, nil
 }
@@ -2250,7 +2332,7 @@ func (o *SyncOrchestrator) syncAccount(ctx context.Context, accountID string, in
 		if !ok {
 			folderInfo = storage.FolderSyncInfo{ID: folderDBID, AccountID: accountID, RemoteID: f.Name, Role: f.Role}
 		}
-		err := o.fullFolderSync(ctx, client, accountID, cfg.Provider, folderInfo, i+1, len(syncFolders), idleExcluded)
+		err := o.fullFolderSync(ctx, client, accountID, cfg.Provider, folderInfo, f.Status, i+1, len(syncFolders), idleExcluded)
 		if err != nil && client.ConnectionLost() && ctx.Err() == nil {
 			// Without a new session every remaining folder would fail on the
 			// dead one, so reconnect and give this folder one more attempt.
@@ -2261,7 +2343,7 @@ func (o *SyncOrchestrator) syncAccount(ctx context.Context, accountID string, in
 			}
 			client.Close()
 			client = reconnected
-			err = o.fullFolderSync(ctx, client, accountID, cfg.Provider, folderInfo, i+1, len(syncFolders), idleExcluded)
+			err = o.fullFolderSync(ctx, client, accountID, cfg.Provider, folderInfo, nil, i+1, len(syncFolders), idleExcluded)
 		}
 		if err != nil {
 			log.Printf("sync folder %s/%s: %v", accountID, f.Name, err)

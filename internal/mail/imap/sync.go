@@ -619,63 +619,70 @@ func isIMAPCommandRejection(err error) bool {
 }
 
 func (c *Client) fetchFlagUpdatesLocked(remoteName string, uids []uint32, changedSince uint64, includeModSeq bool) ([]FlagUpdate, error) {
+	if changedSince > 0 {
+		// Only messages changed since the checkpoint come back, so one
+		// command over the whole folder replaces listing every local UID.
+		var all imap.UIDSet
+		all.AddRange(1, 0)
+		return c.fetchFlagSetLocked(remoteName, all, changedSince, includeModSeq)
+	}
 	var allUpdates []FlagUpdate
-	chunkSize := 500
-
+	const chunkSize = 500
 	for i := 0; i < len(uids); i += chunkSize {
-		end := i + chunkSize
-		if end > len(uids) {
-			end = len(uids)
-		}
-		chunk := uids[i:end]
-
+		end := min(i+chunkSize, len(uids))
 		var uidSet imap.UIDSet
-		for _, uid := range chunk {
+		for _, uid := range uids[i:end] {
 			uidSet.AddNum(imap.UID(uid))
 		}
+		updates, err := c.fetchFlagSetLocked(remoteName, uidSet, 0, includeModSeq)
+		if err != nil {
+			return nil, err
+		}
+		allUpdates = append(allUpdates, updates...)
+	}
+	return allUpdates, nil
+}
 
-		fetchOpts := &imap.FetchOptions{UID: true, Flags: true, ModSeq: includeModSeq, ChangedSince: changedSince}
-		cmd := c.client.Fetch(uidSet, fetchOpts)
+func (c *Client) fetchFlagSetLocked(remoteName string, uidSet imap.UIDSet, changedSince uint64, includeModSeq bool) ([]FlagUpdate, error) {
+	var updates []FlagUpdate
+	fetchOpts := &imap.FetchOptions{UID: true, Flags: true, ModSeq: includeModSeq, ChangedSince: changedSince}
+	cmd := c.client.Fetch(uidSet, fetchOpts)
+	for {
+		msg := cmd.Next()
+		if msg == nil {
+			break
+		}
 
+		var update FlagUpdate
 		for {
-			msg := cmd.Next()
-			if msg == nil {
+			item := msg.Next()
+			if item == nil {
 				break
 			}
-
-			var update FlagUpdate
-			for {
-				item := msg.Next()
-				if item == nil {
-					break
-				}
-				switch item := item.(type) {
-				case imapclient.FetchItemDataUID:
-					update.UID = uint32(item.UID)
-				case imapclient.FetchItemDataFlags:
-					update.Labels = labelsFromFlags(item.Flags)
-					for _, flag := range item.Flags {
-						switch flag {
-						case imap.FlagSeen:
-							update.IsRead = true
-						case imap.FlagFlagged:
-							update.IsStarred = true
-						}
+			switch item := item.(type) {
+			case imapclient.FetchItemDataUID:
+				update.UID = uint32(item.UID)
+			case imapclient.FetchItemDataFlags:
+				update.Labels = labelsFromFlags(item.Flags)
+				for _, flag := range item.Flags {
+					switch flag {
+					case imap.FlagSeen:
+						update.IsRead = true
+					case imap.FlagFlagged:
+						update.IsStarred = true
 					}
 				}
 			}
-
-			if update.UID > 0 {
-				allUpdates = append(allUpdates, update)
-			}
 		}
 
-		if err := cmd.Close(); err != nil {
-			return nil, fmt.Errorf("fetch flags %s: %w", remoteName, err)
+		if update.UID > 0 {
+			updates = append(updates, update)
 		}
 	}
-
-	return allUpdates, nil
+	if err := cmd.Close(); err != nil {
+		return nil, fmt.Errorf("fetch flags %s: %w", remoteName, err)
+	}
+	return updates, nil
 }
 
 func labelsFromFlags(flags []imap.Flag) []storage.LabelInput {
