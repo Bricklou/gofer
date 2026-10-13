@@ -480,6 +480,27 @@ func (r *AccountRouting) CompleteAccountDeletion(ctx context.Context, userID, ac
 	})
 }
 
+// UserAccountIDs lists every account the directory records for the owner,
+// whatever its state and whether or not the owner is still active, so work
+// and sessions of a stopped owner can be ended.
+func (r *AccountRouting) UserAccountIDs(ctx context.Context, userID string) ([]string, error) {
+	rows, err := r.System().Read().QueryContext(ctx,
+		`SELECT account_id FROM gofer_account_directory WHERE user_id = ? ORDER BY account_id`, userID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var ids []string
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		ids = append(ids, id)
+	}
+	return ids, rows.Err()
+}
+
 // ListAccounts pages directory metadata without opening any user databases.
 // An empty owner is an explicit instance-wide worker/operator query. Active
 // entries exclude inactive owners; pending cleanup includes disabled owners.

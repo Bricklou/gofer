@@ -38,6 +38,9 @@ type Client struct {
 	mu          sync.Mutex
 	closed      bool
 	stopContext func() bool
+	pool        *Pool
+	poolKey     string
+	interrupted bool
 }
 
 func NewClient(ctx context.Context, cfg *models.AccountConfig, password string) (*Client, error) {
@@ -173,12 +176,26 @@ func secureClientOptions(host string, options *imapclient.Options) *imapclient.O
 	return options
 }
 
+// Close ends this use of the client. A session from a Pool goes back to the
+// pool for reuse when it is still healthy; the caller must not use it again.
 func (c *Client) Close() error {
 	c.mu.Lock()
-	defer c.mu.Unlock()
 	if c.closed {
+		c.mu.Unlock()
 		return nil
 	}
+	if pool, key := c.pool, c.poolKey; pool != nil {
+		c.pool, c.poolKey = nil, ""
+		// A use whose context already fired has closed the connection.
+		if c.stopContext != nil && !c.stopContext() {
+			c.interrupted = true
+		}
+		c.stopContext = nil
+		c.mu.Unlock()
+		pool.put(key, c)
+		return nil
+	}
+	defer c.mu.Unlock()
 	c.closed = true
 	if c.stopContext != nil {
 		c.stopContext()

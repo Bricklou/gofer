@@ -169,8 +169,9 @@ func (s *UserIMAP) RestartAccount(ctx context.Context, id string) error {
 // current configuration and installation transport policy again.
 func (s *UserIMAP) StopAccount(id string) {
 	s.mu.Lock()
-	defer s.mu.Unlock()
 	s.stopAccountLocked(id, false)
+	s.mu.Unlock()
+	imap.DefaultPool.DropAccount(id)
 }
 
 func (s *UserIMAP) stopAccountLocked(id string, resync bool) {
@@ -195,6 +196,7 @@ func (s *UserIMAP) stopAccountLocked(id string, resync bool) {
 // storage prevents enumerating affected accounts. It only cancels sessions;
 // discovery and later requests must read the now-revoked central policy.
 func (s *UserIMAP) StopMailSecuritySessions() {
+	imap.DefaultPool.DropAll()
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	for key, w := range s.watches {
@@ -688,7 +690,7 @@ func (s *UserIMAP) ensureBody(ctx context.Context, owner string, msgID int64, mo
 				if info == nil || validity == 0 || info.RemoteUID == 0 {
 					return errors.New("message has no verified IMAP body identity")
 				}
-				client, err := imap.NewContextClient(ctx, scope.config, scope.password)
+				client, err := imap.DefaultPool.Get(ctx, scope.config, scope.password)
 				if err != nil {
 					return err
 				}

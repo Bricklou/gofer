@@ -188,7 +188,7 @@ func (s *UserIMAP) ReadRawMessage(ctx context.Context, owner string, id int64) (
 				if info.RemoteUID == 0 || info.UIDValidity == 0 || info.FolderRemoteID == "" {
 					return errors.New("message has no verified IMAP raw identity")
 				}
-				client, e := imap.NewContextClient(operation, scope.config, scope.password)
+				client, e := imap.DefaultPool.Get(operation, scope.config, scope.password)
 				if e != nil {
 					return e
 				}

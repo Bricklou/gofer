@@ -135,7 +135,7 @@ func (s *UserIMAP) applyUserLabelMutation(ctx context.Context, scope *userIMAPSc
 			}
 		}
 		label.ProviderID = keyword
-		client, err := mailimap.NewContextClient(ctx, scope.config, scope.password)
+		client, err := mailimap.DefaultPool.Get(ctx, scope.config, scope.password)
 		if err != nil {
 			return err
 		}

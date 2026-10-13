@@ -192,10 +192,7 @@ func (o *SyncOrchestrator) publishEvent(event Event) {
 }
 
 func (o *SyncOrchestrator) newIMAPSyncClient(ctx context.Context, cfg *models.AccountConfig, password string) (*imap.Client, error) {
-	if o.imapScope != nil {
-		return imap.NewContextClient(ctx, cfg, password)
-	}
-	return imap.NewClient(ctx, cfg, password)
+	return imap.DefaultPool.Get(ctx, cfg, password)
 }
 func (r *userIMAPScope) ListFolderUIDsMissingSize(ctx context.Context, folderID string, limit int) ([]uint32, error) {
 	var result []uint32

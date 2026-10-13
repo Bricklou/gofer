@@ -308,6 +308,7 @@ func (o *SyncOrchestrator) UpdateInterval(minutes int) {
 
 func (o *SyncOrchestrator) StopAccount(accountID string) {
 	o.stopAccount(accountID)
+	imap.DefaultPool.DropAccount(strings.TrimSpace(accountID))
 }
 
 func (o *SyncOrchestrator) stopAccount(accountID string) (<-chan struct{}, <-chan struct{}, <-chan struct{}) {
@@ -2482,7 +2483,7 @@ func (o *SyncOrchestrator) syncIncremental(syncCtx context.Context, accountID, f
 		return
 	}
 
-	client, err := imap.NewClient(syncCtx, cfg, password)
+	client, err := imap.DefaultPool.Get(syncCtx, cfg, password)
 	if err != nil {
 		log.Printf("incremental %s/%s: connect: %v", accountID, remoteName, err)
 		o.markAccountSyncError(syncCtx, accountID, err)
