@@ -5309,9 +5309,11 @@ func (db *DB) getThreadMessages(ctx context.Context, accountID, threadID, userID
 	if err := rows.Close(); err != nil {
 		return nil, err
 	}
+	senders := make([]*models.Contact, len(items))
 	for i := range items {
-		db.hydrateContactAvatar(ctx, &items[i].From)
+		senders[i] = &items[i].From
 	}
+	db.hydrateContactAvatarsFor(ctx, senders)
 	if len(items) > 0 {
 		msgIDs := make([]int64, 0, len(items))
 		index := make(map[string]int, len(items))
@@ -5328,13 +5330,14 @@ func (db *DB) getThreadMessages(ctx context.Context, accountID, threadID, userID
 				items[i].Labels = labels
 			}
 		}
+		toMap, _ := db.batchGetRecipients(ctx, msgIDs, "to")
+		ccMap, _ := db.batchGetRecipients(ctx, msgIDs, "cc")
 		for i, item := range items {
 			id, err := strconv.ParseInt(item.ID, 10, 64)
 			if err != nil {
 				continue
 			}
-			items[i].To, _ = db.getRecipients(ctx, id, "to")
-			items[i].CC, _ = db.getRecipients(ctx, id, "cc")
+			items[i].To, items[i].CC = toMap[id], ccMap[id]
 			if item.HasAttachment {
 				items[i].Attachments, _ = db.GetAttachmentsInternal(ctx, id)
 			}
@@ -5952,9 +5955,11 @@ func (db *DB) scanEmailRows(ctx context.Context, rows *sql.Rows) ([]models.Email
 		return nil, err
 	}
 	// Release the result cursor before avatar lookups acquire another reader.
+	senders := make([]*models.Contact, len(items))
 	for i := range items {
-		db.hydrateContactAvatar(ctx, &items[i].email.From)
+		senders[i] = &items[i].email.From
 	}
+	db.hydrateContactAvatarsFor(ctx, senders)
 	if len(items) > 0 {
 		msgIDs := make([]int64, len(items))
 		for i, r := range items {
@@ -6107,9 +6112,7 @@ func (db *DB) getRecipients(ctx context.Context, messageID int64, kind string) (
 	if err := rows.Close(); err != nil {
 		return nil, err
 	}
-	for i := range contacts {
-		db.hydrateContactAvatar(ctx, &contacts[i])
-	}
+	db.hydrateContactAvatars(ctx, contacts)
 	return contacts, nil
 }
 
@@ -6188,11 +6191,13 @@ func (db *DB) batchGetRecipients(ctx context.Context, msgIDs []int64, kind strin
 	if err := rows.Close(); err != nil {
 		return nil, err
 	}
+	var all []*models.Contact
 	for _, contacts := range result {
 		for i := range contacts {
-			db.hydrateContactAvatar(ctx, &contacts[i])
+			all = append(all, &contacts[i])
 		}
 	}
+	db.hydrateContactAvatarsFor(ctx, all)
 	return result, nil
 }
 
@@ -6300,9 +6305,11 @@ func (db *DB) SearchMessages(ctx context.Context, userID string, query string, l
 		return nil, err
 	}
 	// Release the result cursor before avatar lookups acquire another reader.
+	senders := make([]*models.Contact, len(items))
 	for i := range items {
-		db.hydrateContactAvatar(ctx, &items[i].email.From)
+		senders[i] = &items[i].email.From
 	}
+	db.hydrateContactAvatarsFor(ctx, senders)
 	if len(items) > 0 {
 		msgIDs := make([]int64, len(items))
 		for i, r := range items {

@@ -412,23 +412,7 @@ func (db *DB) hydrateContactAvatar(ctx context.Context, contact *models.Contact)
 	if contact == nil || contact.AvatarHash == "" {
 		return
 	}
-	providerAvatarURL := strings.TrimSpace(contact.AvatarURL)
-	if providerAvatarURL != "" {
-		contact.AvatarSource = "provider_contact"
-		return
-	}
-	rec, err := db.GetSenderAvatarByHash(ctx, contact.AvatarHash)
-	if err != nil || rec == nil {
-		contact.AvatarStatus = "unknown"
-		return
-	}
-	contact.AvatarStatus = rec.Status
-	if rec.Status == "found" && (rec.StoragePath != "" || len(rec.ImageData) > 0) && (!rec.ExpiresAtValid || time.Now().Before(rec.ExpiresAt)) {
-		contact.AvatarSource = rec.Source
-		contact.AvatarURL = senderAvatarURL(rec.EmailHash, rec.FetchedAtVersion())
-		return
-	}
-	contact.AvatarSource = rec.Source
+	db.hydrateContactAvatarsFor(ctx, []*models.Contact{contact})
 }
 
 func (r SenderAvatarRecord) FetchedAtVersion() int64 {

@@ -654,20 +654,35 @@ func (db *DB) hydrateContactListRows(ctx context.Context, userID string, contact
 }
 
 func (db *DB) hydrateContactAvatars(ctx context.Context, contacts []models.Contact) {
+	pointers := make([]*models.Contact, len(contacts))
+	for i := range contacts {
+		pointers[i] = &contacts[i]
+	}
+	db.hydrateContactAvatarsFor(ctx, pointers)
+}
+
+// hydrateContactAvatarsFor fills avatar status and URL for many contacts with
+// one query, reading whether an image is stored but not the image itself.
+// A contact with a provider photo keeps it; one without a known avatar gets
+// the status "unknown".
+func (db *DB) hydrateContactAvatarsFor(ctx context.Context, contacts []*models.Contact) {
 	indexesByHash := make(map[string][]int)
 	var hashes []string
-	for i := range contacts {
-		if strings.TrimSpace(contacts[i].AvatarURL) != "" {
-			if strings.TrimSpace(contacts[i].AvatarSource) == "" {
-				contacts[i].AvatarSource = "provider_contact"
+	for i, contact := range contacts {
+		if contact == nil {
+			continue
+		}
+		if strings.TrimSpace(contact.AvatarURL) != "" {
+			if strings.TrimSpace(contact.AvatarSource) == "" {
+				contact.AvatarSource = "provider_contact"
 			}
 			continue
 		}
-		hash := strings.ToLower(strings.TrimSpace(contacts[i].AvatarHash))
+		hash := strings.ToLower(strings.TrimSpace(contact.AvatarHash))
 		if hash == "" {
 			continue
 		}
-		contacts[i].AvatarStatus = "unknown"
+		contact.AvatarStatus = "unknown"
 		if _, ok := indexesByHash[hash]; !ok {
 			hashes = append(hashes, hash)
 		}
