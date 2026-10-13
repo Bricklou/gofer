@@ -38,13 +38,26 @@ func (s *UserIMAP) BeginActiveUserSession(ctx context.Context, owner string) (fu
 	if err := s.Routing().ValidateUser(ctx, owner); err != nil {
 		return nil, err
 	}
-	if !gmailAPIPollEnabled() {
-		return func() {}, nil
-	}
 	s.mu.Lock()
 	if s.closing || s.ctx.Err() != nil {
 		s.mu.Unlock()
 		return nil, errors.New("mail worker is shutting down")
+	}
+	// Owners with Gofer open have their accounts synced first.
+	s.onlineUsers[owner]++
+	var offline sync.Once
+	leave := func() {
+		offline.Do(func() {
+			s.mu.Lock()
+			if s.onlineUsers[owner]--; s.onlineUsers[owner] <= 0 {
+				delete(s.onlineUsers, owner)
+			}
+			s.mu.Unlock()
+		})
+	}
+	if !gmailAPIPollEnabled() {
+		s.mu.Unlock()
+		return leave, nil
 	}
 	session := s.activePollUsers[owner]
 	if session == nil {
@@ -57,6 +70,7 @@ func (s *UserIMAP) BeginActiveUserSession(ctx context.Context, owner string) (fu
 	s.wakeActivePoll()
 	var once sync.Once
 	return func() {
+		leave()
 		once.Do(func() {
 			s.mu.Lock()
 			session.refs--

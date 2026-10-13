@@ -321,7 +321,8 @@ func TestUserIMAPBackgroundFullQueueRetainsDiscoveryAndFollowUps(t *testing.T) {
 		ids = append(ids, account.ID)
 	}
 	blocked, release := server.setBlock("alice", "list")
-	if err := f.imap.Start(mail.UserIMAPBackgroundOptions{PollInterval: time.Hour, DisableIDLE: true}); err != nil {
+	// Small fixed capacities let 37 accounts saturate the queue.
+	if err := f.imap.Start(mail.UserIMAPBackgroundOptions{PollInterval: time.Hour, DisableIDLE: true, MaxConcurrentSyncs: 4, MaxQueuedSyncs: 32}); err != nil {
 		t.Fatal(err)
 	}
 	awaitIMAP(t, blocked)

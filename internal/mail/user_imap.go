@@ -34,6 +34,14 @@ type UserIMAP struct {
 	contactSlots      chan struct{}
 	calendarSlots     chan struct{}
 	queue             chan userIMAPJob
+	queueOnline       chan userIMAPJob
+	onlineUsers       map[string]int
+	workerLimit       int
+	workerCount       int
+	maxPerServer      int
+	queueLimit        int
+	serverSlots       map[string]*serverSlot
+	lastLateWarning   time.Time
 	mu                sync.Mutex
 	gates             map[userIMAPKey]*userIMAPGate
 	queued            map[string]*userIMAPQueueState
@@ -98,11 +106,10 @@ func NewUserIMAP(ctx context.Context, accounts *config.UserAccountStore, blobs *
 	if ctx == nil || accounts == nil || blobs == nil || events == nil {
 		return nil, errors.New("user IMAP requires lifecycle context, accounts, blobs and events")
 	}
-	s := &UserIMAP{accounts: accounts, blobs: blobs, events: events, ctx: ctx, slots: make(chan struct{}, 4), contactSlots: make(chan struct{}, 2), calendarSlots: make(chan struct{}, 2), queue: make(chan userIMAPJob, 32), gates: make(map[userIMAPKey]*userIMAPGate), queued: make(map[string]*userIMAPQueueState), backgroundWake: make(chan struct{}, 1), activePollQueue: make(chan userActivePollJob, 32), activePollWake: make(chan struct{}, 1), activePollUsers: make(map[string]*userActivePollSession), activePollPending: make(map[string]*userActivePollSession), watches: make(map[userIMAPWatchKey]*userIMAPWatch)}
-	for i := 0; i < 4; i++ {
-		s.workers.Add(1)
-		go s.work()
-	}
+	s := &UserIMAP{accounts: accounts, blobs: blobs, events: events, ctx: ctx, slots: make(chan struct{}, interactiveSlots), contactSlots: make(chan struct{}, 2), calendarSlots: make(chan struct{}, 2), queue: make(chan userIMAPJob, syncQueueSize), queueOnline: make(chan userIMAPJob, syncQueueSize), onlineUsers: make(map[string]int), serverSlots: make(map[string]*serverSlot), maxPerServer: defaultSyncsPerServer, queueLimit: syncQueueSize, gates: make(map[userIMAPKey]*userIMAPGate), queued: make(map[string]*userIMAPQueueState), backgroundWake: make(chan struct{}, 1), activePollQueue: make(chan userActivePollJob, 32), activePollWake: make(chan struct{}, 1), activePollUsers: make(map[string]*userActivePollSession), activePollPending: make(map[string]*userActivePollSession), watches: make(map[userIMAPWatchKey]*userIMAPWatch)}
+	s.mu.Lock()
+	s.setSyncWorkersLocked(syncWorkersBeforeStart)
+	s.mu.Unlock()
 	return s, nil
 }
 func (s *UserIMAP) Routing() *storage.AccountRouting { return s.accounts.Routing() }
@@ -211,20 +218,19 @@ func (s *UserIMAP) StopMailSecuritySessions() {
 	}
 }
 
-func (s *UserIMAP) work() {
+func (s *UserIMAP) work(index int) {
 	defer s.workers.Done()
 	for {
-		var job userIMAPJob
-		select {
-		case <-s.ctx.Done():
+		if s.workerRetired(index) {
 			return
-		case job = <-s.queue:
+		}
+		job, ok := s.nextJob()
+		if !ok {
+			return
 		}
 		for {
 			s.mu.Lock()
-			if state := s.queued[job.account]; state != nil {
-				state.running = true
-			}
+			s.startJobLocked(job)
 			s.mu.Unlock()
 			s.wakeBackground()
 			if err := s.Sync(s.ctx, job.owner, job.account); err != nil && s.ctx.Err() == nil {
@@ -296,11 +302,13 @@ func (s *UserIMAP) operationWithSlots(ctx context.Context, owner, id string, mes
 	case <-workCtx.Done():
 		return workCtx.Err()
 	}
-	select {
-	case slots <- struct{}{}:
-		defer func() { <-slots }()
-	case <-workCtx.Done():
-		return workCtx.Err()
+	if slots != nil {
+		select {
+		case slots <- struct{}{}:
+			defer func() { <-slots }()
+		case <-workCtx.Done():
+			return workCtx.Err()
+		}
 	}
 	return s.Routing().WithAccountActivityForUser(workCtx, owner, id, func() error {
 		// Deletion commits its intent before draining. Cancel protocol waits when
@@ -361,16 +369,24 @@ func (s *UserIMAP) snapshot(ctx context.Context, owner, id string) (*userIMAPSco
 	})
 	return r, err
 }
+
+// Sync runs one background sync of the account. Background syncs are bounded
+// by the worker count and the per-server limit rather than the interactive
+// slots, so they never hold up work people are waiting for.
 func (s *UserIMAP) Sync(ctx context.Context, owner, id string) error {
-	return s.sync(ctx, owner, id, false)
+	return s.sync(ctx, owner, id, false, true)
 }
 
-func (s *UserIMAP) sync(ctx context.Context, owner, id string, repair bool) error {
+func (s *UserIMAP) sync(ctx context.Context, owner, id string, repair, background bool) error {
 	timeout := manualSyncTimeout
 	if repair {
 		timeout = manualRepairSyncTimeout
 	}
-	return s.operation(ctx, owner, id, 0, timeout, func(ctx context.Context) error {
+	slots := s.slots
+	if background {
+		slots = nil
+	}
+	return s.operationWithSlots(ctx, owner, id, 0, 0, timeout, slots, func(ctx context.Context) error {
 		revision, err := s.Routing().PollRevision(ctx, owner, id)
 		if err != nil {
 			return err
@@ -468,6 +484,13 @@ func (s *UserIMAP) sync(ctx context.Context, owner, id string, repair bool) erro
 			return err
 		}
 		interval = scope.pollInterval
+		if background && scope.config.Provider == providers.ProviderIMAP {
+			release, err := s.acquireServer(ctx, scope.config.IMAPHost)
+			if err != nil {
+				return err
+			}
+			defer release()
+		}
 		if scope.tokens != nil {
 			scope.retryAt, err = s.Routing().ProviderRetryUntil(ctx, owner, id)
 			if err != nil {

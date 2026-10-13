@@ -12,6 +12,7 @@ import (
 	"os"
 	"path/filepath"
 	"strconv"
+	"strings"
 	"sync"
 	"time"
 
@@ -148,7 +149,11 @@ func newManagedApplication(parent context.Context, path string, maxOpen int) (re
 	if err := app.mailbox.AwaitUserThreading(ctx); err != nil {
 		return nil, err
 	}
-	if err := app.imap.Start(mail.UserIMAPBackgroundOptions{}); err != nil {
+	syncOptions, err := configuredSyncCapacity()
+	if err != nil {
+		return nil, err
+	}
+	if err := app.imap.Start(syncOptions); err != nil {
 		return nil, err
 	}
 	if err := app.mailbox.StartUserMailRetention(ctx, handler.UserMailRetentionOptions{}); err != nil {
@@ -221,6 +226,30 @@ func configuredUserDatabaseLimit() (int, error) {
 		return 0, errors.New("GOFER_USER_DB_MAX_OPEN must be a positive integer")
 	}
 	return limit, nil
+}
+
+// configuredSyncCapacity reads how many background mail syncs may run at once,
+// overall and per mail server. Unset values use the mail package defaults.
+func configuredSyncCapacity() (mail.UserIMAPBackgroundOptions, error) {
+	var options mail.UserIMAPBackgroundOptions
+	for _, setting := range []struct {
+		name  string
+		value *int
+	}{
+		{"GOFER_SYNC_MAX_CONCURRENT", &options.MaxConcurrentSyncs},
+		{"GOFER_SYNC_MAX_PER_SERVER", &options.MaxPerServer},
+	} {
+		raw := strings.TrimSpace(os.Getenv(setting.name))
+		if raw == "" {
+			continue
+		}
+		value, err := strconv.Atoi(raw)
+		if err != nil || value < 1 {
+			return options, fmt.Errorf("%s must be a positive integer", setting.name)
+		}
+		*setting.value = value
+	}
+	return options, nil
 }
 
 // RunManaged runs managed mode on per-user storage until ctx is canceled.
