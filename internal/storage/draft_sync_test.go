@@ -194,3 +194,43 @@ func TestIMAPDraftSyncPreservesLocalDraftWithPendingRevision(t *testing.T) {
 		t.Fatalf("draft subject=%q remoteUID=%v isDraft=%d", subject, remoteUID, isDraft)
 	}
 }
+
+// Saving a draft stores the new revision on the server and removes the old one
+// before the new UID is recorded locally. A folder check in between sees the
+// old UID gone; the draft must survive it, and go once nothing is saving it.
+func TestExpungedDraftUIDKeepsDraftWhileItIsSaved(t *testing.T) {
+	db, messageID, state := seedIMAPDraftSyncTest(t)
+	ctx := t.Context()
+	if err := db.SetMessageFolderRemoteUID(ctx, messageID, "drafts", 3); err != nil {
+		t.Fatal(err)
+	}
+	state.RemoteUID, state.UIDValidity = 3, 1
+	op := queueDraftRevision(t, db, state, "revision-2", []byte("second"))
+	if claimed, err := db.ClaimDueIMAPDraftOperations(ctx, time.Now(), 10); err != nil || len(claimed) != 1 {
+		t.Fatalf("claim draft operation = %d, %v", len(claimed), err)
+	}
+
+	if _, err := db.RemoveExpungedUIDs(ctx, "drafts", []uint32{3}); err != nil {
+		t.Fatal(err)
+	}
+	var count int
+	if err := db.Read().QueryRow(`SELECT COUNT(*) FROM messages WHERE id = ?`, messageID).Scan(&count); err != nil || count != 1 {
+		t.Fatalf("draft being saved removed by folder check: count %d, %v", count, err)
+	}
+
+	// Finishing the save records the new UID with it, leaving no moment in
+	// which the old UID is local and no operation protects it.
+	if _, err := db.CompleteIMAPDraftUpsert(ctx, op.ID, 4, 1); err != nil {
+		t.Fatal(err)
+	}
+	var uid uint32
+	if err := db.Read().QueryRow(`SELECT remote_uid FROM message_folder_state WHERE message_id = ?`, messageID).Scan(&uid); err != nil || uid != 4 {
+		t.Fatalf("draft UID after save = %d, %v; want 4", uid, err)
+	}
+	if _, err := db.RemoveExpungedUIDs(ctx, "drafts", []uint32{4}); err != nil {
+		t.Fatal(err)
+	}
+	if err := db.Read().QueryRow(`SELECT COUNT(*) FROM messages WHERE id = ?`, messageID).Scan(&count); err != nil || count != 0 {
+		t.Fatalf("draft removed from the server kept locally: count %d, %v", count, err)
+	}
+}

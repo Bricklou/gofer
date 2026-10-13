@@ -7430,6 +7430,13 @@ func (db *DB) SetMessageFolderRemoteUID(ctx context.Context, messageID int64, fo
 		return err
 	}
 	defer tx.Rollback()
+	if err := setMessageFolderRemoteUIDTx(ctx, tx, messageID, folderID, remoteUID); err != nil {
+		return err
+	}
+	return tx.Commit()
+}
+
+func setMessageFolderRemoteUIDTx(ctx context.Context, tx *sql.Tx, messageID int64, folderID string, remoteUID uint32) error {
 	if _, err := tx.ExecContext(ctx, `
 		DELETE FROM message_folder_state
 		WHERE folder_id = ? AND remote_uid = ? AND message_id != ?`, folderID, remoteUID, messageID); err != nil {
@@ -7449,7 +7456,7 @@ func (db *DB) SetMessageFolderRemoteUID(ctx context.Context, messageID int64, fo
 	if rows == 0 {
 		return sql.ErrNoRows
 	}
-	return tx.Commit()
+	return nil
 }
 
 func (db *DB) SyncGmailInboxMembership(ctx context.Context, messageID int64, accountID string, labelIDs []string) error {
@@ -8251,6 +8258,8 @@ func (db *DB) RemoveExpungedUIDs(ctx context.Context, folderID string, expungedU
 		return 0, fmt.Errorf("confirm expunged deletes: %w", err)
 	}
 
+	// A draft being saved keeps its row: the new revision is stored on the
+	// server, and the old one removed, before the new UID is recorded here.
 	query := fmt.Sprintf(
 		`DELETE FROM message_folder_state
 		 WHERE folder_id = ? AND remote_uid IN (%s)
@@ -8258,6 +8267,11 @@ func (db *DB) RemoveExpungedUIDs(ctx context.Context, folderID string, expungedU
 		     SELECT 1 FROM message_mutations mm
 		     WHERE mm.message_id = message_folder_state.message_id
 		       AND mm.kind = 'move' AND mm.destination_folder_id = message_folder_state.folder_id
+		   )
+		   AND NOT EXISTS (
+		     SELECT 1 FROM imap_draft_states ds
+		     JOIN imap_draft_operations op ON op.account_id = ds.account_id AND op.draft_key = ds.draft_key
+		     WHERE ds.local_message_id = message_folder_state.message_id
 		   )`,
 		strings.Join(placeholders, ","))
 

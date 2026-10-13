@@ -1545,30 +1545,23 @@ func (o *SyncOrchestrator) imapFolderUnchanged(ctx context.Context, folder stora
 }
 
 func (o *SyncOrchestrator) reconcileFolder(ctx context.Context, client *imap.Client, accountID string, folder storage.FolderSyncInfo, expectedUIDValidity, highestUID uint32) (uint32, bool, error) {
-	serverUIDs, currentUIDValidity, changed, err := client.FetchAllUIDs(ctx, folder.RemoteID, expectedUIDValidity)
+	snapshot, err := client.FetchUIDSnapshot(ctx, folder.RemoteID, expectedUIDValidity)
+	currentUIDValidity := snapshot.UIDValidity
 	if err != nil {
 		return currentUIDValidity, false, fmt.Errorf("reconcile %s/%s: fetch uids: %w", accountID, folder.RemoteID, err)
 	}
-	if changed || folderUIDStateNeedsReset(expectedUIDValidity, currentUIDValidity, highestUID) {
+	if snapshot.UIDValidityChanged || folderUIDStateNeedsReset(expectedUIDValidity, currentUIDValidity, highestUID) {
 		return currentUIDValidity, true, nil
 	}
 
+	// Read after the snapshot: a message Gofer stores in the folder meanwhile,
+	// such as a new draft revision, has a UID the snapshot cannot list.
 	localUIDs, err := o.imapRepository().GetLocalUIDs(ctx, folder.ID)
 	if err != nil {
 		return currentUIDValidity, false, fmt.Errorf("reconcile %s/%s: local uids: %w", accountID, folder.RemoteID, err)
 	}
 
-	serverSet := make(map[uint32]bool, len(serverUIDs))
-	for _, uid := range serverUIDs {
-		serverSet[uid] = true
-	}
-
-	var expunged []uint32
-	for uid := range localUIDs {
-		if !serverSet[uid] {
-			expunged = append(expunged, uid)
-		}
-	}
+	expunged := snapshot.ExpungedUIDs(localUIDs, highestUID)
 
 	if len(expunged) > 0 {
 		removed, err := o.imapRepository().RemoveExpungedUIDs(ctx, folder.ID, expunged)

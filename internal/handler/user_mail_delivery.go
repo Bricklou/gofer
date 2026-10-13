@@ -468,17 +468,7 @@ func (s *userMailDeliveryScope) syncDraft(ctx context.Context, op storage.IMAPDr
 		}
 	}
 	return s.call(ctx, func(db *storage.DB) error {
-		updated, err := db.CompleteIMAPDraftUpsert(ctx, op.ID, uid, validity)
-		if err != nil {
-			return err
-		}
-		stored, err := db.GetStoredUIDValidity(ctx, updated.FolderID)
-		if err != nil {
-			return err
-		}
-		if stored == validity && updated.LocalMessageID > 0 {
-			return db.SetMessageFolderRemoteUID(ctx, updated.LocalMessageID, updated.FolderID, uid)
-		}
-		return nil
+		_, err := db.CompleteIMAPDraftUpsert(ctx, op.ID, uid, validity)
+		return err
 	})
 }

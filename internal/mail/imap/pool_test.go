@@ -107,7 +107,7 @@ func TestPoolReusesHealthySessions(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		if _, _, _, err := client.FetchAllUIDs(ctx, "INBOX", 0); err != nil {
+		if _, err := client.FetchUIDSnapshot(ctx, "INBOX", 0); err != nil {
 			t.Fatal(err)
 		}
 		client.Close()

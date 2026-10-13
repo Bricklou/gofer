@@ -402,33 +402,69 @@ func uidStateNeedsReset(expected, current, highestUID uint32) bool {
 	return uidValidityChanged(expected, current) || expected == 0 && current > 0 && highestUID > 0
 }
 
-func (c *Client) FetchAllUIDs(ctx context.Context, remoteName string, expectedUIDValidity uint32) ([]uint32, uint32, bool, error) {
+// UIDSnapshot is a folder's UIDs at one moment. Messages added afterwards,
+// including by Gofer itself, get UIDs of at least UIDNext, so the snapshot
+// says nothing about them.
+type UIDSnapshot struct {
+	UIDs               []uint32
+	UIDNext            uint32
+	UIDValidity        uint32
+	UIDValidityChanged bool
+}
+
+// FetchUIDSnapshot lists a folder's UIDs together with the UIDNEXT reported
+// when it was selected.
+func (c *Client) FetchUIDSnapshot(ctx context.Context, remoteName string, expectedUIDValidity uint32) (UIDSnapshot, error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
 	if c.closed {
-		return nil, 0, false, fmt.Errorf("client is closed")
+		return UIDSnapshot{}, fmt.Errorf("client is closed")
 	}
 
 	selectData, err := c.client.Select(remoteName, nil).Wait()
 	if err != nil {
-		return nil, 0, false, fmt.Errorf("select %s: %w", remoteName, err)
+		return UIDSnapshot{}, fmt.Errorf("select %s: %w", remoteName, err)
 	}
 	defer c.unselect()
-	currentUIDValidity := uint32(selectData.UIDValidity)
-	if uidValidityChanged(expectedUIDValidity, currentUIDValidity) {
-		return nil, currentUIDValidity, true, nil
+	snapshot := UIDSnapshot{UIDValidity: uint32(selectData.UIDValidity), UIDNext: uint32(selectData.UIDNext)}
+	if uidValidityChanged(expectedUIDValidity, snapshot.UIDValidity) {
+		snapshot.UIDValidityChanged = true
+		return snapshot, nil
 	}
 
 	imapUIDs, err := c.listAllUIDs(remoteName)
 	if err != nil {
-		return nil, currentUIDValidity, false, err
+		return snapshot, err
 	}
-	uids := make([]uint32, len(imapUIDs))
+	snapshot.UIDs = make([]uint32, len(imapUIDs))
 	for i, uid := range imapUIDs {
-		uids[i] = uint32(uid)
+		snapshot.UIDs[i] = uint32(uid)
 	}
-	return uids, currentUIDValidity, false, nil
+	return snapshot, nil
+}
+
+// ExpungedUIDs returns the local UIDs the snapshot shows were removed from the
+// server: those it should list but does not. A UID is judged when it existed
+// before the snapshot: below its UIDNEXT, or no higher than seenUID, the
+// highest UID sync had seen before taking it. Other local UIDs, such as a draft
+// revision Gofer just stored, were assigned afterwards and are left alone.
+func (s UIDSnapshot) ExpungedUIDs(local map[uint32]int64, seenUID uint32) []uint32 {
+	// The highest listed UID and seenUID cover servers that understate
+	// UIDNEXT.
+	limit := max(s.UIDNext, seenUID+1)
+	listed := make(map[uint32]bool, len(s.UIDs))
+	for _, uid := range s.UIDs {
+		listed[uid] = true
+		limit = max(limit, uid+1)
+	}
+	var expunged []uint32
+	for uid := range local {
+		if uid < limit && !listed[uid] {
+			expunged = append(expunged, uid)
+		}
+	}
+	return expunged
 }
 
 // listAllUIDs returns every UID in the selected mailbox. Some servers answer
