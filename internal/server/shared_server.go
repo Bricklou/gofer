@@ -58,6 +58,16 @@ func RunShared() {
 		log.Printf("WARNING: unauthenticated remote access is explicitly enabled; anyone who can reach %s can control Gofer", httpConfig.BaseURL)
 	}
 
+	diagnostics, err := loadDiagnosticsConfig()
+	if err != nil {
+		log.Fatalf("invalid diagnostics configuration: %v", err)
+	}
+	stopDiagnostics, err := startDiagnostics(diagnostics)
+	if err != nil {
+		log.Fatalf("failed to start diagnostics: %v", err)
+	}
+	defer stopDiagnostics()
+
 	dbPath := ConfiguredDatabasePath()
 	log.Printf("boot: database path resolved to %s", dbPath)
 

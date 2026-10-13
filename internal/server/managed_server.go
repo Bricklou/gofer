@@ -229,6 +229,15 @@ func RunManaged(ctx context.Context, stdout, stderr io.Writer) (err error) {
 	if err != nil {
 		return err
 	}
+	diagnostics, err := loadDiagnosticsConfig()
+	if err != nil {
+		return err
+	}
+	stopDiagnostics, err := startDiagnostics(diagnostics)
+	if err != nil {
+		return err
+	}
+	defer stopDiagnostics()
 	app, err := newManagedApplication(ctx, ConfiguredDatabasePath(), maxOpen)
 	if err != nil {
 		return err
