@@ -53,6 +53,7 @@ type UserStores struct {
 	removeStoreFile func(string) error
 	closing         bool
 	routing         *AccountRouting
+	retain          func(owner string) bool
 	closeErr        error
 	now             func() time.Time
 }
@@ -124,6 +125,21 @@ func NewUserStores(system *DB, options UserStoreOptions) (*UserStores, error) {
 	go m.closePending()
 	go m.reap()
 	return m, nil
+}
+
+// SetRetainHint tells the manager which owners' stores to keep open when
+// possible, typically people who have Gofer open: when room is needed, other
+// owners' idle stores are closed first, and these are not closed for being
+// idle. The function is called with the manager's lock held and must not
+// block or call back into storage.
+func (m *UserStores) SetRetainHint(retain func(owner string) bool) {
+	m.mu.Lock()
+	m.retain = retain
+	m.mu.Unlock()
+}
+
+func (m *UserStores) retainedLocked(owner string) bool {
+	return m.retain != nil && m.retain(owner)
 }
 
 func (m *UserStores) Acquire(ctx context.Context, userID string) (*UserStoreLease, error) {
@@ -374,15 +390,24 @@ func (m *UserStores) evictOldestLocked() bool {
 			return false
 		}
 	}
-	var oldest *userStoreEntry
-	var owner string
+	// Close the longest idle store of someone away; only if every idle store
+	// belongs to someone with Gofer open, the longest idle of those.
+	var oldest, oldestRetained *userStoreEntry
+	var owner, ownerRetained string
 	for id, entry := range m.entries {
 		if entry.opening || entry.closing || entry.refs != 0 {
 			continue
 		}
-		if oldest == nil || entry.idleSince.Before(oldest.idleSince) {
+		if m.retainedLocked(id) {
+			if oldestRetained == nil || entry.idleSince.Before(oldestRetained.idleSince) {
+				ownerRetained, oldestRetained = id, entry
+			}
+		} else if oldest == nil || entry.idleSince.Before(oldest.idleSince) {
 			owner, oldest = id, entry
 		}
+	}
+	if oldest == nil {
+		owner, oldest = ownerRetained, oldestRetained
 	}
 	if oldest == nil {
 		return false
@@ -398,6 +423,9 @@ func (m *UserStores) reapIdle() bool {
 	for owner, entry := range m.entries {
 		if entry.opening || entry.closing || entry.refs != 0 {
 			continue
+		}
+		if !m.closing && m.retainedLocked(owner) {
+			continue // Kept while its owner has Gofer open.
 		}
 		if m.closing || now.Sub(entry.idleSince) >= m.idleTimeout {
 			m.closeEntryLocked(owner, entry)
@@ -459,11 +487,9 @@ func (m *UserStores) openUserStore(ctx context.Context, owner userStoreOwner, cr
 		if err != nil {
 			return nil, err
 		}
+		// OpenExisting has checked the schema version, as did the identity
+		// check before any writer opened the file.
 		db.senderAvatarCache = m.system
-		if err := db.requireCurrentSchema(); err != nil {
-			db.Close()
-			return nil, err
-		}
 		if err := ensureUserOAuthBoundary(ctx, db); err != nil {
 			db.Close()
 			return nil, err

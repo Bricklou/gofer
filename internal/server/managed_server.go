@@ -119,6 +119,8 @@ func newManagedApplication(parent context.Context, path string, maxOpen int) (re
 	if err != nil {
 		return nil, err
 	}
+	// Keep the databases of people with Gofer open when room is needed.
+	s.stores.SetRetainHint(app.imap.OwnerOnline)
 	dataDir := filepath.Dir(s.layout.CentralPath)
 	publicKey, privateKey, err := loadVAPIDKeys(filepath.Join(dataDir, "vapid_private.key"), filepath.Join(dataDir, "vapid_public.key"))
 	if err != nil {

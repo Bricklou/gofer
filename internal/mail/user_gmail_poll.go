@@ -48,6 +48,9 @@ func (s *UserIMAP) BeginActiveUserSession(ctx context.Context, owner string) (fu
 	if s.onlineUsers[owner]++; s.onlineUsers[owner] == 1 {
 		s.ownerCameOnlineLocked(owner)
 	}
+	// Every tab marks the owner, so one stopped while a tab stayed open is
+	// marked again when they return.
+	s.onlineSet.Store(owner, struct{}{})
 	var offline sync.Once
 	leave := func() {
 		offline.Do(func() {

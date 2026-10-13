@@ -43,6 +43,7 @@ type UserIMAP struct {
 	serverSlots       map[string]*serverSlot
 	lastLateWarning   time.Time
 	offlineTimers     map[string]*time.Timer
+	onlineSet         sync.Map // owner -> struct{}; readable without mu
 	idleByHost        map[string]int
 	maxIdlePerServer  int
 	mu                sync.Mutex

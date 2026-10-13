@@ -45,6 +45,7 @@ func (s *UserIMAP) StopUser(owner string) {
 		timer.Stop()
 		delete(s.offlineTimers, owner)
 	}
+	s.onlineSet.Delete(owner)
 	if session := s.activePollUsers[owner]; session != nil {
 		delete(s.activePollUsers, owner)
 		session.cancel()

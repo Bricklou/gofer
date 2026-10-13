@@ -37,6 +37,7 @@ func (s *UserIMAP) ownerOnlineLocked(owner string) bool {
 // ownerCameOnlineLocked runs when the owner's first tab connects. Caller
 // holds mu.
 func (s *UserIMAP) ownerCameOnlineLocked(owner string) {
+	s.onlineSet.Store(owner, struct{}{})
 	if timer := s.offlineTimers[owner]; timer != nil {
 		// Back within the grace period: the watches are still running.
 		timer.Stop()
@@ -74,6 +75,7 @@ func (s *UserIMAP) endOwnerWatches(owner string) {
 	if s.onlineUsers[owner] > 0 {
 		return
 	}
+	s.onlineSet.Delete(owner)
 	for key, w := range s.watches {
 		if w.owner == owner {
 			w.suppressResync = true
@@ -81,6 +83,14 @@ func (s *UserIMAP) endOwnerWatches(owner string) {
 			w.cancel()
 		}
 	}
+}
+
+// OwnerOnline reports, without taking the service's lock, whether the owner
+// has Gofer open or closed it within the grace period. Storage uses it to keep
+// these owners' databases open.
+func (s *UserIMAP) OwnerOnline(owner string) bool {
+	_, ok := s.onlineSet.Load(owner)
+	return ok
 }
 
 // syncOwnerNow queues the owner's accounts ahead of background work, so a

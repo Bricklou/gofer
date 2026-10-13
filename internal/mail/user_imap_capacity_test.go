@@ -197,3 +197,42 @@ func TestIdleLimitsPreferInboxes(t *testing.T) {
 		t.Fatalf("full server: cancelled %v, want only the watch on that server", cancelled)
 	}
 }
+
+// OwnerOnline, which storage reads without the service's lock, follows open
+// tabs: true while one is open and through the grace period, false after it
+// or as soon as the owner is stopped.
+func TestOwnerOnlineFollowsOpenTabs(t *testing.T) {
+	f := newUserGmailFixture(t)
+	t.Cleanup(func() { f.cancel(); f.worker.Wait() })
+	if err := f.worker.Start(UserIMAPBackgroundOptions{PollInterval: time.Hour, DisableIDLE: true, IdleOfflineGrace: 50 * time.Millisecond}); err != nil {
+		t.Fatal(err)
+	}
+	if f.worker.OwnerOnline("alice") {
+		t.Fatal("online before any tab")
+	}
+	release, err := f.worker.BeginActiveUserSession(t.Context(), "alice")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !f.worker.OwnerOnline("alice") || f.worker.OwnerOnline("bob") {
+		t.Fatal("online state does not follow the open tab")
+	}
+	release()
+	if !f.worker.OwnerOnline("alice") {
+		t.Fatal("offline before the grace period passed")
+	}
+	deadline := time.Now().Add(2 * time.Second)
+	for f.worker.OwnerOnline("alice") && time.Now().Before(deadline) {
+		time.Sleep(10 * time.Millisecond)
+	}
+	if f.worker.OwnerOnline("alice") {
+		t.Fatal("still online after the grace period")
+	}
+	if _, err := f.worker.BeginActiveUserSession(t.Context(), "alice"); err != nil {
+		t.Fatal(err)
+	}
+	f.worker.StopUser("alice")
+	if f.worker.OwnerOnline("alice") {
+		t.Fatal("stopped owner still kept online")
+	}
+}
