@@ -4090,166 +4090,84 @@ func (db *DB) GetFolderRole(ctx context.Context, folderID string) (string, error
 }
 
 func (db *DB) RefreshFolderUnreadCount(ctx context.Context, folderID string) (int, error) {
-	var count, localTotal, storedUnread, providerTotal int
+	if err := db.flushFolderThreadState(ctx, folderID); err != nil {
+		return 0, err
+	}
+	var count, storedUnread, providerTotal int
 	var accountProvider, providerRemoteID string
 	err := db.Read().QueryRowContext(ctx,
 		`SELECT
-			COUNT(mfs.message_id),
-			COALESCE(SUM(CASE WHEN mfs.is_read = 0 THEN 1 ELSE 0 END), 0),
-			COALESCE(MAX(f.unread_count), 0),
-			COALESCE(MAX(f.total_count), 0),
-			COALESCE(MAX(a.provider), ''),
-			COALESCE(MAX(f.provider_remote_id), '')
+			(SELECT COUNT(*) FROM message_folder_state mfs WHERE mfs.folder_id = f.id AND mfs.is_deleted = 0 AND mfs.is_read = 0),
+			f.unread_count, f.total_count, a.provider, COALESCE(f.provider_remote_id, '')
 		 FROM folders f
 		 JOIN accounts a ON a.id = f.account_id
-		 LEFT JOIN message_folder_state mfs ON mfs.folder_id = f.id AND mfs.is_deleted = 0
 		 WHERE f.id = ?`, folderID,
-	).Scan(&localTotal, &count, &storedUnread, &providerTotal, &accountProvider, &providerRemoteID)
+	).Scan(&count, &storedUnread, &providerTotal, &accountProvider, &providerRemoteID)
+	if errors.Is(err, sql.ErrNoRows) {
+		return 0, nil
+	}
 	if err != nil {
 		return 0, err
 	}
-	if strings.TrimSpace(accountProvider) == "outlook" && strings.TrimSpace(providerRemoteID) != "" && providerTotal > 0 && localTotal < providerTotal {
-		if err := db.RefreshFolderThreadState(ctx, folderID); err != nil {
+	if outlookCountsFromProvider(accountProvider, providerRemoteID, providerTotal) {
+		localTotal, err := db.visibleFolderMessageCount(ctx, folderID)
+		if err != nil {
 			return storedUnread, err
 		}
-		return storedUnread, nil
+		if localTotal < providerTotal {
+			// Outlook folders that are not fully downloaded keep the
+			// provider's unread count.
+			return storedUnread, nil
+		}
 	}
-	_, err = db.Write().ExecContext(ctx,
-		`UPDATE folders SET unread_count = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`,
-		count, folderID)
-	if err != nil {
-		return 0, err
+	if count != storedUnread {
+		if _, err := db.Write().ExecContext(ctx,
+			`UPDATE folders SET unread_count = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`,
+			count, folderID); err != nil {
+			return 0, err
+		}
 	}
-	if err := db.RefreshFolderThreadState(ctx, folderID); err != nil {
-		return count, err
-	}
+	return count, nil
+}
+
+func outlookCountsFromProvider(provider, providerRemoteID string, providerTotal int) bool {
+	return strings.TrimSpace(provider) == "outlook" && strings.TrimSpace(providerRemoteID) != "" && providerTotal > 0
+}
+
+func (db *DB) visibleFolderMessageCount(ctx context.Context, folderID string) (int, error) {
+	var count int
+	err := db.Read().QueryRowContext(ctx,
+		`SELECT COUNT(*) FROM message_folder_state WHERE folder_id = ? AND is_deleted = 0`, folderID).Scan(&count)
 	return count, err
 }
 
+// RefreshFolderThreadState brings the folder's conversation summaries up to
+// date with recorded changes, building them in full if the folder has never
+// been built.
 func (db *DB) RefreshFolderThreadState(ctx context.Context, folderID string) error {
-	if strings.TrimSpace(folderID) == "" {
-		return nil
-	}
-	tx, err := db.Write().BeginTx(ctx, nil)
-	if err != nil {
-		return err
-	}
-	defer tx.Rollback()
-	if err := db.refreshFolderThreadStateTx(ctx, tx, folderID); err != nil {
-		return err
-	}
-	return tx.Commit()
+	return db.flushFolderThreadState(ctx, folderID)
 }
 
+// RefreshFolderThreadsForMessages is kept for callers that know which
+// messages changed; changes are recorded by the database itself.
 func (db *DB) RefreshFolderThreadsForMessages(ctx context.Context, folderID string, messageIDs []int64) error {
-	folderID = strings.TrimSpace(folderID)
-	messageIDs = compactMessageIDs(messageIDs)
-	if folderID == "" || len(messageIDs) == 0 {
-		return nil
-	}
-
-	idArgs := make([]any, 0, len(messageIDs))
-	for _, messageID := range messageIDs {
-		idArgs = append(idArgs, messageID)
-	}
-	placeholders := sqlPlaceholders(len(messageIDs))
-	keyArgs := append([]any{}, idArgs...)
-	keyArgs = append(keyArgs, folderID)
-	keyArgs = append(keyArgs, idArgs...)
-	rows, err := db.Read().QueryContext(ctx, `
-		SELECT DISTINCT COALESCE(NULLIF(thread_id, ''), printf('msg:%d', id))
-		FROM messages
-		WHERE id IN (`+placeholders+`)
-		UNION
-		SELECT thread_key
-		FROM folder_thread_state
-		WHERE folder_id = ? AND head_message_id IN (`+placeholders+`)`, keyArgs...)
-	if err != nil {
-		return err
-	}
-	var threadKeys []string
-	for rows.Next() {
-		var threadKey string
-		if err := rows.Scan(&threadKey); err != nil {
-			rows.Close()
-			return err
-		}
-		if threadKey = strings.TrimSpace(threadKey); threadKey != "" {
-			threadKeys = append(threadKeys, threadKey)
-		}
-	}
-	if err := rows.Err(); err != nil {
-		rows.Close()
-		return err
-	}
-	rows.Close()
-	if len(threadKeys) == 0 {
-		return nil
-	}
-
-	tx, err := db.Write().BeginTx(ctx, nil)
-	if err != nil {
-		return err
-	}
-	defer tx.Rollback()
-	threadArgs := stringsToAny(threadKeys)
-	threadPlaceholders := sqlPlaceholders(len(threadKeys))
-	deleteArgs := append([]any{folderID}, threadArgs...)
-	if _, err := tx.ExecContext(ctx,
-		`DELETE FROM folder_thread_state WHERE folder_id = ? AND thread_key IN (`+threadPlaceholders+`)`, deleteArgs...); err != nil {
-		return err
-	}
-	insertArgs := append([]any{folderID}, threadArgs...)
-	insertArgs = append(insertArgs, folderID)
-	_, err = tx.ExecContext(ctx, `WITH base AS (
-			SELECT m.id, m.account_id, m.date_received, m.has_attachments,
-			       mfs.is_read, mfs.is_starred,
-			       COALESCE(NULLIF(m.thread_id, ''), printf('msg:%d', m.id)) AS thread_key,
-			       COALESCE(m.date_received, '') || ':' || printf('%020d', m.id) AS row_key
-			FROM message_folder_state mfs
-			JOIN messages m ON mfs.message_id = m.id
-			WHERE mfs.folder_id = ? AND mfs.is_deleted = 0
-			  AND COALESCE(NULLIF(m.thread_id, ''), printf('msg:%d', m.id)) IN (`+threadPlaceholders+`)
-		), grouped AS (
-			SELECT thread_key, MAX(row_key) AS row_key, COUNT(*) AS thread_count,
-			       MIN(is_read) AS thread_is_read, MAX(is_starred) AS thread_is_starred,
-			       MAX(has_attachments) AS thread_has_attachments
-			FROM base
-			GROUP BY thread_key
-		)
-		INSERT OR REPLACE INTO folder_thread_state (
-			folder_id, thread_key, head_message_id, account_id, last_message_at,
-			thread_count, thread_is_read, thread_is_starred, thread_has_attachments, updated_at
-		)
-		SELECT ?, b.thread_key, b.id, b.account_id, b.date_received,
-		       g.thread_count, g.thread_is_read, g.thread_is_starred, g.thread_has_attachments, CURRENT_TIMESTAMP
-		FROM grouped g
-		JOIN base b ON b.thread_key = g.thread_key AND b.row_key = g.row_key`, insertArgs...)
-	if err != nil {
-		return err
-	}
-	return tx.Commit()
+	return db.flushFolderThreadState(ctx, folderID)
 }
 
 func (db *DB) RefreshAccountFolderThreadState(ctx context.Context, accountID string) error {
-	accountID = strings.TrimSpace(accountID)
-	if accountID == "" {
+	if strings.TrimSpace(accountID) == "" {
 		return nil
 	}
-	folders, err := db.GetFoldersForAccount(ctx, accountID)
-	if err != nil {
-		return err
-	}
-	for _, folder := range folders {
-		if err := db.RefreshFolderThreadState(ctx, folder.ID); err != nil {
-			return fmt.Errorf("refresh folder thread state %s: %w", folder.ID, err)
-		}
-	}
-	return nil
+	return db.flushFolderThreadState(ctx)
 }
 
-func (db *DB) refreshFolderThreadStateTx(ctx context.Context, tx *sql.Tx, folderID string) error {
+// rebuildFolderThreadStateTx recomputes every conversation summary of the
+// folder and clears its recorded changes.
+func rebuildFolderThreadStateTx(ctx context.Context, tx *sql.Tx, folderID string) error {
 	if _, err := tx.ExecContext(ctx, `DELETE FROM folder_thread_state WHERE folder_id = ?`, folderID); err != nil {
+		return err
+	}
+	if _, err := tx.ExecContext(ctx, `DELETE FROM folder_thread_dirty WHERE folder_id = ?`, folderID); err != nil {
 		return err
 	}
 	_, err := tx.ExecContext(ctx, `WITH base AS (
@@ -4282,21 +4200,7 @@ func (db *DB) ensureFolderThreadState(ctx context.Context, folderID string) erro
 	if strings.TrimSpace(folderID) == "" {
 		return nil
 	}
-	var existing int
-	if err := db.Read().QueryRowContext(ctx, `SELECT COUNT(*) FROM folder_thread_state WHERE folder_id = ?`, folderID).Scan(&existing); err != nil {
-		return err
-	}
-	if existing > 0 {
-		return nil
-	}
-	var hasVisible int
-	if err := db.Read().QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM message_folder_state WHERE folder_id = ? AND is_deleted = 0)`, folderID).Scan(&hasVisible); err != nil {
-		return err
-	}
-	if hasVisible == 0 {
-		return nil
-	}
-	return db.RefreshFolderThreadState(ctx, folderID)
+	return db.flushFolderThreadState(ctx, folderID)
 }
 
 func (db *DB) ensureFolderThreadStateForUserRole(ctx context.Context, userID, role string) error {
@@ -4353,50 +4257,55 @@ func (db *DB) GetAllFolderUnreadCounts(ctx context.Context, userID string) (map[
 	}
 
 	unifiedSettings := db.GetUISettings(ctx, userID)
+	// Unread messages are counted through the unread index, so the cost
+	// follows the unread count, not the folder size.
 	unifiedRows, err := db.Read().QueryContext(ctx,
-		`WITH folder_counts AS (
-			SELECT f.id, f.role, a.id AS account_id,
-			       COALESCE(f.unread_count, 0) AS provider_unread,
-			       COALESCE(f.total_count, 0) AS provider_total,
-			       COALESCE(a.provider, '') AS account_provider,
-			       COALESCE(f.provider_remote_id, '') AS provider_remote_id,
-			       COUNT(mfs.message_id) AS local_total,
-			       COALESCE(SUM(CASE WHEN mfs.is_read = 0 THEN 1 ELSE 0 END), 0) AS local_unread
-			FROM folders f
-			JOIN accounts a ON f.account_id = a.id
-			LEFT JOIN message_folder_state mfs ON mfs.folder_id = f.id AND mfs.is_deleted = 0
-			WHERE a.user_id = ? AND COALESCE(a.is_deleting, 0) = 0 AND COALESCE(a.email_sync_enabled, 1) = 1
-			  AND f.role IN ('inbox', 'sent', 'drafts', 'archive', 'spam', 'junk', 'trash')
-			GROUP BY f.id
-		)
-		SELECT role, account_id,
-		       CASE
-		         WHEN account_provider = 'outlook'
-		              AND provider_remote_id != ''
-		              AND provider_total > 0
-		              AND local_total < provider_total
-		         THEN provider_unread
-		         ELSE local_unread
-		       END
-		FROM folder_counts`, userID)
+		`SELECT f.id, f.role, a.id, f.unread_count, f.total_count, a.provider, COALESCE(f.provider_remote_id, ''),
+		        (SELECT COUNT(*) FROM message_folder_state mfs
+		         WHERE mfs.folder_id = f.id AND mfs.is_deleted = 0 AND mfs.is_read = 0)
+		 FROM folders f
+		 JOIN accounts a ON f.account_id = a.id
+		 WHERE a.user_id = ? AND COALESCE(a.is_deleting, 0) = 0 AND COALESCE(a.email_sync_enabled, 1) = 1
+		   AND f.role IN ('inbox', 'sent', 'drafts', 'archive', 'spam', 'junk', 'trash')`, userID)
 	if err != nil {
 		return nil, err
 	}
-	defer unifiedRows.Close()
+	type roleCount struct {
+		folderID, role, accountID, provider, providerRemoteID string
+		providerUnread, providerTotal, localUnread            int
+	}
+	var roleCounts []roleCount
 	for unifiedRows.Next() {
-		var role, accountID string
-		var count int
-		if err := unifiedRows.Scan(&role, &accountID, &count); err != nil {
+		var c roleCount
+		if err := unifiedRows.Scan(&c.folderID, &c.role, &c.accountID, &c.providerUnread, &c.providerTotal, &c.provider, &c.providerRemoteID, &c.localUnread); err != nil {
+			unifiedRows.Close()
 			return nil, err
 		}
-		folderID := unifiedFolderIDFromRole(role)
-		if unifiedSettings[unifiedFolderAccountSettingKey(folderID, accountID)] == "false" {
-			continue
-		}
-		result[folderID] += count
+		roleCounts = append(roleCounts, c)
 	}
 	if err := unifiedRows.Err(); err != nil {
+		unifiedRows.Close()
 		return nil, err
+	}
+	unifiedRows.Close()
+	for _, c := range roleCounts {
+		folderID := unifiedFolderIDFromRole(c.role)
+		if unifiedSettings[unifiedFolderAccountSettingKey(folderID, c.accountID)] == "false" {
+			continue
+		}
+		count := c.localUnread
+		if outlookCountsFromProvider(c.provider, c.providerRemoteID, c.providerTotal) {
+			// Outlook folders that are not fully downloaded use the
+			// provider's unread count.
+			localTotal, err := db.visibleFolderMessageCount(ctx, c.folderID)
+			if err != nil {
+				return nil, err
+			}
+			if localTotal < c.providerTotal {
+				count = c.providerUnread
+			}
+		}
+		result[folderID] += count
 	}
 
 	starredRows, err := db.Read().QueryContext(ctx,

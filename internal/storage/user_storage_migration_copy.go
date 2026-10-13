@@ -71,6 +71,15 @@ func copyUserStorageMigrationRows(ctx context.Context, sourcePath string, destin
 		if err := migrationSequences(ctx, tx, report, owner, true); err != nil {
 			return err
 		}
+		// Conversation summaries are copied as they were, and source
+		// databases built them only for folders that were opened. Rebuild
+		// each copied folder once on first use instead of trusting them.
+		if _, err := tx.ExecContext(ctx, `DELETE FROM main.folder_thread_dirty`); err != nil {
+			return err
+		}
+		if _, err := tx.ExecContext(ctx, `INSERT INTO main.folder_thread_dirty(folder_id, thread_key) SELECT id, ? FROM main.folders`, folderThreadRebuildKey); err != nil {
+			return err
+		}
 		if owner == "" {
 			// A missing historic revision gets a fresh destination identity. An
 			// existing registration revision is copied byte for byte above.
@@ -264,7 +273,7 @@ func migrationDestinationBoundaryWithGenerated(ctx context.Context, tx *sql.Tx, 
 				return err
 			}
 		}
-		if rule.destination == migrationSchema || rule.destination == migrationSearchShadow || rule.destination == migrationPlanner {
+		if rule.destination == migrationSchema || rule.destination == migrationSearchShadow || rule.destination == migrationPlanner || rule.destination == migrationDerived {
 			continue
 		}
 		if copied && rule.destination == migrationSequence {
