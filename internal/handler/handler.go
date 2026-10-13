@@ -4421,8 +4421,8 @@ func (h *Handler) handleSSE(w http.ResponseWriter, r *http.Request) {
 		return true
 	}
 
-	ch := h.syncer.Events().Subscribe()
-	defer h.syncer.Events().Unsubscribe(ch)
+	events := h.syncer.Events().SubscribeFor(mail.SubscribeOptions{UserID: userID, Admin: isAdmin, AccountIDs: userAccounts})
+	defer events.Close()
 	ticker := time.NewTicker(1200 * time.Millisecond)
 	defer ticker.Stop()
 	lastProcessingActive := false
@@ -4464,8 +4464,10 @@ func (h *Handler) handleSSE(w http.ResponseWriter, r *http.Request) {
 				flusher.Flush()
 			}
 			lastProcessingActive = active
-		case event := <-ch:
-			writeEvent(event)
+		case <-events.Ready():
+			for _, event := range events.Take() {
+				writeEvent(event)
+			}
 		}
 	}
 }
