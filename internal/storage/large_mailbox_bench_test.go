@@ -15,7 +15,9 @@ import (
 // large mailbox: opening and scrolling a folder, filters, search, unread
 // counts and single-message actions. It builds one synthetic account with
 // GOFER_BENCH_MESSAGES messages (default 200000): 60% Inbox, 30% Archive,
-// 10% Sent, three messages per conversation, one in seventeen unread.
+// 10% Sent, three messages per conversation, one in seventeen unread. Each
+// message has a 2.4 KB body in the search index; one in three mentions an
+// invoice.
 //
 //	go test ./internal/storage -run '^$' -bench LargeMailbox -benchtime 10x
 func BenchmarkLargeMailbox(b *testing.B) {
@@ -99,6 +101,25 @@ func BenchmarkLargeMailbox(b *testing.B) {
 		_, err := db.SearchMessages(ctx, "bench-user", "subject 42", 50)
 		return err
 	})
+	measure("SearchCommonWord", func() error {
+		_, err := db.SearchMessages(ctx, "bench-user", "invoice", 50)
+		return err
+	})
+	// The search box filters the open folder: count, then the first page.
+	searchBox := func(query string) func() error {
+		filters := models.EmailFilters{Query: query}
+		return page(func() (*models.EmailPage, error) {
+			total, err := db.GetFolderEmailCountFiltered(ctx, inbox, filters)
+			if err != nil {
+				return nil, err
+			}
+			return db.GetEmailsRangeFilteredWithTotal(ctx, inbox, 0, 50, filters, total)
+		})
+	}
+	measure("SearchBoxRareWord", searchBox("sender1234"))
+	measure("SearchBoxTwoWords", searchBox("subject 42"))
+	measure("SearchBoxCommonWord", searchBox("invoice"))
+	measure("SearchBoxPrefix", searchBox("inv"))
 	measure("UnreadCounts", func() error {
 		_, err := db.GetAllFolderUnreadCounts(ctx, "bench-user")
 		return err
@@ -147,7 +168,10 @@ func seedLargeMailbox(b *testing.B, db *DB, messages int) {
 		`INSERT INTO message_recipients(message_id, kind, name, email)
 		 SELECT id, 'to', 'Reader', 'reader@example.test' FROM messages`,
 		`INSERT INTO message_search(rowid, account_id, thread_key, subject, sender, recipients, snippet, body, attachment_names)
-		 SELECT id, account_id, thread_id, subject, from_name || ' ' || from_email, 'Reader reader@example.test', snippet, '', ''
+		 SELECT id, account_id, thread_id, subject, from_name || ' ' || from_email, 'Reader reader@example.test', snippet,
+		   'Hello, this is message ' || id || CASE WHEN id % 3 = 0 THEN ' about the invoice for last month. ' ELSE '. ' END ||
+		   replace(hex(zeroblob(24)), '00', 'The team met on Tuesday to review the plan, the budget and the open questions from the previous week. '),
+		   ''
 		 FROM messages`,
 	}
 	for _, statement := range statements {

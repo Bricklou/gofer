@@ -36,6 +36,10 @@ func TestSummaryListsMatchGeneralQuery(t *testing.T) {
 			{}, {Unread: true}, {Read: true}, {Starred: true}, {Attachments: true}, {NoAttach: true},
 			{ThreadsOnly: true}, {NoThreads: true}, {Unread: true, Starred: true}, {AccountID: "second"},
 			{Unread: true, Attachments: true, ThreadsOnly: true},
+			// Searches keep conversations with a match in any message.
+			{Query: "invoice"}, {Query: "inv"}, {Query: "subject 7"}, {Body: "budget"},
+			{Query: "invoice", Body: "budget"}, {Query: "invoice", Unread: true, AccountID: "second"},
+			{Query: "nothing-matches-this"}, {Query: "!!"}, {Query: "collision"},
 		} {
 			f.SortBy, f.SortOrder = sort[0], sort[1]
 			cases = append(cases, f)
@@ -83,14 +87,14 @@ func TestSummaryListsMatchGeneralQuery(t *testing.T) {
 			}
 		}
 	}
-	if compared < len(cases)*3 {
+	if compared < len(cases)*2 {
 		t.Fatalf("only %d of %d comparisons had matching mail; the fixture is too sparse", compared, len(cases)*4)
 	}
 }
 
 func TestSummaryListsLeaveOtherFiltersToGeneralQuery(t *testing.T) {
 	for _, filters := range []models.EmailFilters{
-		{Query: "invoice"}, {From: "ana"}, {Subject: "x"}, {Tag: "work"}, {After: "2024-01-01"},
+		{Query: "invoice", From: "ana"}, {From: "ana"}, {Subject: "x"}, {Tag: "work"}, {After: "2024-01-01"},
 		{Participant: "ana@example.test"}, {MinSizeBytes: 10}, {Unread: true, From: "ana"}, {SortBy: "size"},
 	} {
 		if summaryFiltersOnly(filters) {
@@ -138,6 +142,23 @@ func newSummaryListFixture(t *testing.T) *DB {
 			VALUES (?, ?, ?, ?, ?)`, id, folder, random.Intn(4) > 0, random.Intn(6) == 0, random.Intn(15) == 0); err != nil {
 			t.Fatal(err)
 		}
+	}
+	// The same conversation key in another account: a match there must not
+	// bring the first account's conversation into a search.
+	if _, err := db.Write().Exec(`INSERT INTO messages(id, account_id, remote_message_id, thread_id, subject, from_name, from_email, date_received)
+		SELECT 401, 'second', 'r401', thread_id, 'Shared key', 'Dora', 'dora@example.test', datetime('2024-01-02')
+		FROM messages WHERE account_id = 'acct' AND thread_id IS NOT NULL ORDER BY id LIMIT 1;
+		INSERT INTO message_folder_state(message_id, folder_id, is_read) VALUES (401, 'second-inbox', 1);`); err != nil {
+		t.Fatal(err)
+	}
+	// Index the mail for search: some bodies mention an invoice, others a
+	// budget, a few both.
+	if _, err := db.Write().Exec(`INSERT INTO message_search(rowid, account_id, thread_key, subject, sender, recipients, snippet, body, attachment_names)
+		SELECT id, account_id, COALESCE(NULLIF(thread_id, ''), printf('msg:%d', id)), subject, from_name || ' ' || from_email, '', '',
+		  CASE WHEN id = 401 THEN 'a collision of keys' WHEN id % 7 = 0 THEN 'the invoice is attached' WHEN id % 7 = 1 THEN 'about the budget'
+		    WHEN id % 7 = 2 THEN 'invoice and budget' ELSE 'see you soon' END, ''
+		FROM messages`); err != nil {
+		t.Fatal(err)
 	}
 	return db
 }

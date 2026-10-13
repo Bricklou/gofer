@@ -4992,6 +4992,20 @@ func emailOrderSQL(filters models.EmailFilters) string {
 	}
 }
 
+// searchMatchQuery is the full-text query for the search and body filters,
+// or "" when they have no words to look for.
+func searchMatchQuery(filters models.EmailFilters) string {
+	var parts []string
+	if query := ftsQuery(filters.Query); query != "" {
+		parts = append(parts, query)
+	}
+	if query := ftsQuery(filters.Body); query != "" {
+		parts = append(parts, "body:("+query+")")
+	}
+	// FTS5 needs an explicit AND before a column filter.
+	return strings.Join(parts, " AND ")
+}
+
 func ftsQuery(input string) string {
 	fields := strings.FieldsFunc(strings.ToLower(input), func(r rune) bool {
 		return !unicode.IsLetter(r) && !unicode.IsDigit(r)
@@ -5032,7 +5046,6 @@ func attachmentTypeFilterSQL(filterType, customExtension string) (string, []any)
 func emailFilterSQL(filters models.EmailFilters) emailFilterParts {
 	var cteParts []string
 	var outerParts []string
-	var matchParts []string
 	var withArgs []any
 	var args []any
 	if filters.Unread {
@@ -5065,11 +5078,6 @@ func emailFilterSQL(filters models.EmailFilters) emailFilterParts {
 	if filters.Tag != "" && filters.TagAccountID != "" {
 		cteParts = append(cteParts, "m.account_id = ?")
 		args = append(args, filters.TagAccountID)
-	}
-	if filters.Query != "" {
-		if query := ftsQuery(filters.Query); query != "" {
-			matchParts = append(matchParts, query)
-		}
 	}
 	if filters.Participant != "" {
 		participant := strings.ToLower(strings.TrimSpace(filters.Participant))
@@ -5116,11 +5124,6 @@ func emailFilterSQL(filters models.EmailFilters) emailFilterParts {
 		cteParts = append(cteParts, "m.subject LIKE ?")
 		args = append(args, "%"+filters.Subject+"%")
 	}
-	if filters.Body != "" {
-		if query := ftsQuery(filters.Body); query != "" {
-			matchParts = append(matchParts, "body:("+query+")")
-		}
-	}
 	if filters.Attachment != "" {
 		cteParts = append(cteParts, "EXISTS (SELECT 1 FROM attachments att WHERE att.message_id = m.id AND att.filename LIKE ?)")
 		args = append(args, "%"+filters.Attachment+"%")
@@ -5166,7 +5169,7 @@ func emailFilterSQL(filters models.EmailFilters) emailFilterParts {
 	}
 
 	parts := emailFilterParts{withArgs: withArgs, args: args}
-	if len(matchParts) > 0 {
+	if match := searchMatchQuery(filters); match != "" {
 		parts.withClause = `matched_threads AS (
 			SELECT account_id, thread_key
 			FROM message_search
@@ -5174,7 +5177,7 @@ func emailFilterSQL(filters models.EmailFilters) emailFilterParts {
 			GROUP BY account_id, thread_key
 		), `
 		parts.joinClause = ` JOIN matched_threads mt ON mt.account_id = m.account_id AND mt.thread_key = COALESCE(NULLIF(m.thread_id, ''), printf('msg:%d', m.id)) `
-		parts.withArgs = append(parts.withArgs, strings.Join(matchParts, " "))
+		parts.withArgs = append(parts.withArgs, match)
 	}
 	if len(cteParts) > 0 {
 		parts.cteClause = " AND " + strings.Join(cteParts, " AND ")

@@ -70,17 +70,37 @@ func (db *DB) summaryListScope(ctx context.Context, userID, folderID string, fil
 		where += ` AND fts.account_id = ?`
 		args = append(args, filters.AccountID)
 	}
+	// A search keeps the conversations with a matching message anywhere,
+	// as the full list query does. A folder belongs to one account, so its
+	// list compares conversation keys alone, which SQLite looks up directly;
+	// a unified list compares account and key. The alias is not m, so the
+	// page is still chosen from the summary index before joining messages.
+	if match := searchMatchQuery(filters); match != "" {
+		// CROSS JOIN keeps the search first: otherwise SQLite may walk the
+		// account's messages and search once per message.
+		hits := `FROM message_search CROSS JOIN messages hit ON hit.id = message_search.rowid WHERE message_search MATCH ?`
+		key := `COALESCE(NULLIF(hit.thread_id, ''), printf('msg:%d', hit.id))`
+		if isUnifiedFolderID(folderID) {
+			where += ` AND (fts.account_id, fts.thread_key) IN (SELECT hit.account_id, ` + key + ` ` + hits + `)`
+			args = append(args, match)
+		} else {
+			where += ` AND fts.thread_key IN (SELECT ` + key + ` ` + hits + `
+				AND hit.account_id = (SELECT account_id FROM folders WHERE id = ?))`
+			args = append(args, match, folderID)
+		}
+	}
 	return where, args, true, nil
 }
 
 // summaryFiltersOnly reports whether the filters use nothing beyond the
-// per-conversation summary and a supported sort.
+// per-conversation summary, a full-text search and a supported sort.
 func summaryFiltersOnly(filters models.EmailFilters) bool {
 	flags := filters
 	flags.Unread, flags.Read, flags.Starred = false, false, false
 	flags.Attachments, flags.NoAttach = false, false
 	flags.ThreadsOnly, flags.NoThreads = false, false
 	flags.AccountID = ""
+	flags.Query, flags.Body = "", ""
 	if !emailFiltersEmpty(flags) {
 		return false
 	}
