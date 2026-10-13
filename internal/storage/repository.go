@@ -4622,6 +4622,12 @@ func (db *DB) GetFolderEmailCountFilteredForUser(ctx context.Context, userID, fo
 	if !isUnifiedFolderID(folderID) && filters.Participant == "" {
 		return db.GetFolderEmailCountFiltered(ctx, folderID, filters)
 	}
+	if where, args, ok, err := db.summaryListScope(ctx, userID, folderID, filters); err != nil || ok {
+		if err != nil {
+			return 0, err
+		}
+		return db.countSummaryList(ctx, where, args)
+	}
 
 	filterSQL := emailFilterSQL(filters)
 	var where string
@@ -4677,6 +4683,12 @@ func (db *DB) GetFolderEmailCountFilteredForUser(ctx context.Context, userID, fo
 func (db *DB) GetFolderEmailCountFiltered(ctx context.Context, folderID string, filters models.EmailFilters) (int, error) {
 	if emailFiltersEmpty(filters) {
 		return db.GetFolderEmailCountUnfiltered(ctx, folderID)
+	}
+	if where, args, ok, err := db.summaryListScope(ctx, "", folderID, filters); err != nil || ok {
+		if err != nil {
+			return 0, err
+		}
+		return db.countSummaryList(ctx, where, args)
 	}
 
 	filterSQL := emailFilterSQL(filters)
@@ -4791,6 +4803,14 @@ func (db *DB) GetEmailsRangeFilteredForUserWithTotal(ctx context.Context, userID
 	if !isUnifiedFolderID(folderID) && filters.Participant == "" {
 		return db.GetEmailsRangeFilteredWithTotal(ctx, folderID, start, limit, filters, knownTotal)
 	}
+	if !emailFiltersEmpty(filters) || !emailUsesDefaultSort(filters) {
+		if where, args, ok, err := db.summaryListScope(ctx, userID, folderID, filters); err != nil || ok {
+			if err != nil {
+				return nil, err
+			}
+			return db.summaryEmailPage(ctx, where, args, filters, start, limit, knownTotal)
+		}
+	}
 
 	totalCount := knownTotal
 	var err error
@@ -4846,6 +4866,14 @@ func (db *DB) GetEmailsRangeFiltered(ctx context.Context, folderID string, start
 }
 
 func (db *DB) GetEmailsRangeFilteredWithTotal(ctx context.Context, folderID string, start, limit int, filters models.EmailFilters, knownTotal int) (*models.EmailPage, error) {
+	if !emailFiltersEmpty(filters) || !emailUsesDefaultSort(filters) {
+		if where, args, ok, err := db.summaryListScope(ctx, "", folderID, filters); err != nil || ok {
+			if err != nil {
+				return nil, err
+			}
+			return db.summaryEmailPage(ctx, where, args, filters, start, limit, knownTotal)
+		}
+	}
 	totalCount := knownTotal
 	var err error
 	if emailFiltersEmpty(filters) && !isStarredFolder(folderID) {
@@ -5664,16 +5692,31 @@ func (db *DB) listEmailsUnfiltered(ctx context.Context, folderID string, offset,
 }
 
 func (db *DB) listEmailsFromFolderThreadState(ctx context.Context, where string, args []any, offset, limit int) ([]models.Email, error) {
+	return db.listEmailsFromFolderThreadStateOrdered(ctx, where, args, "fts.last_message_at DESC, fts.head_message_id DESC", offset, limit)
+}
+
+func (db *DB) listEmailsFromFolderThreadStateOrdered(ctx context.Context, where string, args []any, order string, offset, limit int) ([]models.Email, error) {
+	from := `FROM folder_thread_state fts
+		JOIN messages m ON fts.head_message_id = m.id
+		JOIN accounts a ON m.account_id = a.id
+		` + where + `
+		ORDER BY ` + order + `
+		LIMIT ? OFFSET ?`
+	if !referencesMessageOrAccount.MatchString(where + " " + order) {
+		// Choose the page from the summary index alone, then join only its
+		// rows: OFFSET would otherwise join every skipped row first.
+		from = `FROM folder_thread_state fts
+		JOIN messages m ON fts.head_message_id = m.id
+		JOIN accounts a ON m.account_id = a.id
+		WHERE fts.rowid IN (SELECT fts.rowid FROM folder_thread_state fts ` + where + `
+			ORDER BY ` + order + ` LIMIT ? OFFSET ?)
+		ORDER BY ` + order
+	}
 	query := `SELECT m.id, m.account_id, a.color AS account_color, m.subject, m.from_name, m.from_email,
 		       m.date_received, m.snippet, m.has_attachments, m.body_text_path, m.body_html_path,
 		       fts.thread_has_attachments, fts.folder_id, fts.thread_is_read, fts.thread_is_starred,
 		       m.thread_id, fts.thread_count
-		FROM folder_thread_state fts
-		JOIN messages m ON fts.head_message_id = m.id
-		JOIN accounts a ON m.account_id = a.id
-		` + where + `
-		ORDER BY fts.last_message_at DESC, fts.head_message_id DESC
-		LIMIT ? OFFSET ?`
+		` + from
 	args = append(append([]any{}, args...), limit, offset)
 	rows, err := db.Read().QueryContext(ctx, query, args...)
 	if err != nil {
@@ -5682,6 +5725,8 @@ func (db *DB) listEmailsFromFolderThreadState(ctx context.Context, where string,
 	defer rows.Close()
 	return db.scanEmailRows(ctx, rows)
 }
+
+var referencesMessageOrAccount = regexp.MustCompile(`\b[ma]\.`)
 
 func (db *DB) listEmailsUnfilteredFrom(ctx context.Context, fromWhere string, args []any, offset, limit int) ([]models.Email, error) {
 	query := `WITH base AS (
@@ -5925,6 +5970,12 @@ func (db *DB) findEmailPosition(ctx context.Context, folderID, emailID string) (
 	if err != nil {
 		return -1, nil
 	}
+	if where, args, ok, err := db.summaryListScope(ctx, "", folderID, models.EmailFilters{}); err != nil || ok {
+		if err != nil {
+			return -1, err
+		}
+		return db.summaryPosition(ctx, where, args, msgID)
+	}
 
 	var query string
 	var args []any
@@ -5968,6 +6019,12 @@ func (db *DB) findEmailPositionForUser(ctx context.Context, userID, folderID, em
 	msgID, err := strconv.ParseInt(emailID, 10, 64)
 	if err != nil {
 		return -1, nil
+	}
+	if where, args, ok, err := db.summaryListScope(ctx, userID, folderID, models.EmailFilters{}); err != nil || ok {
+		if err != nil {
+			return -1, err
+		}
+		return db.summaryPosition(ctx, where, args, msgID)
 	}
 
 	var where string

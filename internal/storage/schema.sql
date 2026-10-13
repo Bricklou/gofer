@@ -419,6 +419,11 @@ CREATE TABLE IF NOT EXISTS folder_thread_dirty (
 CREATE INDEX IF NOT EXISTS idx_folder_state_folder_unread
 ON message_folder_state(folder_id, is_deleted, is_read);
 
+-- Covers the filters answered from summaries (unread, starred, attachments,
+-- conversations, account), so their counts read only this index.
+CREATE INDEX IF NOT EXISTS idx_folder_thread_state_flags
+ON folder_thread_state(folder_id, thread_is_read, thread_is_starred, thread_has_attachments, thread_count, account_id);
+
 CREATE TRIGGER IF NOT EXISTS folder_thread_track_state_insert
 AFTER INSERT ON message_folder_state
 BEGIN

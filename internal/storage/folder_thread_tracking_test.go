@@ -21,9 +21,9 @@ func newFolderThreadTestDB(t *testing.T) *DB {
 		INSERT INTO users(id, username, username_normalized) VALUES ('reader', 'reader', 'reader');
 		INSERT INTO accounts(id, user_id, email_address) VALUES ('acct', 'reader', 'reader@example.test');
 		INSERT INTO folders(id, account_id, remote_id, name, role) VALUES
-			('inbox', 'acct', 'INBOX', 'Inbox', 'inbox'),
-			('archive', 'acct', 'Archive', 'Archive', 'archive'),
-			('trash', 'acct', 'Trash', 'Trash', 'trash');`); err != nil {
+			('box-inbox', 'acct', 'INBOX', 'Inbox', 'inbox'),
+			('box-archive', 'acct', 'Archive', 'Archive', 'archive'),
+			('box-trash', 'acct', 'Trash', 'Trash', 'trash');`); err != nil {
 		t.Fatal(err)
 	}
 	return db
@@ -67,7 +67,7 @@ func rebuiltFolderThreadRows(t *testing.T, db *DB) []folderThreadRow {
 		t.Fatal(err)
 	}
 	defer tx.Rollback()
-	for _, folder := range []string{"inbox", "archive", "trash"} {
+	for _, folder := range []string{"box-inbox", "box-archive", "box-trash"} {
 		if err := rebuildFolderThreadStateTx(ctx, tx, folder); err != nil {
 			t.Fatal(err)
 		}
@@ -97,7 +97,7 @@ func TestFolderThreadStateIncrementalMatchesFullRebuild(t *testing.T) {
 	db := newFolderThreadTestDB(t)
 	ctx := context.Background()
 	random := rand.New(rand.NewSource(7))
-	folders := []string{"inbox", "archive", "trash"}
+	folders := []string{"box-inbox", "box-archive", "box-trash"}
 	threads := []string{"", "", "thread-a", "thread-b", "thread-c"}
 	nextID := int64(1)
 	var ids []int64
@@ -172,10 +172,10 @@ func TestFolderThreadStateUpgradeRebuildsEachFolderOnFirstUse(t *testing.T) {
 			(1, 'acct', 'r1', 'thread-a', '2024-01-01 10:00:00'),
 			(2, 'acct', 'r2', 'thread-a', '2024-01-02 10:00:00'),
 			(3, 'acct', 'r3', NULL, '2024-01-03 10:00:00');
-		INSERT INTO message_folder_state(message_id, folder_id, is_read) VALUES (1, 'inbox', 1), (2, 'inbox', 0), (3, 'inbox', 1);
+		INSERT INTO message_folder_state(message_id, folder_id, is_read) VALUES (1, 'box-inbox', 1), (2, 'box-inbox', 0), (3, 'box-inbox', 1);
 		-- A summary left behind by an older release that is no longer right.
 		INSERT INTO folder_thread_state(folder_id, thread_key, head_message_id, account_id, thread_count)
-			VALUES ('inbox', 'thread-a', 1, 'acct', 1);
+			VALUES ('box-inbox', 'thread-a', 1, 'acct', 1);
 		DELETE FROM schema_version; INSERT INTO schema_version(version) VALUES (107);`); err != nil {
 		t.Fatal(err)
 	}
@@ -192,10 +192,10 @@ func TestFolderThreadStateUpgradeRebuildsEachFolderOnFirstUse(t *testing.T) {
 	// A new message in a folder that was never rebuilt must not make its
 	// stale summary look complete.
 	if _, err := db.Write().Exec(`INSERT INTO messages(id, account_id, remote_message_id, date_received) VALUES (4, 'acct', 'r4', '2024-01-04 10:00:00');
-		INSERT INTO message_folder_state(message_id, folder_id) VALUES (4, 'inbox');`); err != nil {
+		INSERT INTO message_folder_state(message_id, folder_id) VALUES (4, 'box-inbox');`); err != nil {
 		t.Fatal(err)
 	}
-	page, err := db.GetEmailsRange(ctx, "inbox", 0, 50)
+	page, err := db.GetEmailsRange(ctx, "box-inbox", 0, 50)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -205,7 +205,7 @@ func TestFolderThreadStateUpgradeRebuildsEachFolderOnFirstUse(t *testing.T) {
 	if got, want := folderThreadRows(t, db), rebuiltFolderThreadRows(t, db); !reflect.DeepEqual(got, want) {
 		t.Fatalf("upgraded summaries differ from a rebuild\n got: %+v\nwant: %+v", got, want)
 	}
-	pending, err := db.folderThreadStatePending(ctx, []string{"inbox"})
+	pending, err := db.folderThreadStatePending(ctx, []string{"box-inbox"})
 	if err != nil || pending {
 		t.Fatalf("inbox still pending after its first use: %v %v", pending, err)
 	}
@@ -220,17 +220,17 @@ func TestFolderThreadStateReadsDoNotWriteWhenCurrent(t *testing.T) {
 	db := newFolderThreadTestDB(t)
 	ctx := context.Background()
 	if _, err := db.Write().Exec(`INSERT INTO messages(id, account_id, remote_message_id, date_received) VALUES (1, 'acct', 'r1', '2024-01-01 10:00:00');
-		INSERT INTO message_folder_state(message_id, folder_id) VALUES (1, 'inbox');`); err != nil {
+		INSERT INTO message_folder_state(message_id, folder_id) VALUES (1, 'box-inbox');`); err != nil {
 		t.Fatal(err)
 	}
 	pending, err := db.folderThreadStatePending(ctx, nil)
 	if err != nil || !pending {
 		t.Fatalf("new message not recorded: %v %v", pending, err)
 	}
-	if _, err := db.GetEmailsRange(ctx, "inbox", 0, 50); err != nil {
+	if _, err := db.GetEmailsRange(ctx, "box-inbox", 0, 50); err != nil {
 		t.Fatal(err)
 	}
-	pending, err = db.folderThreadStatePending(ctx, []string{"inbox"})
+	pending, err = db.folderThreadStatePending(ctx, []string{"box-inbox"})
 	if err != nil || pending {
 		t.Fatalf("listing left changes pending: %v %v", pending, err)
 	}

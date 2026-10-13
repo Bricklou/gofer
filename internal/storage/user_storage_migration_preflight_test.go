@@ -390,4 +390,5 @@ DROP TRIGGER folder_thread_track_state_delete;
 DROP TRIGGER folder_thread_track_message_update;
 DROP TRIGGER folder_thread_track_message_delete;
 DROP INDEX idx_folder_state_folder_unread;
+DROP INDEX idx_folder_thread_state_flags;
 DROP TABLE folder_thread_dirty;`

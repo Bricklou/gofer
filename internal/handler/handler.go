@@ -2158,7 +2158,7 @@ func (h *Handler) loadMailWindow(ctx context.Context, userID, folderID string, f
 		}
 	}
 	if page == nil {
-		page, err = h.db.GetEmailsRangeFilteredForUser(ctx, userID, folderID, 0, limit, filters)
+		page, err = h.db.GetEmailsRangeFilteredForUserWithTotal(ctx, userID, folderID, 0, limit, filters, totalCount)
 		if err != nil {
 			return mailWindow{}, err
 		}

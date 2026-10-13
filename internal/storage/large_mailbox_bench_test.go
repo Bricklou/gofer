@@ -89,10 +89,11 @@ func BenchmarkLargeMailbox(b *testing.B) {
 	}))
 	// The list handler counts first, then loads the page.
 	measure("FilterUnread", page(func() (*models.EmailPage, error) {
-		if _, err := db.GetFolderEmailCountFiltered(ctx, inbox, unread); err != nil {
+		total, err := db.GetFolderEmailCountFiltered(ctx, inbox, unread)
+		if err != nil {
 			return nil, err
 		}
-		return db.GetEmailsRangeFiltered(ctx, inbox, 0, 50, unread)
+		return db.GetEmailsRangeFilteredWithTotal(ctx, inbox, 0, 50, unread, total)
 	}))
 	measure("Search", func() error {
 		_, err := db.SearchMessages(ctx, "bench-user", "subject 42", 50)
