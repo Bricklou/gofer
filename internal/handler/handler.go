@@ -10,6 +10,7 @@ import (
 	"errors"
 	"fmt"
 	"github.com/a-h/templ"
+	"github.com/cristianadrielbraun/gofer/internal/assetver"
 	"github.com/cristianadrielbraun/gofer/internal/auth"
 	avatarresolver "github.com/cristianadrielbraun/gofer/internal/avatar"
 	"github.com/cristianadrielbraun/gofer/internal/calendar"
@@ -561,6 +562,7 @@ func setupAssetsRoutes(mux *http.ServeMux) {
 	isDevelopment := os.Getenv("GO_ENV") != "production"
 	assetServer := http.FileServer(assetFileSystem())
 	compressedAssets := newCompressedAssetCache(assetFileSystem())
+	assetver.Use(assetFileSystem())
 
 	assetHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if strings.HasSuffix(r.URL.Path, ".webmanifest") {
@@ -569,10 +571,21 @@ func setupAssetsRoutes(mux *http.ServeMux) {
 		if strings.HasSuffix(r.URL.Path, ".woff2") {
 			w.Header().Set("Content-Type", "font/woff2")
 		}
-		if isDevelopment {
+		version, known := assetver.Version("/assets/" + strings.TrimPrefix(r.URL.Path, "/"))
+		switch {
+		case isDevelopment:
 			w.Header().Set("Cache-Control", "no-store")
-		} else {
-			w.Header().Set("Cache-Control", "public, max-age=31536000")
+		case known && r.URL.Query().Get("v") == version:
+			// Pages link this exact content; a new release links a new version.
+			w.Header().Set("Cache-Control", "public, max-age=31536000, immutable")
+		default:
+			// Linked without its version, as fonts are from the stylesheet:
+			// check every time, which costs a 304 while it is unchanged.
+			w.Header().Set("Cache-Control", "public, no-cache")
+		}
+		if known {
+			// Embedded files carry no modification time to revalidate with.
+			w.Header().Set("ETag", `"`+version+`"`)
 		}
 		if compressedAssets.serve(w, r, r.URL.Path) {
 			return
