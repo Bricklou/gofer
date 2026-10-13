@@ -264,6 +264,7 @@ func TestManagedOfficePairedWorkload(t *testing.T) {
 		if result.Background != nil {
 			b := result.Background
 			t.Logf("%s background incoming=%d/%d SMTP=%d/%d drained=%v drain=%.2fs", result.Layout, b.IncomingReceived, len(b.Incoming), b.SMTPReceiptsComplete, b.SMTPReceipts, b.Drained, b.DrainSeconds)
+			t.Logf("%s active owners' incoming=%d/%d by end of load, all by %.2fs", result.Layout, b.ActiveIncomingReceivedBeforeDrain, b.ActiveIncoming, b.ActiveDrainSeconds)
 			if b.ObserverError != "" {
 				t.Errorf("%s background observer failed: %s; see %s", result.Layout, b.ObserverError, output)
 			}

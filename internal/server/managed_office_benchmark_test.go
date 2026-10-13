@@ -204,14 +204,19 @@ type officeBackground struct {
 	Owners                      []officeOwnerQueues `json:"owners"`
 	InitialOwners               []officeOwnerQueues `json:"owners_before_drain"`
 	IncomingReceivedBeforeDrain int                 `json:"incoming_received_before_drain"`
-	IncomingReceived            int                 `json:"incoming_received"`
-	SMTPRequested               int                 `json:"smtp_requests_dispatched"`
-	SMTPReceipts                int                 `json:"smtp_receipts"`
-	SMTPReceiptsComplete        int                 `json:"smtp_receipts_sent_and_copied"`
-	IntegrityErrors             []string            `json:"integrity_errors,omitempty"`
-	DrainSeconds                float64             `json:"drain_seconds"`
-	DrainCPUSeconds             float64             `json:"drain_cpu_seconds"`
-	Drained                     bool                `json:"drained"`
+	// Active owners keep Gofer open; idle owners are away and their mail
+	// waits for the regular poll by design, so the two are reported apart.
+	ActiveIncoming                    int      `json:"active_incoming"`
+	ActiveIncomingReceivedBeforeDrain int      `json:"active_incoming_received_before_drain"`
+	ActiveDrainSeconds                float64  `json:"active_drain_seconds"`
+	IncomingReceived                  int      `json:"incoming_received"`
+	SMTPRequested                     int      `json:"smtp_requests_dispatched"`
+	SMTPReceipts                      int      `json:"smtp_receipts"`
+	SMTPReceiptsComplete              int      `json:"smtp_receipts_sent_and_copied"`
+	IntegrityErrors                   []string `json:"integrity_errors,omitempty"`
+	DrainSeconds                      float64  `json:"drain_seconds"`
+	DrainCPUSeconds                   float64  `json:"drain_cpu_seconds"`
+	Drained                           bool     `json:"drained"`
 }
 
 func officeObservationBusy(err error) bool {
@@ -443,6 +448,51 @@ func officeProcessResource(pid int) (officeResource, error) {
 	return sample, fmt.Errorf("RSS unavailable")
 }
 
+// officeOpenEventStreams connects each owner's live event stream, as a
+// browser tab showing Gofer does, and reads it until the returned function
+// closes them all.
+// The server may still be starting; connecting is retried until deadline.
+func officeOpenEventStreams(base string, tokens map[string]string, owners []string, deadline time.Time) (func(), error) {
+	ctx, cancel := context.WithCancel(context.Background())
+	var wg sync.WaitGroup
+	closeAll := func() { cancel(); wg.Wait() }
+	client := &http.Client{}
+	for _, owner := range owners {
+		var response *http.Response
+		for {
+			request, err := http.NewRequestWithContext(ctx, "GET", base+"/api/events", nil)
+			if err != nil {
+				closeAll()
+				return nil, err
+			}
+			request.Header.Set("Origin", base)
+			request.Header.Set("Accept", "text/event-stream")
+			request.AddCookie(&http.Cookie{Name: "gofer_session", Value: tokens[owner]})
+			response, err = client.Do(request)
+			if err == nil {
+				break
+			}
+			if time.Now().After(deadline) {
+				closeAll()
+				return nil, err
+			}
+			time.Sleep(100 * time.Millisecond)
+		}
+		if response.StatusCode != http.StatusOK {
+			response.Body.Close()
+			closeAll()
+			return nil, fmt.Errorf("event stream for %s: HTTP %d", owner, response.StatusCode)
+		}
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			defer response.Body.Close()
+			_, _ = io.Copy(io.Discard, response.Body)
+		}()
+	}
+	return closeAll, nil
+}
+
 func officeHTTP(client *http.Client, base, token, method, path, body, contentType string) (int, string, error) {
 	request, err := http.NewRequest(method, base+path, strings.NewReader(body))
 	if err != nil {
@@ -615,6 +665,13 @@ func runOfficeWorkload(t *testing.T, layout, path string, dataset *officeDataset
 	transport := &http.Transport{MaxIdleConns: spec.Workers, MaxIdleConnsPerHost: spec.Workers}
 	defer transport.CloseIdleConnections()
 	client := &http.Client{Transport: transport, Timeout: time.Duration(spec.TimeoutSeconds) * time.Second, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
+	// Active owners have Gofer open for the whole run, which a browser shows
+	// by keeping the live event stream connected; idle owners are away.
+	closeStreams, err := officeOpenEventStreams(base, tokens, dataset.Active, time.Now().Add(time.Duration(spec.WarmupSeconds)*time.Second))
+	if err != nil {
+		t.Fatalf("%s event streams: %v", layout, err)
+	}
+	defer closeStreams()
 	// Warm all idle owners first, then active owners. Their HTTP setup is outside
 	// measurement, while their native background services remain active inside it.
 	deadline := time.Now().Add(time.Duration(spec.WarmupSeconds) * time.Second)
@@ -951,6 +1008,16 @@ func runOfficeWorkload(t *testing.T, layout, path string, dataset *officeDataset
 		deadline := drainStart.Add(time.Duration(spec.DrainSeconds) * time.Second)
 		var initial []officeOwnerQueues
 		initialReceived := 0
+		activeOwners := make(map[string]bool, len(dataset.Active))
+		for _, owner := range dataset.Active {
+			activeOwners[owner] = true
+		}
+		activeTotal, activeInitial, activeDrain := 0, -1, -1.0
+		for _, arrival := range incoming {
+			if activeOwners[arrival.Owner] && arrival.Error == "" {
+				activeTotal++
+			}
+		}
 		nextProgress := drainStart
 		busyRetries := 0
 		lastBusy := ""
@@ -982,6 +1049,19 @@ func runOfficeWorkload(t *testing.T, layout, path string, dataset *officeDataset
 			}
 			background.InitialOwners, background.IncomingReceivedBeforeDrain = initial, initialReceived
 			background.DrainSeconds = time.Since(drainStart).Seconds()
+			activeReceived := 0
+			for _, arrival := range background.Incoming {
+				if activeOwners[arrival.Owner] && arrival.LocalCopies == 1 {
+					activeReceived++
+				}
+			}
+			if activeInitial < 0 {
+				activeInitial = activeReceived
+			}
+			if activeDrain < 0 && activeReceived == activeTotal {
+				activeDrain = background.DrainSeconds
+			}
+			background.ActiveIncoming, background.ActiveIncomingReceivedBeforeDrain, background.ActiveDrainSeconds = activeTotal, activeInitial, activeDrain
 			background.ObserverBusyRetries, background.ObserverLastBusyError = busyRetries, lastBusy
 			result.Background = &background
 			if time.Now().After(nextProgress) {
