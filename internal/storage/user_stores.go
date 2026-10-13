@@ -141,11 +141,23 @@ func (m *UserStores) acquire(ctx context.Context, userID string, create bool) (*
 		return nil, err
 	}
 	m.mu.Lock()
-	closing := m.closing
-	m.mu.Unlock()
-	if closing {
+	if m.closing {
+		m.mu.Unlock()
 		return nil, ErrUserStoresClosed
 	}
+	// An open store needs no owner details to open it: register the lease,
+	// then check the owner once, as the general path does after registering.
+	if entry, ok := m.entries[userID]; ok && !entry.opening && !entry.closing {
+		entry.refs++
+		m.mu.Unlock()
+		lease := &UserStoreLease{manager: m, owner: userID, entry: entry}
+		if _, err := m.lookupOwner(ctx, userID); err != nil {
+			lease.Release()
+			return nil, err
+		}
+		return lease, nil
+	}
+	m.mu.Unlock()
 	for {
 		if err := ctx.Err(); err != nil {
 			return nil, err
