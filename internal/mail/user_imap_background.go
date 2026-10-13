@@ -18,8 +18,19 @@ type UserIMAPBackgroundOptions struct {
 	PollInterval        time.Duration
 	ScanInterval        time.Duration
 	FileCleanupInterval time.Duration
-	MaxIdleWatchers     int
-	DisableIDLE         bool
+	// MaxIdleWatchers bounds folders watched in real time across all users
+	// (default 1024); each holds one mail server connection.
+	MaxIdleWatchers int
+	// MaxIdlePerServer bounds watched folders on one mail server (default
+	// 256). Owners beyond either limit are polled every minute instead.
+	MaxIdlePerServer int
+	// IdleOfflineGrace keeps an owner's watches this long after their last
+	// browser tab closes (default 2 minutes).
+	IdleOfflineGrace time.Duration
+	// OnlinePollInterval polls online owners whose Inbox is not watched
+	// (default 1 minute).
+	OnlinePollInterval time.Duration
+	DisableIDLE        bool
 	// MaxConcurrentSyncs bounds background account syncs running at once
 	// across all users. Each mostly waits on the mail server, so this is
 	// limited by mail-server courtesy and open user databases, not CPU.
@@ -40,6 +51,8 @@ type userIMAPWatchKey struct{ account, folder string }
 type userIMAPWatch struct {
 	owner          string
 	remote         string
+	role           string
+	host           string
 	cancel         context.CancelFunc
 	watcher        *imap.IdleWatcher
 	dirty          bool
@@ -71,7 +84,16 @@ func (s *UserIMAP) Start(options UserIMAPBackgroundOptions) error {
 		options.ScanInterval = min(options.PollInterval, time.Minute)
 	}
 	if options.MaxIdleWatchers == 0 {
-		options.MaxIdleWatchers = 64
+		options.MaxIdleWatchers = defaultIdleWatchers
+	}
+	if options.MaxIdlePerServer <= 0 {
+		options.MaxIdlePerServer = defaultIdlePerServer
+	}
+	if options.IdleOfflineGrace <= 0 {
+		options.IdleOfflineGrace = offlineGrace
+	}
+	if options.OnlinePollInterval <= 0 {
+		options.OnlinePollInterval = onlinePollInterval
 	}
 	if options.FileCleanupInterval == 0 {
 		options.FileCleanupInterval = time.Hour
@@ -88,6 +110,7 @@ func (s *UserIMAP) Start(options UserIMAPBackgroundOptions) error {
 	s.rescan = false // Startup always refreshes all accounts, including pre-start manual receives.
 	s.backgroundOptions = options
 	s.maxPerServer = options.MaxPerServer
+	s.maxIdlePerServer = options.MaxIdlePerServer
 	s.queueLimit = options.MaxQueuedSyncs
 	s.setSyncWorkersLocked(options.MaxConcurrentSyncs)
 	if gmailAPIPollEnabled() {
@@ -337,6 +360,17 @@ func (s *UserIMAP) reconcileWatches(ctx context.Context, scope *userIMAPScope) e
 		return nil
 	}
 	enabled := s.background && !s.backgroundOptions.DisableIDLE
+	if enabled && !s.ownerOnlineLocked(scope.owner) {
+		// Only owners with Gofer open are watched; others are polled.
+		for key, w := range s.watches {
+			if key.account == scope.id {
+				w.suppressResync = true
+				delete(s.watches, key)
+				w.cancel()
+			}
+		}
+		enabled = false
+	}
 	s.mu.Unlock()
 	if !enabled {
 		return nil
@@ -374,17 +408,33 @@ func (s *UserIMAP) reconcileWatches(ctx context.Context, scope *userIMAPScope) e
 			}
 		}
 	}
-	// Repository order gives a stable preference under the configured bound.
+	// Inboxes first, so a limit costs people Sent or other folders before
+	// new mail. Repository order breaks ties.
+	host := watchHost(scope.config.IMAPHost)
+	ordered := make([]storage.FolderSyncInfo, 0, len(wanted))
 	for _, folder := range folders {
-		if _, ok := wanted[folder.ID]; !ok {
+		if _, ok := wanted[folder.ID]; ok && folder.Role == "inbox" {
+			ordered = append(ordered, folder)
+		}
+	}
+	for _, folder := range folders {
+		if _, ok := wanted[folder.ID]; ok && folder.Role != "inbox" {
+			ordered = append(ordered, folder)
+		}
+	}
+	for _, folder := range ordered {
+		key := userIMAPWatchKey{scope.id, folder.ID}
+		if s.watches[key] != nil {
 			continue
 		}
-		key := userIMAPWatchKey{scope.id, folder.ID}
-		if s.watches[key] != nil || s.idleCount >= s.backgroundOptions.MaxIdleWatchers {
+		if room, freeing := s.idleRoomLocked(host, folder.Role); !room {
+			if freeing {
+				_ = s.enqueueLocked(userIMAPJob{scope.owner, scope.id}, true)
+			}
 			continue
 		}
 		watchCtx, cancel := context.WithCancel(s.ctx)
-		w := &userIMAPWatch{owner: scope.owner, remote: folder.RemoteID, cancel: cancel, status: IDLEFolderRuntimeStatus{AccountID: scope.id, FolderID: folder.ID, RemoteName: folder.RemoteID, ReasonCode: "connecting", Reason: "Connecting to real-time notifications; periodic polling is active."}}
+		w := &userIMAPWatch{owner: scope.owner, remote: folder.RemoteID, role: folder.Role, host: host, cancel: cancel, status: IDLEFolderRuntimeStatus{AccountID: scope.id, FolderID: folder.ID, RemoteName: folder.RemoteID, ReasonCode: "connecting", Reason: "Connecting to real-time notifications; periodic polling is active."}}
 		w.watcher = imap.NewIdleWatcher(scope.config, scope.password, folder.RemoteID, func() {
 			s.mu.Lock()
 			if s.watches[key] == w && watchCtx.Err() == nil {
@@ -416,6 +466,7 @@ func (s *UserIMAP) reconcileWatches(ctx context.Context, scope *userIMAPScope) e
 		})
 		s.watches[key] = w
 		s.idleCount++
+		s.idleByHost[host]++
 		s.watchRuns.Add(1)
 		go s.runWatch(watchCtx, key, w)
 	}
@@ -431,6 +482,9 @@ func (s *UserIMAP) runWatch(ctx context.Context, key userIMAPWatchKey, w *userIM
 			delete(s.watches, key)
 		}
 		s.idleCount--
+		if s.idleByHost[w.host]--; s.idleByHost[w.host] <= 0 {
+			delete(s.idleByHost, w.host)
+		}
 		// A fresh sync may finish before a cancelled watcher releases the last
 		// available slot. Revisit its account after joining the old connection.
 		// Saturation is covered by the next discovery pass; never block a watcher.

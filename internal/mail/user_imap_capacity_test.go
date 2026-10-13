@@ -149,3 +149,51 @@ func TestStartSetsConfiguredSyncWorkers(t *testing.T) {
 		t.Fatal("second start or too many workers accepted")
 	}
 }
+
+// When a watch limit is reached, an Inbox takes the place of another folder's
+// watch; other folders never displace anything.
+func TestIdleLimitsPreferInboxes(t *testing.T) {
+	s := newCapacityTestIMAP(t, 10)
+	s.watches = make(map[userIMAPWatchKey]*userIMAPWatch)
+	s.idleByHost = make(map[string]int)
+	s.backgroundOptions.MaxIdleWatchers = 2
+	s.maxIdlePerServer = 10
+	cancelled := map[string]bool{}
+	add := func(account, role, host string) {
+		s.watches[userIMAPWatchKey{account, account + "-" + role}] = &userIMAPWatch{owner: account, role: role, host: host, cancel: func() { cancelled[account+"-"+role] = true }}
+		s.idleCount++
+		s.idleByHost[host]++
+	}
+	add("bob", "sent", "mail.example.test")
+	add("carol", "inbox", "mail.example.test")
+
+	if room, freeing := s.idleRoomLocked("mail.example.test", "sent"); room || freeing {
+		t.Fatal("a Sent folder displaced another watch")
+	}
+	room, freeing := s.idleRoomLocked("mail.example.test", "inbox")
+	if room || !freeing || !cancelled["bob-sent"] || cancelled["carol-inbox"] {
+		t.Fatalf("inbox at the limit: room=%v freeing=%v cancelled=%v; want Bob's Sent watch stopped", room, freeing, cancelled)
+	}
+	// With only Inboxes left there is nothing to displace.
+	delete(cancelled, "bob-sent")
+	s.watches = map[userIMAPWatchKey]*userIMAPWatch{}
+	add("carol", "inbox", "mail.example.test")
+	add("dave", "inbox", "mail.example.test")
+	s.idleCount = 2
+	if room, freeing := s.idleRoomLocked("mail.example.test", "inbox"); room || freeing || len(cancelled) != 0 {
+		t.Fatal("an Inbox displaced another Inbox")
+	}
+
+	// A full server only displaces watches on that server.
+	s.watches = map[userIMAPWatchKey]*userIMAPWatch{}
+	s.idleByHost = map[string]int{}
+	s.idleCount = 0
+	s.backgroundOptions.MaxIdleWatchers = 100
+	s.maxIdlePerServer = 1
+	add("erin", "sent", "other.example.test")
+	add("frank", "sent", "mail.example.test")
+	room, freeing = s.idleRoomLocked("mail.example.test", "inbox")
+	if room || !freeing || !cancelled["frank-sent"] || cancelled["erin-sent"] {
+		t.Fatalf("full server: cancelled %v, want only the watch on that server", cancelled)
+	}
+}

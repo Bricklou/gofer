@@ -41,6 +41,10 @@ func (s *UserIMAP) StopUser(owner string) {
 			w.cancel()
 		}
 	}
+	if timer := s.offlineTimers[owner]; timer != nil {
+		timer.Stop()
+		delete(s.offlineTimers, owner)
+	}
 	if session := s.activePollUsers[owner]; session != nil {
 		delete(s.activePollUsers, owner)
 		session.cancel()

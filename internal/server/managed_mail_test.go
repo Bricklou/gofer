@@ -502,6 +502,15 @@ func (f *managedMailFixture) setUserStatus(t *testing.T, owner, status string) {
 
 func TestManagedApplicationNativeIDLEUserDisableAndCatchUp(t *testing.T) {
 	f := newManagedMailFixture(t)
+	// Real-time watching is for people with Gofer open, which the live event
+	// stream reports this way.
+	for _, owner := range []string{"alice", "bob"} {
+		release, err := f.app.imap.BeginActiveUserSession(t.Context(), owner)
+		if err != nil {
+			t.Fatal(err)
+		}
+		t.Cleanup(release)
+	}
 	awaitManagedCondition(t, func() bool {
 		return f.activity.idleCount("alice") > 0 && f.activity.idleCount("bob") > 0 &&
 			f.messageCount(t, "alice", "alice native private message") == 1 &&

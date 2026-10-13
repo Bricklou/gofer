@@ -228,8 +228,9 @@ func configuredUserDatabaseLimit() (int, error) {
 	return limit, nil
 }
 
-// configuredSyncCapacity reads how many background mail syncs may run at once,
-// overall and per mail server. Unset values use the mail package defaults.
+// configuredSyncCapacity reads how many background mail syncs may run at once
+// and how many folders may be watched in real time, overall and per mail
+// server. Unset values use the mail package defaults.
 func configuredSyncCapacity() (mail.UserIMAPBackgroundOptions, error) {
 	var options mail.UserIMAPBackgroundOptions
 	for _, setting := range []struct {
@@ -238,6 +239,8 @@ func configuredSyncCapacity() (mail.UserIMAPBackgroundOptions, error) {
 	}{
 		{"GOFER_SYNC_MAX_CONCURRENT", &options.MaxConcurrentSyncs},
 		{"GOFER_SYNC_MAX_PER_SERVER", &options.MaxPerServer},
+		{"GOFER_IDLE_MAX", &options.MaxIdleWatchers},
+		{"GOFER_IDLE_MAX_PER_SERVER", &options.MaxIdlePerServer},
 	} {
 		raw := strings.TrimSpace(os.Getenv(setting.name))
 		if raw == "" {

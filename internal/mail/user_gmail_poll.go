@@ -43,14 +43,18 @@ func (s *UserIMAP) BeginActiveUserSession(ctx context.Context, owner string) (fu
 		s.mu.Unlock()
 		return nil, errors.New("mail worker is shutting down")
 	}
-	// Owners with Gofer open have their accounts synced first.
-	s.onlineUsers[owner]++
+	// Owners with Gofer open have their accounts synced first and their
+	// folders watched in real time.
+	if s.onlineUsers[owner]++; s.onlineUsers[owner] == 1 {
+		s.ownerCameOnlineLocked(owner)
+	}
 	var offline sync.Once
 	leave := func() {
 		offline.Do(func() {
 			s.mu.Lock()
 			if s.onlineUsers[owner]--; s.onlineUsers[owner] <= 0 {
 				delete(s.onlineUsers, owner)
+				s.ownerWentOfflineLocked(owner)
 			}
 			s.mu.Unlock()
 		})

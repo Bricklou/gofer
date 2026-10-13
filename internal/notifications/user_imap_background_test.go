@@ -71,8 +71,30 @@ func (f *userStorageFixture) messageCount(t *testing.T, owner string) int {
 func startBackgroundIMAP(t *testing.T, f *userStorageFixture, s *routedIMAPServer, options mail.UserIMAPBackgroundOptions) {
 	t.Helper()
 	f.useIMAPServer(t, s)
+	if !options.DisableIDLE {
+		markOwnersOnline(t, f)
+	}
 	if err := f.imap.Start(options); err != nil {
 		t.Fatal(err)
+	}
+}
+
+// markOwnersOnline opens a browser session for the given owners, or every
+// fixture owner, as the live event stream does: real-time watching is for
+// owners with Gofer open.
+func markOwnersOnline(t *testing.T, f *userStorageFixture, owners ...string) {
+	t.Helper()
+	if len(owners) == 0 {
+		for owner := range f.accounts {
+			owners = append(owners, owner)
+		}
+	}
+	for _, owner := range owners {
+		release, err := f.imap.BeginActiveUserSession(t.Context(), owner)
+		if err != nil {
+			t.Fatal(err)
+		}
+		t.Cleanup(release)
 	}
 }
 func TestUserIMAPBackgroundStartupAndPeriodicPolling(t *testing.T) {
@@ -237,6 +259,7 @@ func TestUserIMAPBackgroundEditRestartsWatcher(t *testing.T) {
 	if _, err := f.system.Write().Exec("UPDATE users SET status='disabled' WHERE id='bob'"); err != nil {
 		t.Fatal(err)
 	}
+	markOwnersOnline(t, f, "alice")
 	if err := f.imap.Start(mail.UserIMAPBackgroundOptions{PollInterval: time.Hour, MaxIdleWatchers: 1}); err != nil {
 		t.Fatal(err)
 	}

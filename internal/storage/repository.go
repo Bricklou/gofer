@@ -7534,6 +7534,20 @@ func (db *DB) SetSetting(ctx context.Context, userID string, key, value string) 
 	return err
 }
 
+// DefaultIdleFolderRoles are the folders watched in real time for accounts
+// whose owner has not chosen any. New mail lands in the Inbox; Sent also
+// changes when mail is sent from other devices. Drafts change mostly through
+// Gofer itself, and periodic polling covers them.
+var DefaultIdleFolderRoles = []string{"inbox", "sent"}
+
+func defaultIdleRoleSet() map[string]bool {
+	roles := make(map[string]bool, len(DefaultIdleFolderRoles))
+	for _, role := range DefaultIdleFolderRoles {
+		roles[role] = true
+	}
+	return roles
+}
+
 func (db *DB) GetSyncInterval(ctx context.Context, userID string) int {
 	val, err := db.GetSetting(ctx, userID, "sync_interval_minutes")
 	if err != nil || val == "" {
@@ -7549,7 +7563,7 @@ func (db *DB) GetSyncInterval(ctx context.Context, userID string) int {
 func (db *DB) GetIdleFoldersForAccount(ctx context.Context, userID string, accountID string) map[string]bool {
 	val, err := db.GetSetting(ctx, userID, "idle_folders")
 	if err != nil || val == "" {
-		return map[string]bool{"inbox": true, "sent": true, "drafts": true}
+		return defaultIdleRoleSet()
 	}
 	if val == "none" {
 		return map[string]bool{}
@@ -7559,7 +7573,7 @@ func (db *DB) GetIdleFoldersForAccount(ctx context.Context, userID string, accou
 	if err := json.Unmarshal([]byte(val), &perAccount); err == nil {
 		roles := perAccount[accountID]
 		if roles == nil {
-			return map[string]bool{"inbox": true, "sent": true, "drafts": true}
+			return defaultIdleRoleSet()
 		}
 		if len(roles) == 1 && roles[0] == "none" {
 			return map[string]bool{}
@@ -7586,7 +7600,7 @@ func (db *DB) GetIdleFoldersForAccount(ctx context.Context, userID string, accou
 func (db *DB) GetIdleFolderIDsForAccount(ctx context.Context, userID string, accountID string) map[string]bool {
 	val, err := db.GetSetting(ctx, userID, "idle_folders")
 	if err != nil || val == "" {
-		return db.idleFolderIDsForRoles(ctx, accountID, []string{"inbox", "sent", "drafts"})
+		return db.idleFolderIDsForRoles(ctx, accountID, DefaultIdleFolderRoles)
 	}
 	if val == "none" {
 		return map[string]bool{}
@@ -7596,7 +7610,7 @@ func (db *DB) GetIdleFolderIDsForAccount(ctx context.Context, userID string, acc
 	if err := json.Unmarshal([]byte(val), &perAccount); err == nil {
 		entries := perAccount[accountID]
 		if entries == nil {
-			return db.idleFolderIDsForRoles(ctx, accountID, []string{"inbox", "sent", "drafts"})
+			return db.idleFolderIDsForRoles(ctx, accountID, DefaultIdleFolderRoles)
 		}
 		if len(entries) == 1 && entries[0] == "none" {
 			return map[string]bool{}

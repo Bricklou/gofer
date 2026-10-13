@@ -42,6 +42,9 @@ type UserIMAP struct {
 	queueLimit        int
 	serverSlots       map[string]*serverSlot
 	lastLateWarning   time.Time
+	offlineTimers     map[string]*time.Timer
+	idleByHost        map[string]int
+	maxIdlePerServer  int
 	mu                sync.Mutex
 	gates             map[userIMAPKey]*userIMAPGate
 	queued            map[string]*userIMAPQueueState
@@ -106,7 +109,7 @@ func NewUserIMAP(ctx context.Context, accounts *config.UserAccountStore, blobs *
 	if ctx == nil || accounts == nil || blobs == nil || events == nil {
 		return nil, errors.New("user IMAP requires lifecycle context, accounts, blobs and events")
 	}
-	s := &UserIMAP{accounts: accounts, blobs: blobs, events: events, ctx: ctx, slots: make(chan struct{}, interactiveSlots), contactSlots: make(chan struct{}, 2), calendarSlots: make(chan struct{}, 2), queue: make(chan userIMAPJob, syncQueueSize), queueOnline: make(chan userIMAPJob, syncQueueSize), onlineUsers: make(map[string]int), serverSlots: make(map[string]*serverSlot), maxPerServer: defaultSyncsPerServer, queueLimit: syncQueueSize, gates: make(map[userIMAPKey]*userIMAPGate), queued: make(map[string]*userIMAPQueueState), backgroundWake: make(chan struct{}, 1), activePollQueue: make(chan userActivePollJob, 32), activePollWake: make(chan struct{}, 1), activePollUsers: make(map[string]*userActivePollSession), activePollPending: make(map[string]*userActivePollSession), watches: make(map[userIMAPWatchKey]*userIMAPWatch)}
+	s := &UserIMAP{accounts: accounts, blobs: blobs, events: events, ctx: ctx, slots: make(chan struct{}, interactiveSlots), contactSlots: make(chan struct{}, 2), calendarSlots: make(chan struct{}, 2), queue: make(chan userIMAPJob, syncQueueSize), queueOnline: make(chan userIMAPJob, syncQueueSize), onlineUsers: make(map[string]int), offlineTimers: make(map[string]*time.Timer), idleByHost: make(map[string]int), maxIdlePerServer: defaultIdlePerServer, serverSlots: make(map[string]*serverSlot), maxPerServer: defaultSyncsPerServer, queueLimit: syncQueueSize, gates: make(map[userIMAPKey]*userIMAPGate), queued: make(map[string]*userIMAPQueueState), backgroundWake: make(chan struct{}, 1), activePollQueue: make(chan userActivePollJob, 32), activePollWake: make(chan struct{}, 1), activePollUsers: make(map[string]*userActivePollSession), activePollPending: make(map[string]*userActivePollSession), watches: make(map[userIMAPWatchKey]*userIMAPWatch)}
 	s.mu.Lock()
 	s.setSyncWorkersLocked(syncWorkersBeforeStart)
 	s.mu.Unlock()
@@ -545,6 +548,9 @@ func (s *UserIMAP) sync(ctx context.Context, owner, id string, repair, backgroun
 		receiveErr = err
 		if err == nil {
 			err = s.reconcileWatches(ctx, scope)
+		}
+		if scope.config.Provider == providers.ProviderIMAP && scope.config.AuthMethod == "plain" {
+			interval = s.pollIntervalFor(owner, id, interval)
 		}
 		err = errors.Join(err, mutationErr)
 		if ctx.Err() == nil {

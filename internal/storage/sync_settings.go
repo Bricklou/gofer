@@ -55,7 +55,7 @@ func (db *DB) SaveUserSyncSettings(ctx context.Context, owner string, minutes in
 		merged := make(map[string][]string)
 		if err := json.Unmarshal([]byte(old), &merged); err != nil || merged == nil {
 			merged = make(map[string][]string)
-			legacy := []string{"inbox", "sent", "drafts"}
+			legacy := append([]string(nil), DefaultIdleFolderRoles...)
 			if old != "" {
 				legacy = strings.Split(old, ",")
 			}
