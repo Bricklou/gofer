@@ -177,8 +177,10 @@ func RunShared() {
 	log.Printf("boot: HTTP routes registered")
 	h.StartAccountDeletionCleanup(ctx)
 
+	compress := handler.CompressResponses
 	var handler http.Handler = views.WithListViewCookie(mux)
 	handler = authManager.Middleware(handler)
+	handler = compress(handler)
 	handler = httpConfig.Middleware(handler)
 	handler = httpConfig.ClientNetworkMiddleware(authConfig.Enabled, handler)
 

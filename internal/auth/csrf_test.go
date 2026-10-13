@@ -1,6 +1,7 @@
 package auth
 
 import (
+	"context"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -186,5 +187,19 @@ func TestSessionCSRFScopePreservesOtherPostsAndLegacyLocalMode(t *testing.T) {
 	handler.ServeHTTP(recorder, request)
 	if recorder.Code != http.StatusNoContent || called != 3 {
 		t.Fatalf("legacy local request status = %d called=%d, want 204/3", recorder.Code, called)
+	}
+}
+
+func TestTrackCSRFTokensRecordsIssuedTokens(t *testing.T) {
+	ctx, issued := TrackCSRFTokens(context.Background())
+	if issued() {
+		t.Fatal("token recorded before any was issued")
+	}
+	if CSRFToken(ctx, "POST", "/auth/logout") != "" || issued() {
+		t.Fatal("no session, no token: nothing should be recorded")
+	}
+	ctx = contextWithSessionCSRF(ctx, "session-bearer")
+	if CSRFToken(ctx, "POST", "/auth/logout") == "" || !issued() {
+		t.Fatal("issued token not recorded")
 	}
 }
