@@ -396,7 +396,7 @@ func (db *DB) reconcileMessageThreadTx(ctx context.Context, tx *sql.Tx, msgID in
 			return err
 		}
 	}
-	return db.updateThreadAggregatesTx(ctx, tx, threadID)
+	return db.updateThreadAggregatesTx(ctx, tx, accountID, threadID)
 }
 
 func (db *DB) createThreadTx(ctx context.Context, tx *sql.Tx, accountID, subject, normalizedSubject string, rootMsgID int64, sentAt time.Time) (string, error) {
@@ -507,7 +507,7 @@ func (db *DB) resolveWaitingChildrenTx(ctx context.Context, tx *sql.Tx, accountI
 			return err
 		}
 		if oldThread.Valid && oldThread.String != "" && oldThread.String != threadID {
-			if err := db.updateThreadAggregatesTx(ctx, tx, oldThread.String); err != nil {
+			if err := db.updateThreadAggregatesTx(ctx, tx, accountID, oldThread.String); err != nil {
 				return err
 			}
 		}
@@ -568,7 +568,7 @@ func (db *DB) reattachResolvedChildrenTx(ctx context.Context, tx *sql.Tx, parent
 
 	for oldThread := range oldThreads {
 		if oldThread != threadID {
-			if err := db.updateThreadAggregatesTx(ctx, tx, oldThread); err != nil {
+			if err := db.updateThreadAggregatesTx(ctx, tx, accountID, oldThread); err != nil {
 				return err
 			}
 		}
@@ -576,13 +576,17 @@ func (db *DB) reattachResolvedChildrenTx(ctx context.Context, tx *sql.Tx, parent
 	return nil
 }
 
-func (db *DB) updateThreadAggregatesTx(ctx context.Context, tx *sql.Tx, threadID string) error {
-	var accountID, subject, normalizedSubject string
+// updateThreadAggregatesTx recomputes a conversation's totals. Conversations
+// never span accounts; the account keeps both lookups on the
+// (account_id, thread_id, date_received) index instead of scanning every
+// message.
+func (db *DB) updateThreadAggregatesTx(ctx context.Context, tx *sql.Tx, accountID, threadID string) error {
+	var subject, normalizedSubject string
 	var rootID int64
 	err := tx.QueryRowContext(ctx,
-		`SELECT account_id, subject, normalized_subject, id, date_received
-		 FROM messages WHERE thread_id = ? ORDER BY date_received ASC, id ASC LIMIT 1`, threadID,
-	).Scan(&accountID, &subject, &normalizedSubject, &rootID, new(sqliteNullTime))
+		`SELECT subject, normalized_subject, id, date_received
+		 FROM messages WHERE account_id = ? AND thread_id = ? ORDER BY date_received ASC, id ASC LIMIT 1`, accountID, threadID,
+	).Scan(&subject, &normalizedSubject, &rootID, new(sqliteNullTime))
 	if err != nil {
 		return nil
 	}
@@ -592,7 +596,7 @@ func (db *DB) updateThreadAggregatesTx(ctx context.Context, tx *sql.Tx, threadID
 	if err := tx.QueryRowContext(ctx,
 		`SELECT COUNT(*), COALESCE(SUM(CASE WHEN COALESCE(mfs.is_read, 1) = 0 THEN 1 ELSE 0 END), 0), MAX(m.date_received)
 		 FROM messages m LEFT JOIN message_folder_state mfs ON m.id = mfs.message_id
-		 WHERE m.thread_id = ?`, threadID,
+		 WHERE m.account_id = ? AND m.thread_id = ?`, accountID, threadID,
 	).Scan(&count, &unread, &latest); err != nil {
 		return err
 	}
@@ -1537,10 +1541,28 @@ func (db *DB) UpsertSyncMessages(ctx context.Context, msgs []SyncMessage) error 
 	if err := tx.Commit(); err != nil {
 		return err
 	}
-	for _, m := range msgs {
-		db.UpsertObservedContactsForMessage(ctx, m.AccountID, m.FromName, m.FromEmail, m.ToRecipients, m.CCRecipients, nil, m.DateSent)
-	}
+	db.recordSyncedContacts(ctx, msgs)
 	return nil
+}
+
+// recordSyncedContacts records the people in a sync batch once per account.
+func (db *DB) recordSyncedContacts(ctx context.Context, msgs []SyncMessage) {
+	byAccount := make(map[string][]SyncMessage)
+	for _, m := range msgs {
+		byAccount[m.AccountID] = append(byAccount[m.AccountID], m)
+	}
+	for accountID, messages := range byAccount {
+		userID, err := db.GetAccountUserID(ctx, accountID)
+		if err != nil || userID == "" {
+			continue
+		}
+		settings := db.GetContactSettings(ctx, userID)
+		contacts := observedContacts{}
+		for _, m := range messages {
+			contacts.addMessage(settings, m.FromName, m.FromEmail, m.ToRecipients, m.CCRecipients, nil, m.DateSent)
+		}
+		_ = db.recordObservedContacts(ctx, userID, contacts, settings)
+	}
 }
 
 func (db *DB) UpsertProviderSyncMessages(ctx context.Context, msgs []ProviderSyncMessage) (map[string]int64, error) {
@@ -1858,46 +1880,11 @@ func (db *DB) UpsertProviderSyncMessages(ctx context.Context, msgs []ProviderSyn
 			continue
 		}
 		settings := db.GetContactSettings(ctx, userID)
-		type observedContact struct {
-			name   string
-			email  string
-			seenAt time.Time
-			count  int
-		}
-		contacts := make(map[string]observedContact)
-		addContact := func(name, email string, seenAt time.Time) {
-			normalized := normalizeContactEmail(email)
-			if normalized == "" {
-				return
-			}
-			contact := contacts[normalized]
-			contact.count++
-			if contact.email == "" || seenAt.After(contact.seenAt) {
-				contact.name = name
-				contact.email = email
-				contact.seenAt = seenAt
-			}
-			contacts[normalized] = contact
-		}
+		contacts := observedContacts{}
 		for _, message := range messages {
-			if settings.ObserveSenders {
-				addContact(message.fromName, message.fromEmail, message.dateSent)
-			}
-			if settings.ObserveRecipients {
-				for _, recipient := range message.toRecipients {
-					addContact(recipient.Name, recipient.Email, message.dateSent)
-				}
-				for _, recipient := range message.ccRecipients {
-					addContact(recipient.Name, recipient.Email, message.dateSent)
-				}
-				for _, recipient := range message.bccRecipients {
-					addContact(recipient.Name, recipient.Email, message.dateSent)
-				}
-			}
+			contacts.addMessage(settings, message.fromName, message.fromEmail, message.toRecipients, message.ccRecipients, message.bccRecipients, message.dateSent)
 		}
-		for _, contact := range contacts {
-			_ = db.upsertObservedContact(ctx, userID, contact.name, contact.email, contact.seenAt, contact.count, settings)
-		}
+		_ = db.recordObservedContacts(ctx, userID, contacts, settings)
 	}
 	for folderID, affectedMessageIDs := range affectedFolderMessages {
 		if err := db.RefreshFolderThreadsForMessages(ctx, folderID, affectedMessageIDs); err != nil {
@@ -5186,12 +5173,15 @@ func (db *DB) GetThreadAccountIDForUser(ctx context.Context, threadID, userID st
 	}
 
 	var accountID string
+	// Start from the owner's few accounts so the lookup uses the
+	// (account_id, thread_id) index rather than scanning every message.
 	err := db.Read().QueryRowContext(ctx,
-		`SELECT m.account_id
-		 FROM messages m
-		 JOIN accounts a ON a.id = m.account_id
-		 WHERE m.thread_id = ? AND a.user_id = ? AND COALESCE(a.is_deleting, 0) = 0
-		 LIMIT 1`, threadID, userID,
+		`SELECT a.id
+		 FROM accounts a
+		 WHERE a.user_id = ? AND COALESCE(a.is_deleting, 0) = 0
+		   AND EXISTS (SELECT 1 FROM messages m WHERE m.account_id = a.id AND m.thread_id = ?)
+		 ORDER BY a.id
+		 LIMIT 1`, userID, threadID,
 	).Scan(&accountID)
 	if err == sql.ErrNoRows {
 		return "", nil

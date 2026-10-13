@@ -160,3 +160,49 @@ func seedLargeMailbox(b *testing.B, db *DB, messages int) {
 		}
 	}
 }
+
+// BenchmarkSyncBatch times writing one 500-message IMAP sync batch, the unit
+// in which new mail and initial downloads reach the database, followed by the
+// refresh at the end of a folder sync. Every third message starts a new
+// conversation; the rest reply to the previous one.
+//
+//	go test ./internal/storage -run '^$' -bench SyncBatch -benchtime 40x
+func BenchmarkSyncBatch(b *testing.B) {
+	db, err := New(filepath.Join(b.TempDir(), "sync.db"))
+	if err != nil {
+		b.Fatal(err)
+	}
+	defer db.Close()
+	if _, err := db.Write().Exec(`INSERT INTO users(id, username, username_normalized) VALUES ('bench-user', 'bench', 'bench');
+		INSERT INTO accounts(id, user_id, email_address) VALUES ('bench-account', 'bench-user', 'reader@example.test');
+		INSERT INTO folders(id, account_id, remote_id, name, role) VALUES ('bench-inbox', 'bench-account', 'INBOX', 'Inbox', 'inbox');`); err != nil {
+		b.Fatal(err)
+	}
+	ctx := context.Background()
+	base := time.Date(2020, 1, 1, 0, 0, 0, 0, time.UTC)
+	n := 0
+	for b.Loop() {
+		batch := make([]SyncMessage, 500)
+		for i := range batch {
+			n++
+			parent := ""
+			if n%3 != 0 {
+				parent = "<m" + strconv.Itoa(n-1) + "@example.test>"
+			}
+			batch[i] = SyncMessage{
+				AccountID: "bench-account", FolderID: "bench-inbox", RemoteUID: uint32(n),
+				MessageID: "<m" + strconv.Itoa(n) + "@example.test>", InReplyTo: parent, References: parent,
+				Subject: "Subject " + strconv.Itoa(n/3), FromName: "Sender", FromEmail: "sender" + strconv.Itoa(n%50) + "@example.test",
+				DateSent: base.Add(time.Duration(n) * time.Minute), Snippet: "A short preview", IsRead: n%7 != 0,
+				ToRecipients: []Recipient{{Name: "Reader", Email: "reader@example.test"}},
+			}
+		}
+		if err := db.UpsertSyncMessages(ctx, batch); err != nil {
+			b.Fatal(err)
+		}
+		if _, err := db.RefreshFolderUnreadCount(ctx, "bench-inbox"); err != nil {
+			b.Fatal(err)
+		}
+	}
+	b.ReportMetric(float64(b.Elapsed().Microseconds())/1000/float64(b.N), "ms/batch")
+}

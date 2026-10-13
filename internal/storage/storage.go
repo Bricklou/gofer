@@ -198,7 +198,7 @@ func (db *DB) notifyContactActivity(event ContactActivityNotification) {
 }
 
 func openDB(path string) (*sql.DB, error) {
-	db, err := sql.Open(sqliteDriverName(), path+"?_pragma=journal_mode(WAL)&_pragma=synchronous(NORMAL)&_pragma=foreign_keys(1)&_pragma=busy_timeout(5000)&_pragma=temp_store(MEMORY)&_texttotime=true")
+	db, err := sql.Open(sqliteDriverName, path+"?_pragma=journal_mode(WAL)&_pragma=synchronous(NORMAL)&_pragma=foreign_keys(1)&_pragma=busy_timeout(5000)&_pragma=temp_store(MEMORY)&_texttotime=true")
 	if err != nil {
 		return nil, err
 	}
@@ -226,7 +226,7 @@ func openReadOnlyDB(path string, pragmas ...string) (*sql.DB, error) {
 	}
 	query.Set("_texttotime", "true")
 	databaseURL.RawQuery = query.Encode()
-	db, err := sql.Open(sqliteDriverName(), databaseURL.String())
+	db, err := sql.Open(sqliteDriverName, databaseURL.String())
 	if err != nil {
 		return nil, err
 	}
