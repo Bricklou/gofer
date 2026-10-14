@@ -360,7 +360,7 @@ templ CalendarAgendaPane(month CalendarMonthData) {
 											<p class="text-xs text-muted-foreground">{ calendarEventAgendaTimeLabel(event, month.Month.Location()) }</p>
 											@CalendarEventResponseIndicator(event, false)
 										</div>
-										if event.SourceName != "" || event.Location != "" {
+										if calendarEventMeta(event) != "" {
 											<p class="mt-1 truncate text-[11px] text-muted-foreground/75">{ calendarEventMeta(event) }</p>
 										}
 									</div>

@@ -165,7 +165,9 @@ func TestUserCalendarMeetingOptionsHTTPLocalRestrictionsAndExistingLink(t *testi
 					}
 				}
 				r := f.request("alice", "GET", "/api/calendar/meeting-options?source_id=same-source&event_id=same-event", "")
-				if r.Code != 200 || !strings.Contains(r.Body.String(), `data-calendar-teams-available="false"`) {
+				// A saved Meet conference stays switchable so the organizer can remove it.
+				removable := mode == "existing" && provider == "gmail"
+				if r.Code != 200 || strings.Contains(r.Body.String(), `data-calendar-teams-available="false"`) == removable || strings.Contains(r.Body.String(), `name="google_meet_meeting" value="true"`) != removable {
 					t.Fatal("local restriction ignored", mode, r.Code, r.Body.String())
 				}
 				if mode == "existing" && (!strings.Contains(r.Body.String(), " checked") || (provider == "gmail" && !strings.Contains(r.Body.String(), "https://meet.google.com/abc-defg-hij"))) {

@@ -55,6 +55,42 @@ func TestCalendarTeamsSwitchStates(t *testing.T) {
 	}
 }
 
+func TestCalendarExistingGoogleMeetCanBeTurnedOff(t *testing.T) {
+	var out bytes.Buffer
+	if err := CalendarTeamsOption(CalendarTeamsData{State: "existing", Provider: "gmail", JoinURL: "https://meet.google.com/abc-defg-hij"}).Render(t.Context(), &out); err != nil {
+		t.Fatal(err)
+	}
+	doc, err := htmlnode.Parse(strings.NewReader(out.String()))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var toggle, field *htmlnode.Node
+	var walk func(*htmlnode.Node)
+	walk = func(n *htmlnode.Node) {
+		if n.Data == "input" && calendarTestAttr(n, "role") == "switch" {
+			toggle = n
+		}
+		if n.Data == "input" && calendarTestAttr(n, "name") == "google_meet_meeting" {
+			field = n
+		}
+		for c := n.FirstChild; c != nil; c = c.NextSibling {
+			walk(c)
+		}
+	}
+	walk(doc)
+	if toggle == nil || field == nil || calendarTestAttr(toggle, "name") != "" || calendarTestAttr(field, "type") != "hidden" || calendarTestAttr(field, "value") != "true" {
+		t.Fatal("existing Meet must submit its state through one hidden field", out.String())
+	}
+	for _, a := range toggle.Attr {
+		if a.Key == "disabled" {
+			t.Fatal("existing Meet switch is disabled")
+		}
+	}
+	if !strings.Contains(calendarTestAttr(toggle, "data-on-change"), "toggleCalendarMeetRemoval") || !strings.Contains(out.String(), "data-calendar-meet-removal") {
+		t.Fatal("turning off Meet does not update the form")
+	}
+}
+
 func TestCalendarTeamsUsesScopedHTMXAndCalendarProvider(t *testing.T) {
 	data := CalendarCreateData{SourceID: "source", EventID: "event", TeamsState: "existing", Sources: []CalendarCreateSource{{ID: "source", Provider: "outlook", Writable: true, Authorized: true}}}
 	var out bytes.Buffer
@@ -81,8 +117,8 @@ func TestCalendarGoogleMeetOption(t *testing.T) {
 		if state == "available" && !strings.Contains(body, `name="google_meet_meeting"`) {
 			t.Fatal("missing opt-in flag")
 		}
-		if state == "existing" && (!strings.Contains(body, "checked") || strings.Contains(body, `name="google_meet_meeting"`)) {
-			t.Fatal("existing Meet must be checked without submitting removal")
+		if state == "existing" && (!strings.Contains(body, "checked") || !strings.Contains(body, `type="hidden" name="google_meet_meeting" value="true"`)) {
+			t.Fatal("existing Meet must be checked and keep the conference unless turned off")
 		}
 	}
 }

@@ -111,6 +111,7 @@
     "syncSignatureEditor",
     "toggleCalendarAuth",
     "toggleCalendarDescription",
+    "toggleCalendarMeetRemoval",
     "toggleCardDAVAuth",
     "toggleComposeAttachments",
     "toggleEmailBodySchemeById",

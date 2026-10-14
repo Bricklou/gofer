@@ -34,12 +34,12 @@ func userCalendarDetailAccess(details *views.CalendarEventDetails, event storage
 	}
 	details.CanEdit, details.EditUnavailableReason = reason == "", reason
 	details.EditSeries = details.CanEdit && series
-	deleteReason := "Online meetings cannot be deleted in Gofer yet."
-	if !calendarStoredEditableOnline(event) {
+	deleteReason := calendarEventDeleteRestriction(event)
+	if deleteReason == "" {
 		deleteReason = calendarEventMutationRestriction(event, source, series)
-		if deleteReason == "" && !authorized {
-			deleteReason = "Reconnect this account from Accounts to grant Calendar write access."
-		}
+	}
+	if deleteReason == "" && !authorized {
+		deleteReason = "Reconnect this account from Accounts to grant Calendar write access."
 	}
 	details.CanDelete = deleteReason == ""
 	calendarEventDetailActions(details, event)

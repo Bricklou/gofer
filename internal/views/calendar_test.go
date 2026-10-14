@@ -181,3 +181,19 @@ func TestCalendarSidebarActivatesCalendarAppAndShowsProviders(t *testing.T) {
 		t.Fatalf("calendar sidebar rendered an unconfigured account: %s", html)
 	}
 }
+
+func TestCalendarEventMetaNamesMeetingWithoutLocation(t *testing.T) {
+	for _, tc := range []struct {
+		event CalendarEvent
+		want  string
+	}{
+		{CalendarEvent{SourceName: "Work", Meeting: "Google Meet meeting"}, "Work · Google Meet meeting"},
+		{CalendarEvent{SourceName: "Work", Location: "Room 2", Meeting: "Google Meet meeting"}, "Work · Room 2"},
+		{CalendarEvent{Meeting: "Microsoft Teams meeting"}, "Microsoft Teams meeting"},
+		{CalendarEvent{SourceName: "Work"}, "Work"},
+	} {
+		if got := calendarEventMeta(tc.event); got != tc.want {
+			t.Errorf("calendarEventMeta(%+v) = %q, want %q", tc.event, got, tc.want)
+		}
+	}
+}

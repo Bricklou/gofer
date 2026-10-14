@@ -18,6 +18,9 @@ templ CalendarTeamsOption(data CalendarTeamsData) {
 		{{ name, title, id = "google_meet_meeting", "Google Meet meeting", "calendar-create-google-meet" }}
 		{{ retryLabel = "Retry Google Meet availability check" }}
 	}
+	// An existing Meet conference can be removed: the switch drives a hidden
+	// field so turning it off submits false. Teams cannot be turned off.
+	{{ removable := data.State == "existing" && data.Provider == "gmail" }}
 	if data.State == "existing" || data.State == "other-online" {
 		{{ name = "" }}
 	}
@@ -32,7 +35,12 @@ templ CalendarTeamsOption(data CalendarTeamsData) {
 						@icon.RefreshCw(icon.Props{Class: "size-3.5"})
 					}
 				}
-				@switchcomp.Switch(switchcomp.Props{ID: id, Name: name, Value: "true", Checked: data.State == "existing", Disabled: !available, Attributes: templ.Attributes{"data-calendar-teams-toggle": "", "data-calendar-teams-available": strconv.FormatBool(available)}})
+				if removable {
+					<input type="hidden" name="google_meet_meeting" value="true" data-calendar-meet-existing/>
+					@switchcomp.Switch(switchcomp.Props{ID: id, Value: "true", Checked: true, Attributes: templ.Attributes{"data-calendar-teams-toggle": "", "data-calendar-teams-available": "true", "data-on-change": onAction("toggleCalendarMeetRemoval", actionElement)}})
+				} else {
+					@switchcomp.Switch(switchcomp.Props{ID: id, Name: name, Value: "true", Checked: data.State == "existing", Disabled: !available, Attributes: templ.Attributes{"data-calendar-teams-toggle": "", "data-calendar-teams-available": strconv.FormatBool(available)}})
+				}
 			</div>
 		</div>
 		if available && (data.Provider == "gmail" || data.EventID == "") {
@@ -54,7 +62,10 @@ templ CalendarTeamsOption(data CalendarTeamsData) {
 				}
 			</div>
 		} else if data.Provider == "gmail" && data.JoinURL != "" {
-			<a href={ templ.SafeURL(data.JoinURL) } target="_blank" rel="noopener noreferrer" class="mt-2 block break-all text-sm underline underline-offset-4">{ data.JoinURL }</a>
+			<a data-calendar-meet-existing-link href={ templ.SafeURL(data.JoinURL) } target="_blank" rel="noopener noreferrer" class="mt-2 block break-all text-sm underline underline-offset-4">{ data.JoinURL }</a>
+		}
+		if removable {
+			<p data-calendar-meet-removal hidden role="status" class="mt-2 text-xs text-muted-foreground">The Meet link is removed when you save. Guests are sent the update.</p>
 		}
 	}
 }

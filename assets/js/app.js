@@ -10944,6 +10944,17 @@ function retryCalendarMeetPreview(form) {
   prepareCalendarMeetPreview(form, state)
 }
 
+// Turning off an existing Meet conference submits false through the hidden
+// field; the conference is only removed when the event is saved.
+function toggleCalendarMeetRemoval(toggle) {
+  var row = toggle.closest("[data-calendar-create-form]")
+  if (!row) return
+  row.querySelector("[data-calendar-meet-existing]").value = toggle.checked ? "true" : "false"
+  var link = row.querySelector("[data-calendar-meet-existing-link]")
+  if (link) link.hidden = !toggle.checked
+  row.querySelector("[data-calendar-meet-removal]").hidden = toggle.checked
+}
+
 function copyCalendarMeetLink(button) {
   var link = button.closest("[data-calendar-meet-preview]").querySelector("[data-calendar-meet-url]")
   if (!link || !link.href || !navigator.clipboard) return

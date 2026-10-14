@@ -44,10 +44,7 @@ func (p *userCalendarRequest) mutationAccess(ctx context.Context, deleting bool)
 	event, source := p.event.Event(), p.event.Source()
 	reason := calendarEventEditRestriction(event)
 	if deleting {
-		reason = ""
-		if calendarStoredEditableOnline(event) {
-			reason = "Online meetings cannot be deleted in Gofer yet."
-		}
+		reason = calendarEventDeleteRestriction(event)
 	}
 	if reason == "" {
 		reason = calendarEventMutationRestriction(event, source, calendarEventIsSeries(event))

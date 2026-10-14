@@ -50,14 +50,14 @@ func TestGoogleMeetDraftValidation(t *testing.T) {
 
 func TestGoogleMeetCreateConvertAndEdit(t *testing.T) {
 	for _, operation := range []string{"create", "convert", "edit"} {
-		for _, mode := range []string{"success", "pending", "guests", "all-day", "unsupported", "read-only", "wrong-calendar", "capability-error", "race", "stale", "invitee", "recurring", "lost-conference", "wrong-uid", "wrong-id", "lost-description", "confirmation-failure", "disable", "other-provider", "retry", "prepared", "prepared-wrong-link"} {
-			if operation == "create" && (mode == "race" || mode == "stale" || mode == "invitee" || mode == "lost-conference" || mode == "wrong-uid" || mode == "disable" || mode == "other-provider") {
+		for _, mode := range []string{"success", "pending", "guests", "all-day", "unsupported", "read-only", "wrong-calendar", "capability-error", "race", "stale", "invitee", "recurring", "lost-conference", "wrong-uid", "wrong-id", "lost-description", "confirmation-failure", "disable", "disable-kept", "disable-guests", "disable-other", "other-provider", "retry", "prepared", "prepared-wrong-link"} {
+			if operation == "create" && (mode == "race" || mode == "stale" || mode == "invitee" || mode == "lost-conference" || mode == "wrong-uid" || strings.HasPrefix(mode, "disable") || mode == "other-provider") {
 				continue
 			}
 			if operation == "edit" && (mode == "prepared" || mode == "prepared-wrong-link" || mode == "unsupported" || mode == "read-only" || mode == "wrong-calendar" || mode == "capability-error" || mode == "retry") {
 				continue
 			}
-			if operation != "edit" && (mode == "lost-conference" || mode == "disable") {
+			if operation != "edit" && (mode == "lost-conference" || strings.HasPrefix(mode, "disable")) {
 				continue
 			}
 			if operation != "create" && mode == "retry" {
@@ -75,11 +75,11 @@ func TestGoogleMeetCreateConvertAndEdit(t *testing.T) {
 				if mode == "recurring" {
 					draft.Recurrence = &calendar.RecurrenceDraft{Frequency: "daily", Interval: 1, Count: 3}
 				}
-				if mode == "guests" {
+				if mode == "guests" || mode == "disable-guests" {
 					draft.GuestsSet = true
 					draft.Guests = []calendar.GuestDraft{{Email: "guest@example.com"}}
 				}
-				if mode == "disable" {
+				if strings.HasPrefix(mode, "disable") {
 					draft.GoogleMeetMeetingSet = true
 				}
 				if mode == "other-provider" {
@@ -96,7 +96,10 @@ func TestGoogleMeetCreateConvertAndEdit(t *testing.T) {
 					current["conferenceData"] = json.RawMessage(testGoogleMeet)
 					existing.OnlineMeetingJSON = testGoogleMeet
 				}
-				if mode == "other-provider" {
+				if mode == "disable-guests" {
+					current["attendees"] = []any{map[string]string{"email": "guest@example.com"}}
+				}
+				if mode == "other-provider" || mode == "disable-other" {
 					current["conferenceData"] = map[string]any{"conferenceSolution": map[string]any{"key": map[string]string{"type": "addOn"}}}
 				}
 				if operation == "edit" && mode == "pending" {
@@ -176,14 +179,18 @@ func TestGoogleMeetCreateConvertAndEdit(t *testing.T) {
 					if r.URL.Query().Get("conferenceDataVersion") != "1" {
 						t.Error("missing conferencing version")
 					}
-					if mode == "guests" && r.URL.Query().Get("sendUpdates") != "all" {
+					if (mode == "guests" || mode == "disable-guests") && r.URL.Query().Get("sendUpdates") != "all" {
 						t.Error("guests not notified")
 					}
 					var payload map[string]any
 					if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
 						t.Fatal(err)
 					}
-					if operation == "edit" {
+					if strings.HasPrefix(mode, "disable") {
+						if value, ok := payload["conferenceData"]; !ok || value != nil {
+							t.Errorf("removal did not clear the conference: %v", payload)
+						}
+					} else if operation == "edit" {
 						if _, ok := payload["conferenceData"]; ok {
 							t.Error("ordinary edit replaced the existing conference")
 						}
@@ -211,7 +218,7 @@ func TestGoogleMeetCreateConvertAndEdit(t *testing.T) {
 					switch mode {
 					case "prepared-wrong-link":
 						current["conferenceData"] = json.RawMessage(strings.ReplaceAll(testGoogleMeet, "abc-defg-hij", "xyz-abcd-efg"))
-					case "lost-conference":
+					case "lost-conference", "disable", "disable-guests":
 						delete(current, "conferenceData")
 					case "wrong-uid":
 						current["iCalUID"] = "other"
@@ -234,7 +241,11 @@ func TestGoogleMeetCreateConvertAndEdit(t *testing.T) {
 					remote, err = updateGoogleCalendarEvent(t.Context(), "token", "primary", existing, draft)
 				}
 				success := mode == "prepared" || mode == "success" || mode == "pending" || mode == "guests" || mode == "all-day" || mode == "retry" || (mode == "confirmation-failure" && operation == "create")
-				if success {
+				if mode == "disable" || mode == "disable-guests" {
+					if err != nil || writes != 1 || calendarUpdateHasDetails(remote.OnlineMeeting) || !calendarUpdateMatchesDraft(remote, draft) {
+						t.Fatalf("remote=%#v err=%v writes=%d", remote, err, writes)
+					}
+				} else if success {
 					if err != nil || remote.RemoteID != id || writes != 1 || !calendarGoogleMeetJSON(remote.OnlineMeeting) || !calendarUpdateMatchesDraft(remote, draft) {
 						t.Fatalf("remote=%#v err=%v writes=%d", remote, err, writes)
 					}
@@ -248,7 +259,7 @@ func TestGoogleMeetCreateConvertAndEdit(t *testing.T) {
 					if err == nil {
 						t.Fatalf("accepted unsafe %s", mode)
 					}
-					afterWrite := mode == "prepared-wrong-link" || mode == "wrong-uid" || mode == "wrong-id" || mode == "lost-description" || mode == "lost-conference" || mode == "confirmation-failure" || mode == "race"
+					afterWrite := mode == "prepared-wrong-link" || mode == "wrong-uid" || mode == "wrong-id" || mode == "lost-description" || mode == "lost-conference" || mode == "disable-kept" || mode == "confirmation-failure" || mode == "race"
 					if (writes > 0) != afterWrite {
 						t.Fatalf("unexpected writes=%d err=%v", writes, err)
 					}
@@ -468,5 +479,20 @@ func TestGoogleMeetOptionsAreScopedAndRetryable(t *testing.T) {
 				t.Fatal("read-only source checked creation")
 			}
 		})
+	}
+}
+
+func TestCalendarListNamesOnlineMeetingProvider(t *testing.T) {
+	for _, tc := range []struct {
+		event storage.CalendarEvent
+		want  string
+	}{
+		{storage.CalendarEvent{SourceProvider: "gmail", OnlineMeetingJSON: testGoogleMeet}, "Google Meet meeting"},
+		{storage.CalendarEvent{SourceProvider: "outlook", OnlineMeetingJSON: `{"joinUrl":"https://teams.live.com/meet/123"}`}, "Microsoft Teams meeting"},
+		{storage.CalendarEvent{SourceProvider: "gmail", OnlineMeetingJSON: `{}`}, ""},
+	} {
+		if got := calendarViewEvent(tc.event).Meeting; got != tc.want {
+			t.Errorf("meeting label = %q, want %q", got, tc.want)
+		}
 	}
 }

@@ -10,6 +10,7 @@ import (
 
 	"github.com/a-h/templ"
 
+	"github.com/cristianadrielbraun/gofer/internal/calendar"
 	"github.com/cristianadrielbraun/gofer/internal/storage"
 	"github.com/cristianadrielbraun/gofer/internal/views"
 )
@@ -201,6 +202,7 @@ func calendarViewEvent(event storage.CalendarEvent) views.CalendarEvent {
 		SourceColor:    event.SourceColor,
 		Summary:        event.Summary,
 		Location:       event.Location,
+		Meeting:        calendarMeetingLabel(event),
 		Status:         event.Status,
 		ResponseStatus: response,
 		AllDay:         event.AllDay,
@@ -284,4 +286,15 @@ func viewsCalendarLocation(uiSettings map[string]string) *time.Location {
 		}
 	}
 	return time.Local
+}
+
+func calendarMeetingLabel(event storage.CalendarEvent) string {
+	joinURL := calendar.MeetingJoinURL(string(calendarOutlookCachedMeetingJSON(event)))
+	switch {
+	case calendar.TeamsJoinURL(joinURL) != "":
+		return "Microsoft Teams meeting"
+	case calendar.GoogleMeetJoinURL(joinURL) != "":
+		return "Google Meet meeting"
+	}
+	return ""
 }

@@ -215,8 +215,8 @@ func TestOutlookOnlineMeetingEditorUsesFullDescription(t *testing.T) {
 	if _, reason, err := h.calendarEventEditAccess(t.Context(), event); err != nil || reason != "" {
 		t.Fatal("organizer cannot edit online meeting", reason, err)
 	}
-	if _, reason, _ := h.calendarEventDeleteAccess(t.Context(), event); reason == "" {
-		t.Fatal("deletion was accidentally enabled")
+	if reason := calendarEventDeleteRestriction(event); reason != "" {
+		t.Fatal("organizer cannot delete online meeting", reason)
 	}
 	r := calendarUpdateRequest(calendarCreateForm(), "one")
 	r.Method = "GET"
@@ -234,6 +234,9 @@ func TestOutlookOnlineMeetingEditorUsesFullDescription(t *testing.T) {
 		}
 		if _, reason, _ := h.calendarEventEditAccess(t.Context(), copy); reason == "" {
 			t.Fatalf("unsupported %s online edit allowed", mode)
+		}
+		if calendarEventDeleteRestriction(copy) == "" {
+			t.Fatalf("unsupported %s online delete allowed", mode)
 		}
 	}
 	// Description and authoritative conferencing metadata share one cache version.

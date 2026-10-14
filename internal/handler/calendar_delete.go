@@ -20,9 +20,21 @@ func calendarDeleteReason(reason string) string {
 	return strings.NewReplacer("edited", "deleted", "editing", "deleting", "cannot edit yet", "cannot delete yet", "Edit it", "Delete it").Replace(reason)
 }
 
+// Deleting a single Meet or Teams meeting also ends its conference, and the
+// provider sends the cancellation to guests.
+func calendarEventDeleteRestriction(event storage.CalendarEvent) string {
+	if calendarStoredEditableOnline(event) && !calendarCachedOrganizer(event) {
+		return "Only the organizer can delete an online meeting."
+	}
+	if calendarStoredEditableOnline(event) && calendarEventIsSeries(event) {
+		return "Recurring online meetings cannot be deleted in Gofer yet."
+	}
+	return ""
+}
+
 func (h *Handler) calendarEventDeleteAccess(ctx context.Context, event storage.CalendarEvent) (storage.CalendarSource, string, error) {
-	if calendarStoredEditableOnline(event) {
-		return storage.CalendarSource{}, "Online meetings cannot be deleted in Gofer yet.", nil
+	if reason := calendarEventDeleteRestriction(event); reason != "" {
+		return storage.CalendarSource{}, reason, nil
 	}
 	source, reason, err := h.calendarEventMutationAccess(ctx, event, h.calendarDeleteEvent != nil, calendarEventIsSeries(event))
 	return source, calendarDeleteReason(reason), err

@@ -70,6 +70,7 @@ type CalendarEvent struct {
 	SourceColor    string
 	Summary        string
 	Location       string
+	Meeting        string // "Google Meet meeting" or "Microsoft Teams meeting", if any
 	Status         string
 	ResponseStatus string
 	AllDay         bool
@@ -323,6 +324,11 @@ func calendarEventAgendaTimeLabel(event CalendarEvent, location *time.Location) 
 func calendarEventMeta(event CalendarEvent) string {
 	source := strings.TrimSpace(event.SourceName)
 	location := strings.TrimSpace(event.Location)
+	// Outlook puts "Microsoft Teams Meeting" in the location itself; Google
+	// leaves it empty, so name the meeting there instead.
+	if location == "" {
+		location = event.Meeting
+	}
 	if source == "" {
 		return location
 	}

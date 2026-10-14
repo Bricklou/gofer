@@ -284,8 +284,9 @@ func updateGoogleCalendarEventScope(ctx context.Context, token, remoteCalendarID
 			return calendar.RemoteEvent{}, errCalendarUpdateConflict
 		}
 	}
-	if online && draft.GoogleMeetMeetingSet && !draft.GoogleMeetMeeting {
-		return calendar.RemoteEvent{}, calendarUpdateUnsupported("Removing an existing Google Meet conference is not supported in Gofer yet.")
+	removingMeet := online && draft.GoogleMeetMeetingSet && !draft.GoogleMeetMeeting
+	if removingMeet && !meet {
+		return calendar.RemoteEvent{}, calendarUpdateUnsupported("Removing a conference from another provider is not supported in Gofer.")
 	}
 	if online && draft.GoogleMeetMeeting && !meet {
 		return calendar.RemoteEvent{}, calendarUpdateUnsupported("Changing an existing conference provider is not supported in Gofer yet.")
@@ -343,6 +344,9 @@ func updateGoogleCalendarEventScope(ctx context.Context, token, remoteCalendarID
 	if calendarDescriptionChanged(existing.Description, draft) {
 		payload["description"] = calendar.DraftDescription(draft)
 	}
+	if removingMeet {
+		payload["conferenceData"] = nil
+	}
 	if addingMeet {
 		if len(draft.GoogleMeetConference) > 0 {
 			payload["conferenceData"] = draft.GoogleMeetConference
@@ -395,7 +399,11 @@ func updateGoogleCalendarEventScope(ctx context.Context, token, remoteCalendarID
 		if event.ICalUID != current.ICalUID || event.ResponseStatus != "organizer" {
 			return calendar.RemoteEvent{}, fmt.Errorf("Google did not confirm the same meeting identity and organizer")
 		}
-		if online {
+		if removingMeet {
+			if calendarUpdateHasDetails(event.OnlineMeeting) {
+				return calendar.RemoteEvent{}, fmt.Errorf("Google did not remove the Meet conference")
+			}
+		} else if online {
 			before := calendarGoogleMeetingJSON(current.googleCalendarEvent)
 			if !calendarGoogleMeetJSON(event.OnlineMeeting) || !calendarGoogleMeetIdentityMatches(before, event.OnlineMeeting) {
 				return calendar.RemoteEvent{}, fmt.Errorf("Google did not preserve the existing Meet conference")
