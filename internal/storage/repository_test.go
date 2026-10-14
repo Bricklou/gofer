@@ -3254,3 +3254,35 @@ func TestMailReadsReleaseRowsBeforeAvatarHydration(t *testing.T) {
 		})
 	}
 }
+
+func TestGetAccountNamesListsOnlyTheUsersActiveAccounts(t *testing.T) {
+	db, err := New(filepath.Join(t.TempDir(), "names.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	for _, statement := range []string{
+		`INSERT INTO users(id, username, username_normalized) VALUES ('ana', 'ana', 'ana'), ('ben', 'ben', 'ben')`,
+		`INSERT INTO accounts(id, user_id, provider, email_address, display_name, color, initials) VALUES
+		 ('ana-work', 'ana', 'imap', 'ana@work.example', 'Ana at work', '#336699', 'A'),
+		 ('ana-home', 'ana', 'imap', 'ana@home.example', '', '#993366', 'A'),
+		 ('ana-old', 'ana', 'imap', 'ana@old.example', 'Old', '#999999', 'A'),
+		 ('ben-mail', 'ben', 'imap', 'ben@example.test', 'Ben', '#669933', 'B')`,
+		`UPDATE accounts SET is_deleting = 1 WHERE id = 'ana-old'`,
+	} {
+		if _, err := db.Write().Exec(statement); err != nil {
+			t.Fatal(err)
+		}
+	}
+	accounts, err := db.GetAccountNames(t.Context(), "ana")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var got []string
+	for _, account := range accounts {
+		got = append(got, account.ID+"|"+account.Email+"|"+account.Name)
+	}
+	if want := "[ana-home|ana@home.example| ana-work|ana@work.example|Ana at work]"; fmt.Sprint(got) != want {
+		t.Fatalf("GetAccountNames() = %s, want %s", got, want)
+	}
+}

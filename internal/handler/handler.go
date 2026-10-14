@@ -2254,7 +2254,7 @@ func (h *Handler) handleMailItems(w http.ResponseWriter, r *http.Request) {
 		if page == nil {
 			page = &models.EmailPage{}
 		}
-		accounts, err := h.db.GetAccounts(ctx, userID)
+		accounts, err := h.db.GetAccountNames(ctx, userID)
 		if err != nil {
 			return nil, err
 		}

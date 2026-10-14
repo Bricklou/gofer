@@ -4476,6 +4476,29 @@ func (db *DB) GetFolderHighestUID(ctx context.Context, folderID string) (uint32,
 	return uid, err
 }
 
+// GetAccountNames returns the user's accounts with only their ID, address and
+// display name, without folders or sync settings: enough to label the rows of
+// a mail list.
+func (db *DB) GetAccountNames(ctx context.Context, userID string) ([]models.Account, error) {
+	rows, err := db.Read().QueryContext(ctx,
+		`SELECT id, email_address, display_name FROM accounts
+		 WHERE user_id = ? AND COALESCE(is_deleting, 0) = 0
+		 ORDER BY id`, userID)
+	if err != nil {
+		return nil, fmt.Errorf("query account names: %w", err)
+	}
+	defer rows.Close()
+	var accounts []models.Account
+	for rows.Next() {
+		var a models.Account
+		if err := rows.Scan(&a.ID, &a.Email, &a.Name); err != nil {
+			return nil, fmt.Errorf("scan account name: %w", err)
+		}
+		accounts = append(accounts, a)
+	}
+	return accounts, rows.Err()
+}
+
 func (db *DB) GetAccounts(ctx context.Context, userID string) ([]models.Account, error) {
 	rows, err := db.Read().QueryContext(ctx,
 		`SELECT a.id, a.provider, a.email_address, a.display_name, a.color, a.initials, COALESCE(a.is_deleting, 0), COALESCE(a.email_sync_enabled, 1),
