@@ -2299,3 +2299,31 @@ html:root[data-theme="express"] :is([data-calendar-month-event], [data-calendar-
   box-shadow: var(--xp-bevel-in);
   padding: 4px;
 }
+
+/* === DRAGGING MAIL === */
+
+[data-theme="express"] :is(.mail-drag-image-row, .mail-drag-image-stack) {
+  border: 1px solid var(--xp-frame);
+  border-radius: 0;
+  background: var(--xp-light);
+}
+
+[data-theme="express"] .mail-drag-image-row {
+  box-shadow: 2px 2px 0 rgb(0 0 0 / 0.35);
+}
+
+[data-theme="express"] .mail-drag-image-count {
+  border: 1px solid var(--xp-frame);
+  border-radius: 0;
+  background: var(--xp-tip);
+  color: var(--xp-tip-foreground);
+  font-family: var(--xp-font);
+}
+
+/* The folder that will take the dragged mail is selected, as in a tree. */
+[data-theme="express"] aside a[data-mail-drop-active] {
+  border-radius: 0;
+  background: var(--xp-select);
+  color: var(--xp-select-foreground);
+  box-shadow: none;
+}

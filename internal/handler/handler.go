@@ -5741,6 +5741,9 @@ type messageBulkRequest struct {
 	State    string              `json:"state"`
 	FolderID string              `json:"folder_id"`
 	Label    string              `json:"label"`
+	// SourceFolderID is the folder a move takes messages from. FolderID is the
+	// destination for moves, so the source travels separately.
+	SourceFolderID string `json:"source_folder_id"`
 }
 
 type ownedMessageTarget struct {
@@ -6059,51 +6062,114 @@ func (h *Handler) handleDeleteMessages(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(map[string]int{"updated": updated})
 }
 
+// handleMoveMessages moves messages to a folder. The destination is either one
+// account's folder, which every message must belong to, or a combined folder
+// such as "inbox", which sends each message to that folder of its own account.
+// Nothing is moved unless every message can go where it was sent.
 func (h *Handler) handleMoveMessages(w http.ResponseWriter, r *http.Request) {
 	payload, err := decodeMessageBulkRequest(r)
 	if err != nil {
-		http.Error(w, "invalid request body", http.StatusBadRequest)
+		moveRefused(w, "invalid request body", http.StatusBadRequest)
 		return
 	}
 	destFolderID := strings.TrimSpace(payload.FolderID)
 	if destFolderID == "" {
-		http.Error(w, "folder_id required", http.StatusBadRequest)
+		moveRefused(w, "folder_id required", http.StatusBadRequest)
 		return
 	}
 	ctx := h.messageMutationContext(r.Context())
-	destFolderID, err = h.resolveFolderID(ctx, h.userID(ctx), destFolderID)
-	if err != nil {
-		http.Error(w, "destination folder not found", http.StatusBadRequest)
+	combinedRole := ""
+	switch destFolderID {
+	case "inbox", "archive", "spam", "trash":
+		combinedRole = destFolderID
+	case "starred", "sent", "drafts", "scheduled":
+		moveRefused(w, "messages cannot be moved to this folder", http.StatusBadRequest)
 		return
 	}
-	if remoteID, err := h.db.GetFolderRemoteID(ctx, destFolderID); err != nil || remoteID == "" {
-		http.Error(w, "destination folder not found", http.StatusBadRequest)
-		return
+	destAccountID := ""
+	if combinedRole == "" {
+		destFolderID, err = h.resolveFolderID(ctx, h.userID(ctx), destFolderID)
+		if err != nil {
+			moveRefused(w, "destination folder not found", http.StatusBadRequest)
+			return
+		}
+		if remoteID, err := h.db.GetFolderRemoteID(ctx, destFolderID); err != nil || remoteID == "" {
+			moveRefused(w, "destination folder not found", http.StatusBadRequest)
+			return
+		}
+		destAccountID, err = h.db.GetFolderAccountID(ctx, destFolderID)
+		if err != nil || destAccountID == "" {
+			moveRefused(w, "destination folder not found", http.StatusBadRequest)
+			return
+		}
 	}
-	targets, err := h.resolveOwnedMessageTargets(ctx, messageBulkTargets(payload), "", false)
+	targets, err := h.resolveOwnedMessageTargets(ctx, messageBulkTargets(payload), strings.TrimSpace(payload.SourceFolderID), false)
 	if err != nil {
+		log.Printf("message move refused: %v", err)
 		writeMessageTargetError(w, r, err)
 		return
 	}
-	updated := 0
 
-	for _, target := range targets {
-		currentInfo := target.Infos[0].MessageMutationInfo
-		if currentInfo.FolderID == destFolderID {
+	destinations := make([]string, len(targets))
+	for i, target := range targets {
+		info := target.Infos[0].MessageMutationInfo
+		if combinedRole == "" {
+			if info.AccountID != destAccountID {
+				moveRefused(w, "messages from another account cannot be moved to this folder", http.StatusBadRequest)
+				return
+			}
+			destinations[i] = destFolderID
 			continue
 		}
-		if err := h.queueMessageMoves(ctx, target.Infos, destFolderID); err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
+		folderID, err := h.combinedFolderIDForAccount(ctx, info.AccountID, combinedRole)
+		if err != nil || folderID == "" {
+			moveRefused(w, "an account has no folder of this kind", http.StatusBadRequest)
+			return
+		}
+		destinations[i] = folderID
+	}
+
+	updated := 0
+	for i, target := range targets {
+		var moving []storage.ThreadMessageMutationInfo
+		for _, info := range target.Infos {
+			if info.FolderID != destinations[i] {
+				moving = append(moving, info)
+			}
+		}
+		if len(moving) == 0 {
+			continue
+		}
+		if err := h.queueMessageMoves(ctx, moving, destinations[i]); err != nil {
+			moveRefused(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
 		updated++
-		h.publishThreadMutation(target.Infos)
-		h.publishMutation(currentInfo.AccountID, destFolderID)
+		h.publishThreadMutation(moving)
+		h.publishMutation(moving[0].AccountID, destinations[i])
 	}
 
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
 	json.NewEncoder(w).Encode(map[string]int{"updated": updated})
+}
+
+// moveRefused answers a refused move and logs why, since the browser only
+// shows the reason to the user.
+func moveRefused(w http.ResponseWriter, reason string, status int) {
+	log.Printf("message move refused (%d): %s", status, reason)
+	http.Error(w, reason, status)
+}
+
+// combinedFolderIDForAccount is an account's folder behind a combined folder.
+// Some servers call their spam folder junk.
+func (h *Handler) combinedFolderIDForAccount(ctx context.Context, accountID, role string) (string, error) {
+	folderID, _, err := h.db.GetFolderIDByRole(ctx, accountID, role)
+	if err != nil || folderID != "" || role != "spam" {
+		return folderID, err
+	}
+	folderID, _, err = h.db.GetFolderIDByRole(ctx, accountID, "junk")
+	return folderID, err
 }
 
 func (h *Handler) handleToggleStar(w http.ResponseWriter, r *http.Request) {

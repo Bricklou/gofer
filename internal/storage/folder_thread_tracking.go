@@ -143,6 +143,44 @@ func migrateV107ToV108(db *sql.DB) error {
 	return tx.Commit()
 }
 
+// folderThreadTriggers are the triggers in folderThreadTrackingSchema.
+var folderThreadTriggers = []string{
+	"folder_thread_track_state_insert",
+	"folder_thread_track_state_update",
+	"folder_thread_track_state_delete",
+	"folder_thread_track_message_update",
+	"folder_thread_track_message_delete",
+}
+
+// repairFolderThreadTriggers replaces triggers left from a development build
+// of schema version 108, which used INSERT OR IGNORE. An upsert on
+// message_folder_state overrides that, so reviving a hidden folder entry, as
+// moving mail back to a folder it left does, failed on a duplicate. CREATE
+// TRIGGER IF NOT EXISTS never replaces them, so they are dropped and created
+// again from the current definitions.
+func repairFolderThreadTriggers(db *sql.DB) error {
+	var stale int
+	if err := db.QueryRow(`SELECT COUNT(*) FROM sqlite_master
+		WHERE type = 'trigger' AND name LIKE 'folder_thread_track_%'
+		  AND sql LIKE '%INSERT OR IGNORE INTO folder_thread_dirty%'`).Scan(&stale); err != nil || stale == 0 {
+		return err
+	}
+	tx, err := db.Begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	for _, name := range folderThreadTriggers {
+		if _, err := tx.Exec(`DROP TRIGGER IF EXISTS ` + name); err != nil {
+			return err
+		}
+	}
+	if _, err := tx.Exec(folderThreadTrackingSchema); err != nil {
+		return err
+	}
+	return tx.Commit()
+}
+
 // flushFolderThreadState brings folder_thread_state up to date with every
 // recorded change. Folders waiting for their first build are rebuilt in full
 // when listed in rebuild; otherwise they wait for first use.

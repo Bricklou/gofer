@@ -826,6 +826,8 @@ templ SidebarFolderItem(folder models.Folder, activeFolder string, accountID str
 				hx-target="#mail-list"
 				hx-swap="outerHTML settle:0s"
 				data-folder-role={ folder.Role }
+				data-mail-drop-folder={ folder.ID }
+				data-mail-drop-account={ accountID }
 				class={
 					"flex w-full items-center gap-2.5 rounded-md px-2.5 py-1.5 text-[13px] transition-all duration-150",
 					templ.KV("bg-sidebar-accent text-sidebar-primary font-medium", activeFolder == folder.ID),
@@ -874,6 +876,8 @@ templ SidebarFolderLink(folder models.Folder, activeFolder string, accountID str
 		hx-target="#mail-list"
 		hx-swap="outerHTML settle:0s"
 		data-folder-role={ folder.Role }
+		data-mail-drop-folder={ folder.ID }
+		data-mail-drop-account={ accountID }
 		class={
 			"flex min-w-0 flex-1 items-center gap-2.5 w-full px-2.5 py-1.5 rounded-md text-[13px] transition-all duration-150",
 			templ.KV("bg-sidebar-accent text-sidebar-primary font-medium", activeFolder == folder.ID),

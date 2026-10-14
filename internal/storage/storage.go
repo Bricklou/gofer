@@ -84,6 +84,11 @@ func New(dbPath string) (*DB, error) {
 		read.Close()
 		return nil, fmt.Errorf("migrate: %w", err)
 	}
+	if err := repairFolderThreadTriggers(db.write); err != nil {
+		write.Close()
+		read.Close()
+		return nil, fmt.Errorf("repair conversation summary triggers: %w", err)
+	}
 	log.Printf("storage: schema migration check complete")
 	log.Printf("storage: threading backfill deferred to background startup worker")
 
@@ -142,6 +147,10 @@ func OpenExisting(dbPath string) (*DB, error) {
 	if err := db.requireCurrentSchema(); err != nil {
 		db.Close()
 		return nil, err
+	}
+	if err := repairFolderThreadTriggers(db.write); err != nil {
+		db.Close()
+		return nil, fmt.Errorf("repair conversation summary triggers: %w", err)
 	}
 	return db, nil
 }

@@ -4102,6 +4102,19 @@ func (db *DB) GetFolderIDByRole(ctx context.Context, accountID, role string) (st
 	return id, remoteID, err
 }
 
+// GetFolderAccountID is the account a folder belongs to, or "" if there is no
+// such folder.
+func (db *DB) GetFolderAccountID(ctx context.Context, folderID string) (string, error) {
+	var accountID string
+	err := db.Read().QueryRowContext(ctx,
+		`SELECT account_id FROM folders WHERE id = ?`, strings.TrimSpace(folderID),
+	).Scan(&accountID)
+	if err == sql.ErrNoRows {
+		return "", nil
+	}
+	return accountID, err
+}
+
 func (db *DB) GetFolderProviderRemoteID(ctx context.Context, folderID string) (string, error) {
 	folderID = strings.TrimSpace(folderID)
 	if folderID == "" {

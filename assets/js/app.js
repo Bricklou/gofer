@@ -1481,6 +1481,7 @@ document.addEventListener("DOMContentLoaded", function () {
     syncMailArchiveActionState()
     syncMailSelectionControls()
     setupMailKeyboardShortcuts()
+    setupMailDragAndDrop()
 
     function renderedMailRows() {
       return Array.prototype.slice.call(document.querySelectorAll("#mail-list-scroll .mail-list-item[data-email-id]"))
@@ -1872,12 +1873,14 @@ document.addEventListener("DOMContentLoaded", function () {
         thread: attr("data-has-thread") === "true",
         read: attr("data-is-read") !== "false",
         starred: attr("data-starred") === "true",
+        account: attr("data-account-id"),
       }
     }
 
     function mailRowInfoFromElement(row) {
       return {
         id: row.dataset.emailId,
+        account: row.dataset.accountId || "",
         thread: row.dataset.hasThread === "true",
         read: row.dataset.isRead !== "false",
         starred: row.dataset.starred === "true",
@@ -2253,6 +2256,356 @@ document.addEventListener("DOMContentLoaded", function () {
       }).finally(function () {
         mailSelectionBusy = false
         syncMailSelectionControls()
+      })
+    }
+
+    // The account a list row belongs to, also for selected rows scrolled out of
+    // the page, which the list keeps as HTML.
+    function mailRowAccountID(emailId) {
+      var row = document.querySelector('#mail-list-scroll .mail-list-item[data-email-id="' + cssEscape(emailId) + '"]')
+      if (row) return row.dataset.accountId || ""
+      var list = currentMailListController()
+      var pos = list && list.indexById ? list.indexById.get(emailId) : undefined
+      var item = pos !== undefined && list.cache ? list.cache.get(pos) : null
+      return item ? mailRowInfoFromHTML(item.id, item.html).account : ""
+    }
+
+    // Rows can be dragged onto the sidebar's folders. Dragging a selected row
+    // takes the whole selection along; any other row goes alone. A folder of
+    // one account only takes mail from that account, and a combined folder
+    // takes each email into that folder of its own account.
+    var MAIL_DROP_COMBINED_FOLDERS = { inbox: true, archive: true, spam: true, trash: true }
+    var MAIL_DROP_REFUSED_ROLES = { starred: true, sent: true, drafts: true, scheduled: true }
+    var MAIL_DROP_EXPAND_DELAY = 600
+
+    function setupMailDragAndDrop() {
+      if (document.body._goferMailDragBound) return
+      document.body._goferMailDragBound = true
+
+      var drag = null
+      var activeTarget = null
+      var pointerTarget = null
+      var expandTarget = null
+      var expandTimer = null
+
+      function draggedRowLink(el) {
+        return el && el.closest ? el.closest("#mail-list-scroll .mail-list-item[data-email-id] > a") : null
+      }
+
+      function dropTargetFrom(el) {
+        return el && el.closest ? el.closest("aside a[data-mail-drop-folder]") : null
+      }
+
+      // Why a folder can't take the dragged mail, or "" when it can.
+      function dropRefusal(link) {
+        var folderID = link.getAttribute("data-mail-drop-folder") || ""
+        var accountID = link.getAttribute("data-mail-drop-account") || ""
+        var role = String(link.getAttribute("data-folder-role") || "").toLowerCase()
+        if (!folderID || folderID === drag.sourceFolderID) return "same"
+        if (!accountID) return MAIL_DROP_COMBINED_FOLDERS[folderID] ? "" : "kind"
+        if (MAIL_DROP_REFUSED_ROLES[role]) return "kind"
+        if (drag.accounts.length !== 1 || drag.accounts[0] !== accountID) return "accounts"
+        return ""
+      }
+
+      function setActiveTarget(link) {
+        if (activeTarget === link) return
+        if (activeTarget) activeTarget.removeAttribute("data-mail-drop-active")
+        activeTarget = link
+        if (activeTarget) activeTarget.setAttribute("data-mail-drop-active", "")
+      }
+
+      // Hovering a collapsed folder or account for a moment opens it, so its
+      // subfolders can be reached. It is not remembered as opened.
+      function collapsedBranchFrom(el) {
+        if (!el || !el.closest) return null
+        var folderToggle = el.closest("aside [data-sidebar-folder-toggle]")
+        var folder = folderToggle && folderToggle.closest('[data-sidebar-folder][data-sidebar-folder-collapsed="true"]')
+        if (folder) return { group: folder, attr: "data-sidebar-folder-collapsed", toggle: folderToggle }
+        var accountToggle = el.closest("aside [data-sidebar-account-toggle]")
+        var account = accountToggle && accountToggle.closest('[data-sidebar-account][data-sidebar-account-collapsed="true"]')
+        if (account) return { group: account, attr: "data-sidebar-account-collapsed", toggle: accountToggle }
+        return null
+      }
+
+      function scheduleExpand(el) {
+        var branch = collapsedBranchFrom(el)
+        var group = branch ? branch.group : null
+        if (group === expandTarget) return
+        clearTimeout(expandTimer)
+        expandTarget = group
+        if (!branch) return
+        expandTimer = setTimeout(function () {
+          branch.group.setAttribute(branch.attr, "false")
+          branch.toggle.setAttribute("aria-expanded", "true")
+          expandTarget = null
+        }, MAIL_DROP_EXPAND_DELAY)
+      }
+
+      // The picture beside the pointer is a copy of the dragged row. With more
+      // than one email, cards stack up behind it and a badge gives the count.
+      // Browsers fade their own drag pictures, so theirs is an empty image and
+      // this one follows the pointer instead. It sits in the list so the list's
+      // own styles still apply.
+      var MAIL_DRAG_IMAGE_MAX_WIDTH = 420
+      var MAIL_DRAG_IMAGE_POINTER_GAP = 0
+      var MAIL_DRAG_IMAGE_DROP = 22
+      // The picture keeps room on its right and bottom for the stacked cards.
+      var MAIL_DRAG_IMAGE_STACK_ROOM = 12
+      var emptyDragImage = new Image()
+      emptyDragImage.src = "data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7"
+      var floating = null
+
+      function dragImage(row, count) {
+        var scroll = document.getElementById("mail-list-scroll") || document.body
+        var width = Math.min(row.getBoundingClientRect().width, MAIL_DRAG_IMAGE_MAX_WIDTH)
+        var image = document.createElement("div")
+        image.className = "mail-drag-image"
+        image.style.width = (width + MAIL_DRAG_IMAGE_STACK_ROOM) + "px"
+        if (count > 1) {
+          for (var layer = Math.min(count - 1, 2); layer >= 1; layer--) {
+            var card = document.createElement("div")
+            card.className = "mail-drag-image-stack"
+            card.style.transform = "translate(" + (layer * 6) + "px, " + (layer * 6) + "px)"
+            image.appendChild(card)
+          }
+        }
+        var copy = row.cloneNode(true)
+        copy.removeAttribute("data-mail-dragging")
+        copy.classList.add("mail-drag-image-row")
+        // A card already has its frame; the row's spacing around it goes.
+        var card = row.querySelector(":scope > a.mail-list-card")
+        if (card) {
+          var cardHeight = card.getBoundingClientRect().height + "px"
+          copy.classList.add("mail-drag-image-card")
+          copy.style.height = cardHeight
+          copy.style.minHeight = cardHeight
+          copy.style.maxHeight = cardHeight
+        }
+        image.appendChild(copy)
+        if (count > 1) {
+          var badge = document.createElement("span")
+          badge.className = "mail-drag-image-count"
+          badge.textContent = String(count)
+          image.appendChild(badge)
+        }
+        scroll.appendChild(image)
+        return image
+      }
+
+      // The element the picture stands for in the list: a card's own frame, or
+      // the whole row.
+      function floatingHome(row) {
+        return (row && row.querySelector(":scope > a.mail-list-card")) || row
+      }
+
+      // Picked up: the picture starts on top of its row, at the row's width,
+      // then narrows and glides out beside the pointer while the stack fans out.
+      function liftFloating(image, row) {
+        if (!mailDragAnimates()) return
+        var home = floatingHome(row).getBoundingClientRect()
+        var left = parseFloat(image.style.left) || 0
+        var top = parseFloat(image.style.top) || 0
+        image.animate(
+          [
+            { transform: "translate(" + (home.left - left) + "px, " + (home.top - top) + "px) rotate(0deg)", width: (home.width + MAIL_DRAG_IMAGE_STACK_ROOM) + "px" },
+            { transform: "translate(0, 0) rotate(-2deg)", width: image.style.width },
+          ],
+          { duration: 220, easing: "cubic-bezier(0.2, 0.8, 0.2, 1)", fill: "forwards" }
+        )
+        image.querySelectorAll(".mail-drag-image-stack").forEach(function (card) {
+          card.animate([{ transform: "translate(0, 0)" }, { transform: card.style.transform }], { duration: 260, delay: 80, easing: "cubic-bezier(0.2, 0.8, 0.2, 1)", fill: "backwards" })
+        })
+      }
+
+      function mailDragAnimates() {
+        return typeof Element.prototype.animate === "function" &&
+          !(window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches)
+      }
+
+      // Let go of the picture: into the folder it was dropped on, or back to its
+      // row when the drag was cancelled.
+      function releaseFloating(dropTarget) {
+        if (!floating) return
+        var image = floating.image
+        var row = floating.row
+        floating = null
+        if (!mailDragAnimates()) {
+          image.remove()
+          return
+        }
+        var from = image.getBoundingClientRect()
+        var animation
+        if (dropTarget) {
+          var to = dropTarget.getBoundingClientRect()
+          var dx = to.left + Math.min(to.width, 40) / 2 - from.left
+          var dy = to.top + to.height / 2 - from.top
+          animation = image.animate(
+            [{ transform: "scale(1) rotate(-2deg)", opacity: 1 }, { transform: "translate(" + dx + "px, " + dy + "px) scale(0.12) rotate(0deg)", opacity: 0 }],
+            { duration: 260, easing: "cubic-bezier(0.5, 0, 0.75, 0)", fill: "forwards" }
+          )
+          dropTarget.animate(
+            [{ transform: "scale(1)" }, { transform: "scale(1.06)" }, { transform: "scale(1)" }],
+            { duration: 260, delay: 200, easing: "ease-out" }
+          )
+        } else {
+          // Back home, the picture widens to its row's width again.
+          var home = row && row.isConnected ? floatingHome(row).getBoundingClientRect() : null
+          var visible = home && home.bottom > 0 && home.top < window.innerHeight
+          var left = parseFloat(image.style.left) || 0
+          var top = parseFloat(image.style.top) || 0
+          var width = parseFloat(getComputedStyle(image).width)
+          var homeWidth = home ? home.width + MAIL_DRAG_IMAGE_STACK_ROOM : width
+          var keyframes = visible
+            ? [
+                { transform: "translate(0, 0) rotate(-2deg)", width: width + "px", opacity: 1 },
+                { transform: "translate(" + (home.left - left) + "px, " + (home.top - top) + "px) rotate(0deg)", width: homeWidth + "px", opacity: 1, offset: 0.85 },
+                { transform: "translate(" + (home.left - left) + "px, " + (home.top - top) + "px) rotate(0deg)", width: homeWidth + "px", opacity: 0 },
+              ]
+            : [{ transform: "rotate(-2deg)", opacity: 1 }, { transform: "scale(0.96) rotate(0deg)", opacity: 0 }]
+          animation = image.animate(keyframes, { duration: visible ? 280 : 160, easing: "cubic-bezier(0.2, 0.8, 0.2, 1)", fill: "forwards" })
+        }
+        animation.onfinish = function () { image.remove() }
+        animation.oncancel = function () { image.remove() }
+      }
+
+      function moveFloating(x, y) {
+        if (!floating || (!x && !y)) return
+        var left = x + MAIL_DRAG_IMAGE_POINTER_GAP
+        var top = y - floating.grabY + MAIL_DRAG_IMAGE_DROP
+        floating.image.style.left = left + "px"
+        floating.image.style.top = top + "px"
+        // Something around the list may move fixed elements with it; the
+        // picture then goes to the page itself.
+        if (!floating.checked) {
+          floating.checked = true
+          var rect = floating.image.getBoundingClientRect()
+          if (Math.abs(rect.left - left) > 1 || Math.abs(rect.top - top) > 1) document.body.appendChild(floating.image)
+        }
+      }
+
+      function markDraggedRows(dragging) {
+        if (!drag) return
+        for (var i = 0; i < drag.ids.length; i++) {
+          var row = document.querySelector('#mail-list-scroll .mail-list-item[data-email-id="' + cssEscape(drag.ids[i]) + '"]')
+          if (!row) continue
+          if (dragging) row.setAttribute("data-mail-dragging", "")
+          else row.removeAttribute("data-mail-dragging")
+        }
+      }
+
+      function endDrag(dropTarget) {
+        releaseFloating(dropTarget || null)
+        markDraggedRows(false)
+        setActiveTarget(null)
+        clearTimeout(expandTimer)
+        expandTarget = null
+        pointerTarget = null
+        drag = null
+      }
+
+      document.addEventListener("dragstart", function (e) {
+        var link = draggedRowLink(e.target)
+        if (!link || !e.dataTransfer) return
+        var emailId = link.parentElement.dataset.emailId
+        var ids = selectedMailIds.has(emailId) ? Array.from(selectedMailIds) : [emailId]
+        var accounts = []
+        for (var i = 0; i < ids.length; i++) {
+          var accountID = mailRowAccountID(ids[i])
+          if (accounts.indexOf(accountID) === -1) accounts.push(accountID)
+        }
+        drag = { ids: ids, accounts: accounts, sourceFolderID: currentMailListFolderID() }
+        e.dataTransfer.effectAllowed = "move"
+        e.dataTransfer.setData("application/x-gofer-mail", ids.join(","))
+        // The picture hangs just right of and a little below where the row
+        // was grabbed, so the folder under the pointer stays visible.
+        var row = link.parentElement
+        var rect = row.getBoundingClientRect()
+        floating = { image: dragImage(row, ids.length), row: row, grabY: Math.max(0, Math.min(e.clientY - rect.top, rect.height)), checked: false }
+        moveFloating(e.clientX, e.clientY)
+        liftFloating(floating.image, row)
+        e.dataTransfer.setDragImage(emptyDragImage, 0, 0)
+        markDraggedRows(true)
+      })
+
+      document.addEventListener("dragover", function (e) {
+        if (!drag) return
+        moveFloating(e.clientX, e.clientY)
+        scheduleExpand(e.target)
+        var link = dropTargetFrom(e.target)
+        pointerTarget = link
+        if (!link || dropRefusal(link)) {
+          setActiveTarget(null)
+          return
+        }
+        e.preventDefault()
+        e.dataTransfer.dropEffect = "move"
+        setActiveTarget(link)
+      })
+
+      document.addEventListener("drop", function (e) {
+        if (!drag) return
+        var link = dropTargetFrom(e.target)
+        if (!link || dropRefusal(link)) return
+        e.preventDefault()
+        var ids = drag.ids
+        var sourceFolderID = drag.sourceFolderID
+        endDrag(link)
+        moveDroppedMail(ids, link.getAttribute("data-mail-drop-folder"), sourceFolderID)
+      })
+
+      // A drop on another account's folder is refused by the cursor; letting go
+      // there also says why.
+      document.addEventListener("dragend", function () {
+        if (!drag) return
+        var refusedTarget = pointerTarget && dropRefusal(pointerTarget) === "accounts"
+        endDrag()
+        if (refusedTarget) {
+          showGoferToast({
+            title: "Can't move these emails there",
+            description: "Moving mail between accounts isn't supported yet.",
+            variant: "warning",
+            duration: 4000,
+          })
+        }
+      })
+    }
+
+    function moveDroppedMail(ids, folderID, sourceFolderID) {
+      var targets = selectedMailTargets(ids)
+      var current = virtualMailList && virtualMailList.selectedEmailId
+      if (current && ids.indexOf(current) !== -1) setMailViewEmpty()
+      applyOptimisticRemove(ids)
+      clearMailSelection()
+
+      var run = Promise.resolve()
+      for (var start = 0; start < targets.length; start += MAIL_BULK_CHUNK_SIZE) {
+        run = run.then(postMoveChunk.bind(null, targets.slice(start, start + MAIL_BULK_CHUNK_SIZE), folderID, sourceFolderID))
+      }
+      run.catch(function (err) {
+        var reason = err && err.reason ? err.reason : "Please try again."
+        showGoferToast({ title: "Couldn't move the emails", description: reason, variant: "error", icon: "error", duration: 8000 })
+      }).then(function () {
+        if (virtualMailList && typeof virtualMailList.refreshCurrentFolder === "function") {
+          virtualMailList.refreshCurrentFolder({ noAnimation: true }).catch(function () {})
+        }
+        refreshSidebarUnread()
+      })
+    }
+
+    function postMoveChunk(targets, folderID, sourceFolderID) {
+      return fetch("/api/messages/move", {
+        method: "POST",
+        keepalive: true,
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ targets: targets, folder_id: folderID, source_folder_id: sourceFolderID }),
+      }).then(function (response) {
+        if (response.ok) return
+        return response.text().then(function (text) {
+          var err = new Error("move failed")
+          err.reason = String(text || "").trim() || "The server answered " + response.status + "."
+          throw err
+        })
       })
     }
 
