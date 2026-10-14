@@ -6,7 +6,8 @@ import "embed"
 
 // FS contains the browser assets needed by production builds.
 //
-// Build with `-tags embedded_assets` after generating css/output.css.
+// Build with `-tags embedded_assets` after `task generate`, which writes
+// css/output.css and the minified scripts in min/js.
 //
-//go:embed css/output.css js/*.js fonts/*.woff2 fonts/COPYING.LIB fonts/README.md icons/express/*.png icons/express/*.svg icons/express/README.md logo.svg logo.png manifest.webmanifest
+//go:embed css/output.css js/*.js min/js/*.js fonts/*.woff2 fonts/COPYING.LIB fonts/README.md fonts/*/*.woff2 fonts/*/OFL.txt icons/express/*.png icons/express/*.svg icons/express/README.md logo.svg logo.png manifest.webmanifest
 var FS embed.FS

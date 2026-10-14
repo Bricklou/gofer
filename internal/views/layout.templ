@@ -32,9 +32,7 @@ templ Layout(accounts []models.Account, activeFolder string, emails []models.Ema
 			<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
 			<title>Gofer - Email</title>
 			@AppIcon()
-			<link rel="preconnect" href="https://fonts.googleapis.com"/>
-			<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin="anonymous"/>
-			<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,600;0,9..144,700;0,9..144,800;1,9..144,400&family=Nunito+Sans:ital,wght@0,400;0,600;0,700;1,400&display=swap" rel="stylesheet"/>
+			@FontFaces()
 			@SavedPanelSizeStyle()
 			<link rel="stylesheet" href={ assetver.URL("/assets/css/output.css") }/>
 			@dialog.Script()
@@ -125,9 +123,7 @@ templ SettingsLayout(accounts []models.Account, syncSettings models.SyncSettings
 			<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
 			<title>Gofer - Settings</title>
 			@AppIcon()
-			<link rel="preconnect" href="https://fonts.googleapis.com"/>
-			<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin="anonymous"/>
-			<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,600;0,9..144,700;0,9..144,800;1,9..144,400&family=Nunito+Sans:ital,wght@0,400;0,600;0,700;1,400&display=swap" rel="stylesheet"/>
+			@FontFaces()
 			@SavedPanelSizeStyle()
 			<link rel="stylesheet" href={ assetver.URL("/assets/css/output.css") }/>
 			@SettingsComponentScripts()
@@ -235,9 +231,7 @@ templ ContactsLayout(accounts []models.Account, contacts []models.Contact, selec
 			<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
 			<title>Gofer - Contacts</title>
 			@AppIcon()
-			<link rel="preconnect" href="https://fonts.googleapis.com"/>
-			<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin="anonymous"/>
-			<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,600;0,9..144,700;0,9..144,800;1,9..144,400&family=Nunito+Sans:ital,wght@0,400;0,600;0,700;1,400&display=swap" rel="stylesheet"/>
+			@FontFaces()
 			@SavedPanelSizeStyle()
 			<link rel="stylesheet" href={ assetver.URL("/assets/css/output.css") }/>
 			@dialog.Script()
@@ -323,9 +317,7 @@ templ AdminLayout(uiSettings map[string]string, userData AdminUsersData, avatarS
 			<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
 			<title>Gofer - Admin</title>
 			@AppIcon()
-			<link rel="preconnect" href="https://fonts.googleapis.com"/>
-			<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin="anonymous"/>
-			<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,600;0,9..144,700;0,9..144,800;1,9..144,400&family=Nunito+Sans:ital,wght@0,400;0,600;0,700;1,400&display=swap" rel="stylesheet"/>
+			@FontFaces()
 			@SavedPanelSizeStyle()
 			<link rel="stylesheet" href={ assetver.URL("/assets/css/output.css") }/>
 			@dialog.Script()
