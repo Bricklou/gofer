@@ -300,7 +300,7 @@ func updateGoogleCalendarEventScope(ctx context.Context, token, remoteCalendarID
 			return calendar.RemoteEvent{}, calendarUpdateUnsupported(calendarGoogleMeetUnavailableMessage)
 		}
 	}
-	if err := calendarMeetingScopeRestriction(calendarGoogleOrganizerStatus(current.googleCalendarEvent), current.Attendees, draft, series || occurrence || draft.Recurrence != nil); err != nil {
+	if err := calendarMeetingScopeRestriction(calendarGoogleOrganizerStatus(current.googleCalendarEvent), draft); err != nil {
 		return calendar.RemoteEvent{}, err
 	}
 	draft.OrganizerEmail = current.Organizer.Email
@@ -507,7 +507,7 @@ func updateOutlookCalendarEventScope(ctx context.Context, token, remoteCalendarI
 	if version != current.ChangeKey && version != current.ODataETag {
 		return calendar.RemoteEvent{}, errCalendarUpdateConflict
 	}
-	if err := calendarMeetingScopeRestriction(calendarOutlookOrganizerStatus(current.outlookCalendarEvent), current.Attendees, draft, series || occurrence || draft.Recurrence != nil); err != nil {
+	if err := calendarMeetingScopeRestriction(calendarOutlookOrganizerStatus(current.outlookCalendarEvent), draft); err != nil {
 		return calendar.RemoteEvent{}, err
 	}
 	draft.OrganizerEmail = current.Organizer.EmailAddress.Address

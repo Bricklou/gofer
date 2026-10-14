@@ -106,7 +106,7 @@ func (h *Handler) handleCalendarSeriesDeleteConfirmation(w http.ResponseWriter, 
 		return
 	}
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	details := views.CalendarEventDetails{Event: calendarViewEvent(master), HasOccurrence: event.SeriesRemoteID != "", DeleteSeries: true, CanDelete: true, DeleteVersion: master.ETag, DeleteSeriesID: master.RemoteID}
+	details := views.CalendarEventDetails{Event: calendarViewEvent(master), HasOccurrence: event.SeriesRemoteID != "", DeleteSeries: true, CanDelete: true, DeleteVersion: master.ETag, DeleteSeriesID: master.RemoteID, Attendees: calendarEventParticipants(master.AttendeesJSON)}
 	if err := views.CalendarEventDeleteConfirmation(details).Render(ctx, w); err != nil {
 		http.Error(w, "Could not open the confirmation.", http.StatusInternalServerError)
 	}
@@ -129,7 +129,7 @@ func (h *Handler) handleCalendarOccurrenceDeleteConfirmation(w http.ResponseWrit
 		return
 	}
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	details := views.CalendarEventDetails{Event: calendarViewEvent(event), HasOccurrence: true, CanDelete: true, DeleteOccurrence: true, DeleteVersion: event.ETag}
+	details := views.CalendarEventDetails{Event: calendarViewEvent(event), HasOccurrence: true, CanDelete: true, DeleteOccurrence: true, DeleteVersion: event.ETag, Attendees: calendarEventParticipants(event.AttendeesJSON)}
 	if err := views.CalendarEventDeleteConfirmation(details).Render(r.Context(), w); err != nil {
 		http.Error(w, "Could not open the confirmation.", http.StatusInternalServerError)
 	}

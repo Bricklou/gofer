@@ -11351,6 +11351,14 @@ function selectCalendarGuest(button) {
   input.focus()
 }
 
+// Google and Outlook send guests the updates for repeating meetings; CalDAV
+// meetings with guests still have to be single events.
+function calendarCreateSourceProvider(form) {
+  var source = form.querySelector('[name="source_id"]')
+  var choice = source && Array.from(form.querySelectorAll("[data-calendar-source-provider]")).find(function (item) { return item.dataset.tuiSelectboxValue === source.value })
+  return choice ? choice.dataset.calendarSourceProvider : ""
+}
+
 function validateCalendarCreatePickers(form) {
   adjustCalendarCreateAllDayRange(form)
   var fields = ["start_date", "end_date", "timezone"]
@@ -11369,8 +11377,8 @@ function validateCalendarCreatePickers(form) {
     return false
   }
   var guests = form.querySelector('[name="guests"]')
-  if (guests && guests.value.trim() && repeat && repeat.value !== "none") {
-    setCalendarCreateError(form, "Guest invitations currently support events that do not repeat. Remove the guests or choose Does not repeat.")
+  if (guests && guests.value.trim() && repeat && repeat.value !== "none" && calendarCreateSourceProvider(form) === "caldav") {
+    setCalendarCreateError(form, "Guest invitations on CalDAV calendars currently support events that do not repeat. Remove the guests or choose Does not repeat.")
     guests.focus()
     return false
   }

@@ -36,6 +36,7 @@ func calendarOccurrenceExistingRestriction(existing storage.CalendarEvent) error
 		RemoteID: existing.RemoteID, SeriesRemoteID: existing.SeriesRemoteID, Status: existing.Status,
 		Deleted: existing.IsDeleted, Recurrence: json.RawMessage(existing.RecurrenceJSON),
 		Attendees: json.RawMessage(existing.AttendeesJSON), OnlineMeeting: json.RawMessage(existing.OnlineMeetingJSON),
+		ResponseStatus: calendarStoredOrganizerStatus(existing),
 	}, existing.SeriesRemoteID); reason != "" {
 		return calendarUpdateUnsupported(reason)
 	}

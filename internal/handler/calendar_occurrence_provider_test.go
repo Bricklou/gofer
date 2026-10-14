@@ -16,7 +16,7 @@ import (
 func TestCalendarJSONOccurrenceMutation(t *testing.T) {
 	for _, graph := range []bool{false, true} {
 		for _, deleting := range []bool{false, true} {
-			for _, mode := range []string{"timed", "all-day", "exception", "wrong-parent", "master", "stale", "race", "guests", "invitation", "meeting", "unconfirmed", "wrong-result", "boundary"} {
+			for _, mode := range []string{"timed", "all-day", "exception", "wrong-parent", "master", "stale", "race", "guests", "organizer-guests", "guest-change", "invitation", "meeting", "unconfirmed", "wrong-result", "boundary"} {
 				t.Run(fmt.Sprintf("graph=%v/delete=%v/%s", graph, deleting, mode), func(t *testing.T) {
 					draft := calendarProviderDraft(t, mode == "all-day")
 					existing := storage.CalendarEvent{RemoteID: "instance", SeriesRemoteID: "master", ETag: `"v1"`, Description: "Old notes"}
@@ -42,6 +42,15 @@ func TestCalendarJSONOccurrenceMutation(t *testing.T) {
 						current["etag"], current["changeKey"] = `"newer"`, "newer"
 					case "guests":
 						current["attendees"] = []any{map[string]string{"email": "guest@example.com"}}
+					case "organizer-guests", "guest-change":
+						// The organizer can change one date of a meeting, guests included.
+						current["organizer"], current["isOrganizer"] = map[string]any{"self": true, "email": "owner@example.com", "emailAddress": map[string]string{"address": "owner@example.com"}}, true
+						current["attendees"] = []any{map[string]any{"email": "guest@example.com", "emailAddress": map[string]string{"address": "guest@example.com"}, "type": "required"}}
+						if mode == "guest-change" {
+							draft.GuestsSet = true
+							draft.Guests = []calendar.GuestDraft{{Email: "guest@example.com"}, {Email: "second@example.com"}}
+						}
+						existing.ResponseStatus, existing.AttendeesJSON = "organizer", `[{"email":"guest@example.com"}]`
 					case "invitation":
 						current["organizer"], current["isOrganizer"] = map[string]bool{"self": false}, false
 					case "meeting":
@@ -64,6 +73,9 @@ func TestCalendarJSONOccurrenceMutation(t *testing.T) {
 						}
 						if reads != 1 || r.Header.Get("If-Match") != etag {
 							t.Error("write lacked fresh preflight and conditional version")
+						}
+						if guests := mode == "organizer-guests" || mode == "guest-change"; !graph && guests != (r.URL.Query().Get("sendUpdates") == "all") {
+							t.Errorf("guest notification mismatch: %s", r.URL.RawQuery)
 						}
 						if mode == "race" {
 							w.WriteHeader(412)
@@ -90,7 +102,10 @@ func TestCalendarJSONOccurrenceMutation(t *testing.T) {
 						}
 						var patch map[string]any
 						_ = json.NewDecoder(r.Body).Decode(&patch)
-						for _, field := range []string{"recurrence", "recurringEventId", "seriesMasterId", "originalStartTime", "attendees", "reminders"} {
+						if _, exists := patch["attendees"]; exists != (mode == "guest-change") {
+							t.Errorf("occurrence PATCH attendees mismatch: %v", patch["attendees"])
+						}
+						for _, field := range []string{"recurrence", "recurringEventId", "seriesMasterId", "originalStartTime", "reminders"} {
 							if _, exists := patch[field]; exists {
 								t.Errorf("occurrence PATCH changed %s", field)
 							}
@@ -153,6 +168,9 @@ func TestCalendarJSONOccurrenceMutation(t *testing.T) {
 						}
 						if !deleting && (remote.RemoteID != existing.RemoteID || remote.SeriesRemoteID != "master" || !calendarUpdateMatchesDraft(remote, draft)) {
 							t.Fatalf("wrong saved occurrence: %+v", remote)
+						}
+						if mode == "guest-change" && !deleting && !calendarMeetingGuestsMatch(remote.Attendees, draft.Guests, "owner@example.com") {
+							t.Fatalf("occurrence guests not saved: %s", remote.Attendees)
 						}
 					}
 				})

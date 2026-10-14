@@ -195,9 +195,8 @@ func parseCalendarEventDraft(r *http.Request) (calendar.EventDraft, error) {
 			}
 		}
 		sort.Slice(draft.Guests, func(i, j int) bool { return draft.Guests[i].Email < draft.Guests[j].Email })
-		if frequency := r.PostForm.Get("repeat_frequency"); frequency != "" && frequency != "none" {
-			return draft, fmt.Errorf("guest invitations currently support events that do not repeat")
-		}
+		// Repeating meetings depend on the calendar: Google and Outlook support
+		// them, and the CalDAV paths refuse them before writing.
 	}
 	if draft.Summary == "" || utf8.RuneCountInString(draft.Summary) > 255 {
 		return draft, fmt.Errorf("enter an event title of at most 255 characters")

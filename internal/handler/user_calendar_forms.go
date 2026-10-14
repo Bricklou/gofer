@@ -212,13 +212,13 @@ func (h *Handler) renderUserCalendarDeleteConfirmation(w http.ResponseWriter, r 
 			if err := calendarOccurrenceExistingRestriction(event); err != nil {
 				return userCalendarFormFailure{http.StatusForbidden, "This occurrence cannot be deleted. Refresh the calendar and check its write access."}
 			}
-			details = views.CalendarEventDetails{Event: calendarViewEvent(event), HasOccurrence: true, CanDelete: true, DeleteOccurrence: true, DeleteVersion: event.ETag}
+			details = views.CalendarEventDetails{Event: calendarViewEvent(event), HasOccurrence: true, CanDelete: true, DeleteOccurrence: true, DeleteVersion: event.ETag, Attendees: calendarEventParticipants(event.AttendeesJSON)}
 		} else {
 			master, err := p.readSeries(ctx, true)
 			if err != nil {
 				return err
 			}
-			details = views.CalendarEventDetails{Event: calendarViewEvent(master), HasOccurrence: event.SeriesRemoteID != "", DeleteSeries: true, CanDelete: true, DeleteVersion: master.ETag, DeleteSeriesID: master.RemoteID}
+			details = views.CalendarEventDetails{Event: calendarViewEvent(master), HasOccurrence: event.SeriesRemoteID != "", DeleteSeries: true, CanDelete: true, DeleteVersion: master.ETag, DeleteSeriesID: master.RemoteID, Attendees: calendarEventParticipants(master.AttendeesJSON)}
 		}
 		return p.mutationAccess(ctx, true)
 	})

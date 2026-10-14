@@ -18,7 +18,7 @@ import (
 
 func TestCalendarJSONProviderUpdateConditionalAndPreserving(t *testing.T) {
 	for _, graph := range []bool{false, true} {
-		for _, mode := range []string{"timed", "all-day", "stale", "race", "guests", "unconfirmed", "recurring", "recurring-all-day", "recurring-mismatch", "recurring-missing", "already-recurring", "series", "series-all-day", "series-stale", "series-instance", "series-complex", "series-guests", "series-race"} {
+		for _, mode := range []string{"timed", "all-day", "stale", "race", "guests", "unconfirmed", "recurring", "recurring-all-day", "recurring-mismatch", "recurring-missing", "already-recurring", "series", "series-all-day", "series-stale", "series-instance", "series-complex", "series-guests", "series-organizer-guests", "series-guest-change", "recurring-organizer-guests", "series-race"} {
 			t.Run(fmt.Sprintf("graph=%v/%s", graph, mode), func(t *testing.T) {
 				draft := calendarProviderDraft(t, strings.HasSuffix(mode, "all-day"))
 				series := strings.HasPrefix(mode, "series")
@@ -87,6 +87,18 @@ func TestCalendarJSONProviderUpdateConditionalAndPreserving(t *testing.T) {
 						}
 					}
 				}
+				// The organizer of a recurring meeting can change the series or turn
+				// a meeting into one; Google and Outlook send guests the update.
+				organizerGuests := mode == "series-organizer-guests" || mode == "series-guest-change" || mode == "recurring-organizer-guests"
+				if organizerGuests {
+					current["organizer"], current["isOrganizer"] = map[string]any{"self": true, "email": "owner@example.com", "emailAddress": map[string]string{"address": "owner@example.com"}}, true
+					current["attendees"] = []any{map[string]any{"email": "guest@example.com", "emailAddress": map[string]string{"address": "guest@example.com"}, "type": "required"}}
+					existing.ResponseStatus, existing.AttendeesJSON = "organizer", `[{"email":"guest@example.com"}]`
+				}
+				if mode == "series-guest-change" {
+					draft.GuestsSet = true
+					draft.Guests = []calendar.GuestDraft{{Email: "second@example.com"}}
+				}
 				gets, patches := 0, 0
 				server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 					if r.Header.Get("Authorization") != "Bearer test-token" {
@@ -121,11 +133,20 @@ func TestCalendarJSONProviderUpdateConditionalAndPreserving(t *testing.T) {
 					if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
 						t.Error(err)
 					}
+					if !graph && organizerGuests != (r.URL.Query().Get("sendUpdates") == "all") {
+						t.Errorf("guest notification mismatch: %s", r.URL.RawQuery)
+					}
 					for _, key := range []string{"attendees", "recurrence", "reminders", "isReminderOn", "reminderMinutesBeforeStart", "description", "body"} {
 						if key == "recurrence" && converting {
 							raw, _ := json.Marshal(payload[key])
 							if !calendarRecurrenceMatchesDraft(raw, draft) {
 								t.Errorf("repeat settings missing from update: %s", raw)
+							}
+							continue
+						}
+						if key == "attendees" && mode == "series-guest-change" {
+							if _, exists := payload[key]; !exists {
+								t.Error("changed guests missing from update")
 							}
 							continue
 						}
@@ -197,6 +218,12 @@ func TestCalendarJSONProviderUpdateConditionalAndPreserving(t *testing.T) {
 					}
 					if converting && !calendarRecurrenceMatchesDraft(remote.Recurrence, draft) {
 						t.Fatal("conversion response lost recurrence")
+					}
+					if organizerGuests && !draft.GuestsSet && !calendarMeetingGuestsMatch(remote.Attendees, []calendar.GuestDraft{{Email: "guest@example.com"}}, "owner@example.com") {
+						t.Fatalf("series guests lost: %s", remote.Attendees)
+					}
+					if mode == "series-guest-change" && !calendarMeetingGuestsMatch(remote.Attendees, draft.Guests, "owner@example.com") {
+						t.Fatalf("series guests not saved: %s", remote.Attendees)
 					}
 				}
 			})

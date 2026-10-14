@@ -140,7 +140,7 @@ templ CalendarCreateDialog(data CalendarCreateData) {
 							}
 							@input.Input(input.Props{ID: "calendar-create-location", Name: "location", Value: data.Location, Placeholder: "Add location", Attributes: templ.Attributes{"maxlength": "1024"}})
 						}
-						if !data.EditSeries && !data.EditOccurrence {
+						if calendarGuestsEditable(data) {
 							@calendarDialogRow(icon.Users(icon.Props{Class: "size-4"}), "pt-2.5") {
 								<div class="relative space-y-1.5">
 									@label.Label(label.Props{For: "calendar-create-guests", Class: "sr-only"}) {
@@ -167,7 +167,7 @@ templ CalendarCreateDialog(data CalendarCreateData) {
 											<div id="calendar-guest-suggestions" class="max-h-60 overflow-y-auto" role="listbox" aria-label="Matching contacts"></div>
 										}
 									}
-									<p class="text-xs text-muted-foreground" data-calendar-guests-help>Separate guests with commas. Non-repeating meetings only; saving sends invitations and updates.</p>
+									<p class="text-xs text-muted-foreground" data-calendar-guests-help>Separate guests with commas. Saving sends invitations and updates.</p>
 								</div>
 							}
 						}

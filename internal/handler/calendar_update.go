@@ -63,7 +63,7 @@ func calendarEventMutationRestriction(event storage.CalendarEvent, source storag
 	if !calendarSourceWritable(source) {
 		return "This calendar is read-only."
 	}
-	if series && calendarUpdateHasDetails(json.RawMessage(event.AttendeesJSON)) {
+	if series && source.Provider == storage.CalendarSourceProviderCalDAV && calendarUpdateHasDetails(json.RawMessage(event.AttendeesJSON)) {
 		return "Recurring meetings with guests cannot be edited yet."
 	}
 	if reason := calendarStoredEditRestriction(event); reason != "" {
@@ -271,6 +271,9 @@ func (h *Handler) updateCalendarProviderEvent(ctx context.Context, source storag
 			return calendar.RemoteEvent{}, err
 		}
 		if occurrence {
+			if len(draft.Guests) > 0 {
+				return calendar.RemoteEvent{}, calendarDeletePreflightError{calendarUpdateUnsupported("Recurring meetings with guests are not supported on CalDAV calendars yet.")}
+			}
 			return updateCalDAVCalendarOccurrence(ctx, source, credentials.username, credentials.password, event, &draft)
 		}
 		if len(draft.Guests) > 0 || event.OrganizerEmail != "" || calendarUpdateHasDetails(json.RawMessage(event.AttendeesJSON)) {
@@ -367,7 +370,7 @@ func (h *Handler) handleUpdateCalendarEvent(w http.ResponseWriter, r *http.Reque
 		return
 	}
 	occurrence := event
-	if draft.Recurrence != nil && calendarUpdateHasDetails(json.RawMessage(event.AttendeesJSON)) {
+	if draft.Recurrence != nil && source.Provider == storage.CalendarSourceProviderCalDAV && calendarUpdateHasDetails(json.RawMessage(event.AttendeesJSON)) {
 		calendarUpdateFailure(w, 400, "Recurring meetings with guests are not supported yet.", false, false)
 		return
 	}

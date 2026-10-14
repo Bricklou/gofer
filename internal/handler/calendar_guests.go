@@ -128,10 +128,7 @@ func calendarMeetingGuestsMatch(raw json.RawMessage, requested []calendar.GuestD
 	return true
 }
 
-func calendarMeetingScopeRestriction(organizer string, attendees json.RawMessage, draft calendar.EventDraft, recurring bool) error {
-	if recurring && (len(draft.Guests) > 0 || calendarUpdateHasDetails(attendees)) {
-		return calendarUpdateUnsupported("Recurring meetings with guests are not supported yet.")
-	}
+func calendarMeetingScopeRestriction(organizer string, draft calendar.EventDraft) error {
 	if len(draft.Guests) > 0 && organizer != "organizer" {
 		return calendarUpdateUnsupported("Only the organizer can invite guests.")
 	}

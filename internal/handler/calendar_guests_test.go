@@ -29,10 +29,15 @@ func TestCalendarGuestValidation(t *testing.T) {
 			t.Fatalf("accepted invalid guest: %q", raw)
 		}
 	}
+	// Whether a repeating meeting is allowed depends on the calendar, which
+	// the provider paths check; the form itself accepts it.
 	values.Set("guests", "guest@example.com")
 	values.Set("repeat_frequency", "weekly")
-	if _, err := parseCalendarEventDraft(calendarCreateHTTPRequest(values, "one")); err == nil {
-		t.Fatal("accepted recurring invitations")
+	values.Set("repeat_interval", "1")
+	values.Set("repeat_end", "count")
+	values.Set("repeat_count", "4")
+	if draft, err := parseCalendarEventDraft(calendarCreateHTTPRequest(values, "one")); err != nil || draft.Recurrence == nil || len(draft.Guests) != 1 {
+		t.Fatalf("recurring invitation draft=%#v err=%v", draft, err)
 	}
 	if calendarGuestLastSeparator(`"Last, First" <guest@example.com>, next`) != strings.LastIndex(`"Last, First" <guest@example.com>, next`, ",") {
 		t.Fatal("quoted guest names split incorrectly")
@@ -284,6 +289,11 @@ func TestCalendarGuestCalDAVSchedulingAndDurableFallback(t *testing.T) {
 					t.Fatal(err)
 				}
 			}
+			repeating := draft
+			repeating.Recurrence = &calendar.RecurrenceDraft{Frequency: "weekly", Interval: 1, Count: 4}
+			if _, err := h.createCalDAVMeeting(t.Context(), source, credentials, repeating); !errors.Is(err, errCalendarUpdateUnsupported) || calendarCreateUncertain(err) || writes != 0 {
+				t.Fatalf("repeating CalDAV meeting reached a write: %v", err)
+			}
 			event, err := h.createCalDAVMeeting(t.Context(), source, credentials, draft)
 			if err != nil || event.ResponseStatus != "organizer" {
 				t.Fatalf("create=%#v err=%v", event, err)
@@ -421,5 +431,15 @@ func TestCalendarMeetingSafetyChecks(t *testing.T) {
 	cal.Events()[0].Props.SetText("RRULE", "FREQ=DAILY")
 	if calendarMeetingCalDAVShape(cal, http.Header{}, "host@example.com") == nil {
 		t.Fatal("recurring meeting accepted")
+	}
+}
+
+func TestCalendarRecurringMeetingEditableOnGoogleAndOutlookOnly(t *testing.T) {
+	event := storage.CalendarEvent{RemoteID: "instance", SeriesRemoteID: "master", ETag: `"v1"`, ResponseStatus: "organizer", AttendeesJSON: `[{"email":"guest@example.com"}]`}
+	for provider, editable := range map[string]bool{"gmail": true, "outlook": true, "caldav": false} {
+		source := storage.CalendarSource{Provider: provider, AccessRole: "owner"}
+		if reason := calendarEventMutationRestriction(event, source, true); (reason == "") != editable {
+			t.Errorf("%s: recurring meeting restriction %q", provider, reason)
+		}
 	}
 }

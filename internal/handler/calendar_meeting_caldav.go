@@ -124,6 +124,9 @@ func calendarMeetingNormalized(cal *ical.Calendar, headers http.Header, endpoint
 }
 
 func (h *Handler) createCalDAVMeeting(ctx context.Context, source storage.CalendarSource, credentials calendarCredentials, draft calendar.EventDraft) (calendar.RemoteEvent, error) {
+	if draft.Recurrence != nil {
+		return calendar.RemoteEvent{}, calendarDeletePreflightError{calendarUpdateUnsupported("Recurring meetings with guests are not supported on CalDAV calendars yet.")}
+	}
 	agent, email, name, err := h.calendarMeetingAgent(ctx, source, credentials)
 	if err != nil {
 		return calendar.RemoteEvent{}, calendarDeletePreflightError{err}

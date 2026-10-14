@@ -17,7 +17,7 @@ import (
 func TestCalendarDeleteJSONProvidersConditionalAndSafe(t *testing.T) {
 	for _, graph := range []bool{false, true} {
 		for _, mode := range []string{"success", "changed", "wrong-id", "invalid-etag", "recurring", "guests", "invitation", "online", "organizer-online", "organizer-online-guests", "race", "denied", "missing", "redirect", "accepted", "read-failure",
-			"series-success", "series-changed", "series-wrong-id", "series-invalid-etag", "series-guests", "series-invitation", "series-online", "series-race", "series-denied", "series-missing", "series-redirect", "series-accepted", "series-read-failure", "series-occurrence", "series-single"} {
+			"series-success", "series-organizer-guests", "series-changed", "series-wrong-id", "series-invalid-etag", "series-guests", "series-invitation", "series-online", "series-race", "series-denied", "series-missing", "series-redirect", "series-accepted", "series-read-failure", "series-occurrence", "series-single"} {
 			t.Run(fmt.Sprintf("graph=%v/%s", graph, mode), func(t *testing.T) {
 				series := strings.HasPrefix(mode, "series-")
 				mode := strings.TrimPrefix(mode, "series-")
@@ -62,6 +62,10 @@ func TestCalendarDeleteJSONProvidersConditionalAndSafe(t *testing.T) {
 					current["organizer"], current["isOrganizer"] = map[string]bool{"self": false}, false
 				case "online":
 					current["hangoutLink"], current["isOnlineMeeting"] = "https://meet.example", true
+				case "organizer-guests":
+					current["organizer"], current["isOrganizer"] = map[string]any{"self": true, "email": "owner@example.com", "emailAddress": map[string]string{"address": "owner@example.com"}}, true
+					current["attendees"] = []any{map[string]any{"email": "guest@example.com", "emailAddress": map[string]string{"address": "guest@example.com"}, "type": "required"}}
+					existing.ResponseStatus, existing.AttendeesJSON = "organizer", `[{"email":"guest@example.com"}]`
 				case "organizer-online", "organizer-online-guests":
 					current["organizer"], current["isOrganizer"] = map[string]bool{"self": true}, true
 					current["conferenceData"] = map[string]any{"conferenceSolution": map[string]any{"key": map[string]string{"type": "hangoutsMeet"}}, "entryPoints": []any{map[string]string{"entryPointType": "video", "uri": "https://meet.google.com/abc-defg-hij"}}}
@@ -108,7 +112,7 @@ func TestCalendarDeleteJSONProvidersConditionalAndSafe(t *testing.T) {
 					if gets != 1 || r.Header.Get("If-Match") != expected || r.Header.Get("Prefer") != `IdType="ImmutableId"` {
 						t.Error("missing read-before-delete or exact provider version")
 					}
-					if sendUpdates := r.URL.Query().Get("sendUpdates"); !graph && (mode == "organizer-online-guests") != (sendUpdates == "all") {
+					if sendUpdates := r.URL.Query().Get("sendUpdates"); !graph && (mode == "organizer-online-guests" || mode == "organizer-guests") != (sendUpdates == "all") {
 						t.Errorf("guest notification mismatch: sendUpdates=%q", sendUpdates)
 					}
 					if body, _ := io.ReadAll(r.Body); len(body) != 0 {
@@ -147,7 +151,7 @@ func TestCalendarDeleteJSONProvidersConditionalAndSafe(t *testing.T) {
 					t.Fatal("delete followed a redirect or retried")
 				}
 				switch mode {
-				case "success", "organizer-online", "organizer-online-guests":
+				case "success", "organizer-online", "organizer-online-guests", "organizer-guests":
 					if err != nil || deletes != 1 {
 						t.Fatalf("deletes=%d err=%v", deletes, err)
 					}
