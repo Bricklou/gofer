@@ -4306,6 +4306,16 @@ document.addEventListener("DOMContentLoaded", function () {
       var data
       try { data = JSON.parse(e.data) } catch (_) { return }
       if (!data || !data.folder_id) return
+      if (data.unchanged) {
+        // The server reported nothing new in this folder: count it as done
+        // without reloading counts or the list.
+        updateMailSyncFolderProgress("complete", data)
+        syncStatesByFolder[data.folder_id] = mailFolderSyncStateFromEvent(data, false)
+        withMailListForFolder(data.folder_id, data.folder_role, function (vml) {
+          vml.setSyncState(false, 0, 0, data)
+        }, false)
+        return
+      }
       if (data.refresh_only) {
         syncStatesByFolder[data.folder_id] = mailFolderSyncStateFromEvent(data, false)
         refreshSidebarUnread()

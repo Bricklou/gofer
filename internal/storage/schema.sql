@@ -409,6 +409,88 @@ ON folder_thread_state(account_id);
 CREATE INDEX IF NOT EXISTS idx_folder_thread_state_head
 ON folder_thread_state(head_message_id);
 
+-- Incremental maintenance of folder_thread_state (see folder_thread_tracking.go).
+CREATE TABLE IF NOT EXISTS folder_thread_dirty (
+    folder_id TEXT NOT NULL,
+    thread_key TEXT NOT NULL,
+    PRIMARY KEY (folder_id, thread_key)
+) WITHOUT ROWID;
+
+CREATE INDEX IF NOT EXISTS idx_folder_state_folder_unread
+ON message_folder_state(folder_id, is_deleted, is_read);
+
+-- Covers the filters answered from summaries (unread, starred, attachments,
+-- conversations, account), so their counts read only this index.
+CREATE INDEX IF NOT EXISTS idx_folder_thread_state_flags
+ON folder_thread_state(folder_id, thread_is_read, thread_is_starred, thread_has_attachments, thread_count, account_id);
+
+CREATE TRIGGER IF NOT EXISTS folder_thread_track_state_insert
+AFTER INSERT ON message_folder_state
+BEGIN
+    INSERT INTO folder_thread_dirty(folder_id, thread_key)
+    SELECT NEW.folder_id, COALESCE(NULLIF(m.thread_id, ''), printf('msg:%d', m.id))
+    FROM messages m WHERE m.id = NEW.message_id
+      AND NOT EXISTS(SELECT 1 FROM folder_thread_dirty w WHERE w.folder_id = NEW.folder_id AND w.thread_key = '*')
+    ON CONFLICT DO NOTHING;
+END;
+
+CREATE TRIGGER IF NOT EXISTS folder_thread_track_state_update
+AFTER UPDATE ON message_folder_state
+WHEN OLD.is_read IS NOT NEW.is_read OR OLD.is_starred IS NOT NEW.is_starred
+  OR OLD.is_deleted IS NOT NEW.is_deleted OR OLD.folder_id IS NOT NEW.folder_id
+  OR OLD.message_id IS NOT NEW.message_id
+BEGIN
+    INSERT INTO folder_thread_dirty(folder_id, thread_key)
+    SELECT OLD.folder_id, COALESCE(NULLIF(m.thread_id, ''), printf('msg:%d', m.id))
+    FROM messages m WHERE m.id = OLD.message_id
+      AND NOT EXISTS(SELECT 1 FROM folder_thread_dirty w WHERE w.folder_id = OLD.folder_id AND w.thread_key = '*')
+    ON CONFLICT DO NOTHING;
+    INSERT INTO folder_thread_dirty(folder_id, thread_key)
+    SELECT NEW.folder_id, COALESCE(NULLIF(m.thread_id, ''), printf('msg:%d', m.id))
+    FROM messages m WHERE m.id = NEW.message_id
+      AND NOT EXISTS(SELECT 1 FROM folder_thread_dirty w WHERE w.folder_id = NEW.folder_id AND w.thread_key = '*')
+    ON CONFLICT DO NOTHING;
+END;
+
+CREATE TRIGGER IF NOT EXISTS folder_thread_track_state_delete
+AFTER DELETE ON message_folder_state
+BEGIN
+    INSERT INTO folder_thread_dirty(folder_id, thread_key)
+    SELECT OLD.folder_id, COALESCE(NULLIF(m.thread_id, ''), printf('msg:%d', m.id))
+    FROM messages m WHERE m.id = OLD.message_id
+      AND NOT EXISTS(SELECT 1 FROM folder_thread_dirty w WHERE w.folder_id = OLD.folder_id AND w.thread_key = '*')
+    ON CONFLICT DO NOTHING;
+END;
+
+CREATE TRIGGER IF NOT EXISTS folder_thread_track_message_update
+AFTER UPDATE OF thread_id, date_received, has_attachments ON messages
+WHEN OLD.thread_id IS NOT NEW.thread_id OR OLD.date_received IS NOT NEW.date_received
+  OR OLD.has_attachments IS NOT NEW.has_attachments
+BEGIN
+    INSERT INTO folder_thread_dirty(folder_id, thread_key)
+    SELECT mfs.folder_id, COALESCE(NULLIF(OLD.thread_id, ''), printf('msg:%d', OLD.id))
+    FROM message_folder_state mfs WHERE mfs.message_id = OLD.id
+      AND NOT EXISTS(SELECT 1 FROM folder_thread_dirty w WHERE w.folder_id = mfs.folder_id AND w.thread_key = '*')
+    ON CONFLICT DO NOTHING;
+    INSERT INTO folder_thread_dirty(folder_id, thread_key)
+    SELECT mfs.folder_id, COALESCE(NULLIF(NEW.thread_id, ''), printf('msg:%d', NEW.id))
+    FROM message_folder_state mfs WHERE mfs.message_id = NEW.id
+      AND NOT EXISTS(SELECT 1 FROM folder_thread_dirty w WHERE w.folder_id = mfs.folder_id AND w.thread_key = '*')
+    ON CONFLICT DO NOTHING;
+END;
+
+-- Runs before the cascade removes the message's folder states, while its
+-- conversation is still known.
+CREATE TRIGGER IF NOT EXISTS folder_thread_track_message_delete
+BEFORE DELETE ON messages
+BEGIN
+    INSERT INTO folder_thread_dirty(folder_id, thread_key)
+    SELECT mfs.folder_id, COALESCE(NULLIF(OLD.thread_id, ''), printf('msg:%d', OLD.id))
+    FROM message_folder_state mfs WHERE mfs.message_id = OLD.id
+      AND NOT EXISTS(SELECT 1 FROM folder_thread_dirty w WHERE w.folder_id = mfs.folder_id AND w.thread_key = '*')
+    ON CONFLICT DO NOTHING;
+END;
+
 CREATE UNIQUE INDEX IF NOT EXISTS idx_folder_uid
 ON message_folder_state(folder_id, remote_uid);
 
@@ -1557,4 +1639,4 @@ CREATE TABLE IF NOT EXISTS calendar_teams_drafts (
 );
 
 -- Schema version marker for fresh installs
-INSERT OR REPLACE INTO schema_version (version) VALUES (107);
+INSERT OR REPLACE INTO schema_version (version) VALUES (108);

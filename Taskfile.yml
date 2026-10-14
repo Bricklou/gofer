@@ -21,6 +21,7 @@ tasks:
     cmds:
       - templ generate --ignore-pattern='(^|/)dist(/|$)'
       - tailwindcss -i ./assets/css/input.css -o ./assets/css/output.css --minify
+      - go run github.com/evanw/esbuild/cmd/esbuild@v0.28.2 $(ls assets/js/*.js | grep -v -e '\.min\.js$' -e '/sw\.js$') --minify --outdir=assets/min/js --log-level=warning
 
   build:
     desc: Build for production
@@ -46,4 +47,4 @@ tasks:
   clean:
     desc: Clean build artifacts
     cmds:
-      - rm -rf dist/ assets/css/output.css
+      - rm -rf dist/ assets/css/output.css assets/min/

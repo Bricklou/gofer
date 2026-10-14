@@ -301,10 +301,11 @@ func TestListConfiguredIdleFoldersUsesEffectiveIMAPSelection(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ListConfiguredIdleFolders() error = %v", err)
 	}
-	if len(configured) != 3 {
-		t.Fatalf("configured idle folders = %#v, want three generic IMAP folders", configured)
+	// The default watches Inbox and Sent; Drafts is polled.
+	if len(configured) != 2 {
+		t.Fatalf("configured idle folders = %#v, want the default Inbox and Sent", configured)
 	}
-	for index, wantID := range []string{"imap-drafts", "imap-inbox", "imap-sent"} {
+	for index, wantID := range []string{"imap-inbox", "imap-sent"} {
 		if configured[index].AccountID != "idle-imap" || configured[index].FolderID != wantID || configured[index].Provider != "imap" {
 			t.Fatalf("configured idle folder[%d] = %#v, want idle-imap/%s/imap", index, configured[index], wantID)
 		}

@@ -125,7 +125,7 @@ func upgradeStorageDatabase(ctx context.Context, path, owner string) (err error)
 		return nil
 	}
 	log.Printf("storage: upgrading %s from schema version %d/%d to %d/%d", path, version, layout, CurrentSchemaVersion, len(steps))
-	write, err := openDB(path)
+	write, err := openDB(path, writePoolOption)
 	if err != nil {
 		return err
 	}

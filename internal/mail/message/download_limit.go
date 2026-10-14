@@ -3,8 +3,9 @@ package message
 import (
 	"context"
 	"fmt"
-	"io"
 	"os"
+
+	"github.com/cristianadrielbraun/gofer/internal/store"
 )
 
 // AutoDownloadMaxBytes is the largest message Gofer downloads on its own to
@@ -54,18 +55,21 @@ func (e *TooLargeError) CanDownloadFully() bool {
 // ReadSavedMessage reads a message saved earlier, within the download limit
 // on ctx, or nothing when it can't be read.
 func ReadSavedMessage(ctx context.Context, path string) ([]byte, error) {
-	file, err := os.Open(path)
+	info, err := os.Stat(path)
 	if err != nil {
 		return nil, nil
 	}
-	defer file.Close()
 	limit := DownloadLimit(ctx, MaxDownloadBytes)
-	if info, err := file.Stat(); err == nil && info.Size() > limit {
+	// A saved file is never larger than the message it holds.
+	if info.Size() > limit {
 		return nil, &TooLargeError{Size: info.Size(), Limit: limit}
 	}
-	raw, err := io.ReadAll(io.LimitReader(file, limit+1))
-	if err != nil || int64(len(raw)) > limit {
+	raw, err := store.ReadMessageFile(path)
+	if err != nil {
 		return nil, nil
+	}
+	if int64(len(raw)) > limit {
+		return nil, &TooLargeError{Size: int64(len(raw)), Limit: limit}
 	}
 	return raw, nil
 }

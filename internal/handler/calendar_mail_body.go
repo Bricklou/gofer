@@ -5,12 +5,12 @@ import (
 	"context"
 	"io"
 	"log"
-	"os"
 	"strconv"
 	"strings"
 
 	"github.com/cristianadrielbraun/gofer/internal/mail/message"
 	"github.com/cristianadrielbraun/gofer/internal/storage"
+	"github.com/cristianadrielbraun/gofer/internal/store"
 )
 
 // Repair the old parser's cached calendar-as-text result when its owned message
@@ -58,7 +58,7 @@ func (h *Handler) repairCachedCalendarBody(ctx context.Context, emailID, account
 	if err != nil || rawPath == "" || textPath == "" {
 		return false
 	}
-	file, err := os.Open(rawPath)
+	file, err := store.OpenMessageFile(rawPath)
 	if err != nil {
 		return false
 	}
@@ -129,7 +129,7 @@ func (h *Handler) repairUserCalendarBodies(ctx context.Context, owner, emailID s
 
 // cachedCalendarText reports whether a cached text body starts with raw iCalendar.
 func cachedCalendarText(path string) bool {
-	file, err := os.Open(path)
+	file, err := store.OpenMessageFile(path)
 	if err != nil {
 		return false
 	}

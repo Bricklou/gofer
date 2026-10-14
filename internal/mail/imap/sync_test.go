@@ -1,6 +1,7 @@
 package imap
 
 import (
+	"slices"
 	"testing"
 	"time"
 
@@ -121,6 +122,36 @@ func TestFinalizeSyncMessageUsesIMAPDatePrecedence(t *testing.T) {
 			}
 			if msg.MessageID != "<folder-42@sync.gofer>" || msg.Subject != "(no subject)" || msg.Snippet != "(no subject)" {
 				t.Fatalf("finalized metadata = %#v, want synthetic defaults", msg)
+			}
+		})
+	}
+}
+
+// A message Gofer stores in a folder while it is being reconciled, such as a
+// new draft revision, gets a UID the server's earlier list cannot include. It
+// must not be taken for a message removed from the server.
+func TestUIDSnapshotLeavesLaterMessagesAlone(t *testing.T) {
+	local := map[uint32]int64{3: 1, 5: 2, 7: 3, 11: 4}
+	tests := []struct {
+		name     string
+		snapshot UIDSnapshot
+		seenUID  uint32
+		want     []uint32
+	}{
+		{"uid next", UIDSnapshot{UIDs: []uint32{3, 7}, UIDNext: 11}, 7, []uint32{5}},
+		{"without uid next", UIDSnapshot{UIDs: []uint32{3, 7}}, 7, []uint32{5}},
+		{"everything removed", UIDSnapshot{UIDNext: 12}, 11, []uint32{3, 5, 7, 11}},
+		{"empty without uid next", UIDSnapshot{}, 0, nil},
+		// UIDNEXT never goes down, but a server that lowers it after an
+		// expunge must not keep messages sync has seen.
+		{"understated uid next", UIDSnapshot{UIDs: []uint32{3}, UIDNext: 4}, 11, []uint32{5, 7, 11}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := tt.snapshot.ExpungedUIDs(local, tt.seenUID)
+			slices.Sort(got)
+			if !slices.Equal(got, tt.want) {
+				t.Fatalf("ExpungedUIDs() = %v, want %v", got, tt.want)
 			}
 		})
 	}

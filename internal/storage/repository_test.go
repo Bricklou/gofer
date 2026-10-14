@@ -181,61 +181,6 @@ func TestUpsertFoldersPreservesRemoteIDWhenProviderRemoteIDChanges(t *testing.T)
 	}
 }
 
-func TestGetFoldersForAccountCountsProviderBackedMessagesSeparately(t *testing.T) {
-	ctx := context.Background()
-	db := newContactsTestDB(t)
-
-	if _, err := db.Write().ExecContext(ctx, `INSERT INTO accounts (id, user_id, provider, email_address) VALUES ('acc', 'default', 'outlook', 'user@example.com')`); err != nil {
-		t.Fatalf("insert account: %v", err)
-	}
-	if err := db.UpsertFolders(ctx, []UpsertFolderInput{{
-		ID:               "acc_inbox",
-		AccountID:        "acc",
-		RemoteID:         "Inbox",
-		ProviderRemoteID: "graph-inbox",
-		Name:             "Inbox",
-		Role:             "inbox",
-		Selectable:       true,
-	}}); err != nil {
-		t.Fatalf("UpsertFolders() error = %v", err)
-	}
-	if err := db.UpsertSyncMessages(ctx, []SyncMessage{{
-		AccountID: "acc",
-		FolderID:  "acc_inbox",
-		RemoteUID: 100,
-		MessageID: "<legacy@example.com>",
-		Subject:   "Legacy",
-		FromEmail: "sender@example.com",
-		DateSent:  time.Now(),
-		IsRead:    true,
-	}}); err != nil {
-		t.Fatalf("UpsertSyncMessages() error = %v", err)
-	}
-	if _, err := db.UpsertProviderSyncMessages(ctx, []ProviderSyncMessage{{
-		AccountID:         "acc",
-		FolderID:          "acc_inbox",
-		ProviderMessageID: "graph-message-1",
-		InternetMessageID: "<graph@example.com>",
-		Subject:           "Graph",
-		FromEmail:         "sender@example.com",
-		DateSent:          time.Now(),
-		IsRead:            true,
-	}}); err != nil {
-		t.Fatalf("UpsertProviderSyncMessages() error = %v", err)
-	}
-
-	folders, err := db.GetFoldersForAccount(ctx, "acc")
-	if err != nil {
-		t.Fatalf("GetFoldersForAccount() error = %v", err)
-	}
-	if len(folders) != 1 {
-		t.Fatalf("GetFoldersForAccount() = %#v, want one folder", folders)
-	}
-	if folders[0].LocalMessageCount != 2 || folders[0].ProviderMessageCount != 1 {
-		t.Fatalf("folder counts local=%d provider=%d, want local 2 and provider-backed 1", folders[0].LocalMessageCount, folders[0].ProviderMessageCount)
-	}
-}
-
 func TestRefreshFolderThreadsForMessagesOnlyRebuildsAffectedThreads(t *testing.T) {
 	ctx := context.Background()
 	db := newContactsTestDB(t)
@@ -3307,5 +3252,37 @@ func TestMailReadsReleaseRowsBeforeAvatarHydration(t *testing.T) {
 				t.Fatalf("recipient data missing: %#v", recipients)
 			}
 		})
+	}
+}
+
+func TestGetAccountNamesListsOnlyTheUsersActiveAccounts(t *testing.T) {
+	db, err := New(filepath.Join(t.TempDir(), "names.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	for _, statement := range []string{
+		`INSERT INTO users(id, username, username_normalized) VALUES ('ana', 'ana', 'ana'), ('ben', 'ben', 'ben')`,
+		`INSERT INTO accounts(id, user_id, provider, email_address, display_name, color, initials) VALUES
+		 ('ana-work', 'ana', 'imap', 'ana@work.example', 'Ana at work', '#336699', 'A'),
+		 ('ana-home', 'ana', 'imap', 'ana@home.example', '', '#993366', 'A'),
+		 ('ana-old', 'ana', 'imap', 'ana@old.example', 'Old', '#999999', 'A'),
+		 ('ben-mail', 'ben', 'imap', 'ben@example.test', 'Ben', '#669933', 'B')`,
+		`UPDATE accounts SET is_deleting = 1 WHERE id = 'ana-old'`,
+	} {
+		if _, err := db.Write().Exec(statement); err != nil {
+			t.Fatal(err)
+		}
+	}
+	accounts, err := db.GetAccountNames(t.Context(), "ana")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var got []string
+	for _, account := range accounts {
+		got = append(got, account.ID+"|"+account.Email+"|"+account.Name)
+	}
+	if want := "[ana-home|ana@home.example| ana-work|ana@work.example|Ana at work]"; fmt.Sprint(got) != want {
+		t.Fatalf("GetAccountNames() = %s, want %s", got, want)
 	}
 }

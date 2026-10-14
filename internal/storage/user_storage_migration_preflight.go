@@ -29,6 +29,7 @@ const (
 	migrationSchema        = "metadata-initialize-validate"
 	migrationSequence      = "metadata-preserve-high-water"
 	migrationPlanner       = "metadata-rebuild-planner"
+	migrationDerived       = "local-rebuild-derived"
 )
 
 type migrationTableRule struct{ destination, owner, columns string }
@@ -130,7 +131,7 @@ func InspectUserStorageMigration(ctx context.Context, sourcePath string) (UserSt
 }
 
 func migrationSharedVersionSupported(version int) bool {
-	return version == 105 || version == 106 || version == 107
+	return version >= 105 && version <= 108
 }
 
 // These recognized shared schemas differ only in the explicitly handled push
@@ -453,6 +454,9 @@ func requireSharedMigrationTables(ctx context.Context, present map[string]bool, 
 		if !present[name] {
 			if name == "web_push_subscriptions" && version == 105 {
 				continue // Same recognized historical absence as migrateV105ToV106.
+			}
+			if name == "folder_thread_dirty" && version < 108 {
+				continue // Added by migrateV107ToV108; destinations rebuild it.
 			}
 			return migrationSourceError(name, "required shared table is missing")
 		}

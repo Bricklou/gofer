@@ -96,3 +96,23 @@ func TestUserLifecycleStopRetiresBrowserPollingGeneration(t *testing.T) {
 		t.Fatal("old browser release removed replacement")
 	}
 }
+
+// Stopping an owner logs out the idle IMAP sessions of every account they
+// own, even though the owner is already disabled, and leaves others alone.
+func TestUserLifecycleStopEndsOwnerIMAPSessions(t *testing.T) {
+	f := newUserGmailFixture(t)
+	t.Cleanup(func() { f.cancel(); f.worker.Wait() })
+	var dropped []string
+	previousAccount, previousAll := dropPooledAccount, dropPooledSessions
+	dropPooledAccount = func(id string) { dropped = append(dropped, id) }
+	dropPooledSessions = func() { t.Error("dropped every session although the owner's accounts were listed") }
+	t.Cleanup(func() { dropPooledAccount, dropPooledSessions = previousAccount, previousAll })
+
+	if _, err := f.system.Write().Exec(`UPDATE users SET status='disabled' WHERE id='alice'`); err != nil {
+		t.Fatal(err)
+	}
+	f.worker.StopUser("alice")
+	if len(dropped) != 1 || dropped[0] != f.ids["alice"] {
+		t.Fatalf("dropped sessions of %v, want only alice's account %s", dropped, f.ids["alice"])
+	}
+}

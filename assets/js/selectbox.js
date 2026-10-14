@@ -68,6 +68,54 @@
     return getContentFromContainer(getContainer(trigger));
   }
 
+  // A long menu may arrive with one entry and the full list in
+  // data-tui-selectbox-lazy-items (see selectbox.LazyItems). The entry is
+  // copied into the others when the menu is first used, or when a script sets
+  // a value the menu does not have yet.
+  function fillLazyItems(content) {
+    const group = content?.querySelector('[data-tui-selectbox-lazy-items]');
+    if (!group) return;
+    let entries = null;
+    try {
+      entries = JSON.parse(group.getAttribute('data-tui-selectbox-lazy-items'));
+    } catch {
+      // keep the entries already there
+    }
+    group.removeAttribute('data-tui-selectbox-lazy-items');
+    const sample = group.querySelector('.select-item');
+    if (!Array.isArray(entries) || !sample) return;
+
+    const sampleValue = sample.getAttribute('data-tui-selectbox-value');
+    const existing = new Map();
+    group.querySelectorAll('.select-item').forEach(item => {
+      existing.set(item.getAttribute('data-tui-selectbox-value'), item);
+    });
+    const items = entries.map(([value, label]) => {
+      const found = existing.get(value);
+      if (found) return found;
+      const item = sample.cloneNode(true);
+      // Data attributes that carry the value (such as a month index) follow it.
+      Array.from(item.attributes).forEach(attr => {
+        if (attr.name.startsWith('data-') && attr.value === sampleValue) item.setAttribute(attr.name, value);
+      });
+      item.setAttribute('data-tui-selectbox-selected', 'false');
+      const text = item.querySelector('.select-item-text');
+      if (text) text.textContent = label;
+      return item;
+    });
+    existing.forEach(item => {
+      if (!items.includes(item)) items.push(item);
+    });
+    group.append(...items);
+  }
+
+  ['pointerdown', 'keydown', 'focusin'].forEach(type => {
+    document.addEventListener(type, (e) => {
+      const trigger = e.target.closest?.('button.select-trigger');
+      if (trigger) fillLazyItems(getContentFromTrigger(trigger));
+    }, true);
+  });
+
   function syncContentWidth(trigger) {
     const content = getContentFromTrigger(trigger);
     if (!content) return;
@@ -104,6 +152,8 @@
     
     const isMultiple = trigger.getAttribute('data-tui-selectbox-multiple') === 'true';
     const values = hiddenInput.value ? (isMultiple ? hiddenInput.value.split(',') : [hiddenInput.value]) : [];
+    const present = new Set(Array.from(content.querySelectorAll('.select-item'), item => item.getAttribute('data-tui-selectbox-value')));
+    if (values.some(value => !present.has(value))) fillLazyItems(content);
     
     content.querySelectorAll('.select-item').forEach(item => {
       const itemValue = item.getAttribute('data-tui-selectbox-value') || '';

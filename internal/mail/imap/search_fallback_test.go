@@ -165,12 +165,13 @@ func TestClientListsAllUIDsWhenServerSearchIsIncomplete(t *testing.T) {
 
 			// Reconcile must see the same messages, or it would remove the
 			// ones just synced as expunged.
-			reconciled, _, _, err := client.FetchAllUIDs(context.Background(), "INBOX", result.UIDValidity)
+			snapshot, err := client.FetchUIDSnapshot(context.Background(), "INBOX", result.UIDValidity)
+			reconciled := snapshot.UIDs
 			if err != nil {
-				t.Fatalf("FetchAllUIDs() error = %v", err)
+				t.Fatalf("FetchUIDSnapshot() error = %v", err)
 			}
 			if !slices.Equal(reconciled, want) {
-				t.Fatalf("FetchAllUIDs() = %v, want %v", reconciled, want)
+				t.Fatalf("FetchUIDSnapshot() = %v, want %v", reconciled, want)
 			}
 
 			fellBack := strings.Contains(strings.ToUpper(recorder.String()), "UID FETCH 1:* (UID)")
@@ -189,12 +190,13 @@ func TestClientListsNoUIDsInEmptyMailboxWithoutFallback(t *testing.T) {
 	}
 	defer client.Close()
 
-	uids, _, _, err := client.FetchAllUIDs(context.Background(), "INBOX", 0)
+	snapshot, err := client.FetchUIDSnapshot(context.Background(), "INBOX", 0)
+	uids := snapshot.UIDs
 	if err != nil {
-		t.Fatalf("FetchAllUIDs() error = %v", err)
+		t.Fatalf("FetchUIDSnapshot() error = %v", err)
 	}
 	if len(uids) != 0 {
-		t.Fatalf("FetchAllUIDs() = %v, want none", uids)
+		t.Fatalf("FetchUIDSnapshot() = %v, want none", uids)
 	}
 	if strings.Contains(strings.ToUpper(recorder.String()), "UID FETCH") {
 		t.Fatalf("empty mailbox fell back to UID FETCH; client sent:\n%s", recorder.String())

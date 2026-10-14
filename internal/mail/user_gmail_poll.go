@@ -38,13 +38,33 @@ func (s *UserIMAP) BeginActiveUserSession(ctx context.Context, owner string) (fu
 	if err := s.Routing().ValidateUser(ctx, owner); err != nil {
 		return nil, err
 	}
-	if !gmailAPIPollEnabled() {
-		return func() {}, nil
-	}
 	s.mu.Lock()
 	if s.closing || s.ctx.Err() != nil {
 		s.mu.Unlock()
 		return nil, errors.New("mail worker is shutting down")
+	}
+	// Owners with Gofer open have their accounts synced first and their
+	// folders watched in real time.
+	if s.onlineUsers[owner]++; s.onlineUsers[owner] == 1 {
+		s.ownerCameOnlineLocked(owner)
+	}
+	// Every tab marks the owner, so one stopped while a tab stayed open is
+	// marked again when they return.
+	s.onlineSet.Store(owner, struct{}{})
+	var offline sync.Once
+	leave := func() {
+		offline.Do(func() {
+			s.mu.Lock()
+			if s.onlineUsers[owner]--; s.onlineUsers[owner] <= 0 {
+				delete(s.onlineUsers, owner)
+				s.ownerWentOfflineLocked(owner)
+			}
+			s.mu.Unlock()
+		})
+	}
+	if !gmailAPIPollEnabled() {
+		s.mu.Unlock()
+		return leave, nil
 	}
 	session := s.activePollUsers[owner]
 	if session == nil {
@@ -57,6 +77,7 @@ func (s *UserIMAP) BeginActiveUserSession(ctx context.Context, owner string) (fu
 	s.wakeActivePoll()
 	var once sync.Once
 	return func() {
+		leave()
 		once.Do(func() {
 			s.mu.Lock()
 			session.refs--

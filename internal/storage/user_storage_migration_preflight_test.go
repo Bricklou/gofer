@@ -282,11 +282,16 @@ func TestUserStorageMigrationPreflightHonorsRuntimeLockCancellationAndMissingFil
 }
 
 func TestUserStorageMigrationPreflightAcceptsMainSchemaAndKeepsHistoricalClaimsUnchanged(t *testing.T) {
-	for _, mode := range []string{"main-105", "main-105-no-push-table", "partial-105-claim", "shared-106", "shared-107"} {
+	for _, mode := range []string{"main-105", "main-105-no-push-table", "partial-105-claim", "shared-106", "shared-107", "shared-108"} {
 		t.Run(mode, func(t *testing.T) {
 			db := sharedMigrationFixture(t)
-			version := 107
-			if mode != "shared-107" {
+			version := 108
+			if mode != "shared-108" {
+				migrationFixtureSQL(t, db, withoutFolderThreadTracking+`;
+DELETE FROM schema_version; INSERT INTO schema_version(version) VALUES(107)`)
+				version = 107
+			}
+			if mode != "shared-107" && mode != "shared-108" {
 				version = 106
 				if mode != "shared-106" {
 					version = 105
@@ -304,7 +309,7 @@ func TestUserStorageMigrationPreflightAcceptsMainSchemaAndKeepsHistoricalClaimsU
 				}
 			}
 			migrationFixtureSQL(t, db, `INSERT INTO calendar_response_requests(user_id,source_id,remote_id,version,response) VALUES('alice','alice-calendar','original-resource','original-etag','accepted')`)
-			if mode == "partial-105-claim" || mode == "shared-107" {
+			if mode == "partial-105-claim" || mode == "shared-107" || mode == "shared-108" {
 				migrationFixtureSQL(t, db, `UPDATE calendar_response_requests SET claim_id='original-nonce'`)
 			}
 			path := db.Path()
@@ -319,7 +324,7 @@ func TestUserStorageMigrationPreflightAcceptsMainSchemaAndKeepsHistoricalClaimsU
 			if err != nil || report.SchemaVersion != version || report.TargetSchemaVersion != CurrentSchemaVersion {
 				t.Fatal("supported shared schema rejected", report, err)
 			}
-			wantClaim := mode == "partial-105-claim" || mode == "shared-107"
+			wantClaim := mode == "partial-105-claim" || mode == "shared-107" || mode == "shared-108"
 			foundResponse := false
 			for _, table := range report.Tables {
 				if table.Name == "calendar_response_requests" {
@@ -360,7 +365,8 @@ func TestUserStorageMigrationPreflightAcceptsMainSchemaAndKeepsHistoricalClaimsU
 func TestUserStorageMigrationPreflightRejectsUnknownVersionsAndFalseUpgradeMarkers(t *testing.T) {
 	for _, query := range []string{
 		`DELETE FROM schema_version; INSERT INTO schema_version(version) VALUES(104)`,
-		`DELETE FROM schema_version; INSERT INTO schema_version(version) VALUES(108)`,
+		`DELETE FROM schema_version; INSERT INTO schema_version(version) VALUES(109)`,
+		`DROP TABLE folder_thread_dirty`,
 		`ALTER TABLE calendar_response_requests DROP COLUMN claim_id`,
 		`DELETE FROM schema_version; INSERT INTO schema_version(version) VALUES(106); ALTER TABLE web_push_subscriptions DROP COLUMN revision`,
 		`DELETE FROM schema_version; INSERT INTO schema_version(version) VALUES(106); ALTER TABLE calendar_response_requests DROP COLUMN claim_id; ALTER TABLE calendar_response_requests ADD COLUMN claim_id TEXT`,
@@ -374,3 +380,15 @@ func TestUserStorageMigrationPreflightRejectsUnknownVersionsAndFalseUpgradeMarke
 		})
 	}
 }
+
+// withoutFolderThreadTracking gives a current fixture the shape of a shared
+// database from before schema version 108.
+const withoutFolderThreadTracking = `
+DROP TRIGGER folder_thread_track_state_insert;
+DROP TRIGGER folder_thread_track_state_update;
+DROP TRIGGER folder_thread_track_state_delete;
+DROP TRIGGER folder_thread_track_message_update;
+DROP TRIGGER folder_thread_track_message_delete;
+DROP INDEX idx_folder_state_folder_unread;
+DROP INDEX idx_folder_thread_state_flags;
+DROP TABLE folder_thread_dirty;`

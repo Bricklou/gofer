@@ -130,8 +130,10 @@
 
     // Update SelectBox values
     const monthNames = getMonthNames(locale);
-    container.querySelectorAll("[data-tui-calendar-month-index] .select-item-text").forEach((option, index) => {
-      if (option.textContent !== monthNames[index]) option.textContent = monthNames[index];
+    container.querySelectorAll("[data-tui-calendar-month-index]").forEach((option) => {
+      const text = option.querySelector(".select-item-text");
+      const name = monthNames[parseInt(option.dataset.tuiCalendarMonthIndex, 10)];
+      if (text && name && text.textContent !== name) text.textContent = name;
     });
     const monthValue = container.querySelector(`#${container.id}-month-value`);
     const yearValue = container.querySelector(`#${container.id}-year-value`);

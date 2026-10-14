@@ -54,6 +54,7 @@ Authentication:
 Storage:
   gofer storage inspect [--db PATH]
   gofer storage migrate [--db PATH] --to PATH [--working-dir PATH] [--retry]
+  gofer storage compress [--dir PATH] [--dry-run]
 `
 
 func runApplication(ctx context.Context, args []string, stdout, stderr io.Writer, serve func()) int {

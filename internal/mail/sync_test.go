@@ -351,7 +351,7 @@ func TestFullFolderSyncCompletesWithErrorStatusAfterFailure(t *testing.T) {
 	orchestrator, _, events := newFolderMessageSyncTestOrchestrator(t)
 	// A folder missing from the database fails before the IMAP client is used.
 	folder := storage.FolderSyncInfo{ID: "acc_missing", AccountID: "acc", RemoteID: "Missing", Role: ""}
-	if err := orchestrator.fullFolderSync(context.Background(), nil, "acc", "imap", folder, 1, 1, 0); err == nil {
+	if err := orchestrator.fullFolderSync(context.Background(), nil, "acc", "imap", folder, nil, 1, 1, 0); err == nil {
 		t.Fatal("fullFolderSync() error = nil, want missing folder failure")
 	}
 

@@ -148,12 +148,9 @@ func (h *Handler) upsertRemoteIMAPDraft(ctx context.Context, client sentCopyIMAP
 			return
 		}
 	}
-	state, err := h.db.CompleteIMAPDraftUpsert(ctx, operation.ID, remoteUID, uidValidity)
-	if err != nil {
+	if _, err := h.db.CompleteIMAPDraftUpsert(ctx, operation.ID, remoteUID, uidValidity); err != nil {
 		h.finishIMAPDraftOperation(operation, storage.IMAPDraftStatusAmbiguous, fmt.Errorf("save remote draft revision: %w", err))
-		return
 	}
-	h.linkLocalIMAPDraftUID(ctx, state)
 }
 
 func (h *Handler) deleteRemoteIMAPDraft(ctx context.Context, client sentCopyIMAPClient, operation storage.IMAPDraftOperation) {
@@ -165,24 +162,6 @@ func (h *Handler) deleteRemoteIMAPDraft(ctx context.Context, client sentCopyIMAP
 	}
 	if err := h.db.CompleteIMAPDraftDelete(ctx, operation.ID); err != nil {
 		h.finishIMAPDraftOperation(operation, storage.IMAPDraftStatusFailed, fmt.Errorf("complete remote draft deletion: %w", err))
-	}
-}
-
-func (h *Handler) linkLocalIMAPDraftUID(ctx context.Context, state storage.IMAPDraftState) {
-	if state.LocalMessageID <= 0 || state.FolderID == "" || state.RemoteUID == 0 {
-		return
-	}
-	storedUIDValidity, err := h.db.GetStoredUIDValidity(ctx, state.FolderID)
-	if err != nil {
-		log.Printf("imap-draft: read UID validity account=%s draft=%s: %v", state.AccountID, state.DraftKey, err)
-		return
-	}
-	if state.UIDValidity > 0 && storedUIDValidity > 0 && state.UIDValidity != storedUIDValidity {
-		log.Printf("imap-draft: skip UID link account=%s draft=%s uidvalidity=%d stored=%d", state.AccountID, state.DraftKey, state.UIDValidity, storedUIDValidity)
-		return
-	}
-	if err := h.db.SetMessageFolderRemoteUID(ctx, state.LocalMessageID, state.FolderID, state.RemoteUID); err != nil {
-		log.Printf("imap-draft: link remote UID account=%s draft=%s uid=%d: %v", state.AccountID, state.DraftKey, state.RemoteUID, err)
 	}
 }
 

@@ -140,8 +140,8 @@ func TestClientSendsUnselectOnlyWhenServerSupportsIt(t *testing.T) {
 			if err != nil {
 				t.Fatalf("NewClient() error = %v", err)
 			}
-			if _, _, _, err := client.FetchAllUIDs(context.Background(), "INBOX", 0); err != nil {
-				t.Fatalf("FetchAllUIDs() error = %v", err)
+			if _, err := client.FetchUIDSnapshot(context.Background(), "INBOX", 0); err != nil {
+				t.Fatalf("FetchUIDSnapshot() error = %v", err)
 			}
 			// A second command proves the session survived and flushes the
 			// deferred UNSELECT, if one was sent, through the proxy.
@@ -171,8 +171,8 @@ func TestClientConnectionLostAfterServerCloses(t *testing.T) {
 	if err := client.client.Logout().Wait(); err != nil {
 		t.Fatalf("Logout() error = %v", err)
 	}
-	if _, _, _, err := client.FetchAllUIDs(context.Background(), "INBOX", 0); err == nil {
-		t.Fatal("FetchAllUIDs() succeeded after the server closed the session")
+	if _, err := client.FetchUIDSnapshot(context.Background(), "INBOX", 0); err == nil {
+		t.Fatal("FetchUIDSnapshot() succeeded after the server closed the session")
 	}
 	if !client.ConnectionLost() {
 		t.Fatal("ConnectionLost() = false after the server closed the session")

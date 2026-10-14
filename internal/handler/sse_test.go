@@ -1,8 +1,11 @@
 package handler
 
 import (
+	"bufio"
 	"net/http"
 	"net/http/httptest"
+	"slices"
+	"strings"
 	"testing"
 
 	"github.com/cristianadrielbraun/gofer/internal/auth"
@@ -66,5 +69,50 @@ func TestGlobalProcessingStatusRequiresAdmin(t *testing.T) {
 				t.Fatalf("status = %d, want %d", recorder.Code, tt.want)
 			}
 		})
+	}
+}
+
+// A browser's stream carries the events of its user and accounts, and none
+// of another user's, now that events are routed to the connections they are
+// about.
+func TestSSEStreamCarriesOnlyTheUsersEvents(t *testing.T) {
+	h, _ := newAccountOwnershipTestHandler(t)
+	h.syncer = mail.NewSyncOrchestrator(h.db, h.accountStore, nil, nil)
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		h.handleSSE(w, attackerRequest(r))
+	}))
+	defer server.Close()
+	response, err := http.Get(server.URL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer response.Body.Close()
+	lines := bufio.NewScanner(response.Body)
+	next := func() string {
+		for lines.Scan() {
+			if name, ok := strings.CutPrefix(lines.Text(), "event: "); ok {
+				return name
+			}
+		}
+		t.Fatalf("stream ended: %v", lines.Err())
+		return ""
+	}
+	if got := next(); got != "connected" {
+		t.Fatalf("first event %q", got)
+	}
+	bus := h.syncer.Events()
+	bus.Publish(mail.Event{Type: mail.EventNewMail, AccountID: "victim-account", FolderID: "inbox"})
+	bus.Publish(mail.Event{Type: mail.EventCalendarChanged, UserID: "owner"})
+	bus.Publish(mail.Event{Type: mail.EventAvatarBackfill, AdminOnly: true})
+	bus.Publish(mail.Event{Type: mail.EventMutation, AccountID: "attacker-account", FolderID: "inbox"})
+	bus.Publish(mail.Event{Type: mail.EventCalendarChanged, UserID: "attacker"})
+	bus.Publish(mail.Event{Type: mail.EventSendResult, UserIDs: []string{"owner", "attacker"}})
+	var got []string
+	for len(got) < 3 {
+		got = append(got, next())
+	}
+	want := []string{string(mail.EventMutation), string(mail.EventCalendarChanged), string(mail.EventSendResult)}
+	if !slices.Equal(got, want) {
+		t.Fatalf("stream carried %v, want %v", got, want)
 	}
 }

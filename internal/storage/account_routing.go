@@ -215,24 +215,21 @@ func (r *AccountRouting) WithAccountActivityForUser(ctx context.Context, userID,
 	if userID == "" {
 		return ErrAccountRoute
 	}
-	entry, release, err := r.startAccountActivity(ctx, userID, accountID)
+	_, release, err := r.startAccountActivity(ctx, userID, accountID)
 	if err != nil {
 		return err
 	}
 	defer release()
-	if err := r.requireActiveOwner(ctx, entry.UserID); err != nil {
-		return err
-	}
 	return fn()
 }
 
+// startAccountActivity registers a callback on an active account of an
+// active owner. It registers first and checks afterwards, so the routing
+// lock is never held during a query: a transition that starts later waits
+// for (or refuses while) the registered callback, and one that finished
+// earlier is seen by the check.
 func (r *AccountRouting) startAccountActivity(ctx context.Context, userID, accountID string) (AccountRoute, func(), error) {
 	r.mu.Lock()
-	entry, err := r.route(ctx, accountID, userID, AccountActive)
-	if err != nil {
-		r.mu.Unlock()
-		return AccountRoute{}, nil, err
-	}
 	scope := r.scopeLocked(accountID)
 	if scope.transitioning {
 		r.mu.Unlock()
@@ -241,12 +238,40 @@ func (r *AccountRouting) startAccountActivity(ctx context.Context, userID, accou
 	scope.refs++
 	scope.running++
 	r.mu.Unlock()
-	return entry, func() {
+	release := func() {
 		r.mu.Lock()
 		scope.running--
 		r.releaseScopeLocked(accountID, scope)
 		r.mu.Unlock()
-	}, nil
+	}
+	entry, err := r.activeRoute(ctx, accountID, userID)
+	if err != nil {
+		release()
+		return AccountRoute{}, nil, err
+	}
+	return entry, release, nil
+}
+
+// activeRoute checks in one query what route(AccountActive) and
+// requireActiveOwner check: the account is active and belongs to the owner,
+// and the owner may sign in. Errors match theirs, in that order.
+func (r *AccountRouting) activeRoute(ctx context.Context, accountID, userID string) (AccountRoute, error) {
+	var entry AccountRoute
+	var ownerActive bool
+	err := r.System().Read().QueryRowContext(ctx, `SELECT d.account_id, d.user_id, d.state,
+		EXISTS(SELECT 1 FROM users u WHERE u.id = d.user_id AND u.user_type = 'webmail' AND u.is_admin = 0
+		       AND u.status = 'active' AND u.deletion_pending = 0)
+		FROM gofer_account_directory d WHERE d.account_id = ?`, accountID).Scan(&entry.AccountID, &entry.UserID, &entry.State, &ownerActive)
+	if errors.Is(err, sql.ErrNoRows) || (err == nil && (entry.State != AccountActive || (userID != "" && entry.UserID != userID))) {
+		return AccountRoute{}, ErrAccountRoute
+	}
+	if err != nil {
+		return AccountRoute{}, err
+	}
+	if !ownerActive {
+		return AccountRoute{}, ErrUserStoreOwner
+	}
+	return entry, nil
 }
 
 func (r *AccountRouting) withAccount(ctx context.Context, userID, accountID string, fn func(*DB, string) error) error {
@@ -255,8 +280,9 @@ func (r *AccountRouting) withAccount(ctx context.Context, userID, accountID stri
 		return err
 	}
 	defer release()
-	return r.withUser(ctx, entry.UserID, true, func(db *DB) error {
-		if _, err := r.route(ctx, accountID, entry.UserID, AccountActive); err != nil {
+	return r.withUserStore(ctx, entry.UserID, true, func(db *DB) error {
+		// Acquiring a store may wait for cache capacity. Recheck lifecycle after it.
+		if _, err := r.activeRoute(ctx, accountID, entry.UserID); err != nil {
 			return err
 		}
 		var found int
@@ -478,6 +504,27 @@ func (r *AccountRouting) CompleteAccountDeletion(ctx context.Context, userID, ac
 			return err
 		})
 	})
+}
+
+// UserAccountIDs lists every account the directory records for the owner,
+// whatever its state and whether or not the owner is still active, so work
+// and sessions of a stopped owner can be ended.
+func (r *AccountRouting) UserAccountIDs(ctx context.Context, userID string) ([]string, error) {
+	rows, err := r.System().Read().QueryContext(ctx,
+		`SELECT account_id FROM gofer_account_directory WHERE user_id = ? ORDER BY account_id`, userID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var ids []string
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		ids = append(ids, id)
+	}
+	return ids, rows.Err()
 }
 
 // ListAccounts pages directory metadata without opening any user databases.

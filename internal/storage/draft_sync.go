@@ -316,6 +316,10 @@ func (db *DB) MarkInterruptedIMAPDraftOperationsAmbiguous(ctx context.Context, r
 	return result.RowsAffected()
 }
 
+// CompleteIMAPDraftUpsert records the revision's new UID and finishes the
+// operation. The local draft takes the new UID in the same transaction: until
+// then a folder check would find its old UID gone from the server and, with
+// the operation finished, remove the draft.
 func (db *DB) CompleteIMAPDraftUpsert(ctx context.Context, id string, remoteUID, uidValidity uint32) (IMAPDraftState, error) {
 	tx, err := db.Write().BeginTx(ctx, nil)
 	if err != nil {
@@ -345,6 +349,19 @@ func (db *DB) CompleteIMAPDraftUpsert(ctx context.Context, id string, remoteUID,
 	}
 	if _, err := tx.ExecContext(ctx, `DELETE FROM imap_draft_operations WHERE id = ?`, id); err != nil {
 		return IMAPDraftState{}, err
+	}
+	if state.LocalMessageID > 0 && state.FolderID != "" && remoteUID > 0 {
+		var stored sql.NullInt64
+		if err := tx.QueryRowContext(ctx, `SELECT uid_validity FROM folders WHERE id = ?`, state.FolderID).Scan(&stored); err != nil && err != sql.ErrNoRows {
+			return IMAPDraftState{}, err
+		}
+		// A UID from another mailbox identity means nothing here; the next
+		// sync resets the folder.
+		if !stored.Valid || stored.Int64 == 0 || uint32(stored.Int64) == uidValidity {
+			if err := setMessageFolderRemoteUIDTx(ctx, tx, state.LocalMessageID, state.FolderID, remoteUID); err != nil && err != sql.ErrNoRows {
+				return IMAPDraftState{}, err
+			}
+		}
 	}
 	if err := tx.Commit(); err != nil {
 		return IMAPDraftState{}, err

@@ -11,6 +11,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"strconv"
 	"testing"
 	"time"
 
@@ -135,7 +136,20 @@ func newOfficeDataset(t *testing.T, spec officeWorkloadSpec) (*officeDataset, st
 	baselineRoot := t.TempDir()
 	baseline := filepath.Join(baselineRoot, "shared.db")
 	key := []byte("0123456789abcdef0123456789abcdef")
+	davURL, err := url.Parse(server.URL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	davPort, err := strconv.Atoi(davURL.Port())
+	if err != nil {
+		t.Fatal(err)
+	}
 	fixture := newManagedMailFixtureOptions(t, managedMailOptions{Owners: dataset.All, Messages: spec.MessagesPerActiveUser, MessageCounts: dataset.MessageCounts, SkipApplication: true}, func(db *storage.DB, accounts *config.AccountStore, ids map[string]string) {
+		// The contacts and calendar fixture runs on loopback, which Gofer
+		// reaches only with an administrator's private-network exception.
+		if err := db.AddPrivateTargetException(t.Context(), "https", davURL.Hostname(), davPort, "office workload"); err != nil {
+			t.Fatal(err)
+		}
 		manager := auth.NewManager(auth.LoadConfig("http://127.0.0.1:8090"), db, auth.Dependencies{BucketHashKey: key})
 		for _, owner := range dataset.All {
 			session, err := manager.CreateAuthenticatedSession(t.Context(), owner, "office workload", auth.AuthenticationMethodTOTP, auth.AssuranceLevelMultiFactor)
@@ -250,6 +264,7 @@ func TestManagedOfficePairedWorkload(t *testing.T) {
 		if result.Background != nil {
 			b := result.Background
 			t.Logf("%s background incoming=%d/%d SMTP=%d/%d drained=%v drain=%.2fs", result.Layout, b.IncomingReceived, len(b.Incoming), b.SMTPReceiptsComplete, b.SMTPReceipts, b.Drained, b.DrainSeconds)
+			t.Logf("%s active owners' incoming=%d/%d by end of load, all by %.2fs", result.Layout, b.ActiveIncomingReceivedBeforeDrain, b.ActiveIncoming, b.ActiveDrainSeconds)
 			if b.ObserverError != "" {
 				t.Errorf("%s background observer failed: %s; see %s", result.Layout, b.ObserverError, output)
 			}

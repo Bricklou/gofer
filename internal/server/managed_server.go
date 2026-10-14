@@ -12,6 +12,7 @@ import (
 	"os"
 	"path/filepath"
 	"strconv"
+	"strings"
 	"sync"
 	"time"
 
@@ -118,6 +119,8 @@ func newManagedApplication(parent context.Context, path string, maxOpen int) (re
 	if err != nil {
 		return nil, err
 	}
+	// Keep the databases of people with Gofer open when room is needed.
+	s.stores.SetRetainHint(app.imap.OwnerOnline)
 	dataDir := filepath.Dir(s.layout.CentralPath)
 	publicKey, privateKey, err := loadVAPIDKeys(filepath.Join(dataDir, "vapid_private.key"), filepath.Join(dataDir, "vapid_public.key"))
 	if err != nil {
@@ -148,7 +151,11 @@ func newManagedApplication(parent context.Context, path string, maxOpen int) (re
 	if err := app.mailbox.AwaitUserThreading(ctx); err != nil {
 		return nil, err
 	}
-	if err := app.imap.Start(mail.UserIMAPBackgroundOptions{}); err != nil {
+	syncOptions, err := configuredSyncCapacity()
+	if err != nil {
+		return nil, err
+	}
+	if err := app.imap.Start(syncOptions); err != nil {
 		return nil, err
 	}
 	if err := app.mailbox.StartUserMailRetention(ctx, handler.UserMailRetentionOptions{}); err != nil {
@@ -158,7 +165,7 @@ func newManagedApplication(parent context.Context, path string, maxOpen int) (re
 	app.auth.StartSessionCleanup(ctx)
 	app.flows.StartCleanup(ctx)
 	app.notifications.Start(ctx)
-	app.handler = app.httpConfig.ClientNetworkMiddleware(authConfig.Enabled, app.httpConfig.Middleware(app.auth.Middleware(views.WithListViewCookie(mux))))
+	app.handler = app.httpConfig.ClientNetworkMiddleware(authConfig.Enabled, app.httpConfig.Middleware(handler.CompressResponses(app.auth.Middleware(views.WithListViewCookie(mux)))))
 	return app, nil
 }
 
@@ -223,12 +230,48 @@ func configuredUserDatabaseLimit() (int, error) {
 	return limit, nil
 }
 
+// configuredSyncCapacity reads how many background mail syncs may run at once
+// and how many folders may be watched in real time, overall and per mail
+// server. Unset values use the mail package defaults.
+func configuredSyncCapacity() (mail.UserIMAPBackgroundOptions, error) {
+	var options mail.UserIMAPBackgroundOptions
+	for _, setting := range []struct {
+		name  string
+		value *int
+	}{
+		{"GOFER_SYNC_MAX_CONCURRENT", &options.MaxConcurrentSyncs},
+		{"GOFER_SYNC_MAX_PER_SERVER", &options.MaxPerServer},
+		{"GOFER_IDLE_MAX", &options.MaxIdleWatchers},
+		{"GOFER_IDLE_MAX_PER_SERVER", &options.MaxIdlePerServer},
+	} {
+		raw := strings.TrimSpace(os.Getenv(setting.name))
+		if raw == "" {
+			continue
+		}
+		value, err := strconv.Atoi(raw)
+		if err != nil || value < 1 {
+			return options, fmt.Errorf("%s must be a positive integer", setting.name)
+		}
+		*setting.value = value
+	}
+	return options, nil
+}
+
 // RunManaged runs managed mode on per-user storage until ctx is canceled.
 func RunManaged(ctx context.Context, stdout, stderr io.Writer) (err error) {
 	maxOpen, err := configuredUserDatabaseLimit()
 	if err != nil {
 		return err
 	}
+	diagnostics, err := loadDiagnosticsConfig()
+	if err != nil {
+		return err
+	}
+	stopDiagnostics, err := startDiagnostics(diagnostics)
+	if err != nil {
+		return err
+	}
+	defer stopDiagnostics()
 	app, err := newManagedApplication(ctx, ConfiguredDatabasePath(), maxOpen)
 	if err != nil {
 		return err

@@ -59,16 +59,17 @@ func (s *Service) Start(ctx context.Context) {
 	}
 
 	s.workers.Add(1)
-	ch := s.events.Subscribe()
+	// Only new mail, so other events cannot fill the queue ahead of it.
+	events := s.events.SubscribeFor(mail.SubscribeOptions{All: true, Types: []mail.EventType{mail.EventNewMail}})
 	go func() {
 		defer s.workers.Done()
-		defer s.events.Unsubscribe(ch)
+		defer events.Close()
 		for {
 			select {
 			case <-ctx.Done():
 				return
-			case event := <-ch:
-				if event.Type == mail.EventNewMail {
+			case <-events.Ready():
+				for _, event := range events.Take() {
 					s.handleNewMail(ctx, event)
 				}
 			}

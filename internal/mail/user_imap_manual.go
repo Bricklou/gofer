@@ -146,7 +146,7 @@ func (s *UserIMAP) runManual(ctx context.Context, owner string, run *userIMAPMan
 			kind: string(accountSyncManual), mode: run.mode, userID: owner, runID: run.id,
 			accountIDs: run.accounts, accountsTotal: len(run.accounts), accountIndex: index + 1, parallelism: 1,
 		})
-		err := s.sync(accountCtx, owner, id, run.mode == "repair")
+		err := s.sync(accountCtx, owner, id, run.mode == "repair", false)
 		status, errorText := "synced", ""
 		s.mu.Lock()
 		run.done++

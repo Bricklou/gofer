@@ -1,6 +1,7 @@
 package views
 
 import (
+	"github.com/cristianadrielbraun/gofer/internal/assetver"
 	"fmt"
 
 	"github.com/cristianadrielbraun/gofer/components/button"
@@ -33,14 +34,14 @@ templ LoginPage(showGoogle, showMicrosoft bool, oidcName string, errorMessage st
 			<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
 			<title>Gofer - Sign In</title>
 			@AppIcon()
-			<link rel="stylesheet" href="/assets/css/output.css"/>
-			<script src="/assets/js/actions.js"></script>
+			<link rel="stylesheet" href={ assetver.URL("/assets/css/output.css") }/>
+			<script src={ assetver.URL("/assets/js/actions.js") }></script>
 		</head>
 		<body class="bg-background text-foreground antialiased surface-desk">
 			<div class="min-h-screen flex items-center justify-center p-4">
 				<div class="w-full max-w-sm">
 					<div class="text-center mb-10">
-						<img src="/assets/logo.svg" alt="Gofer" class="h-12 w-auto mx-auto"/>
+						<img src={ assetver.URL("/assets/logo.svg") } alt="Gofer" class="h-12 w-auto mx-auto"/>
 						<p class="text-muted-foreground mt-2 text-sm">A self-hosted email client</p>
 					</div>
 					if errorMessage != "" {
@@ -166,7 +167,7 @@ templ LoginPage(showGoogle, showMicrosoft bool, oidcName string, errorMessage st
 }
 				</div>
 			</div>
-			<script src="/assets/js/passkey-authentication.js"></script>
+			<script src={ assetver.URL("/assets/js/passkey-authentication.js") }></script>
 		</body>
 	</html>
 }
@@ -186,14 +187,14 @@ templ LoginMFAContinuationPage(errorMessage string, factors LoginMFAFactors) {
 			<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
 			<title>Gofer - Additional verification</title>
 			@AppIcon()
-			<link rel="stylesheet" href="/assets/css/output.css"/>
-			<script src="/assets/js/actions.js"></script>
+			<link rel="stylesheet" href={ assetver.URL("/assets/css/output.css") }/>
+			<script src={ assetver.URL("/assets/js/actions.js") }></script>
 		</head>
 		<body class="bg-background text-foreground antialiased surface-desk">
 			<main class="min-h-screen flex items-center justify-center p-4">
 				<div class="w-full max-w-sm">
 					<div class="text-center">
-						<img src="/assets/logo.svg" alt="Gofer" class="h-12 w-auto mx-auto"/>
+						<img src={ assetver.URL("/assets/logo.svg") } alt="Gofer" class="h-12 w-auto mx-auto"/>
 						if factors.HasPasskey && !factors.HasTOTP {
 							<h1 class="mt-8 text-2xl font-semibold">Verify with your passkey</h1>
 							<p class="mt-3 text-sm text-muted-foreground">Your passkey is your only registered MFA method. Verify with your passkey to finish signing in.</p>
@@ -257,7 +258,7 @@ templ LoginMFAContinuationPage(errorMessage string, factors LoginMFAFactors) {
 					</div>
 				</div>
 			</main>
-			<script src="/assets/js/passkey-authentication.js"></script>
+			<script src={ assetver.URL("/assets/js/passkey-authentication.js") }></script>
 		</body>
 	</html>
 }
@@ -270,14 +271,14 @@ templ RecoveryCodeLoginPage(errorMessage string) {
 			<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
 			<title>Gofer - Use a Recovery Code</title>
 			@AppIcon()
-			<link rel="stylesheet" href="/assets/css/output.css"/>
-			<script src="/assets/js/actions.js"></script>
+			<link rel="stylesheet" href={ assetver.URL("/assets/css/output.css") }/>
+			<script src={ assetver.URL("/assets/js/actions.js") }></script>
 		</head>
 		<body class="bg-background text-foreground antialiased surface-desk">
 			<main class="min-h-screen flex items-center justify-center p-4">
 				<div class="w-full max-w-sm">
 					<div class="text-center">
-						<img src="/assets/logo.svg" alt="Gofer" class="h-12 w-auto mx-auto"/>
+						<img src={ assetver.URL("/assets/logo.svg") } alt="Gofer" class="h-12 w-auto mx-auto"/>
 						<h1 class="mt-8 text-2xl font-semibold">Use a recovery code</h1>
 						<p class="mt-3 text-sm text-muted-foreground">Enter one of the recovery codes you saved during setup. A successful code starts required authenticator repair before Gofer grants access.</p>
 					</div>
@@ -327,14 +328,14 @@ templ RecoveryRepairMFAPage(data RecoveryRepairMFAData) {
 			<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
 			<title>Gofer - Repair Your Authenticator</title>
 			@AppIcon()
-			<link rel="stylesheet" href="/assets/css/output.css"/>
-			<script src="/assets/js/actions.js"></script>
+			<link rel="stylesheet" href={ assetver.URL("/assets/css/output.css") }/>
+			<script src={ assetver.URL("/assets/js/actions.js") }></script>
 		</head>
 		<body class="bg-background text-foreground antialiased surface-desk">
 			<main class="min-h-screen flex items-center justify-center p-4 py-10">
 				<div class="w-full max-w-lg">
 					<div class="text-center mb-8">
-						<img src="/assets/logo.svg" alt="Gofer" class="h-12 w-auto mx-auto"/>
+						<img src={ assetver.URL("/assets/logo.svg") } alt="Gofer" class="h-12 w-auto mx-auto"/>
 						<p class="mt-5 text-xs font-medium uppercase tracking-widest text-warning">Recovery code accepted</p>
 						<h1 class="mt-2 text-2xl font-semibold">Replace your authenticator</h1>
 						<p class="mt-2 text-sm text-muted-foreground">Gofer has not created a session. Enroll this replacement authenticator and save a fresh recovery batch before access is restored.</p>
@@ -383,14 +384,14 @@ templ MFAEnrollmentPage(data MFAEnrollmentData) {
 			<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
 			<title>Gofer - Set Up MFA</title>
 			@AppIcon()
-			<link rel="stylesheet" href="/assets/css/output.css"/>
-			<script src="/assets/js/actions.js"></script>
+			<link rel="stylesheet" href={ assetver.URL("/assets/css/output.css") }/>
+			<script src={ assetver.URL("/assets/js/actions.js") }></script>
 		</head>
 		<body class="bg-background text-foreground antialiased surface-desk">
 			<main class="min-h-screen flex items-center justify-center p-4 py-10">
 				<div class="w-full max-w-lg">
 					<div class="text-center mb-8">
-						<img src="/assets/logo.svg" alt="Gofer" class="h-12 w-auto mx-auto"/>
+						<img src={ assetver.URL("/assets/logo.svg") } alt="Gofer" class="h-12 w-auto mx-auto"/>
 						<p class="mt-5 text-xs font-medium uppercase tracking-widest text-warning">MFA required</p>
 						<h1 class="mt-2 text-2xl font-semibold">Set up an authenticator</h1>
 						<p class="mt-2 text-sm text-muted-foreground">Your primary sign-in succeeded, but Gofer has not created a session. Set up MFA before continuing to your mailbox.</p>
@@ -439,14 +440,14 @@ templ MFAEnrollmentCodesPage(data MFAEnrollmentCodesData) {
 			<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
 			<title>Gofer - Save Recovery Codes</title>
 			@AppIcon()
-			<link rel="stylesheet" href="/assets/css/output.css"/>
-			<script src="/assets/js/actions.js"></script>
+			<link rel="stylesheet" href={ assetver.URL("/assets/css/output.css") }/>
+			<script src={ assetver.URL("/assets/js/actions.js") }></script>
 		</head>
 		<body class="bg-background text-foreground antialiased surface-desk">
 			<main class="min-h-screen flex items-center justify-center p-4 py-10">
 				<div class="w-full max-w-lg">
 					<div class="text-center mb-8">
-						<img src="/assets/logo.svg" alt="Gofer" class="h-12 w-auto mx-auto"/>
+						<img src={ assetver.URL("/assets/logo.svg") } alt="Gofer" class="h-12 w-auto mx-auto"/>
 						<p class="mt-5 text-xs font-medium uppercase tracking-widest text-success">Authenticator verified</p>
 						<h1 class="mt-2 text-2xl font-semibold">Save your recovery codes</h1>
 						<p class="mt-2 text-sm text-muted-foreground">Save a recovery batch before Gofer commits the authenticator and creates your signed-in session.</p>
@@ -511,14 +512,14 @@ templ RecoveryRepairCodesPage(data RecoveryRepairCodesData) {
 			<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
 			<title>Gofer - Save New Recovery Codes</title>
 			@AppIcon()
-			<link rel="stylesheet" href="/assets/css/output.css"/>
-			<script src="/assets/js/actions.js"></script>
+			<link rel="stylesheet" href={ assetver.URL("/assets/css/output.css") }/>
+			<script src={ assetver.URL("/assets/js/actions.js") }></script>
 		</head>
 		<body class="bg-background text-foreground antialiased surface-desk">
 			<main class="min-h-screen flex items-center justify-center p-4 py-10">
 				<div class="w-full max-w-lg">
 					<div class="text-center mb-8">
-						<img src="/assets/logo.svg" alt="Gofer" class="h-12 w-auto mx-auto"/>
+						<img src={ assetver.URL("/assets/logo.svg") } alt="Gofer" class="h-12 w-auto mx-auto"/>
 						<p class="mt-5 text-xs font-medium uppercase tracking-widest text-success">Replacement authenticator verified</p>
 						<h1 class="mt-2 text-2xl font-semibold">Save fresh recovery codes</h1>
 						<p class="mt-2 text-sm text-muted-foreground">Completing this page replaces the old authenticator and remaining old recovery codes, revokes earlier sessions, and signs you in.</p>

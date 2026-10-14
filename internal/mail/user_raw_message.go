@@ -3,7 +3,6 @@ package mail
 import (
 	"context"
 	"errors"
-	"io"
 	"os"
 	"time"
 
@@ -11,6 +10,7 @@ import (
 	"github.com/cristianadrielbraun/gofer/internal/mail/imap"
 	"github.com/cristianadrielbraun/gofer/internal/mailauth"
 	"github.com/cristianadrielbraun/gofer/internal/storage"
+	"github.com/cristianadrielbraun/gofer/internal/store"
 )
 
 const userRawMessageMaxBytes = 64 << 20
@@ -119,21 +119,17 @@ func (s *UserIMAP) ReadRawMessage(ctx context.Context, owner string, id int64) (
 		var authorization *mailauth.UserServiceAuthorization
 		var credentials *mailauth.UserCredentials
 		if info.RawPath != "" {
-			file, err := os.Open(info.RawPath)
+			stat, err := os.Stat(info.RawPath)
 			if err == nil {
-				stat, err := file.Stat()
-				if err != nil {
-					file.Close()
-					return err
-				}
 				if !stat.Mode().IsRegular() {
-					file.Close()
 					return errors.New("saved MIME is not a regular file")
 				}
-				raw, err = io.ReadAll(io.LimitReader(file, userRawMessageMaxBytes+1))
-				file.Close()
+				raw, err = store.ReadMessageFile(info.RawPath)
 				if err != nil {
 					return err
+				}
+				if len(raw) > userRawMessageMaxBytes {
+					raw = raw[:userRawMessageMaxBytes+1]
 				}
 			} else if !errors.Is(err, os.ErrNotExist) {
 				return err
@@ -188,7 +184,7 @@ func (s *UserIMAP) ReadRawMessage(ctx context.Context, owner string, id int64) (
 				if info.RemoteUID == 0 || info.UIDValidity == 0 || info.FolderRemoteID == "" {
 					return errors.New("message has no verified IMAP raw identity")
 				}
-				client, e := imap.NewContextClient(operation, scope.config, scope.password)
+				client, e := imap.DefaultPool.Get(operation, scope.config, scope.password)
 				if e != nil {
 					return e
 				}

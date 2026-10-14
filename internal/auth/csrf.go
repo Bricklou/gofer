@@ -7,6 +7,7 @@ import (
 	"encoding/hex"
 	"net/http"
 	"strings"
+	"sync/atomic"
 )
 
 const (
@@ -28,6 +29,17 @@ func contextWithSessionCSRF(ctx context.Context, sessionToken string) context.Co
 	return context.WithValue(ctx, csrfContextKey{}, mac.Sum(nil))
 }
 
+type csrfIssuedKey struct{}
+
+// TrackCSRFTokens returns a context that records whether a CSRF token was
+// issued while handling the request, and a function reporting it. Responses
+// that carry a token must not be compressed: compression next to text an
+// attacker controls can reveal the token through the response size (BREACH).
+func TrackCSRFTokens(ctx context.Context) (context.Context, func() bool) {
+	issued := new(atomic.Bool)
+	return context.WithValue(ctx, csrfIssuedKey{}, issued), issued.Load
+}
+
 // CSRFToken returns a proof bound to the authenticated session, HTTP method,
 // and exact path. It never exposes or persists the raw session bearer.
 func CSRFToken(ctx context.Context, method, path string) string {
@@ -38,6 +50,9 @@ func CSRFToken(ctx context.Context, method, path string) string {
 	action, ok := canonicalCSRFAction(method, path)
 	if !ok {
 		return ""
+	}
+	if issued, ok := ctx.Value(csrfIssuedKey{}).(*atomic.Bool); ok {
+		issued.Store(true)
 	}
 	mac := hmac.New(sha256.New, key)
 	_, _ = mac.Write([]byte(csrfActionContext))

@@ -654,20 +654,35 @@ func (db *DB) hydrateContactListRows(ctx context.Context, userID string, contact
 }
 
 func (db *DB) hydrateContactAvatars(ctx context.Context, contacts []models.Contact) {
+	pointers := make([]*models.Contact, len(contacts))
+	for i := range contacts {
+		pointers[i] = &contacts[i]
+	}
+	db.hydrateContactAvatarsFor(ctx, pointers)
+}
+
+// hydrateContactAvatarsFor fills avatar status and URL for many contacts with
+// one query, reading whether an image is stored but not the image itself.
+// A contact with a provider photo keeps it; one without a known avatar gets
+// the status "unknown".
+func (db *DB) hydrateContactAvatarsFor(ctx context.Context, contacts []*models.Contact) {
 	indexesByHash := make(map[string][]int)
 	var hashes []string
-	for i := range contacts {
-		if strings.TrimSpace(contacts[i].AvatarURL) != "" {
-			if strings.TrimSpace(contacts[i].AvatarSource) == "" {
-				contacts[i].AvatarSource = "provider_contact"
+	for i, contact := range contacts {
+		if contact == nil {
+			continue
+		}
+		if strings.TrimSpace(contact.AvatarURL) != "" {
+			if strings.TrimSpace(contact.AvatarSource) == "" {
+				contact.AvatarSource = "provider_contact"
 			}
 			continue
 		}
-		hash := strings.ToLower(strings.TrimSpace(contacts[i].AvatarHash))
+		hash := strings.ToLower(strings.TrimSpace(contact.AvatarHash))
 		if hash == "" {
 			continue
 		}
-		contacts[i].AvatarStatus = "unknown"
+		contact.AvatarStatus = "unknown"
 		if _, ok := indexesByHash[hash]; !ok {
 			hashes = append(hashes, hash)
 		}
@@ -2690,6 +2705,10 @@ func (db *DB) upsertObservedContactTx(ctx context.Context, tx *sql.Tx, userID, n
 	return observationCreated, nil
 }
 
+// observedContactBatchSize bounds how long one backfill transaction holds the
+// writer.
+const observedContactBatchSize = 200
+
 func (db *DB) BackfillObservedContacts(ctx context.Context, userID string) error {
 	return db.BackfillObservedContactsWithProgress(ctx, userID, nil)
 }
@@ -2733,6 +2752,18 @@ func (db *DB) BackfillObservedContactsWithProgress(ctx context.Context, userID s
 	defer rows.Close()
 
 	processed := 0
+	batch := observedContacts{}
+	flush := func() error {
+		if err := db.recordObservedContacts(ctx, userID, batch, settings); err != nil {
+			return err
+		}
+		processed += len(batch)
+		batch = observedContacts{}
+		if progress != nil {
+			progress(processed)
+		}
+		return nil
+	}
 	for rows.Next() {
 		var name, email string
 		var count int
@@ -2744,16 +2775,20 @@ func (db *DB) BackfillObservedContactsWithProgress(ctx context.Context, userID s
 		if t, ok := parseSQLiteDateTime(lastSeenRaw); ok {
 			seenAt = t
 		}
-		if err := db.upsertObservedContact(ctx, userID, name, email, seenAt, count, settings); err != nil {
-			return err
-		}
-		processed++
-		if progress != nil {
-			progress(processed)
+		batch.add(name, email, seenAt, count)
+		if len(batch) >= observedContactBatchSize {
+			if err := flush(); err != nil {
+				return err
+			}
 		}
 	}
 	if err := rows.Err(); err != nil {
 		return err
+	}
+	if len(batch) > 0 {
+		if err := flush(); err != nil {
+			return err
+		}
 	}
 	_ = db.LogContactActivity(ctx, userID, "backfill_completed", "", "Observed contact backfill completed", processed)
 	return nil
@@ -2819,18 +2854,95 @@ func (db *DB) UpsertObservedContactsForMessage(ctx context.Context, accountID, f
 		return
 	}
 	settings := db.GetContactSettings(ctx, userID)
+	contacts := observedContacts{}
+	contacts.addMessage(settings, fromName, fromEmail, to, cc, bcc, seenAt)
+	_ = db.recordObservedContacts(ctx, userID, contacts, settings)
+}
+
+// observedContacts gathers the people in a batch of messages, keyed by
+// normalized address, so each is recorded once per batch. The name kept is the
+// one from the most recent message.
+type observedContacts map[string]observedContact
+
+type observedContact struct {
+	name   string
+	email  string
+	seenAt time.Time
+	count  int
+}
+
+func (c observedContacts) add(name, email string, seenAt time.Time, count int) {
+	normalized := normalizeContactEmail(email)
+	if normalized == "" {
+		return
+	}
+	contact := c[normalized]
+	contact.count += count
+	if contact.email == "" || seenAt.After(contact.seenAt) {
+		contact.name, contact.email, contact.seenAt = name, email, seenAt
+	}
+	c[normalized] = contact
+}
+
+func (c observedContacts) addMessage(settings ContactSettings, fromName, fromEmail string, to, cc, bcc []Recipient, seenAt time.Time) {
 	if settings.ObserveSenders {
-		_ = db.upsertObservedContact(ctx, userID, fromName, fromEmail, seenAt, 1, settings)
+		c.add(fromName, fromEmail, seenAt, 1)
 	}
 	if settings.ObserveRecipients {
-		for _, r := range to {
-			_ = db.upsertObservedContact(ctx, userID, r.Name, r.Email, seenAt, 1, settings)
-		}
-		for _, r := range cc {
-			_ = db.upsertObservedContact(ctx, userID, r.Name, r.Email, seenAt, 1, settings)
-		}
-		for _, r := range bcc {
-			_ = db.upsertObservedContact(ctx, userID, r.Name, r.Email, seenAt, 1, settings)
+		for _, recipients := range [][]Recipient{to, cc, bcc} {
+			for _, r := range recipients {
+				c.add(r.Name, r.Email, seenAt, 1)
+			}
 		}
 	}
+}
+
+// recordObservedContacts saves a batch in one transaction. If the batch
+// fails, each contact is retried on its own so one bad address does not lose
+// the others; the first error is returned.
+func (db *DB) recordObservedContacts(ctx context.Context, userID string, contacts observedContacts, settings ContactSettings) error {
+	if userID == "" || len(contacts) == 0 {
+		return nil
+	}
+	keys := make([]string, 0, len(contacts))
+	for key := range contacts {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	created, err := func() ([]string, error) {
+		tx, err := db.Write().BeginTx(ctx, nil)
+		if err != nil {
+			return nil, err
+		}
+		defer tx.Rollback()
+		var created []string
+		for _, key := range keys {
+			contact := contacts[key]
+			added, err := db.upsertObservedContactTx(ctx, tx, userID, contact.name, contact.email, contact.seenAt, contact.count, settings)
+			if err != nil {
+				return nil, err
+			}
+			if added {
+				created = append(created, contact.email)
+			}
+		}
+		return created, tx.Commit()
+	}()
+	if err == nil {
+		for _, email := range created {
+			db.notifyObservedContact(userID, email)
+		}
+		return nil
+	}
+	if ctx.Err() != nil {
+		return err
+	}
+	var first error
+	for _, key := range keys {
+		contact := contacts[key]
+		if err := db.upsertObservedContact(ctx, userID, contact.name, contact.email, contact.seenAt, contact.count, settings); err != nil && first == nil {
+			first = err
+		}
+	}
+	return first
 }

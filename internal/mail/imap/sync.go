@@ -119,6 +119,8 @@ func (c *Client) SyncFolder(ctx context.Context, folderID, remoteName string, op
 		}},
 	}
 
+	writer := newBatchWriter(fn)
+	defer writer.close()
 	var allMsgs []storage.SyncMessage
 	for start := 0; start < len(uids); start += chunkSize {
 		end := min(start+chunkSize, len(uids))
@@ -224,19 +226,21 @@ func (c *Client) SyncFolder(ctx context.Context, folderID, remoteName string, op
 		}
 
 		if len(allMsgs) >= chunkSize {
-			if err := fn(allMsgs); err != nil {
+			if err := writer.send(allMsgs); err != nil {
 				return result, fmt.Errorf("callback: %w", err)
 			}
-			allMsgs = allMsgs[:0]
+			allMsgs = nil
 		}
 	}
 
 	if len(allMsgs) > 0 {
-		if err := fn(allMsgs); err != nil {
+		if err := writer.send(allMsgs); err != nil {
 			return result, fmt.Errorf("callback: %w", err)
 		}
 	}
-
+	if err := writer.close(); err != nil {
+		return result, fmt.Errorf("callback: %w", err)
+	}
 	return result, nil
 }
 
@@ -286,6 +290,11 @@ func (c *Client) SyncFolderIncremental(ctx context.Context, folderID, remoteName
 	}
 
 	cmd := c.client.Fetch(uidSet, fetchOpts)
+	// However long the mailbox was away, new mail is saved in batches as
+	// it arrives instead of being held and saved all at once.
+	writer := newBatchWriter(fn)
+	defer writer.close()
+	defer cmd.Close()
 
 	var msgs []storage.SyncMessage
 
@@ -379,6 +388,12 @@ func (c *Client) SyncFolderIncremental(ctx context.Context, folderID, remoteName
 			result.HighestUID = syncMsg.RemoteUID
 		}
 		result.TotalFetched++
+		if len(msgs) >= incrementalBatchSize {
+			if err := writer.send(msgs); err != nil {
+				return result, fmt.Errorf("callback: %w", err)
+			}
+			msgs = nil
+		}
 	}
 
 	if err := cmd.Close(); err != nil {
@@ -386,12 +401,63 @@ func (c *Client) SyncFolderIncremental(ctx context.Context, folderID, remoteName
 	}
 
 	if len(msgs) > 0 {
-		if err := fn(msgs); err != nil {
+		if err := writer.send(msgs); err != nil {
 			return result, fmt.Errorf("callback: %w", err)
 		}
 	}
-
+	if err := writer.close(); err != nil {
+		return result, fmt.Errorf("callback: %w", err)
+	}
 	return result, nil
+}
+
+// incrementalBatchSize matches the batches of a first download.
+const incrementalBatchSize = 500
+
+// batchWriter saves fetched batches on a goroutine of its own, so the next
+// batch downloads while the previous one is saved. It holds at most one batch
+// waiting besides the one being saved, and stops saving at the first error.
+type batchWriter struct {
+	batches chan []storage.SyncMessage
+	done    chan struct{}
+	closed  bool
+	err     error
+}
+
+func newBatchWriter(fn func([]storage.SyncMessage) error) *batchWriter {
+	w := &batchWriter{batches: make(chan []storage.SyncMessage), done: make(chan struct{})}
+	go func() {
+		defer close(w.done)
+		for batch := range w.batches {
+			if err := fn(batch); err != nil {
+				w.err = err
+				return
+			}
+		}
+	}()
+	return w
+}
+
+// send hands a batch over, waiting while the previous one is still being
+// saved. It returns the error that stopped saving, if any.
+func (w *batchWriter) send(batch []storage.SyncMessage) error {
+	select {
+	case w.batches <- batch:
+		return nil
+	case <-w.done:
+		return w.err
+	}
+}
+
+// close waits until every batch handed over is saved and returns the first
+// error. It may be called more than once.
+func (w *batchWriter) close() error {
+	if !w.closed {
+		w.closed = true
+		close(w.batches)
+	}
+	<-w.done
+	return w.err
 }
 
 func uidValidityChanged(expected, current uint32) bool {
@@ -402,33 +468,69 @@ func uidStateNeedsReset(expected, current, highestUID uint32) bool {
 	return uidValidityChanged(expected, current) || expected == 0 && current > 0 && highestUID > 0
 }
 
-func (c *Client) FetchAllUIDs(ctx context.Context, remoteName string, expectedUIDValidity uint32) ([]uint32, uint32, bool, error) {
+// UIDSnapshot is a folder's UIDs at one moment. Messages added afterwards,
+// including by Gofer itself, get UIDs of at least UIDNext, so the snapshot
+// says nothing about them.
+type UIDSnapshot struct {
+	UIDs               []uint32
+	UIDNext            uint32
+	UIDValidity        uint32
+	UIDValidityChanged bool
+}
+
+// FetchUIDSnapshot lists a folder's UIDs together with the UIDNEXT reported
+// when it was selected.
+func (c *Client) FetchUIDSnapshot(ctx context.Context, remoteName string, expectedUIDValidity uint32) (UIDSnapshot, error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
 	if c.closed {
-		return nil, 0, false, fmt.Errorf("client is closed")
+		return UIDSnapshot{}, fmt.Errorf("client is closed")
 	}
 
 	selectData, err := c.client.Select(remoteName, nil).Wait()
 	if err != nil {
-		return nil, 0, false, fmt.Errorf("select %s: %w", remoteName, err)
+		return UIDSnapshot{}, fmt.Errorf("select %s: %w", remoteName, err)
 	}
 	defer c.unselect()
-	currentUIDValidity := uint32(selectData.UIDValidity)
-	if uidValidityChanged(expectedUIDValidity, currentUIDValidity) {
-		return nil, currentUIDValidity, true, nil
+	snapshot := UIDSnapshot{UIDValidity: uint32(selectData.UIDValidity), UIDNext: uint32(selectData.UIDNext)}
+	if uidValidityChanged(expectedUIDValidity, snapshot.UIDValidity) {
+		snapshot.UIDValidityChanged = true
+		return snapshot, nil
 	}
 
 	imapUIDs, err := c.listAllUIDs(remoteName)
 	if err != nil {
-		return nil, currentUIDValidity, false, err
+		return snapshot, err
 	}
-	uids := make([]uint32, len(imapUIDs))
+	snapshot.UIDs = make([]uint32, len(imapUIDs))
 	for i, uid := range imapUIDs {
-		uids[i] = uint32(uid)
+		snapshot.UIDs[i] = uint32(uid)
 	}
-	return uids, currentUIDValidity, false, nil
+	return snapshot, nil
+}
+
+// ExpungedUIDs returns the local UIDs the snapshot shows were removed from the
+// server: those it should list but does not. A UID is judged when it existed
+// before the snapshot: below its UIDNEXT, or no higher than seenUID, the
+// highest UID sync had seen before taking it. Other local UIDs, such as a draft
+// revision Gofer just stored, were assigned afterwards and are left alone.
+func (s UIDSnapshot) ExpungedUIDs(local map[uint32]int64, seenUID uint32) []uint32 {
+	// The highest listed UID and seenUID cover servers that understate
+	// UIDNEXT.
+	limit := max(s.UIDNext, seenUID+1)
+	listed := make(map[uint32]bool, len(s.UIDs))
+	for _, uid := range s.UIDs {
+		listed[uid] = true
+		limit = max(limit, uid+1)
+	}
+	var expunged []uint32
+	for uid := range local {
+		if uid < limit && !listed[uid] {
+			expunged = append(expunged, uid)
+		}
+	}
+	return expunged
 }
 
 // listAllUIDs returns every UID in the selected mailbox. Some servers answer
@@ -619,63 +721,70 @@ func isIMAPCommandRejection(err error) bool {
 }
 
 func (c *Client) fetchFlagUpdatesLocked(remoteName string, uids []uint32, changedSince uint64, includeModSeq bool) ([]FlagUpdate, error) {
+	if changedSince > 0 {
+		// Only messages changed since the checkpoint come back, so one
+		// command over the whole folder replaces listing every local UID.
+		var all imap.UIDSet
+		all.AddRange(1, 0)
+		return c.fetchFlagSetLocked(remoteName, all, changedSince, includeModSeq)
+	}
 	var allUpdates []FlagUpdate
-	chunkSize := 500
-
+	const chunkSize = 500
 	for i := 0; i < len(uids); i += chunkSize {
-		end := i + chunkSize
-		if end > len(uids) {
-			end = len(uids)
-		}
-		chunk := uids[i:end]
-
+		end := min(i+chunkSize, len(uids))
 		var uidSet imap.UIDSet
-		for _, uid := range chunk {
+		for _, uid := range uids[i:end] {
 			uidSet.AddNum(imap.UID(uid))
 		}
+		updates, err := c.fetchFlagSetLocked(remoteName, uidSet, 0, includeModSeq)
+		if err != nil {
+			return nil, err
+		}
+		allUpdates = append(allUpdates, updates...)
+	}
+	return allUpdates, nil
+}
 
-		fetchOpts := &imap.FetchOptions{UID: true, Flags: true, ModSeq: includeModSeq, ChangedSince: changedSince}
-		cmd := c.client.Fetch(uidSet, fetchOpts)
+func (c *Client) fetchFlagSetLocked(remoteName string, uidSet imap.UIDSet, changedSince uint64, includeModSeq bool) ([]FlagUpdate, error) {
+	var updates []FlagUpdate
+	fetchOpts := &imap.FetchOptions{UID: true, Flags: true, ModSeq: includeModSeq, ChangedSince: changedSince}
+	cmd := c.client.Fetch(uidSet, fetchOpts)
+	for {
+		msg := cmd.Next()
+		if msg == nil {
+			break
+		}
 
+		var update FlagUpdate
 		for {
-			msg := cmd.Next()
-			if msg == nil {
+			item := msg.Next()
+			if item == nil {
 				break
 			}
-
-			var update FlagUpdate
-			for {
-				item := msg.Next()
-				if item == nil {
-					break
-				}
-				switch item := item.(type) {
-				case imapclient.FetchItemDataUID:
-					update.UID = uint32(item.UID)
-				case imapclient.FetchItemDataFlags:
-					update.Labels = labelsFromFlags(item.Flags)
-					for _, flag := range item.Flags {
-						switch flag {
-						case imap.FlagSeen:
-							update.IsRead = true
-						case imap.FlagFlagged:
-							update.IsStarred = true
-						}
+			switch item := item.(type) {
+			case imapclient.FetchItemDataUID:
+				update.UID = uint32(item.UID)
+			case imapclient.FetchItemDataFlags:
+				update.Labels = labelsFromFlags(item.Flags)
+				for _, flag := range item.Flags {
+					switch flag {
+					case imap.FlagSeen:
+						update.IsRead = true
+					case imap.FlagFlagged:
+						update.IsStarred = true
 					}
 				}
 			}
-
-			if update.UID > 0 {
-				allUpdates = append(allUpdates, update)
-			}
 		}
 
-		if err := cmd.Close(); err != nil {
-			return nil, fmt.Errorf("fetch flags %s: %w", remoteName, err)
+		if update.UID > 0 {
+			updates = append(updates, update)
 		}
 	}
-
-	return allUpdates, nil
+	if err := cmd.Close(); err != nil {
+		return nil, fmt.Errorf("fetch flags %s: %w", remoteName, err)
+	}
+	return updates, nil
 }
 
 func labelsFromFlags(flags []imap.Flag) []storage.LabelInput {

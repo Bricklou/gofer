@@ -24,8 +24,10 @@ func (h *Handler) handleUserSSE(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	defer releaseActive()
-	ch := h.userIMAP.Events().Subscribe()
-	defer h.userIMAP.Events().Unsubscribe(ch)
+	// Events here name their owner; AnyAccount also passes those naming only
+	// an account, whose ownership writeEvent checks.
+	events := h.userIMAP.Events().SubscribeFor(mail.SubscribeOptions{UserID: owner, AnyAccount: true})
+	defer events.Close()
 	manual, err := h.userIMAP.ManualSyncSnapshot(ctx, owner)
 	if err != nil {
 		userAccountError(w, r, err)
@@ -79,9 +81,11 @@ func (h *Handler) handleUserSSE(w http.ResponseWriter, r *http.Request) {
 			if err := h.userStorage.ValidateUser(ctx, owner); err != nil {
 				return
 			}
-		case event := <-ch:
-			if !writeEvent(event) {
-				return
+		case <-events.Ready():
+			for _, event := range events.Take() {
+				if !writeEvent(event) {
+					return
+				}
 			}
 		}
 	}

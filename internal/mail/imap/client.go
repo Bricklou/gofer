@@ -26,6 +26,9 @@ type FolderInfo struct {
 	Attributes []imap.MailboxAttr
 	Role       string
 	Selectable bool
+	// Status comes with the folder list on servers with LIST-STATUS, so a
+	// poll learns which folders changed without a command per folder.
+	Status *FolderStatus
 }
 
 type Client struct {
@@ -35,6 +38,9 @@ type Client struct {
 	mu          sync.Mutex
 	closed      bool
 	stopContext func() bool
+	pool        *Pool
+	poolKey     string
+	interrupted bool
 }
 
 func NewClient(ctx context.Context, cfg *models.AccountConfig, password string) (*Client, error) {
@@ -170,12 +176,26 @@ func secureClientOptions(host string, options *imapclient.Options) *imapclient.O
 	return options
 }
 
+// Close ends this use of the client. A session from a Pool goes back to the
+// pool for reuse when it is still healthy; the caller must not use it again.
 func (c *Client) Close() error {
 	c.mu.Lock()
-	defer c.mu.Unlock()
 	if c.closed {
+		c.mu.Unlock()
 		return nil
 	}
+	if pool, key := c.pool, c.poolKey; pool != nil {
+		c.pool, c.poolKey = nil, ""
+		// A use whose context already fired has closed the connection.
+		if c.stopContext != nil && !c.stopContext() {
+			c.interrupted = true
+		}
+		c.stopContext = nil
+		c.mu.Unlock()
+		pool.put(key, c)
+		return nil
+	}
+	defer c.mu.Unlock()
 	c.closed = true
 	if c.stopContext != nil {
 		c.stopContext()
@@ -238,13 +258,16 @@ func (c *Client) ListFolders(ctx context.Context) ([]FolderInfo, error) {
 		return nil, fmt.Errorf("list folders: %w", err)
 	}
 
-	// Also get subfolders by listing with * pattern
-	subCmd := c.client.List("", "*", nil)
+	// Also get subfolders by listing with * pattern. Where the server can,
+	// this listing also returns every folder's status.
+	subCmd := c.client.List("", "*", listStatusOptions(c))
 	defer subCmd.Close()
 
 	seen := make(map[string]bool)
-	for _, f := range folders {
+	index := make(map[string]int)
+	for i, f := range folders {
 		seen[strings.ToUpper(f.Name)] = true
+		index[strings.ToUpper(f.Name)] = i
 	}
 
 	for {
@@ -252,8 +275,21 @@ func (c *Client) ListFolders(ctx context.Context) ([]FolderInfo, error) {
 		if data == nil {
 			break
 		}
+		if data.Mailbox != "" && data.Status != nil {
+			if i, ok := index[strings.ToUpper(data.Mailbox)]; ok {
+				if status, ok := folderStatusFromData(data.Status); ok {
+					folders[i].Status = &status
+				}
+			}
+		}
 		if data.Mailbox == "" || seen[strings.ToUpper(data.Mailbox)] || !isExistingMailbox(data.Attrs) {
 			continue
+		}
+		var status *FolderStatus
+		if data.Status != nil {
+			if parsed, ok := folderStatusFromData(data.Status); ok {
+				status = &parsed
+			}
 		}
 		seen[strings.ToUpper(data.Mailbox)] = true
 		role := detectFolderRole(data.Mailbox, data.Attrs)
@@ -263,6 +299,7 @@ func (c *Client) ListFolders(ctx context.Context) ([]FolderInfo, error) {
 			Attributes: data.Attrs,
 			Role:       role,
 			Selectable: isSelectableMailbox(data.Attrs),
+			Status:     status,
 		})
 	}
 

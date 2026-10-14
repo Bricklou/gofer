@@ -126,7 +126,7 @@ func (s *UserIMAP) applyMutation(ctx context.Context, scope *userIMAPScope, muta
 	if mutation.Kind == storage.MessageMutationMove && destination == "" {
 		return errors.New("destination has no remote IMAP folder identity")
 	}
-	client, err := imap.NewContextClient(ctx, scope.config, scope.password)
+	client, err := imap.DefaultPool.Get(ctx, scope.config, scope.password)
 	if err != nil {
 		return err
 	}

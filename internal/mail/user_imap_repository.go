@@ -21,6 +21,8 @@ type imapSyncRepository interface {
 	UpdateFolderIncrementalSync(ctx context.Context, folderID string, highestUID uint32, uidValidity uint32, totalCount int) error
 	RefreshFolderUnreadCount(ctx context.Context, folderID string) (int, error)
 	GetLocalUIDs(ctx context.Context, folderID string) (map[uint32]int64, error)
+	IMAPFolderLocalCounts(ctx context.Context, folderID string) (messages, unseen int, err error)
+	SetFolderUIDNext(ctx context.Context, folderID string, uidValidity, uidNext uint32) error
 	RemoveExpungedUIDs(ctx context.Context, folderID string, expungedUIDs []uint32) (int, error)
 	ApplyIMAPFlagChanges(ctx context.Context, folderID string, expectedUIDValidity uint32, updates []storage.FlagUpdate, highestModSeq uint64) (int, error)
 	BatchUpdateFlags(ctx context.Context, folderID string, updates []storage.FlagUpdate) (int, error)
@@ -117,6 +119,17 @@ func (r *userIMAPScope) GetLocalUIDs(ctx context.Context, folderID string) (map[
 	err := r.call(ctx, func(db *storage.DB) error { var err error; result, err = db.GetLocalUIDs(ctx, folderID); return err })
 	return result, err
 }
+func (r *userIMAPScope) IMAPFolderLocalCounts(ctx context.Context, folderID string) (messages, unseen int, err error) {
+	err = r.call(ctx, func(db *storage.DB) error {
+		var err error
+		messages, unseen, err = db.IMAPFolderLocalCounts(ctx, folderID)
+		return err
+	})
+	return messages, unseen, err
+}
+func (r *userIMAPScope) SetFolderUIDNext(ctx context.Context, folderID string, uidValidity, uidNext uint32) error {
+	return r.call(ctx, func(db *storage.DB) error { return db.SetFolderUIDNext(ctx, folderID, uidValidity, uidNext) })
+}
 func (r *userIMAPScope) RemoveExpungedUIDs(ctx context.Context, folderID string, expungedUIDs []uint32) (int, error) {
 	var result int
 	err := r.call(ctx, func(db *storage.DB) error {
@@ -179,10 +192,7 @@ func (o *SyncOrchestrator) publishEvent(event Event) {
 }
 
 func (o *SyncOrchestrator) newIMAPSyncClient(ctx context.Context, cfg *models.AccountConfig, password string) (*imap.Client, error) {
-	if o.imapScope != nil {
-		return imap.NewContextClient(ctx, cfg, password)
-	}
-	return imap.NewClient(ctx, cfg, password)
+	return imap.DefaultPool.Get(ctx, cfg, password)
 }
 func (r *userIMAPScope) ListFolderUIDsMissingSize(ctx context.Context, folderID string, limit int) ([]uint32, error) {
 	var result []uint32

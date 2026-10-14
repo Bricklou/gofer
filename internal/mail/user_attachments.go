@@ -85,7 +85,7 @@ func (s *UserIMAP) EnsureAttachment(ctx context.Context, owner string, id int64)
 		var raw, content []byte
 		localMIME := false
 		if snapshot.RawPath != "" {
-			file, err := os.Open(snapshot.RawPath)
+			file, err := store.OpenMessageFile(snapshot.RawPath)
 			if err == nil {
 				raw, err = io.ReadAll(io.LimitReader(file, userAttachmentMaxBytes+1))
 				_ = file.Close()

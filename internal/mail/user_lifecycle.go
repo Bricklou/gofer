@@ -1,5 +1,13 @@
 package mail
 
+import (
+	"context"
+	"log"
+	"time"
+
+	"github.com/cristianadrielbraun/gofer/internal/mail/imap"
+)
+
 // All registration/removal shares mu with StopUser. Entries represent only
 // running jobs, including owner work between account operations; no persistent
 // per-registered-user worker or history is retained here.
@@ -16,6 +24,7 @@ func (s *UserIMAP) trackUserRunLocked(run *userIMAPOperation, owner string) {
 // Central status/deletion intent must be changed first to reject fresh work;
 // queued operations and publication continue to validate central authority.
 func (s *UserIMAP) StopUser(owner string) {
+	s.dropUserSessions(owner)
 	s.mu.Lock()
 	for run, user := range s.userRuns {
 		if user == owner {
@@ -32,6 +41,11 @@ func (s *UserIMAP) StopUser(owner string) {
 			w.cancel()
 		}
 	}
+	if timer := s.offlineTimers[owner]; timer != nil {
+		timer.Stop()
+		delete(s.offlineTimers, owner)
+	}
+	s.onlineSet.Delete(owner)
 	if session := s.activePollUsers[owner]; session != nil {
 		delete(s.activePollUsers, owner)
 		session.cancel()
@@ -45,4 +59,27 @@ func (s *UserIMAP) StopUser(owner string) {
 	s.mu.Unlock()
 	s.wakeActivePoll()
 	s.wakeBackground()
+}
+
+// dropPooledAccount logs out an account's idle IMAP sessions; tests replace it.
+var dropPooledAccount = imap.DefaultPool.DropAccount
+
+// dropPooledSessions logs out every idle IMAP session; tests replace it.
+var dropPooledSessions = imap.DefaultPool.DropAll
+
+// dropUserSessions logs out the owner's idle IMAP sessions, so none stays
+// logged in after the owner is stopped. If the owner's accounts cannot be
+// listed, every idle session is dropped instead: that only costs reconnects.
+func (s *UserIMAP) dropUserSessions(owner string) {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	ids, err := s.Routing().UserAccountIDs(ctx, owner)
+	if err != nil {
+		log.Printf("stop user: list accounts to end IMAP sessions: %v", err)
+		dropPooledSessions()
+		return
+	}
+	for _, id := range ids {
+		dropPooledAccount(id)
+	}
 }

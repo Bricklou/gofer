@@ -10,6 +10,7 @@ import (
 	"errors"
 	"fmt"
 	"github.com/a-h/templ"
+	"github.com/cristianadrielbraun/gofer/internal/assetver"
 	"github.com/cristianadrielbraun/gofer/internal/auth"
 	avatarresolver "github.com/cristianadrielbraun/gofer/internal/avatar"
 	"github.com/cristianadrielbraun/gofer/internal/calendar"
@@ -561,6 +562,7 @@ func setupAssetsRoutes(mux *http.ServeMux) {
 	isDevelopment := os.Getenv("GO_ENV") != "production"
 	assetServer := http.FileServer(assetFileSystem())
 	compressedAssets := newCompressedAssetCache(assetFileSystem())
+	assetver.Use(assetFileSystem())
 
 	assetHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if strings.HasSuffix(r.URL.Path, ".webmanifest") {
@@ -569,10 +571,21 @@ func setupAssetsRoutes(mux *http.ServeMux) {
 		if strings.HasSuffix(r.URL.Path, ".woff2") {
 			w.Header().Set("Content-Type", "font/woff2")
 		}
-		if isDevelopment {
+		version, known := assetver.Version("/assets/" + strings.TrimPrefix(r.URL.Path, "/"))
+		switch {
+		case isDevelopment:
 			w.Header().Set("Cache-Control", "no-store")
-		} else {
-			w.Header().Set("Cache-Control", "public, max-age=31536000")
+		case known && r.URL.Query().Get("v") == version:
+			// Pages link this exact content; a new release links a new version.
+			w.Header().Set("Cache-Control", "public, max-age=31536000, immutable")
+		default:
+			// Linked without its version, as fonts are from the stylesheet:
+			// check every time, which costs a 304 while it is unchanged.
+			w.Header().Set("Cache-Control", "public, no-cache")
+		}
+		if known {
+			// Embedded files carry no modification time to revalidate with.
+			w.Header().Set("ETag", `"`+version+`"`)
 		}
 		if compressedAssets.serve(w, r, r.URL.Path) {
 			return
@@ -1762,7 +1775,7 @@ func (h *Handler) originalBodyFromStoredMessage(ctx context.Context, emailID str
 			return nil, err
 		}
 		if storageInfo.RawPath != "" {
-			if raw, readErr := os.ReadFile(storageInfo.RawPath); readErr == nil {
+			if raw, readErr := store.ReadMessageFile(storageInfo.RawPath); readErr == nil {
 				if extracted, extractErr := message.ExtractHTMLBody(bytes.NewReader(raw)); extractErr == nil && len(extracted) > 0 {
 					body = extracted
 					if p, storeErr := h.blobStore.StoreBodyOriginalHTML(ctx, storageInfo.AccountID, msgID, extracted); storeErr == nil {
@@ -2158,7 +2171,7 @@ func (h *Handler) loadMailWindow(ctx context.Context, userID, folderID string, f
 		}
 	}
 	if page == nil {
-		page, err = h.db.GetEmailsRangeFilteredForUser(ctx, userID, folderID, 0, limit, filters)
+		page, err = h.db.GetEmailsRangeFilteredForUserWithTotal(ctx, userID, folderID, 0, limit, filters, totalCount)
 		if err != nil {
 			return mailWindow{}, err
 		}
@@ -2241,7 +2254,7 @@ func (h *Handler) handleMailItems(w http.ResponseWriter, r *http.Request) {
 		if page == nil {
 			page = &models.EmailPage{}
 		}
-		accounts, err := h.db.GetAccounts(ctx, userID)
+		accounts, err := h.db.GetAccountNames(ctx, userID)
 		if err != nil {
 			return nil, err
 		}
@@ -4408,8 +4421,8 @@ func (h *Handler) handleSSE(w http.ResponseWriter, r *http.Request) {
 		return true
 	}
 
-	ch := h.syncer.Events().Subscribe()
-	defer h.syncer.Events().Unsubscribe(ch)
+	events := h.syncer.Events().SubscribeFor(mail.SubscribeOptions{UserID: userID, Admin: isAdmin, AccountIDs: userAccounts})
+	defer events.Close()
 	ticker := time.NewTicker(1200 * time.Millisecond)
 	defer ticker.Stop()
 	lastProcessingActive := false
@@ -4451,8 +4464,10 @@ func (h *Handler) handleSSE(w http.ResponseWriter, r *http.Request) {
 				flusher.Flush()
 			}
 			lastProcessingActive = active
-		case event := <-ch:
-			writeEvent(event)
+		case <-events.Ready():
+			for _, event := range events.Take() {
+				writeEvent(event)
+			}
 		}
 	}
 }

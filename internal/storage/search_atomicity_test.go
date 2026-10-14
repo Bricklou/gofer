@@ -141,7 +141,7 @@ func useSearchFailureWriter(t *testing.T, db *DB) {
 	if err := db.write.Close(); err != nil {
 		t.Fatal(err)
 	}
-	db.write = sql.OpenDB(searchFailureConnector{db.path + "?_pragma=journal_mode(WAL)&_pragma=synchronous(NORMAL)&_pragma=foreign_keys(1)&_pragma=busy_timeout(5000)&_pragma=temp_store(MEMORY)&_texttotime=true"})
+	db.write = sql.OpenDB(searchFailureConnector{db.path + "?_pragma=journal_mode(WAL)&_pragma=synchronous(NORMAL)&_pragma=foreign_keys(1)&_pragma=busy_timeout(5000)&_pragma=temp_store(MEMORY)"})
 	db.write.SetMaxOpenConns(1)
 }
 
