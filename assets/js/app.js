@@ -2178,28 +2178,10 @@ document.addEventListener("DOMContentLoaded", function () {
     function performMailSelectionAction(action) {
       if (mailSelectionBusy || selectedMailIds.size === 0) return
       var ids = Array.from(selectedMailIds)
-      if (action === "label") {
-        var labelName = promptMailLabelName()
-        if (!labelName) return
+      if (action === "labels") {
         var labelTargets = selectedMailTargets(ids)
-        clearMailSelection()
-        sendBulkMessageAction("/api/messages/label", labelTargets, { label: labelName, folder_id: currentMailListFolderID() }).then(function () {
-          if (virtualMailList && typeof virtualMailList.refreshCurrentFolder === "function") {
-            virtualMailList.refreshCurrentFolder({ noAnimation: true }).catch(function () {})
-          }
-          var currentEmail = virtualMailList && virtualMailList.selectedEmailId
-          if (currentEmail && ids.indexOf(currentEmail) !== -1 && window.htmx) {
-            htmx.ajax("GET", mailViewRequestURL(currentEmail), { target: "#mail-view", swap: "innerHTML" })
-          }
-        })
-        return
-      }
-      if (action === "unlabel") {
-        var removeLabelName = promptMailLabelName()
-        if (!removeLabelName) return
-        var unlabelTargets = selectedMailTargets(ids)
-        clearMailSelection()
-        sendBulkMessageAction("/api/messages/unlabel", unlabelTargets, { label: removeLabelName, folder_id: currentMailListFolderID() }).then(function () {
+        openLabelsDialog(labelTargets, function () {
+          clearMailSelection()
           if (virtualMailList && typeof virtualMailList.refreshCurrentFolder === "function") {
             virtualMailList.refreshCurrentFolder({ noAnimation: true }).catch(function () {})
           }
@@ -2972,12 +2954,6 @@ document.addEventListener("DOMContentLoaded", function () {
         sortBy: "date",
         sortOrder: "desc",
       }
-    }
-
-    function promptMailLabelName() {
-      var value = window.prompt("Label name")
-      if (value == null) return ""
-      return String(value).trim()
     }
 
     function readFilters() {
@@ -15758,18 +15734,202 @@ function markSpamState(emailId, notSpam, thread) {
     .catch(function () {})
 }
 
-function promptLabelMessage(emailId, thread) {
-  var labelName = window.prompt("Label name")
-  if (labelName == null) return
-  labelName = String(labelName).trim()
-  if (!labelName) return
-  fetch("/api/messages/" + encodeURIComponent(emailId) + "/label", {
+// The Labels dialog adds and removes labels on one or more emails. The server
+// draws it with each label checked, unchecked or partly checked; Apply sends
+// only what changed, one label at a time.
+var _labelsDialog = null
+
+function openMessageLabels(emailId, thread) {
+  openLabelsDialog([{ id: String(emailId), thread: !!thread }], function () { refreshAfterLabelMutation(emailId) })
+}
+
+function openLabelsDialog(targets, done) {
+  var folderID = mailActionCurrentFolderID()
+  fetch("/mail/labels-dialog", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ label: labelName, thread: !!thread, folder_id: mailActionCurrentFolderID() })
+    body: JSON.stringify({ targets: targets, folder_id: folderID }),
   })
-    .then(function () { refreshAfterLabelMutation(emailId) })
-    .catch(function () {})
+    .then(function (response) {
+      if (!response.ok) throw new Error("labels dialog unavailable")
+      return response.text()
+    })
+    .then(function (html) {
+      var host = document.getElementById("mail-labels-dialog-host")
+      if (!host) {
+        host = document.createElement("div")
+        host.id = "mail-labels-dialog-host"
+        document.body.appendChild(host)
+      }
+      host.innerHTML = html
+      _labelsDialog = { targets: targets, folderID: folderID, done: done }
+      host.querySelectorAll('[data-mail-labels-check][data-state="some"]').forEach(function (check) { check.indeterminate = true })
+      if (window.tui && window.tui.dialog) {
+        window.tui.dialog.open("mail-labels-dialog")
+      } else {
+        var content = host.querySelector("[data-tui-dialog-content]")
+        if (content && !content.open) {
+          try { content.showModal() } catch (_) {}
+        }
+      }
+      var search = host.querySelector("[data-mail-labels-search]")
+      if (search) setTimeout(function () { search.focus() }, 0)
+    })
+    .catch(function () {
+      showGoferToast({ title: "Couldn't open labels", description: "Please try again.", variant: "error", icon: "error", duration: 5000 })
+    })
+}
+
+function labelsDialogRoot() {
+  return document.getElementById("mail-labels-dialog")
+}
+
+// A partly checked label cycles through all, none and back to partly; any
+// other label just toggles.
+function cycleLabelOption(check) {
+  if (!check) return
+  var initial = check.getAttribute("data-initial")
+  var state = check.getAttribute("data-state")
+  var next
+  if (initial === "some") next = state === "some" ? "all" : state === "all" ? "none" : "some"
+  else next = state === "all" ? "none" : "all"
+  check.setAttribute("data-state", next)
+  check.checked = next === "all"
+  check.indeterminate = next === "some"
+  syncLabelsDialogApply()
+}
+
+function syncLabelsDialogApply() {
+  var root = labelsDialogRoot()
+  if (!root) return
+  var changed = Array.prototype.some.call(root.querySelectorAll("[data-mail-labels-check]"), function (check) {
+    return check.getAttribute("data-state") !== check.getAttribute("data-initial")
+  })
+  var apply = root.querySelector("[data-mail-labels-apply]")
+  if (apply) apply.disabled = !changed
+}
+
+function filterLabelsDialog() {
+  var root = labelsDialogRoot()
+  if (!root) return
+  var search = root.querySelector("[data-mail-labels-search]")
+  var query = String(search && search.value || "").trim()
+  var key = query.toLowerCase()
+  var exact = false
+  var rows = root.querySelectorAll("[data-mail-labels-rows] [data-mail-label-option]")
+  rows.forEach(function (row) {
+    var rowKey = row.getAttribute("data-mail-labels-key") || ""
+    if (rowKey === key) exact = true
+    row.classList.toggle("hidden", !!key && rowKey.indexOf(key) === -1)
+  })
+  var create = root.querySelector("[data-mail-labels-create]")
+  if (create) {
+    create.classList.toggle("hidden", !query || exact)
+    var name = create.querySelector("[data-mail-labels-create-name]")
+    if (name) name.textContent = query
+  }
+  var empty = root.querySelector("[data-mail-labels-empty]")
+  if (empty) empty.classList.toggle("hidden", rows.length > 0 || !!query)
+}
+
+// Enter creates the typed label, or toggles the only label left by the search.
+function labelsDialogSearchKeydown(event) {
+  if (!event || event.key !== "Enter") return
+  event.preventDefault()
+  var root = labelsDialogRoot()
+  if (!root) return
+  var create = root.querySelector("[data-mail-labels-create]")
+  if (create && !create.classList.contains("hidden")) {
+    createLabelFromSearch()
+    return
+  }
+  var visible = Array.prototype.filter.call(root.querySelectorAll("[data-mail-labels-rows] [data-mail-label-option]"), function (row) {
+    return !row.classList.contains("hidden")
+  })
+  if (visible.length === 1) visible[0].querySelector("[data-mail-labels-check]").click()
+}
+
+function createLabelFromSearch() {
+  var root = labelsDialogRoot()
+  if (!root) return
+  var search = root.querySelector("[data-mail-labels-search]")
+  var name = String(search && search.value || "").trim()
+  var template = root.querySelector("template[data-mail-labels-row-template]")
+  var rows = root.querySelector("[data-mail-labels-rows]")
+  if (!name || !template || !rows) return
+  var row = template.content.firstElementChild.cloneNode(true)
+  row.setAttribute("data-mail-label-option", name)
+  row.setAttribute("data-mail-labels-key", name.toLowerCase())
+  row.querySelector("[data-mail-labels-name]").textContent = name
+  var check = row.querySelector("[data-mail-labels-check]")
+  check.setAttribute("data-state", "all")
+  check.checked = true
+  rows.insertBefore(row, rows.firstChild)
+  search.value = ""
+  filterLabelsDialog()
+  syncLabelsDialogApply()
+  search.focus()
+}
+
+function applyLabelsDialog() {
+  var root = labelsDialogRoot()
+  var state = _labelsDialog
+  if (!root || !state) return
+  var changes = []
+  root.querySelectorAll("[data-mail-labels-check]").forEach(function (check) {
+    var row = check.closest("[data-mail-label-option]")
+    var name = row ? row.getAttribute("data-mail-label-option") : ""
+    var initial = check.getAttribute("data-initial")
+    var next = check.getAttribute("data-state")
+    if (!name || next === initial || next === "some") return
+    changes.push({ name: name, add: next === "all" })
+  })
+  _labelsDialog = null
+  if (window.tui && window.tui.dialog) {
+    window.tui.dialog.close("mail-labels-dialog")
+  } else {
+    var content = root.querySelector("[data-tui-dialog-content]")
+    if (content && content.open) content.close()
+  }
+  var failures = []
+  var run = Promise.resolve()
+  changes.forEach(function (change) {
+    run = run.then(function () {
+      return postLabelChange(change.add ? "/api/messages/label" : "/api/messages/unlabel", state.targets, change.name, state.folderID)
+        .catch(function (err) { failures.push(change.name + ": " + (err && err.reason ? err.reason : "please try again.")) })
+    })
+  })
+  run.then(function () {
+    if (failures.length) {
+      showGoferToast({ title: "Some labels weren't changed", description: failures.join(" "), variant: "error", icon: "error", duration: 8000 })
+    }
+    if (typeof state.done === "function") state.done()
+  })
+}
+
+// The server takes a few hundred messages per request, so many emails go in
+// chunks, one after another.
+function postLabelChange(path, targets, label, folderID) {
+  var run = Promise.resolve()
+  for (var start = 0; start < targets.length; start += 200) {
+    run = run.then(postLabelChunk.bind(null, path, targets.slice(start, start + 200), label, folderID))
+  }
+  return run
+}
+
+function postLabelChunk(path, targets, label, folderID) {
+  return fetch(path, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ targets: targets, label: label, folder_id: folderID }),
+  }).then(function (response) {
+    if (response.ok) return
+    return response.text().then(function (text) {
+      var err = new Error("label change failed")
+      err.reason = String(text || "").trim() || "The server answered " + response.status + "."
+      throw err
+    })
+  })
 }
 
 function removeLabelMessage(emailId, labelName, thread) {

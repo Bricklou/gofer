@@ -410,6 +410,7 @@ func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /", h.handleIndex)
 	mux.HandleFunc("GET /email/{id}", h.handleEmailPartial)
 	mux.HandleFunc("GET /email/{id}/move", h.handleMoveDialog)
+	mux.HandleFunc("POST /mail/labels-dialog", h.handleLabelsDialog)
 	mux.HandleFunc("GET /api/mail/{id}/calendar", h.handleMailCalendarFooter)
 	mux.HandleFunc("GET /email/{id}/body", h.handleEmailBody)
 	mux.HandleFunc("GET /email/{id}/body/translated", h.handleTranslatedEmailBody)
@@ -743,6 +744,82 @@ func (h *Handler) handleMoveDialog(w http.ResponseWriter, r *http.Request) {
 			return nil, err
 		}
 		return views.MailMoveDialog(email, accounts), nil
+	})
+}
+
+// handleLabelsDialog lists the labels of the emails' accounts for the Labels
+// dialog, each marked as on all, some or none of the emails.
+func (h *Handler) handleLabelsDialog(w http.ResponseWriter, r *http.Request) {
+	payload, err := decodeMessageBulkRequest(r)
+	if err != nil {
+		http.Error(w, "invalid request body", http.StatusBadRequest)
+		return
+	}
+	ctx := r.Context()
+	h.renderMailboxView(w, r, &ctx, func(h *Handler) (templ.Component, error) {
+		targets, err := h.resolveOwnedMessageTargets(ctx, messageBulkTargets(payload), strings.TrimSpace(payload.FolderID), false)
+		if errors.Is(err, errMessageTargetNotFound) || errors.Is(err, errInvalidMessageTarget) {
+			return nil, sql.ErrNoRows
+		}
+		if err != nil {
+			return nil, err
+		}
+		var messageIDs []int64
+		accountIDs := make(map[string]bool)
+		for _, target := range targets {
+			for _, info := range target.Infos {
+				messageIDs = append(messageIDs, info.MessageID)
+				accountIDs[info.AccountID] = true
+			}
+		}
+		labelsByMessage, err := h.db.GetMessageLabels(ctx, messageIDs)
+		if err != nil {
+			return nil, err
+		}
+		// An email has a label when any of its messages has it.
+		emailsWithLabel := make(map[string]int)
+		for _, target := range targets {
+			names := make(map[string]bool)
+			for _, info := range target.Infos {
+				for _, label := range labelsByMessage[info.MessageID] {
+					names[strings.ToLower(strings.TrimSpace(label.Name))] = true
+				}
+			}
+			for name := range names {
+				emailsWithLabel[name]++
+			}
+		}
+		accounts, err := h.db.GetAccounts(ctx, h.userID(ctx))
+		if err != nil {
+			return nil, err
+		}
+		var options []views.MailLabelOption
+		seen := make(map[string]bool)
+		for _, account := range accounts {
+			if !accountIDs[account.ID] {
+				continue
+			}
+			for _, label := range account.Labels {
+				name := strings.TrimSpace(label.Name)
+				key := strings.ToLower(name)
+				if name == "" || seen[key] {
+					continue
+				}
+				seen[key] = true
+				state := views.MailLabelOnNone
+				switch count := emailsWithLabel[key]; {
+				case count == len(targets):
+					state = views.MailLabelOnAll
+				case count > 0:
+					state = views.MailLabelOnSome
+				}
+				options = append(options, views.MailLabelOption{Name: name, State: state})
+			}
+		}
+		slices.SortFunc(options, func(a, b views.MailLabelOption) int {
+			return strings.Compare(strings.ToLower(a.Name), strings.ToLower(b.Name))
+		})
+		return views.MailLabelsDialog(options), nil
 	})
 }
 

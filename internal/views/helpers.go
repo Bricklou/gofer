@@ -106,6 +106,19 @@ func mailEmailIsArchived(email *models.Email) bool {
 	return email != nil && (email.FolderID == "archive" || mailRoleIsArchive(email.FolderRole))
 }
 
+// MailLabelOption is a label in the Labels dialog, with how many of the
+// emails have it.
+type MailLabelOption struct {
+	Name  string
+	State string
+}
+
+const (
+	MailLabelOnAll  = "all"
+	MailLabelOnSome = "some"
+	MailLabelOnNone = "none"
+)
+
 type mailMoveTarget struct {
 	Folder models.Folder
 	Depth  int

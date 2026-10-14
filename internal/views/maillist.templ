@@ -290,17 +290,11 @@ templ MailListToolbar(accounts []models.Account, activeFolder string, viewMode s
 					@icon.EllipsisVertical(icon.Props{Class: "size-3.5"})
 				}
 			}
-			@dropdown.Content(dropdown.ContentProps{Class: "mobile-sheet"}) {
-				@dropdown.Item(dropdown.ItemProps{Attributes: templ.Attributes{"data-mail-selection-action": "label"}}) {
+			@dropdown.Content(dropdown.ContentProps{Class: "mobile-sheet", Placement: dropdown.PlacementBottomEnd}) {
+				@dropdown.Item(dropdown.ItemProps{Attributes: templ.Attributes{"data-mail-selection-action": "labels"}}) {
 					<span class="flex items-center gap-2">
 						@icon.Tag(icon.Props{Class: "size-4"})
-						Add label
-					</span>
-				}
-				@dropdown.Item(dropdown.ItemProps{Attributes: templ.Attributes{"data-mail-selection-action": "unlabel"}}) {
-					<span class="flex items-center gap-2">
-						@icon.X(icon.Props{Class: "size-4"})
-						Remove label
+						Labels…
 					</span>
 				}
 				@dropdown.Item(dropdown.ItemProps{Attributes: templ.Attributes{"data-mail-selection-action": "star"}}) {

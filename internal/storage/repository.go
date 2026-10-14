@@ -6363,6 +6363,14 @@ func (db *DB) batchGetRecipients(ctx context.Context, msgIDs []int64, kind strin
 	return result, nil
 }
 
+// GetMessageLabels is the labels of each of the messages.
+func (db *DB) GetMessageLabels(ctx context.Context, msgIDs []int64) (map[int64][]models.Label, error) {
+	if len(msgIDs) == 0 {
+		return map[int64][]models.Label{}, nil
+	}
+	return db.batchGetLabels(ctx, msgIDs)
+}
+
 func (db *DB) batchGetLabels(ctx context.Context, msgIDs []int64) (map[int64][]models.Label, error) {
 	placeholders := make([]string, len(msgIDs))
 	args := make([]any, len(msgIDs))

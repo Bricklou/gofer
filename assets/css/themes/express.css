@@ -1317,12 +1317,38 @@ html:root[data-theme="express"] :is(.account-wizard-card-footer, .account-wizard
   --xp-icon-paths: hidden;
 }
 
+/* The mail list's view switch is drawn for Gofer as a pair: Tango has no
+   list of cards, and its spreadsheet carries a chart. */
+[data-theme="express"] svg[data-lucide="layout-list"] {
+  --xp-icon: url("/assets/icons/express/cards.svg");
+  --xp-icon-paths: hidden;
+}
+
+[data-theme="express"] svg[data-lucide="table-2"] {
+  --xp-icon: url("/assets/icons/express/table.svg");
+  --xp-icon-paths: hidden;
+}
+
+[data-theme="express"] svg[data-lucide="layout-template"] {
+  --xp-icon: image-set(url("/assets/icons/express/preferences-desktop-16.png") 1x, url("/assets/icons/express/preferences-desktop-32.png") 2x);
+  --xp-icon-paths: hidden;
+}
+
 [data-theme="express"] svg[data-lucide] {
   background: var(--xp-icon, none) center / contain no-repeat;
 }
 
 [data-theme="express"] svg[data-lucide] > * {
   visibility: var(--xp-icon-paths, visible);
+}
+
+/* Sorting is Tango's up and down arrows side by side. It comes after the
+   rule above because it draws two pictures. */
+[data-theme="express"] svg[data-lucide="arrow-up-down"] {
+  background:
+    image-set(url("/assets/icons/express/go-up-16.png") 1x, url("/assets/icons/express/go-up-32.png") 2x) left top / 70% no-repeat,
+    image-set(url("/assets/icons/express/go-down-16.png") 1x, url("/assets/icons/express/go-down-32.png") 2x) right bottom / 70% no-repeat;
+  --xp-icon-paths: hidden;
 }
 
 /* Move to Inbox is Archive's package with Tango's up arrow rising out of it,
@@ -2284,15 +2310,16 @@ html:root[data-theme="express"] :is([data-calendar-month-event], [data-calendar-
 
 /* === MOVE TO DIALOG === */
 
-/* The chosen folder is highlighted like a selected list item. */
-[data-theme="express"] [data-mail-move-folder][aria-selected="true"] {
+/* The chosen folder or label is highlighted like a selected list item. */
+[data-theme="express"] :is([data-mail-move-folder], [data-mail-label-option])[aria-selected="true"] {
   border-radius: 0;
   background: var(--xp-select);
   color: var(--xp-select-foreground);
 }
 
-/* The folder list is a sunken white list box on the dialog's silver. */
-[data-theme="express"] [data-mail-move-list] {
+/* The folder and label lists are sunken white list boxes on the dialog's
+   silver. */
+[data-theme="express"] :is([data-mail-move-list], [data-mail-label-list]) {
   border: none;
   border-radius: 0;
   background: var(--xp-light);
@@ -2326,4 +2353,8 @@ html:root[data-theme="express"] :is([data-calendar-month-event], [data-calendar-
   background: var(--xp-select);
   color: var(--xp-select-foreground);
   box-shadow: none;
+}
+
+[data-theme="express"] [data-mail-label-option] {
+  border-radius: 0;
 }

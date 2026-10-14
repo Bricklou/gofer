@@ -6,6 +6,7 @@ import (
 	"github.com/cristianadrielbraun/gofer/internal/models"
 
 	"github.com/cristianadrielbraun/gofer/components/button"
+	"github.com/cristianadrielbraun/gofer/components/checkbox"
 	"github.com/cristianadrielbraun/gofer/components/copybutton"
 	"github.com/cristianadrielbraun/gofer/components/dialog"
 	"github.com/cristianadrielbraun/gofer/components/dropdown"
@@ -884,10 +885,10 @@ templ MailViewHeader(email *models.Email, thread []models.ThreadItem) {
 						@dropdown.Separator(dropdown.SeparatorProps{Class: "max-lg:hidden"})
 					}
 					@MailViewMobileMenuItems(email)
-					@dropdown.Item(dropdown.ItemProps{Attributes: templ.Attributes{"data-on-click": onAction("promptLabelMessage", email.ID, email.ThreadCount > 1)}}) {
+					@dropdown.Item(dropdown.ItemProps{Attributes: templ.Attributes{"data-on-click": onAction("openMessageLabels", email.ID, email.ThreadCount > 1)}}) {
 						<span class="flex items-center gap-2">
 							@icon.Tag(icon.Props{Class: "size-4"})
-							Add label
+							Labels…
 						</span>
 					}
 					@dropdown.Item(dropdown.ItemProps{Attributes: templ.Attributes{"data-on-click": onAction("openMoveDialog", email.ID, email.ThreadCount > 1)}}) {
@@ -1327,4 +1328,86 @@ templ MailMoveDialog(email *models.Email, accounts []models.Account) {
 			}
 		}
 	}
+}
+
+// MailLabelsDialog adds and removes labels on one or more emails. Each label
+// is checked when all the emails have it and partly checked when some do;
+// Apply sends only what was changed. Typing a name that doesn't exist yet
+// offers to create it.
+templ MailLabelsDialog(options []MailLabelOption) {
+	@dialog.Dialog(dialog.Props{ID: "mail-labels-dialog"}) {
+		@dialog.Content(dialog.ContentProps{Class: "sm:max-w-sm"}) {
+			@dialog.Header() {
+				@dialog.Title() {
+					Labels
+				}
+				<input
+					type="search"
+					class="h-8 w-full rounded-md border border-input bg-background px-2.5 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring"
+					placeholder="Search or create a label"
+					aria-label="Search or create a label"
+					autocomplete="off"
+					data-mail-labels-search
+					data-on-input={ onAction("filterLabelsDialog") }
+					data-on-keydown={ onAction("labelsDialogSearchKeydown", actionEvent) }
+				/>
+			}
+			<div class="h-[40vh] max-h-80 overflow-y-auto rounded-md border border-border bg-muted/50 p-1" role="group" aria-label="Labels" data-mail-label-list>
+				<button
+					type="button"
+					class="hidden w-full items-center gap-2.5 rounded-md px-2 py-1.5 text-left text-sm hover:bg-accent hover:text-accent-foreground [&:not(.hidden)]:flex"
+					data-mail-labels-create
+					data-on-click={ onAction("createLabelFromSearch") }
+				>
+					@icon.Plus(icon.Props{Class: "size-4 shrink-0 text-muted-foreground"})
+					<span class="min-w-0 flex-1 truncate">Create “<span data-mail-labels-create-name></span>”</span>
+				</button>
+				<div data-mail-labels-rows>
+					for _, option := range options {
+						@mailLabelsDialogRow(option.Name, option.State)
+					}
+				</div>
+				<p class={ "px-2.5 py-6 text-center text-sm text-muted-foreground", templ.KV("hidden", len(options) > 0) } data-mail-labels-empty>
+					No labels yet. Type a name to create one.
+				</p>
+			</div>
+			<template data-mail-labels-row-template>
+				@mailLabelsDialogRow("", MailLabelOnNone)
+			</template>
+			@dialog.Footer() {
+				@dialog.Close() {
+					@button.Button(button.Props{Variant: button.VariantOutline, Class: "h-8 px-3 text-xs"}) {
+						Cancel
+					}
+				}
+				@button.Button(button.Props{
+					Class:      "h-8 px-3 text-xs",
+					Disabled:   true,
+					Attributes: templ.Attributes{"data-mail-labels-apply": "", "data-on-click": onAction("applyLabelsDialog")},
+				}) {
+					Apply
+				}
+			}
+		}
+	}
+}
+
+templ mailLabelsDialogRow(name string, state string) {
+	<label
+		class="flex w-full cursor-pointer items-center gap-2.5 rounded-md px-2 py-1.5 text-sm hover:bg-accent hover:text-accent-foreground"
+		data-mail-label-option={ name }
+		data-mail-labels-key={ strings.ToLower(name) }
+	>
+		@checkbox.Checkbox(checkbox.Props{
+			Checked: state == MailLabelOnAll,
+			Attributes: templ.Attributes{
+				"data-mail-labels-check": "",
+				"data-initial":           state,
+				"data-state":             state,
+				"data-on-click":          onAction("cycleLabelOption", actionElement),
+			},
+		})
+		@icon.Tag(icon.Props{Class: "size-3.5 shrink-0 text-muted-foreground"})
+		<span class="min-w-0 flex-1 truncate" data-mail-labels-name>{ name }</span>
+	</label>
 }
