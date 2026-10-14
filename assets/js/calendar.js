@@ -202,6 +202,86 @@
   }
 
   // Handle month/year selection through templUI's hidden inputs.
+  // The page carries only the shown year in each year menu. The other years
+  // of the calendar's range are copied from that entry when the menu is first
+  // opened, and a year set by a script gets its entry before the menu reacts.
+  function yearMenuParts(yearInput) {
+    const container = yearInput.closest("[data-tui-calendar-container]");
+    const group = yearInput
+      .closest(".select-container")
+      ?.querySelector("[data-tui-selectbox-content] [role=group]");
+    const sample = group?.querySelector(".select-item");
+    return container && group && sample ? { container, group, sample } : null;
+  }
+
+  function yearMenuItem(parts, year) {
+    const value = String(year);
+    const existing = parts.group.querySelector(
+      `.select-item[data-tui-selectbox-value="${value}"]`,
+    );
+    if (existing) return existing;
+    const item = parts.sample.cloneNode(true);
+    item.setAttribute("data-tui-selectbox-value", value);
+    item.setAttribute("data-tui-selectbox-selected", "false");
+    item.querySelector(".select-item-text").textContent = value;
+    return item;
+  }
+
+  function placeYearMenuItems(parts, years) {
+    const items = years.map((year) => yearMenuItem(parts, year));
+    parts.group
+      .querySelectorAll(".select-item")
+      .forEach((item) => {
+        if (!items.includes(item)) items.push(item);
+      });
+    items.sort(
+      (a, b) =>
+        Number(b.getAttribute("data-tui-selectbox-value")) -
+        Number(a.getAttribute("data-tui-selectbox-value")),
+    );
+    parts.group.append(...items);
+  }
+
+  function ensureYearMenuItem(yearInput) {
+    const year = parseInt(yearInput.value, 10);
+    const parts = !isNaN(year) && yearMenuParts(yearInput);
+    if (parts) placeYearMenuItems(parts, [year]);
+  }
+
+  function fillYearMenu(yearInput) {
+    const parts = yearMenuParts(yearInput);
+    if (!parts || parts.container.hasAttribute("data-tui-calendar-years-filled")) return;
+    parts.container.setAttribute("data-tui-calendar-years-filled", "");
+    const min = parseInt(parts.container.dataset.tuiCalendarYearMin, 10);
+    const max = parseInt(parts.container.dataset.tuiCalendarYearMax, 10);
+    if (isNaN(min) || isNaN(max)) return;
+    const years = [];
+    for (let year = max; year >= min; year--) years.push(year);
+    placeYearMenuItems(parts, years);
+  }
+
+  // Capture phase: runs before the select box reads the new value.
+  document.addEventListener(
+    "input",
+    (e) => {
+      if (e.target.matches?.("[data-tui-calendar-year-select]")) ensureYearMenuItem(e.target);
+    },
+    true,
+  );
+
+  ["pointerdown", "keydown", "focusin"].forEach((type) => {
+    document.addEventListener(
+      type,
+      (e) => {
+        const yearInput = e.target.closest?.("button.select-trigger")?.querySelector(
+          "[data-tui-calendar-year-select]",
+        );
+        if (yearInput) fillYearMenu(yearInput);
+      },
+      true,
+    );
+  });
+
   document.addEventListener("change", (e) => {
     // Month select
     if (e.target.matches("[data-tui-calendar-month-select]")) {

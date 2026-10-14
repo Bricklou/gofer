@@ -45,6 +45,8 @@ type Props struct {
 	InitialYear     int  // Optional: (Default: current or from Value). Controls the initially displayed year view.
 	StartOfWeek     *Day // Optional: 0-6 [Sun-Sat] (Default: 1).
 	HideHiddenInput bool // Optional: Hide the hidden input when a parent component owns form submission.
+	MinYear         int  // Optional: first year in the year menu (Default: 1900).
+	MaxYear         int  // Optional: last year in the year menu (Default: 2100).
 }
 
 templ Calendar(props ...Props) {
@@ -123,6 +125,8 @@ templ Calendar(props ...Props) {
 			data-tui-calendar-initial-year={ strconv.Itoa(initialYear) }
 			data-tui-calendar-selected-date={ initialSelectedISO }
 			data-tui-calendar-start-of-week={ int(initialStartOfWeek) }
+			data-tui-calendar-year-min={ strconv.Itoa(yearMenuMin(p)) }
+			data-tui-calendar-year-max={ strconv.Itoa(yearMenuMax(p)) }
 		>
 			<!-- Calendar Header -->
 			<div class="flex w-full items-center gap-2 mb-4">
@@ -151,10 +155,10 @@ templ Calendar(props ...Props) {
 							@selectbox.Value(selectbox.ValueProps{ID: p.ID + "-year-value", Placeholder: strconv.Itoa(currentYear)})
 						}
 						@selectbox.Content(selectbox.ContentProps{NoSearch: true, DisableExclusive: true, Attributes: templ.Attributes{"aria-label": "Choose the Year"}}) {
+							// Only the shown year is sent; calendar.js copies it into the
+							// other years of the range when the menu is first opened.
 							@selectbox.Group() {
-								for year := 2100; year >= 1900; year-- {
-									@selectbox.Item(selectbox.ItemProps{Value: strconv.Itoa(year), Selected: year == currentYear}) { { strconv.Itoa(year) } }
-								}
+								@selectbox.Item(selectbox.ItemProps{Value: strconv.Itoa(currentYear), Selected: true}) { { strconv.Itoa(currentYear) } }
 							}
 						}
 					}
@@ -182,4 +186,18 @@ templ Script() {
 		@selectbox.Script()
 		@utils.ComponentScript("calendar")
 	}
+}
+
+func yearMenuMin(p Props) int {
+	if p.MinYear > 0 {
+		return p.MinYear
+	}
+	return 1900
+}
+
+func yearMenuMax(p Props) int {
+	if p.MaxYear > 0 {
+		return p.MaxYear
+	}
+	return 2100
 }

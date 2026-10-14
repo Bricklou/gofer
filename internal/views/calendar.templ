@@ -39,11 +39,6 @@ templ CalendarLayout(accounts []models.Account, month CalendarMonthData, uiSetti
 			@CalendarShell(accounts, month, uiSettings)
 			<div id="app-pane-dialogs"></div>
 			@ComposeDialog(accounts)
-			@ChooseAccountTypeDialog()
-			@GmailAccountDialog()
-			@OutlookAccountDialog()
-			@AddAccountDialog()
-			<div id="edit-account-container"></div>
 			@CalendarLoadingTemplates(accounts, uiSettings)
 			<script src={ assetver.URL("/assets/js/htmx.min.js") }></script>
 			<script src={ assetver.URL("/assets/js/virtual-scroll.js") }></script>

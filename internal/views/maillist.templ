@@ -3,6 +3,7 @@ package views
 import (
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/cristianadrielbraun/gofer/components/button"
 	"github.com/cristianadrielbraun/gofer/components/calendar"
@@ -653,7 +654,7 @@ templ MailFilterCalendarField(name string, id string, placeholder string) {
 			</button>
 		}
 		@popover.Content(popover.ContentProps{Placement: popover.PlacementBottomStart, Exclusive: false, Class: "z-[80] w-auto p-3"}) {
-			@calendar.Calendar(calendar.Props{ID: id, Name: name, Class: "[--cell-size:1.9rem]", HideHiddenInput: false})
+			@calendar.Calendar(calendar.Props{ID: id, Name: name, Class: "[--cell-size:1.9rem]", HideHiddenInput: false, MinYear: 1970, MaxYear: time.Now().Year() + 1})
 		}
 	}
 }

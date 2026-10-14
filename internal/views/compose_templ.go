@@ -10,6 +10,7 @@ import templruntime "github.com/a-h/templ/runtime"
 
 import (
 	"fmt"
+	"time"
 
 	"github.com/cristianadrielbraun/gofer/components/calendar"
 	"github.com/cristianadrielbraun/gofer/components/dialog"
@@ -237,7 +238,7 @@ func ComposeDialog(accounts []models.Account) templ.Component {
 				var templ_7745c5c3_Var10 string
 				templ_7745c5c3_Var10, templ_7745c5c3_Err = templ.JoinStringErrs(composeDefaultAccountID(accounts))
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/compose.templ`, Line: 56, Col: 108}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/compose.templ`, Line: 57, Col: 108}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var10))
 				if templ_7745c5c3_Err != nil {
@@ -278,7 +279,7 @@ func ComposeDialog(accounts []models.Account) templ.Component {
 						var templ_7745c5c3_Var13 string
 						templ_7745c5c3_Var13, templ_7745c5c3_Err = templ.JoinStringErrs(composeDefaultName(accounts))
 						if templ_7745c5c3_Err != nil {
-							return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/compose.templ`, Line: 67, Col: 71}
+							return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/compose.templ`, Line: 68, Col: 71}
 						}
 						_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var13))
 						if templ_7745c5c3_Err != nil {
@@ -291,7 +292,7 @@ func ComposeDialog(accounts []models.Account) templ.Component {
 						var templ_7745c5c3_Var14 string
 						templ_7745c5c3_Var14, templ_7745c5c3_Err = templ.JoinStringErrs(composeDefaultEmail(accounts))
 						if templ_7745c5c3_Err != nil {
-							return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/compose.templ`, Line: 67, Col: 109}
+							return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/compose.templ`, Line: 68, Col: 109}
 						}
 						_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var14))
 						if templ_7745c5c3_Err != nil {
@@ -351,7 +352,7 @@ func ComposeDialog(accounts []models.Account) templ.Component {
 								var templ_7745c5c3_Var17 string
 								templ_7745c5c3_Var17, templ_7745c5c3_Err = templ.JoinStringErrs(acc.Name)
 								if templ_7745c5c3_Err != nil {
-									return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/compose.templ`, Line: 85, Col: 60}
+									return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/compose.templ`, Line: 86, Col: 60}
 								}
 								_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var17))
 								if templ_7745c5c3_Err != nil {
@@ -364,7 +365,7 @@ func ComposeDialog(accounts []models.Account) templ.Component {
 								var templ_7745c5c3_Var18 string
 								templ_7745c5c3_Var18, templ_7745c5c3_Err = templ.JoinStringErrs(acc.Email)
 								if templ_7745c5c3_Err != nil {
-									return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/compose.templ`, Line: 85, Col: 78}
+									return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/compose.templ`, Line: 86, Col: 78}
 								}
 								_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var18))
 								if templ_7745c5c3_Err != nil {
@@ -2094,7 +2095,7 @@ func ComposeSchedulePopover(fromPane bool, buttonClass string) templ.Component {
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
-				templ_7745c5c3_Err = calendar.Calendar(calendar.Props{ID: "compose-" + suffix + "schedule-calendar", Name: "compose_" + suffix + "schedule_date", Class: "[--cell-size:1.75rem]", HideHiddenInput: false}).Render(ctx, templ_7745c5c3_Buffer)
+				templ_7745c5c3_Err = calendar.Calendar(calendar.Props{ID: "compose-" + suffix + "schedule-calendar", Name: "compose_" + suffix + "schedule_date", Class: "[--cell-size:1.75rem]", HideHiddenInput: false, MinYear: time.Now().Year(), MaxYear: time.Now().Year() + 10}).Render(ctx, templ_7745c5c3_Buffer)
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
@@ -2105,7 +2106,7 @@ func ComposeSchedulePopover(fromPane bool, buttonClass string) templ.Component {
 				var templ_7745c5c3_Var81 string
 				templ_7745c5c3_Var81, templ_7745c5c3_Err = templ.JoinStringErrs("compose-" + suffix + "schedule-hour")
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/compose.templ`, Line: 444, Col: 115}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/compose.templ`, Line: 445, Col: 115}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var81))
 				if templ_7745c5c3_Err != nil {
@@ -2194,7 +2195,7 @@ func ComposeSchedulePopover(fromPane bool, buttonClass string) templ.Component {
 									var templ_7745c5c3_Var87 string
 									templ_7745c5c3_Var87, templ_7745c5c3_Err = templ.JoinStringErrs(value)
 									if templ_7745c5c3_Err != nil {
-										return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/compose.templ`, Line: 456, Col: 18}
+										return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/compose.templ`, Line: 457, Col: 18}
 									}
 									_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var87))
 									if templ_7745c5c3_Err != nil {
@@ -2308,7 +2309,7 @@ func ComposeSchedulePopover(fromPane bool, buttonClass string) templ.Component {
 									var templ_7745c5c3_Var93 string
 									templ_7745c5c3_Var93, templ_7745c5c3_Err = templ.JoinStringErrs(value)
 									if templ_7745c5c3_Err != nil {
-										return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/compose.templ`, Line: 472, Col: 18}
+										return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/compose.templ`, Line: 473, Col: 18}
 									}
 									_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var93))
 									if templ_7745c5c3_Err != nil {
@@ -2402,7 +2403,7 @@ func ComposeField(label string, name string, placeholder string) templ.Component
 		var templ_7745c5c3_Var95 string
 		templ_7745c5c3_Var95, templ_7745c5c3_Err = templ.JoinStringErrs(label)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/compose.templ`, Line: 498, Col: 79}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/compose.templ`, Line: 499, Col: 79}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var95))
 		if templ_7745c5c3_Err != nil {
@@ -2415,7 +2416,7 @@ func ComposeField(label string, name string, placeholder string) templ.Component
 		var templ_7745c5c3_Var96 string
 		templ_7745c5c3_Var96, templ_7745c5c3_Err = templ.JoinStringErrs(name)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/compose.templ`, Line: 499, Col: 34}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/compose.templ`, Line: 500, Col: 34}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var96))
 		if templ_7745c5c3_Err != nil {
@@ -2428,7 +2429,7 @@ func ComposeField(label string, name string, placeholder string) templ.Component
 		var templ_7745c5c3_Var97 string
 		templ_7745c5c3_Var97, templ_7745c5c3_Err = templ.JoinStringErrs(name)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/compose.templ`, Line: 500, Col: 182}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/compose.templ`, Line: 501, Col: 182}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var97))
 		if templ_7745c5c3_Err != nil {
@@ -2441,7 +2442,7 @@ func ComposeField(label string, name string, placeholder string) templ.Component
 		var templ_7745c5c3_Var98 string
 		templ_7745c5c3_Var98, templ_7745c5c3_Err = templ.JoinStringErrs(placeholder)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/compose.templ`, Line: 501, Col: 227}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/compose.templ`, Line: 502, Col: 227}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var98))
 		if templ_7745c5c3_Err != nil {
@@ -2593,7 +2594,7 @@ func ComposePane(accounts []models.Account) templ.Component {
 		var templ_7745c5c3_Var103 string
 		templ_7745c5c3_Var103, templ_7745c5c3_Err = templ.JoinStringErrs(composeDefaultAccountID(accounts))
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/compose.templ`, Line: 554, Col: 115}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/compose.templ`, Line: 555, Col: 115}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var103))
 		if templ_7745c5c3_Err != nil {
@@ -2634,7 +2635,7 @@ func ComposePane(accounts []models.Account) templ.Component {
 				var templ_7745c5c3_Var106 string
 				templ_7745c5c3_Var106, templ_7745c5c3_Err = templ.JoinStringErrs(composeDefaultName(accounts))
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/compose.templ`, Line: 565, Col: 77}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/compose.templ`, Line: 566, Col: 77}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var106))
 				if templ_7745c5c3_Err != nil {
@@ -2647,7 +2648,7 @@ func ComposePane(accounts []models.Account) templ.Component {
 				var templ_7745c5c3_Var107 string
 				templ_7745c5c3_Var107, templ_7745c5c3_Err = templ.JoinStringErrs(composeDefaultEmail(accounts))
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/compose.templ`, Line: 565, Col: 115}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/compose.templ`, Line: 566, Col: 115}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var107))
 				if templ_7745c5c3_Err != nil {
@@ -2707,7 +2708,7 @@ func ComposePane(accounts []models.Account) templ.Component {
 						var templ_7745c5c3_Var110 string
 						templ_7745c5c3_Var110, templ_7745c5c3_Err = templ.JoinStringErrs(acc.Name)
 						if templ_7745c5c3_Err != nil {
-							return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/compose.templ`, Line: 583, Col: 61}
+							return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/compose.templ`, Line: 584, Col: 61}
 						}
 						_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var110))
 						if templ_7745c5c3_Err != nil {
@@ -2720,7 +2721,7 @@ func ComposePane(accounts []models.Account) templ.Component {
 						var templ_7745c5c3_Var111 string
 						templ_7745c5c3_Var111, templ_7745c5c3_Err = templ.JoinStringErrs(acc.Email)
 						if templ_7745c5c3_Err != nil {
-							return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/compose.templ`, Line: 583, Col: 79}
+							return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/compose.templ`, Line: 584, Col: 79}
 						}
 						_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var111))
 						if templ_7745c5c3_Err != nil {
