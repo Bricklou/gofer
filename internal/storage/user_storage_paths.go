@@ -34,7 +34,7 @@ func absolutizeStoredPaths(ctx context.Context, path string, layout UserStorageL
 		}
 		return filepath.Join(layout.BlobDirectory, relative), true, nil
 	}
-	db, err := openDB(path)
+	db, err := openDB(path, writePoolOption)
 	if err != nil {
 		return err
 	}

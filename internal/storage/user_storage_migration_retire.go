@@ -94,7 +94,7 @@ func sharedDatabaseVersion(ctx context.Context, path string) (version int, err e
 // Fold the WAL into the main file and leave it in rollback-journal mode, so the
 // retired database is one file that read-only migration connections can open.
 func checkpointSharedDatabase(ctx context.Context, path string) (err error) {
-	db, err := openDB(path)
+	db, err := openDB(path, writePoolOption)
 	if err != nil {
 		return err
 	}

@@ -59,13 +59,13 @@ func New(dbPath string) (*DB, error) {
 		return nil, fmt.Errorf("create db directory: %w", err)
 	}
 
-	write, err := openDB(dbPath)
+	write, err := openDB(dbPath, writePoolOption)
 	if err != nil {
 		return nil, fmt.Errorf("open write connection: %w", err)
 	}
 	write.SetMaxOpenConns(1)
 
-	read, err := openDB(dbPath, readMmapPragma)
+	read, err := openDB(dbPath, readPoolOption)
 	if err != nil {
 		write.Close()
 		return nil, fmt.Errorf("open read connection: %w", err)
@@ -126,12 +126,12 @@ func OpenExisting(dbPath string) (*DB, error) {
 	if err := requireExistingDatabase(dbPath); err != nil {
 		return nil, err
 	}
-	write, err := openDB(dbPath)
+	write, err := openDB(dbPath, writePoolOption)
 	if err != nil {
 		return nil, fmt.Errorf("open write connection: %w", err)
 	}
 	write.SetMaxOpenConns(1)
-	read, err := openDB(dbPath, readMmapPragma)
+	read, err := openDB(dbPath, readPoolOption)
 	if err != nil {
 		write.Close()
 		return nil, fmt.Errorf("open read connection: %w", err)
@@ -197,19 +197,25 @@ func (db *DB) notifyContactActivity(event ContactActivityNotification) {
 	}
 }
 
-// readMmapPragma lets the reading connections read the database file through
+// readPoolOption lets the reading connections read the database file through
 // a memory map of up to 256 MB instead of copying each page: searches over a
 // large mailbox run up to 40% faster. The writing connection does not map the
 // file, which made every write slower.
-const readMmapPragma = "mmap_size(268435456)"
+const readPoolOption = "_pragma=mmap_size(268435456)"
 
-// openDB opens a pool of connections to path. journal_size_limit shrinks the
-// write-ahead log back to 64 MB after a large sync instead of leaving it at
-// its largest size.
-func openDB(path string, pragmas ...string) (*sql.DB, error) {
+// writePoolOption starts every transaction on the writing connection with
+// BEGIN IMMEDIATE, taking the write lock up front. A transaction that began
+// with a read and wrote after another connection had changed the database
+// failed at once with "database is locked", without waiting out busy_timeout.
+const writePoolOption = "_txlock=immediate"
+
+// openDB opens a pool of connections to path with the given extra DSN
+// options. journal_size_limit shrinks the write-ahead log back to 64 MB after
+// a large sync instead of leaving it at its largest size.
+func openDB(path string, options ...string) (*sql.DB, error) {
 	dsn := path + "?_pragma=journal_mode(WAL)&_pragma=synchronous(NORMAL)&_pragma=foreign_keys(1)&_pragma=busy_timeout(5000)&_pragma=temp_store(MEMORY)&_pragma=journal_size_limit(67108864)"
-	for _, pragma := range pragmas {
-		dsn += "&_pragma=" + pragma
+	for _, option := range options {
+		dsn += "&" + option
 	}
 	db, err := sql.Open(sqliteDriverName, dsn)
 	if err != nil {
