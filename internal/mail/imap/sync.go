@@ -119,6 +119,8 @@ func (c *Client) SyncFolder(ctx context.Context, folderID, remoteName string, op
 		}},
 	}
 
+	writer := newBatchWriter(fn)
+	defer writer.close()
 	var allMsgs []storage.SyncMessage
 	for start := 0; start < len(uids); start += chunkSize {
 		end := min(start+chunkSize, len(uids))
@@ -224,19 +226,21 @@ func (c *Client) SyncFolder(ctx context.Context, folderID, remoteName string, op
 		}
 
 		if len(allMsgs) >= chunkSize {
-			if err := fn(allMsgs); err != nil {
+			if err := writer.send(allMsgs); err != nil {
 				return result, fmt.Errorf("callback: %w", err)
 			}
-			allMsgs = allMsgs[:0]
+			allMsgs = nil
 		}
 	}
 
 	if len(allMsgs) > 0 {
-		if err := fn(allMsgs); err != nil {
+		if err := writer.send(allMsgs); err != nil {
 			return result, fmt.Errorf("callback: %w", err)
 		}
 	}
-
+	if err := writer.close(); err != nil {
+		return result, fmt.Errorf("callback: %w", err)
+	}
 	return result, nil
 }
 
@@ -286,6 +290,11 @@ func (c *Client) SyncFolderIncremental(ctx context.Context, folderID, remoteName
 	}
 
 	cmd := c.client.Fetch(uidSet, fetchOpts)
+	// However long the mailbox was away, new mail is saved in batches as
+	// it arrives instead of being held and saved all at once.
+	writer := newBatchWriter(fn)
+	defer writer.close()
+	defer cmd.Close()
 
 	var msgs []storage.SyncMessage
 
@@ -379,6 +388,12 @@ func (c *Client) SyncFolderIncremental(ctx context.Context, folderID, remoteName
 			result.HighestUID = syncMsg.RemoteUID
 		}
 		result.TotalFetched++
+		if len(msgs) >= incrementalBatchSize {
+			if err := writer.send(msgs); err != nil {
+				return result, fmt.Errorf("callback: %w", err)
+			}
+			msgs = nil
+		}
 	}
 
 	if err := cmd.Close(); err != nil {
@@ -386,12 +401,63 @@ func (c *Client) SyncFolderIncremental(ctx context.Context, folderID, remoteName
 	}
 
 	if len(msgs) > 0 {
-		if err := fn(msgs); err != nil {
+		if err := writer.send(msgs); err != nil {
 			return result, fmt.Errorf("callback: %w", err)
 		}
 	}
-
+	if err := writer.close(); err != nil {
+		return result, fmt.Errorf("callback: %w", err)
+	}
 	return result, nil
+}
+
+// incrementalBatchSize matches the batches of a first download.
+const incrementalBatchSize = 500
+
+// batchWriter saves fetched batches on a goroutine of its own, so the next
+// batch downloads while the previous one is saved. It holds at most one batch
+// waiting besides the one being saved, and stops saving at the first error.
+type batchWriter struct {
+	batches chan []storage.SyncMessage
+	done    chan struct{}
+	closed  bool
+	err     error
+}
+
+func newBatchWriter(fn func([]storage.SyncMessage) error) *batchWriter {
+	w := &batchWriter{batches: make(chan []storage.SyncMessage), done: make(chan struct{})}
+	go func() {
+		defer close(w.done)
+		for batch := range w.batches {
+			if err := fn(batch); err != nil {
+				w.err = err
+				return
+			}
+		}
+	}()
+	return w
+}
+
+// send hands a batch over, waiting while the previous one is still being
+// saved. It returns the error that stopped saving, if any.
+func (w *batchWriter) send(batch []storage.SyncMessage) error {
+	select {
+	case w.batches <- batch:
+		return nil
+	case <-w.done:
+		return w.err
+	}
+}
+
+// close waits until every batch handed over is saved and returns the first
+// error. It may be called more than once.
+func (w *batchWriter) close() error {
+	if !w.closed {
+		w.closed = true
+		close(w.batches)
+	}
+	<-w.done
+	return w.err
 }
 
 func uidValidityChanged(expected, current uint32) bool {

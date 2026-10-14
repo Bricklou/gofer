@@ -103,7 +103,7 @@ func (db *DB) SaveMessageBodyCache(ctx context.Context, id int64, accountID stri
 	if ids := mailmessage.ParseMessageIDs(p.InReplyTo); len(ids) > 0 {
 		reply = ids[0]
 	}
-	if err := db.reconcileMessageThreadTx(ctx, tx, id, accountID, normalized, reply, p.References, p.Subject, date); err != nil {
+	if err := db.reconcileMessageThreadTx(ctx, tx, id, accountID, normalized, reply, p.References, p.Subject, date, nil); err != nil {
 		return err
 	}
 	if err := db.reindexMessagesSearchTx(ctx, tx, []int64{id}); err != nil {

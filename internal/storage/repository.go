@@ -316,7 +316,31 @@ func (db *DB) MarkUnlistedProviderFoldersNonSelectable(ctx context.Context, acco
 	return err
 }
 
-func (db *DB) reconcileMessageThreadTx(ctx context.Context, tx *sql.Tx, msgID int64, accountID, messageID, inReplyTo, refsRaw, subject string, sentAt time.Time) error {
+// pendingThreadTotals collects the conversations a batch changed, so each
+// one's totals are recomputed once, after the batch's folder states are
+// saved. A nil set recomputes them at once.
+type pendingThreadTotals map[threadRef]struct{}
+
+type threadRef struct{ accountID, threadID string }
+
+func (db *DB) threadTotalsChangedTx(ctx context.Context, tx *sql.Tx, pending pendingThreadTotals, accountID, threadID string) error {
+	if pending == nil {
+		return db.updateThreadAggregatesTx(ctx, tx, accountID, threadID)
+	}
+	pending[threadRef{accountID, threadID}] = struct{}{}
+	return nil
+}
+
+func (db *DB) flushThreadTotalsTx(ctx context.Context, tx *sql.Tx, pending pendingThreadTotals) error {
+	for ref := range pending {
+		if err := db.updateThreadAggregatesTx(ctx, tx, ref.accountID, ref.threadID); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (db *DB) reconcileMessageThreadTx(ctx context.Context, tx *sql.Tx, msgID int64, accountID, messageID, inReplyTo, refsRaw, subject string, sentAt time.Time, pending pendingThreadTotals) error {
 	normalizedSubject := normalizeSubject(subject)
 	refs := mailmessage.ThreadReferences(refsRaw, inReplyTo)
 
@@ -326,16 +350,34 @@ func (db *DB) reconcileMessageThreadTx(ctx context.Context, tx *sql.Tx, msgID in
 	if _, err := tx.ExecContext(ctx, `DELETE FROM unresolved_references WHERE child_message_id = ?`, msgID); err != nil {
 		return err
 	}
-	for i, ref := range refs {
-		if _, err := tx.ExecContext(ctx,
-			`INSERT OR REPLACE INTO message_references (message_id, referenced_message_id, ordinal) VALUES (?, ?, ?)`,
-			msgID, ref, i); err != nil {
-			return err
-		}
+	link := db.findMessageThreadTx(ctx, tx, msgID, accountID, inReplyTo, normalizedSubject, subject, refs, sentAt, func() map[string]bool {
+		return db.messageParticipantsTx(ctx, tx, msgID, accountID)
+	})
+	var parentValue any
+	if link.parentID.Valid {
+		parentValue = link.parentID.Int64
 	}
+	if _, err := tx.ExecContext(ctx,
+		`UPDATE messages SET thread_id = ?, thread_parent_id = ?, message_id_normalized = ?, normalized_subject = ?, in_reply_to = ?, "references" = ? WHERE id = ?`,
+		link.threadID, parentValue, messageID, normalizedSubject, inReplyTo, refsRaw, msgID); err != nil {
+		return err
+	}
+	return db.linkMessageThreadTx(ctx, tx, msgID, accountID, messageID, normalizedSubject, subject, refs, sentAt, link, pending)
+}
 
-	var parentID sql.NullInt64
-	var threadID string
+// messageThreadLink is the conversation a message belongs to and the message
+// it replies to. A new conversation is created by linkMessageThreadTx.
+type messageThreadLink struct {
+	threadID  string
+	parentID  sql.NullInt64
+	newThread bool
+}
+
+// findMessageThreadTx finds the conversation of message msgID, or of a
+// message not saved yet when msgID is 0: the nearest referenced message's,
+// or for a reply without references a recent one with the same subject and
+// a shared participant. Otherwise the message starts a new conversation.
+func (db *DB) findMessageThreadTx(ctx context.Context, tx *sql.Tx, msgID int64, accountID, inReplyTo, normalizedSubject, subject string, refs []string, sentAt time.Time, participants func() map[string]bool) messageThreadLink {
 	for i := len(refs) - 1; i >= 0; i-- {
 		var candidateID int64
 		var candidateThread sql.NullString
@@ -347,33 +389,33 @@ func (db *DB) reconcileMessageThreadTx(ctx context.Context, tx *sql.Tx, msgID in
 			if refs[i] != inReplyTo && candidateSubject != normalizedSubject {
 				continue
 			}
-			parentID = sql.NullInt64{Int64: candidateID, Valid: true}
-			threadID = candidateThread.String
-			break
+			return messageThreadLink{threadID: candidateThread.String, parentID: sql.NullInt64{Int64: candidateID, Valid: true}}
 		}
 	}
-
-	if threadID == "" && len(refs) == 0 {
-		threadID = db.findSubjectFallbackThreadTx(ctx, tx, msgID, accountID, normalizedSubject, subject, sentAt)
+	if len(refs) == 0 {
+		if threadID := db.findSubjectFallbackThreadTx(ctx, tx, msgID, accountID, normalizedSubject, subject, sentAt, participants); threadID != "" {
+			return messageThreadLink{threadID: threadID}
+		}
 	}
-	if threadID == "" {
-		var err error
-		threadID, err = db.createThreadTx(ctx, tx, accountID, subject, normalizedSubject, msgID, sentAt)
-		if err != nil {
+	return messageThreadLink{threadID: uuid.NewString(), newThread: true}
+}
+
+// linkMessageThreadTx records the rest of a message's threading once the
+// message carries link's conversation: its references, the conversation when
+// the message starts one, and the replies that were waiting for it.
+func (db *DB) linkMessageThreadTx(ctx context.Context, tx *sql.Tx, msgID int64, accountID, messageID, normalizedSubject, subject string, refs []string, sentAt time.Time, link messageThreadLink, pending pendingThreadTotals) error {
+	for i, ref := range refs {
+		if _, err := tx.ExecContext(ctx,
+			`INSERT OR REPLACE INTO message_references (message_id, referenced_message_id, ordinal) VALUES (?, ?, ?)`,
+			msgID, ref, i); err != nil {
 			return err
 		}
 	}
-
-	var parentValue any
-	if parentID.Valid {
-		parentValue = parentID.Int64
+	if link.newThread {
+		if err := db.createThreadTx(ctx, tx, link.threadID, accountID, subject, normalizedSubject, msgID, sentAt); err != nil {
+			return err
+		}
 	}
-	if _, err := tx.ExecContext(ctx,
-		`UPDATE messages SET thread_id = ?, thread_parent_id = ?, message_id_normalized = ?, normalized_subject = ?, in_reply_to = ?, "references" = ? WHERE id = ?`,
-		threadID, parentValue, messageID, normalizedSubject, inReplyTo, refsRaw, msgID); err != nil {
-		return err
-	}
-
 	for i, ref := range refs {
 		var exists int
 		_ = tx.QueryRowContext(ctx,
@@ -389,18 +431,17 @@ func (db *DB) reconcileMessageThreadTx(ctx context.Context, tx *sql.Tx, msgID in
 	}
 
 	if messageID != "" {
-		if err := db.resolveWaitingChildrenTx(ctx, tx, accountID, msgID, messageID, threadID); err != nil {
+		if err := db.resolveWaitingChildrenTx(ctx, tx, accountID, msgID, messageID, link.threadID, pending); err != nil {
 			return err
 		}
-		if err := db.reattachResolvedChildrenTx(ctx, tx, msgID, accountID, messageID, normalizedSubject, threadID); err != nil {
+		if err := db.reattachResolvedChildrenTx(ctx, tx, msgID, accountID, messageID, normalizedSubject, link.threadID, pending); err != nil {
 			return err
 		}
 	}
-	return db.updateThreadAggregatesTx(ctx, tx, accountID, threadID)
+	return db.threadTotalsChangedTx(ctx, tx, pending, accountID, link.threadID)
 }
 
-func (db *DB) createThreadTx(ctx context.Context, tx *sql.Tx, accountID, subject, normalizedSubject string, rootMsgID int64, sentAt time.Time) (string, error) {
-	threadID := uuid.NewString()
+func (db *DB) createThreadTx(ctx context.Context, tx *sql.Tx, threadID, accountID, subject, normalizedSubject string, rootMsgID int64, sentAt time.Time) error {
 	if sentAt.IsZero() {
 		sentAt = time.Now().UTC()
 	}
@@ -408,17 +449,17 @@ func (db *DB) createThreadTx(ctx context.Context, tx *sql.Tx, accountID, subject
 		`INSERT INTO threads (id, account_id, subject, normalized_subject, root_message_id, last_message_at, message_count, unread_count)
 		 VALUES (?, ?, ?, ?, ?, ?, 0, 0)`,
 		threadID, accountID, subject, normalizedSubject, rootMsgID, sentAt)
-	return threadID, err
+	return err
 }
 
-func (db *DB) findSubjectFallbackThreadTx(ctx context.Context, tx *sql.Tx, msgID int64, accountID, normalizedSubject, subject string, sentAt time.Time) string {
+func (db *DB) findSubjectFallbackThreadTx(ctx context.Context, tx *sql.Tx, msgID int64, accountID, normalizedSubject, subject string, sentAt time.Time, messageParticipants func() map[string]bool) string {
 	if normalizedSubject == "" || !mailmessage.IsReplyOrForwardSubject(subject) {
 		return ""
 	}
 	if sentAt.IsZero() {
 		sentAt = time.Now().UTC()
 	}
-	participants := db.messageParticipantsTx(ctx, tx, msgID, accountID)
+	participants := messageParticipants()
 	if len(participants) == 0 {
 		return ""
 	}
@@ -451,14 +492,7 @@ func (db *DB) findSubjectFallbackThreadTx(ctx context.Context, tx *sql.Tx, msgID
 
 func (db *DB) messageParticipantsTx(ctx context.Context, tx *sql.Tx, msgID int64, accountID string) map[string]bool {
 	participants := make(map[string]bool)
-	accountEmail := db.accountEmailTx(ctx, tx, accountID)
-	add := func(email string) {
-		email = strings.ToLower(strings.TrimSpace(email))
-		if email == "" || email == accountEmail {
-			return
-		}
-		participants[email] = true
-	}
+	add := participantAdder(participants, db.accountEmailTx(ctx, tx, accountID))
 
 	var from string
 	_ = tx.QueryRowContext(ctx, `SELECT from_email FROM messages WHERE id = ?`, msgID).Scan(&from)
@@ -477,13 +511,40 @@ func (db *DB) messageParticipantsTx(ctx context.Context, tx *sql.Tx, msgID int64
 	return participants
 }
 
+// participantAdder adds addresses to participants, other than the account's
+// own, as messageParticipantsTx compares them.
+func participantAdder(participants map[string]bool, accountEmail string) func(string) {
+	return func(email string) {
+		email = strings.ToLower(strings.TrimSpace(email))
+		if email == "" || email == accountEmail {
+			return
+		}
+		participants[email] = true
+	}
+}
+
+// syncMessageParticipantsTx is messageParticipantsTx for a message not saved
+// yet: its sender and the recipients it will be saved with.
+func (db *DB) syncMessageParticipantsTx(ctx context.Context, tx *sql.Tx, m *SyncMessage) map[string]bool {
+	participants := make(map[string]bool)
+	add := participantAdder(participants, db.accountEmailTx(ctx, tx, m.AccountID))
+	add(m.FromEmail)
+	for _, r := range m.ToRecipients {
+		add(r.Email)
+	}
+	for _, r := range m.CCRecipients {
+		add(r.Email)
+	}
+	return participants
+}
+
 func (db *DB) accountEmailTx(ctx context.Context, tx *sql.Tx, accountID string) string {
 	var email string
 	_ = tx.QueryRowContext(ctx, `SELECT lower(email_address) FROM accounts WHERE id = ?`, accountID).Scan(&email)
 	return strings.TrimSpace(email)
 }
 
-func (db *DB) resolveWaitingChildrenTx(ctx context.Context, tx *sql.Tx, accountID string, parentMsgID int64, parentMessageID, threadID string) error {
+func (db *DB) resolveWaitingChildrenTx(ctx context.Context, tx *sql.Tx, accountID string, parentMsgID int64, parentMessageID, threadID string, pending pendingThreadTotals) error {
 	rows, err := tx.QueryContext(ctx,
 		`SELECT child_message_id FROM unresolved_references WHERE account_id = ? AND referenced_message_id = ?`,
 		accountID, parentMessageID)
@@ -507,7 +568,7 @@ func (db *DB) resolveWaitingChildrenTx(ctx context.Context, tx *sql.Tx, accountI
 			return err
 		}
 		if oldThread.Valid && oldThread.String != "" && oldThread.String != threadID {
-			if err := db.updateThreadAggregatesTx(ctx, tx, accountID, oldThread.String); err != nil {
+			if err := db.threadTotalsChangedTx(ctx, tx, pending, accountID, oldThread.String); err != nil {
 				return err
 			}
 		}
@@ -518,7 +579,7 @@ func (db *DB) resolveWaitingChildrenTx(ctx context.Context, tx *sql.Tx, accountI
 	return err
 }
 
-func (db *DB) reattachResolvedChildrenTx(ctx context.Context, tx *sql.Tx, parentMsgID int64, accountID, parentMessageID, normalizedSubject, threadID string) error {
+func (db *DB) reattachResolvedChildrenTx(ctx context.Context, tx *sql.Tx, parentMsgID int64, accountID, parentMessageID, normalizedSubject, threadID string, pending pendingThreadTotals) error {
 	rows, err := tx.QueryContext(ctx,
 		`SELECT DISTINCT m.id, m.thread_id, COALESCE(m.in_reply_to, ''), COALESCE(m.normalized_subject, '')
 		 FROM messages m
@@ -568,7 +629,7 @@ func (db *DB) reattachResolvedChildrenTx(ctx context.Context, tx *sql.Tx, parent
 
 	for oldThread := range oldThreads {
 		if oldThread != threadID {
-			if err := db.updateThreadAggregatesTx(ctx, tx, accountID, oldThread); err != nil {
+			if err := db.threadTotalsChangedTx(ctx, tx, pending, accountID, oldThread); err != nil {
 				return err
 			}
 		}
@@ -640,7 +701,7 @@ func (db *DB) reconcileThreadingRepairMessageTx(ctx context.Context, tx *sql.Tx,
 			sentAt = parsed
 		}
 	}
-	return db.reconcileMessageThreadTx(ctx, tx, m.id, m.accountID, messageID, inReplyTo, m.refs, m.subject, sentAt)
+	return db.reconcileMessageThreadTx(ctx, tx, m.id, m.accountID, messageID, inReplyTo, m.refs, m.subject, sentAt, nil)
 }
 
 func (db *DB) EnsureThreading(ctx context.Context) error {
@@ -1423,7 +1484,18 @@ func (db *DB) UpsertSyncMessages(ctx context.Context, msgs []SyncMessage) error 
 	}
 	defer delRecipStmt.Close()
 
+	newMsgStmt, err := tx.PrepareContext(ctx, `
+		INSERT INTO messages (account_id, internet_message_id, message_id_normalized, in_reply_to, "references", normalized_subject, subject, from_name, from_email,
+			date_sent, date_received, snippet, preview_text, size_bytes, thread_id, thread_parent_id)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		RETURNING id`)
+	if err != nil {
+		return fmt.Errorf("prepare new msg insert: %w", err)
+	}
+	defer newMsgStmt.Close()
+
 	msgIDs := make([]int64, 0, len(msgs))
+	threadTotals := pendingThreadTotals{}
 	for i := range msgs {
 		m := &msgs[i]
 		messageIDNorm := mailmessage.NormalizeMessageID(m.MessageID)
@@ -1455,15 +1527,38 @@ func (db *DB) UpsertSyncMessages(ctx context.Context, msgs []SyncMessage) error 
 				}
 			}
 		}
+		// A message seen for the first time is saved with its conversation and
+		// has nothing stored to replace: no recipients, labels or references,
+		// and no pending change, which names messages that already exist.
+		isNew := false
+		var refs []string
+		var thread messageThreadLink
 		if !preserveLocalDraft {
+			err := tx.QueryRowContext(ctx, `SELECT id FROM messages WHERE account_id = ? AND internet_message_id = ?`,
+				m.AccountID, m.MessageID).Scan(&msgID)
+			if err != nil && !errors.Is(err, sql.ErrNoRows) {
+				return fmt.Errorf("query message: %w", err)
+			}
+			isNew = errors.Is(err, sql.ErrNoRows)
+		}
+		if isNew {
+			refs = mailmessage.ThreadReferences(m.References, inReplyTo)
+			thread = db.findMessageThreadTx(ctx, tx, 0, m.AccountID, inReplyTo, normalizedSubject, m.Subject, refs, m.DateSent, func() map[string]bool {
+				return db.syncMessageParticipantsTx(ctx, tx, m)
+			})
+			var parent any
+			if thread.parentID.Valid {
+				parent = thread.parentID.Int64
+			}
+			if err := newMsgStmt.QueryRowContext(ctx, m.AccountID, m.MessageID, messageIDNorm, inReplyTo, m.References, normalizedSubject, m.Subject,
+				m.FromName, m.FromEmail, messageDBDate, messageDBDate, m.Snippet, m.Snippet, m.SizeBytes, thread.threadID, parent).Scan(&msgID); err != nil {
+				return fmt.Errorf("insert message: %w", err)
+			}
+		} else if !preserveLocalDraft {
 			if _, err := msgStmt.ExecContext(ctx, m.AccountID, m.MessageID, messageIDNorm, inReplyTo, m.References, normalizedSubject, m.Subject,
 				m.FromName, m.FromEmail, messageDBDate, messageDBDate, m.Snippet, m.Snippet, m.SizeBytes,
 				boolInt(m.DateSentFallback), boolInt(m.DateSentFallback)); err != nil {
 				return fmt.Errorf("upsert message: %w", err)
-			}
-			if err := tx.QueryRow(`SELECT id FROM messages WHERE account_id = ? AND internet_message_id = ?`,
-				m.AccountID, m.MessageID).Scan(&msgID); err != nil {
-				return fmt.Errorf("query upserted message: %w", err)
 			}
 		}
 		if m.DateSentFallback {
@@ -1484,35 +1579,14 @@ func (db *DB) UpsertSyncMessages(ctx context.Context, msgs []SyncMessage) error 
 			}
 		}
 
-		isRead, isStarred := m.IsRead, m.IsStarred
-		if err := refreshIMAPDeleteUIDValidityTx(ctx, tx, msgID, m.FolderID); err != nil {
-			return fmt.Errorf("refresh pending IMAP delete identity: %w", err)
-		}
-		if err := resolveMessageMutationTargetsTx(ctx, tx, msgID, m.FolderID, &isRead, &isStarred); err != nil {
-			return fmt.Errorf("protect pending message mutation: %w", err)
-		}
-		visible, err := protectProviderMoveFolderTx(ctx, tx, msgID, m.FolderID)
-		if err != nil {
-			return fmt.Errorf("protect pending message location mutation: %w", err)
-		}
-		if _, err := stateStmt.ExecContext(ctx, msgID, m.FolderID, remoteUID,
-			isRead, isStarred, m.IsDraft, boolInt(!visible), time.Now().UTC()); err != nil {
-			return fmt.Errorf("upsert state: %w", err)
-		}
-
-		if m.LabelsKnown && strings.TrimSpace(m.LabelProvider) != "" {
-			if err := db.replaceMessageLabelsForProviderTx(ctx, tx, msgID, m.AccountID, m.LabelProvider, m.Labels); err != nil {
-				return fmt.Errorf("replace message labels: %w", err)
-			}
-		} else if len(m.Labels) > 0 {
-			if err := db.addMessageLabelsTx(ctx, tx, msgID, m.AccountID, m.Labels); err != nil {
-				return fmt.Errorf("add message labels: %w", err)
-			}
-		}
-
+		// The conversation is settled before the folder state is saved, so
+		// the state is recorded once under its final conversation instead of
+		// being moved there from a conversation of its own.
 		if !preserveLocalDraft {
-			if _, err := delRecipStmt.ExecContext(ctx, msgID); err != nil {
-				return fmt.Errorf("delete recipients: %w", err)
+			if !isNew {
+				if _, err := delRecipStmt.ExecContext(ctx, msgID); err != nil {
+					return fmt.Errorf("delete recipients: %w", err)
+				}
 			}
 
 			for _, r := range m.ToRecipients {
@@ -1525,16 +1599,54 @@ func (db *DB) UpsertSyncMessages(ctx context.Context, msgs []SyncMessage) error 
 					return fmt.Errorf("insert cc: %w", err)
 				}
 			}
-		}
-
-		if !preserveLocalDraft {
-			if err := db.reconcileMessageThreadTx(ctx, tx, msgID, m.AccountID, messageIDNorm, inReplyTo, m.References, m.Subject, m.DateSent); err != nil {
+			if isNew {
+				if err := db.linkMessageThreadTx(ctx, tx, msgID, m.AccountID, messageIDNorm, normalizedSubject, m.Subject, refs, m.DateSent, thread, threadTotals); err != nil {
+					return fmt.Errorf("link thread: %w", err)
+				}
+			} else if err := db.reconcileMessageThreadTx(ctx, tx, msgID, m.AccountID, messageIDNorm, inReplyTo, m.References, m.Subject, m.DateSent, threadTotals); err != nil {
 				return fmt.Errorf("reconcile thread: %w", err)
 			}
 		}
+
+		isRead, isStarred, visible := m.IsRead, m.IsStarred, true
+		if !isNew {
+			if err := refreshIMAPDeleteUIDValidityTx(ctx, tx, msgID, m.FolderID); err != nil {
+				return fmt.Errorf("refresh pending IMAP delete identity: %w", err)
+			}
+			if err := resolveMessageMutationTargetsTx(ctx, tx, msgID, m.FolderID, &isRead, &isStarred); err != nil {
+				return fmt.Errorf("protect pending message mutation: %w", err)
+			}
+			if visible, err = protectProviderMoveFolderTx(ctx, tx, msgID, m.FolderID); err != nil {
+				return fmt.Errorf("protect pending message location mutation: %w", err)
+			}
+		}
+		if _, err := stateStmt.ExecContext(ctx, msgID, m.FolderID, remoteUID,
+			isRead, isStarred, m.IsDraft, boolInt(!visible), time.Now().UTC()); err != nil {
+			return fmt.Errorf("upsert state: %w", err)
+		}
+
+		providerLabels := m.LabelsKnown && strings.TrimSpace(m.LabelProvider) != ""
+		switch {
+		case providerLabels && isNew:
+			if err := db.addMessageLabelsTx(ctx, tx, msgID, m.AccountID, withLabelProvider(m.Labels, m.AccountID, m.LabelProvider)); err != nil {
+				return fmt.Errorf("add message labels: %w", err)
+			}
+		case providerLabels:
+			if err := db.replaceMessageLabelsForProviderTx(ctx, tx, msgID, m.AccountID, m.LabelProvider, m.Labels); err != nil {
+				return fmt.Errorf("replace message labels: %w", err)
+			}
+		case len(m.Labels) > 0:
+			if err := db.addMessageLabelsTx(ctx, tx, msgID, m.AccountID, m.Labels); err != nil {
+				return fmt.Errorf("add message labels: %w", err)
+			}
+		}
+
 		msgIDs = append(msgIDs, msgID)
 	}
 
+	if err := db.flushThreadTotalsTx(ctx, tx, threadTotals); err != nil {
+		return fmt.Errorf("update conversation totals: %w", err)
+	}
 	if err := db.reindexMessagesSearchTx(ctx, tx, msgIDs); err != nil {
 		return err
 	}
@@ -1675,6 +1787,7 @@ func (db *DB) UpsertProviderSyncMessages(ctx context.Context, msgs []ProviderSyn
 	observedProviderFolders := map[int64]map[string]bool{}
 	messageAccounts := map[int64]string{}
 	affectedFolderMessages := map[string][]int64{}
+	threadTotals := pendingThreadTotals{}
 
 	for _, m := range msgs {
 		m.AccountID = strings.TrimSpace(m.AccountID)
@@ -1817,7 +1930,7 @@ func (db *DB) UpsertProviderSyncMessages(ctx context.Context, msgs []ProviderSyn
 			}
 		}
 
-		if err := db.reconcileMessageThreadTx(ctx, tx, msgID, m.AccountID, messageIDNorm, inReplyTo, m.References, m.Subject, dateSent); err != nil {
+		if err := db.reconcileMessageThreadTx(ctx, tx, msgID, m.AccountID, messageIDNorm, inReplyTo, m.References, m.Subject, dateSent, threadTotals); err != nil {
 			return nil, fmt.Errorf("reconcile provider thread: %w", err)
 		}
 		idsByProvider[m.ProviderMessageID] = msgID
@@ -1864,6 +1977,9 @@ func (db *DB) UpsertProviderSyncMessages(ctx context.Context, msgs []ProviderSyn
 		}
 	}
 
+	if err := db.flushThreadTotalsTx(ctx, tx, threadTotals); err != nil {
+		return nil, fmt.Errorf("update conversation totals: %w", err)
+	}
 	if err := db.reindexMessagesSearchTx(ctx, tx, msgIDs); err != nil {
 		return nil, err
 	}
@@ -2560,13 +2676,7 @@ func (db *DB) replaceMessageLabelsForProviderTx(ctx context.Context, tx *sql.Tx,
 		  )`, messageID, accountID, providerType); err != nil {
 		return err
 	}
-	for i := range labels {
-		labels[i].AccountID = firstNonEmpty(labels[i].AccountID, accountID)
-		if strings.TrimSpace(labels[i].ProviderType) == "" {
-			labels[i].ProviderType = providerType
-		}
-	}
-	if err := db.addMessageLabelsTx(ctx, tx, messageID, accountID, labels); err != nil {
+	if err := db.addMessageLabelsTx(ctx, tx, messageID, accountID, withLabelProvider(labels, accountID, providerType)); err != nil {
 		return err
 	}
 	// Routed removals remain optimistic during retries. Receiving older metadata
@@ -2576,6 +2686,19 @@ func (db *DB) replaceMessageLabelsForProviderTx(ctx context.Context, tx *sql.Tx,
 		WHERE q.message_id=? AND l.account_id=? AND l.provider_type=? AND q.operation='remove' AND lower(q.label_name)=lower(l.name))
 		AND EXISTS(SELECT 1 FROM sqlite_schema WHERE name='gofer_user_store')`, messageID, messageID, accountID, providerType)
 	return err
+}
+
+// withLabelProvider fills in the account and provider of labels that leave
+// them out.
+func withLabelProvider(labels []LabelInput, accountID, providerType string) []LabelInput {
+	providerType = strings.TrimSpace(providerType)
+	for i := range labels {
+		labels[i].AccountID = firstNonEmpty(labels[i].AccountID, accountID)
+		if strings.TrimSpace(labels[i].ProviderType) == "" {
+			labels[i].ProviderType = providerType
+		}
+	}
+	return labels
 }
 
 func (db *DB) ReplaceMessageLabelsForProvider(ctx context.Context, messageID int64, accountID, providerType string, labels []LabelInput) error {
@@ -6671,7 +6794,7 @@ func (db *DB) UpdateMessageThreadHeadersInternal(ctx context.Context, messageID 
 	if sentAt.Valid {
 		date = sentAt.Time
 	}
-	if err := db.reconcileMessageThreadTx(ctx, tx, messageID, accountID, messageIDNorm, inReplyTo, refs, subject, date); err != nil {
+	if err := db.reconcileMessageThreadTx(ctx, tx, messageID, accountID, messageIDNorm, inReplyTo, refs, subject, date, nil); err != nil {
 		return err
 	}
 	if err := db.reindexMessagesSearchTx(ctx, tx, []int64{messageID}); err != nil {
