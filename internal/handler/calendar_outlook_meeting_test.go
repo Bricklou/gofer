@@ -9,6 +9,7 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/cristianadrielbraun/gofer/internal/calendar"
 	"github.com/cristianadrielbraun/gofer/internal/storage"
@@ -162,6 +163,9 @@ func TestOutlookOnlineMeetingFullDescriptionUpdate(t *testing.T) {
 					_ = json.Unmarshal(value, &decoded)
 					current[key] = decoded
 				}
+				if _, ok := payload["recurrence"]; ok {
+					current["type"] = "seriesMaster"
+				}
 				current["changeKey"], current["@odata.etag"] = "v2", `W/"v2"`
 				_ = json.NewEncoder(w).Encode(current)
 			}))
@@ -170,7 +174,7 @@ func TestOutlookOnlineMeetingFullDescriptionUpdate(t *testing.T) {
 			outlookGraphBaseURL = server.URL
 			defer func() { outlookGraphBaseURL = old }()
 			remote, err := updateOutlookCalendarEvent(context.Background(), "token", "primary", existing, draft)
-			preflight := mode == "stale" || mode == "invitee" || mode == "recurrence"
+			preflight := mode == "stale" || mode == "invitee"
 			failed := preflight || mode == "race" || mode == "wrong-uid" || mode == "body-not-applied" || mode == "confirmation-failed"
 			if failed {
 				if err == nil {
@@ -225,19 +229,15 @@ func TestOutlookOnlineMeetingEditorUsesFullDescription(t *testing.T) {
 	if w.Code != 200 || strings.Contains(w.Body.String(), "Additional notes") || strings.Contains(w.Body.String(), "data-calendar-original-description") || strings.Contains(w.Body.String(), `contenteditable="false"`) || !strings.Contains(w.Body.String(), "Original organizer notes: reunión") || !strings.Contains(w.Body.String(), "https://teams.live.com/meet/123") || !strings.Contains(w.Body.String(), "data-calendar-rich-editor") || strings.Contains(w.Body.String(), "opaque meeting metadata") {
 		t.Fatalf("full description editor %d %s", w.Code, w.Body.String())
 	}
-	for _, mode := range []string{"guest", "recurring"} {
-		copy := event
-		if mode == "guest" {
-			copy.ResponseStatus = "needsAction"
-		} else {
-			copy.SeriesRemoteID = "master"
-		}
-		if _, reason, _ := h.calendarEventEditAccess(t.Context(), copy); reason == "" {
-			t.Fatalf("unsupported %s online edit allowed", mode)
-		}
-		if calendarEventDeleteRestriction(copy) == "" {
-			t.Fatalf("unsupported %s online delete allowed", mode)
-		}
+	invitation := event
+	invitation.ResponseStatus = "needsAction"
+	if _, reason, _ := h.calendarEventEditAccess(t.Context(), invitation); reason == "" || calendarEventDeleteRestriction(invitation) == "" {
+		t.Fatal("an invited guest can edit or delete the online meeting")
+	}
+	occurrence := event
+	occurrence.SeriesRemoteID = "master"
+	if calendarEventEditRestriction(occurrence) != "" || calendarEventDeleteRestriction(occurrence) != "" {
+		t.Fatal("the organizer cannot edit or delete a date of a Teams series")
 	}
 	// Description and authoritative conferencing metadata share one cache version.
 	disabled := false
@@ -318,6 +318,28 @@ func TestOutlookOnlineFlagIsRetainedInCache(t *testing.T) {
 		event, err := normalizeOutlookCalendarEvent(remote)
 		if err != nil || !calendarUpdateHasDetails(event.OnlineMeeting) {
 			t.Fatal("online meeting metadata disappeared", flags, err)
+		}
+	}
+}
+
+func TestCalendarTeamsReplacementOfferedToOrganizerForEventOrSeries(t *testing.T) {
+	teams := storage.CalendarEvent{ID: "event", RemoteID: "master", ETag: "v1", SourceProvider: "outlook", ResponseStatus: "organizer",
+		OnlineMeetingJSON: `{"provider":"teamsForBusiness","isOnlineMeeting":true,"joinUrl":"https://teams.microsoft.com/l/meetup-join/meeting"}`, StartTimeZone: "UTC", AllDay: true, StartDate: "2026-10-02", EndDate: "2026-10-03"}
+	source := storage.CalendarSource{ID: "source", Provider: "outlook"}
+	for _, tc := range []struct {
+		name               string
+		event              storage.CalendarEvent
+		series, occurrence bool
+		want               string
+	}{
+		{"event", teams, false, false, "version=v1"},
+		{"series", teams, true, false, "scope=series&series_id=master&version=v1"},
+		{"date", teams, false, true, ""},
+		{"invitation", storage.CalendarEvent{ID: "event", RemoteID: "master", ETag: "v1", SourceProvider: "outlook", ResponseStatus: "accepted", OnlineMeetingJSON: teams.OnlineMeetingJSON, StartTimeZone: "UTC", AllDay: true, StartDate: "2026-10-02", EndDate: "2026-10-03"}, false, false, ""},
+	} {
+		data, err := calendarEditData(tc.event, source, "Work", time.UTC, tc.series, tc.occurrence, nil)
+		if err != nil || data.TeamsReplaceDelete != tc.want {
+			t.Errorf("%s: replacement delete %q, want %q (err %v)", tc.name, data.TeamsReplaceDelete, tc.want, err)
 		}
 	}
 }

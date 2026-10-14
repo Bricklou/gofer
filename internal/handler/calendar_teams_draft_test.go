@@ -28,7 +28,7 @@ func calendarTeamsPreviewFixture(t *testing.T) *Handler {
 	return h
 }
 func TestCalendarTeamsPreviewFinalizesSameEventAndRecoversLostResponses(t *testing.T) {
-	for _, mode := range []string{"business", "personal", "lost-create", "lost-save", "lost-local", "all-day"} {
+	for _, mode := range []string{"business", "personal", "lost-create", "lost-save", "lost-local", "all-day", "recurring"} {
 		t.Run(mode, func(t *testing.T) {
 			h := calendarTeamsPreviewFixture(t)
 			draftID := "2d07e60e-5f8b-49d7-8e3c-c9e3bf5640af"
@@ -68,7 +68,16 @@ func TestCalendarTeamsPreviewFinalizesSameEventAndRecoversLostResponses(t *testi
 						t.Error("sync cannot recognize drafts")
 					}
 					events := []any{}
-					if remote != nil {
+					if remote != nil && remote["type"] == "seriesMaster" {
+						// Microsoft lists a series as its dates.
+						occurrence := map[string]any{}
+						for key, value := range remote {
+							occurrence[key] = value
+						}
+						delete(occurrence, "recurrence")
+						occurrence["id"], occurrence["type"], occurrence["seriesMasterId"] = "temporary-native-1", "occurrence", "temporary-native"
+						events = append(events, occurrence)
+					} else if remote != nil {
 						events = append(events, remote)
 					}
 					json.NewEncoder(w).Encode(map[string]any{"value": events})
@@ -120,8 +129,16 @@ func TestCalendarTeamsPreviewFinalizesSameEventAndRecoversLostResponses(t *testi
 					if !strings.Contains(body, join) {
 						t.Error("Microsoft meeting block removed")
 					}
+					// A repeating Teams meeting gets its repeat rule when the
+					// prepared event becomes the real one.
+					if _, repeating := payload["recurrence"]; repeating != (mode == "recurring") {
+						t.Errorf("finalized repeat rule mismatch: %v", payload["recurrence"])
+					}
 					for key, value := range payload {
 						remote[key] = value
+					}
+					if mode == "recurring" {
+						remote["type"] = "seriesMaster"
 					}
 					remote["changeKey"], remote["@odata.etag"] = "v2", `W/"v2"`
 					if mode == "lost-save" {
@@ -188,6 +205,12 @@ func TestCalendarTeamsPreviewFinalizesSameEventAndRecoversLostResponses(t *testi
 			if mode == "all-day" {
 				values.Set("all_day", "true")
 			}
+			if mode == "recurring" {
+				values.Set("repeat_frequency", "weekly")
+				values.Set("repeat_interval", "1")
+				values.Set("repeat_end", "count")
+				values.Set("repeat_count", "4")
+			}
 			if mode == "lost-local" {
 				if _, err := h.db.Write().Exec(`CREATE TRIGGER block_calendar_create BEFORE INSERT ON calendar_events BEGIN SELECT RAISE(FAIL,'local unavailable'); END`); err != nil {
 					t.Fatal(err)
@@ -222,7 +245,7 @@ func TestCalendarTeamsPreviewFinalizesSameEventAndRecoversLostResponses(t *testi
 				t.Fatal("final event identity not retained", err)
 			}
 			page, err = listOutlookCalendarEvents(t.Context(), "token", "primary", query)
-			if err != nil || len(page.Events) != 1 || page.Events[0].RemoteID != d.RemoteID {
+			if mode != "recurring" && (err != nil || len(page.Events) != 1 || page.Events[0].RemoteID != d.RemoteID) {
 				t.Fatal("finalized event missing from sync", err)
 			}
 			h.handleCalendarTeamsDraftDiscard(httptest.NewRecorder(), calendarCreateHTTPRequest(url.Values{"source_id": {"one-source"}, "draft_id": {draftID}}, "one"))

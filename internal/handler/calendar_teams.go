@@ -146,7 +146,8 @@ func (h *Handler) handleCalendarTeamsOptions(w http.ResponseWriter, r *http.Requ
 			_ = views.CalendarTeamsOption(data).Render(ctx, w)
 			return
 		}
-		if calendarEventIsSeries(event) || event.SeriesRemoteID != "" {
+		// Teams is added to a whole series, never to one of its dates.
+		if r.URL.Query().Get("edit_scope") == "occurrence" {
 			data.State = "recurring"
 			_ = views.CalendarTeamsOption(data).Render(ctx, w)
 			return

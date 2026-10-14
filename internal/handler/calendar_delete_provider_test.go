@@ -17,7 +17,7 @@ import (
 func TestCalendarDeleteJSONProvidersConditionalAndSafe(t *testing.T) {
 	for _, graph := range []bool{false, true} {
 		for _, mode := range []string{"success", "changed", "wrong-id", "invalid-etag", "recurring", "guests", "invitation", "online", "organizer-online", "organizer-online-guests", "race", "denied", "missing", "redirect", "accepted", "read-failure",
-			"series-success", "series-organizer-guests", "series-changed", "series-wrong-id", "series-invalid-etag", "series-guests", "series-invitation", "series-online", "series-race", "series-denied", "series-missing", "series-redirect", "series-accepted", "series-read-failure", "series-occurrence", "series-single"} {
+			"series-success", "series-organizer-guests", "series-organizer-online", "series-changed", "series-wrong-id", "series-invalid-etag", "series-guests", "series-invitation", "series-online", "series-race", "series-denied", "series-missing", "series-redirect", "series-accepted", "series-read-failure", "series-occurrence", "series-single"} {
 			t.Run(fmt.Sprintf("graph=%v/%s", graph, mode), func(t *testing.T) {
 				series := strings.HasPrefix(mode, "series-")
 				mode := strings.TrimPrefix(mode, "series-")
@@ -72,6 +72,12 @@ func TestCalendarDeleteJSONProvidersConditionalAndSafe(t *testing.T) {
 					current["hangoutLink"] = "https://meet.google.com/abc-defg-hij"
 					current["isOnlineMeeting"], current["onlineMeetingProvider"] = true, "teamsForConsumer"
 					current["onlineMeeting"] = map[string]string{"joinUrl": "https://teams.live.com/meet/123"}
+					existing.ResponseStatus, existing.SourceProvider, existing.OnlineMeetingJSON = "organizer", "gmail", `{"joinUrl":"https://teams.live.com/meet/123"}`
+					if !graph {
+						existing.OnlineMeetingJSON = testGoogleMeet
+					} else {
+						existing.SourceProvider = "outlook"
+					}
 					if mode == "organizer-online-guests" {
 						current["attendees"] = []any{map[string]any{"email": "guest@example.com", "emailAddress": map[string]string{"address": "guest@example.com"}}}
 					}

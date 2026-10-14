@@ -90,9 +90,6 @@ func calendarCreateJSON(ctx context.Context, method, endpoint, token string, pay
 
 func createGoogleCalendarEvent(ctx context.Context, token, remoteCalendarID string, draft calendar.EventDraft) (calendar.RemoteEvent, error) {
 	if draft.GoogleMeetMeeting {
-		if draft.Recurrence != nil {
-			return calendar.RemoteEvent{}, calendarDeletePreflightError{calendarUpdateUnsupported("Adding Google Meet to recurring events is not supported in Gofer yet.")}
-		}
 		supported, err := googleCalendarMeetSupported(ctx, token, remoteCalendarID)
 		if err != nil {
 			return calendar.RemoteEvent{}, calendarDeletePreflightError{err}
@@ -187,9 +184,6 @@ func createGoogleCalendarEvent(ctx context.Context, token, remoteCalendarID stri
 func createOutlookCalendarEvent(ctx context.Context, token, remoteCalendarID string, draft calendar.EventDraft) (calendar.RemoteEvent, error) {
 	teamsMode := ""
 	if draft.TeamsMeeting {
-		if draft.Recurrence != nil {
-			return calendar.RemoteEvent{}, calendarDeletePreflightError{calendarUpdateUnsupported("Adding Teams to recurring events is not supported in Gofer yet.")}
-		}
 		mode, err := outlookCalendarTeamsMode(ctx, token, remoteCalendarID)
 		if err != nil {
 			return calendar.RemoteEvent{}, calendarDeletePreflightError{err}

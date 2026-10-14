@@ -295,18 +295,19 @@ func calendarProviderSeriesResult(source storage.CalendarSource, occurrence stor
 	if err != nil {
 		return storage.CalendarEvent{}, err
 	}
+	stored := calendarStorageEvent(source.UserID, source.ID, event)
+	stored.SourceProvider = source.Provider
+	if calendarStoredEditableOnline(stored) {
+		event.OnlineMeeting = nil // Meet and Teams meetings are kept as they are.
+	}
 	if reason := calendarUpdateSavedRestriction(event, draft); reason != "" {
 		return storage.CalendarEvent{}, calendarUpdateUnsupported(reason)
 	}
-	stored := calendarStorageEvent(source.UserID, source.ID, event)
 	stored.ID = occurrence.ID // UI route remains the owned, cached occurrence.
 	return stored, nil
 }
 
 func calendarUpdateExistingScopeRestriction(existing storage.CalendarEvent, series bool, occurrenceScope ...bool) error {
-	if calendarStoredGoogleMeet(existing) && (series || calendarOccurrenceScope(occurrenceScope)) {
-		return calendarUpdateUnsupported("Recurring online meetings are not supported yet.")
-	}
 	if calendarOccurrenceScope(occurrenceScope) {
 		if series {
 			return errCalendarUpdateUnsupported

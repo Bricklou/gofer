@@ -97,7 +97,7 @@ func TestCalendarTeamsUsesScopedHTMXAndCalendarProvider(t *testing.T) {
 	if err := CalendarCreateDialog(data).Render(t.Context(), &out); err != nil {
 		t.Fatal(err)
 	}
-	for _, want := range []string{`data-calendar-source-provider="outlook"`, `hx-get="/api/calendar/meeting-options"`, `hx-params="source_id,event_id"`, `hx-sync="this:replace"`, `data-calendar-teams-state="existing"`} {
+	for _, want := range []string{`data-calendar-source-provider="outlook"`, `hx-get="/api/calendar/meeting-options"`, `hx-params="source_id,event_id,edit_scope"`, `hx-sync="this:replace"`, `data-calendar-teams-state="existing"`} {
 		if !strings.Contains(out.String(), want) {
 			t.Errorf("missing %s", want)
 		}
@@ -168,6 +168,32 @@ func TestCalendarTeamsPreviewOnlyReservesNewEvents(t *testing.T) {
 					t.Fatalf("missing preview control %s", want)
 				}
 			}
+		}
+	}
+}
+
+func TestCalendarTeamsReplacementIsOfferedOnlyWhenReplaceable(t *testing.T) {
+	for _, tc := range []struct {
+		data              CalendarTeamsData
+		replaceable, note bool
+	}{
+		{CalendarTeamsData{State: "existing", Provider: "outlook", Replaceable: true}, true, false},
+		{CalendarTeamsData{State: "existing", Provider: "outlook", Replaceable: true, Series: true}, true, true},
+		{CalendarTeamsData{State: "existing", Provider: "outlook"}, false, false},
+	} {
+		var out bytes.Buffer
+		if err := CalendarTeamsOption(tc.data).Render(t.Context(), &out); err != nil {
+			t.Fatal(err)
+		}
+		body := out.String()
+		if strings.Contains(body, "data-calendar-teams-replace-toggle") != tc.replaceable || strings.Contains(body, "data-calendar-teams-replace-confirm") != tc.replaceable {
+			t.Fatalf("replacement offered=%v for %+v", !tc.replaceable, tc.data)
+		}
+		if strings.Contains(body, `name="teams_meeting"`) {
+			t.Fatal("an existing Teams meeting submits a Teams setting", body)
+		}
+		if strings.Contains(body, "Changes made to single dates") != tc.note {
+			t.Fatalf("series note shown=%v for %+v", !tc.note, tc.data)
 		}
 	}
 }

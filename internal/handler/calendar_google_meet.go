@@ -125,8 +125,6 @@ func (h *Handler) renderCalendarGoogleMeetOptions(w http.ResponseWriter, r *http
 		} else if calendarStoredGoogleMeet(event) {
 			data.State = "existing"
 			data.JoinURL = calendar.MeetingJoinURL(event.OnlineMeetingJSON)
-		} else if calendarEventIsSeries(event) || event.SeriesRemoteID != "" {
-			data.State = "recurring"
 		}
 		if data.State != "unsupported" {
 			_ = views.CalendarTeamsOption(data).Render(ctx, w)

@@ -722,6 +722,15 @@ func (db *DB) GetCalendarEvent(ctx context.Context, userID, eventID string) (Cal
 	return scanCalendarEvent(db.Read().QueryRowContext(ctx, calendarEventSelect+` AND event.id = ?`, userID, eventID))
 }
 
+// GetCalendarSeriesOccurrence returns one cached date of a series. A new
+// series is cached only as its dates, which carry the series' meeting.
+func (db *DB) GetCalendarSeriesOccurrence(ctx context.Context, userID, sourceID, seriesRemoteID string) (CalendarEvent, error) {
+	if strings.TrimSpace(userID) == "" || strings.TrimSpace(sourceID) == "" || strings.TrimSpace(seriesRemoteID) == "" {
+		return CalendarEvent{}, sql.ErrNoRows
+	}
+	return scanCalendarEvent(db.Read().QueryRowContext(ctx, calendarEventSelect+` AND event.source_id = ? AND event.series_remote_id = ? AND event.is_deleted = 0 ORDER BY event.id LIMIT 1`, userID, sourceID, seriesRemoteID))
+}
+
 // ListCalendarEvents returns cached events that overlap the requested window
 // on selected, active sources.
 func (db *DB) ListCalendarEvents(ctx context.Context, userID string, windowStart, windowEnd time.Time) ([]CalendarEvent, error) {

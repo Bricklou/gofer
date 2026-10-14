@@ -16,12 +16,12 @@ import (
 func (h *Handler) handleUserCalendarMeetingOptions(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Cache-Control", "private, no-store")
 	query, err := url.ParseQuery(r.URL.RawQuery)
-	if err != nil || len(query["source_id"]) != 1 || query.Get("source_id") == "" || len(query["event_id"]) > 1 {
+	if err != nil || len(query["source_id"]) != 1 || query.Get("source_id") == "" || len(query["event_id"]) > 1 || len(query["edit_scope"]) > 1 {
 		http.Error(w, "Choose a calendar before checking meeting availability.", http.StatusBadRequest)
 		return
 	}
 	for key := range query {
-		if key != "source_id" && key != "event_id" {
+		if key != "source_id" && key != "event_id" && key != "edit_scope" {
 			http.Error(w, "Invalid meeting availability request.", http.StatusBadRequest)
 			return
 		}
@@ -69,8 +69,8 @@ func (h *Handler) handleUserCalendarMeetingOptions(w http.ResponseWriter, r *htt
 				if calendarOutlookTeamsJSON(calendarOutlookCachedMeetingJSON(event)) {
 					data.State = "existing"
 				}
-			} else if calendarEventIsSeries(event) || event.SeriesRemoteID != "" {
-				data.State = "recurring"
+			} else if selected.Provider == "outlook" && query.Get("edit_scope") == "occurrence" {
+				data.State = "recurring" // Teams is added to a whole series, never to one of its dates.
 			}
 			source = selected
 		}

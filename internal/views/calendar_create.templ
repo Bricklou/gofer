@@ -39,7 +39,7 @@ templ CalendarCreateDialog(data CalendarCreateData) {
 					@icon.X(icon.Props{Class: "size-4"})
 				}
 			</header>
-			<form id="calendar-create-form" data-calendar-create-form data-calendar-event-id={ data.EventID } data-calendar-edit-series={ strconv.FormatBool(data.EditSeries) } data-calendar-edit-occurrence={ strconv.FormatBool(data.EditOccurrence) } data-request-id={ data.RequestID } class="flex min-h-0 flex-1 flex-col" action={ templ.SafeURL(action) } method="post">
+			<form id="calendar-create-form" data-calendar-create-form data-calendar-event-id={ data.EventID } data-calendar-teams-replace-delete={ data.TeamsReplaceDelete } data-calendar-edit-series={ strconv.FormatBool(data.EditSeries) } data-calendar-edit-occurrence={ strconv.FormatBool(data.EditOccurrence) } data-request-id={ data.RequestID } class="flex min-h-0 flex-1 flex-col" action={ templ.SafeURL(action) } method="post">
 				<input type="hidden" name="request_id" value={ data.RequestID }/>
 				if editing {
 					<input type="hidden" name="version" value={ data.Version }/>
@@ -177,9 +177,9 @@ templ CalendarCreateDialog(data CalendarCreateData) {
 						<template data-calendar-meet-checking>
 							@CalendarTeamsOption(CalendarTeamsData{State:"checking",Provider:"gmail"})
 						</template>
-						<div id="calendar-teams-options" data-calendar-teams-options data-calendar-teams-state={data.TeamsState} data-calendar-teams-source={data.SourceID} hx-get="/api/calendar/meeting-options" hx-trigger="calendar-teams-source-changed" hx-include="closest form" hx-vals={calendarTeamsEventParams(data.EventID)} hx-params="source_id,event_id" hx-target="this" hx-swap="innerHTML" hx-sync="this:replace">
+						<div id="calendar-teams-options" data-calendar-teams-options data-calendar-teams-state={data.TeamsState} data-calendar-teams-source={data.SourceID} hx-get="/api/calendar/meeting-options" hx-trigger="calendar-teams-source-changed" hx-include="closest form" hx-vals={calendarTeamsEventParams(data)} hx-params="source_id,event_id,edit_scope" hx-target="this" hx-swap="innerHTML" hx-sync="this:replace">
 							if data.TeamsState != "" && len(data.Sources) > 0 && (data.Sources[0].Provider == "outlook" || data.Sources[0].Provider == "gmail") {
-								@CalendarTeamsOption(CalendarTeamsData{State:data.TeamsState,SourceID:data.SourceID,Provider:data.Sources[0].Provider,JoinURL:data.MeetingJoinURL,EventID:data.EventID})
+								@CalendarTeamsOption(CalendarTeamsData{State:data.TeamsState,SourceID:data.SourceID,Provider:data.Sources[0].Provider,JoinURL:data.MeetingJoinURL,EventID:data.EventID,Replaceable:data.TeamsReplaceDelete != "",Series:data.EditSeries})
 							}
 						</div>
 						@calendarDialogRow(icon.TextAlignStart(icon.Props{Class: "size-4"}), "pt-2.5") {

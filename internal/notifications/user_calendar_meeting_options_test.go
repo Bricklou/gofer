@@ -133,6 +133,11 @@ func TestUserCalendarMeetingOptionsHTTPLocalRestrictionsAndExistingLink(t *testi
 		t.Run(provider, func(t *testing.T) {
 			f, calls := newOwnedMeetingOptionsFixture(t, provider, nil)
 			for _, mode := range []string{"invitation", "existing", "recurring", "read-grant"} {
+				// Meet can be added to a date of a series; Teams only to the
+				// whole series, so one Outlook date stays locked.
+				if mode == "recurring" && provider == "gmail" {
+					continue
+				}
 				if err := f.routing.WithUser(t.Context(), "alice", func(db *storage.DB) error {
 					_, err := db.Write().Exec(`UPDATE calendar_events SET response_status='',organizer_email='',attendees_json='[]',online_meeting_json='{}',recurrence_json='[]',series_remote_id='' WHERE id='same-event'`)
 					if err != nil {
@@ -164,7 +169,11 @@ func TestUserCalendarMeetingOptionsHTTPLocalRestrictionsAndExistingLink(t *testi
 						t.Fatal(err)
 					}
 				}
-				r := f.request("alice", "GET", "/api/calendar/meeting-options?source_id=same-source&event_id=same-event", "")
+				target := "/api/calendar/meeting-options?source_id=same-source&event_id=same-event"
+				if mode == "recurring" {
+					target += "&edit_scope=occurrence"
+				}
+				r := f.request("alice", "GET", target, "")
 				// A saved Meet conference stays switchable so the organizer can remove it.
 				removable := mode == "existing" && provider == "gmail"
 				if r.Code != 200 || strings.Contains(r.Body.String(), `data-calendar-teams-available="false"`) == removable || strings.Contains(r.Body.String(), `name="google_meet_meeting" value="true"`) != removable {

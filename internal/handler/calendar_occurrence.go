@@ -32,6 +32,9 @@ func calendarOccurrenceRestriction(event calendar.RemoteEvent, seriesID string) 
 }
 
 func calendarOccurrenceExistingRestriction(existing storage.CalendarEvent) error {
+	if calendarStoredEditableOnline(existing) {
+		existing.OnlineMeetingJSON = "{}" // A date keeps its series' Meet or Teams meeting.
+	}
 	if reason := calendarOccurrenceRestriction(calendar.RemoteEvent{
 		RemoteID: existing.RemoteID, SeriesRemoteID: existing.SeriesRemoteID, Status: existing.Status,
 		Deleted: existing.IsDeleted, Recurrence: json.RawMessage(existing.RecurrenceJSON),

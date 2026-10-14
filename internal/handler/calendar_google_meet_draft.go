@@ -194,7 +194,7 @@ func (h *Handler) handleCalendarGoogleMeetDraft(w http.ResponseWriter, r *http.R
 			fail(404, "This event is unavailable.")
 			return
 		}
-		if _, reason, err := h.calendarEventEditAccess(r.Context(), event); err != nil || reason != "" || calendarStoredGoogleMeet(event) || calendarEventIsSeries(event) {
+		if _, reason, err := h.calendarEventEditAccess(r.Context(), event); err != nil || reason != "" || calendarStoredGoogleMeet(event) {
 			fail(403, "A Meet conference cannot be added to this event.")
 			return
 		}

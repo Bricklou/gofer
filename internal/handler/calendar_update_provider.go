@@ -277,9 +277,6 @@ func updateGoogleCalendarEventScope(ctx context.Context, token, remoteCalendarID
 		if calendarGoogleOrganizerStatus(current.googleCalendarEvent) != "organizer" {
 			return calendar.RemoteEvent{}, calendarUpdateUnsupported("Only the organizer can edit or add a Google Meet meeting.")
 		}
-		if series || occurrence || draft.Recurrence != nil || len(current.Recurrence) > 0 || current.RecurringEventID != "" || current.OriginalStartTime != nil {
-			return calendar.RemoteEvent{}, calendarUpdateUnsupported("Recurring online meetings are not supported yet.")
-		}
 		if current.ICalUID == "" || (existing.ICalUID != "" && existing.ICalUID != current.ICalUID) {
 			return calendar.RemoteEvent{}, errCalendarUpdateConflict
 		}
@@ -483,8 +480,8 @@ func updateOutlookCalendarEventScope(ctx context.Context, token, remoteCalendarI
 		return calendar.RemoteEvent{}, calendarUpdateUnsupported("Microsoft does not allow changing an online meeting's provider.")
 	}
 	if addingTeams {
-		if series || occurrence || draft.Recurrence != nil {
-			return calendar.RemoteEvent{}, calendarUpdateUnsupported("Adding Teams to recurring events is not supported in Gofer yet.")
+		if occurrence || current.SeriesMasterID != "" {
+			return calendar.RemoteEvent{}, calendarUpdateUnsupported("Teams can only be added to the whole series.")
 		}
 		if calendarOutlookOrganizerStatus(current.outlookCalendarEvent) != "organizer" {
 			return calendar.RemoteEvent{}, calendarUpdateUnsupported("Only the organizer can add a Teams meeting.")
@@ -492,9 +489,6 @@ func updateOutlookCalendarEventScope(ctx context.Context, token, remoteCalendarI
 	}
 	if (online || addingTeams) && existing.ICalUID != "" && existing.ICalUID != current.ICalUID {
 		return calendar.RemoteEvent{}, errCalendarUpdateConflict
-	}
-	if online && (series || occurrence || draft.Recurrence != nil) {
-		return calendar.RemoteEvent{}, calendarUpdateUnsupported("Recurring online meetings are not supported yet.")
 	}
 	// The cache stores changeKey, but it is NOT an HTTP entity tag. Use the
 	// fresh @odata.etag verbatim, including W/ and quotes; never guess it from

@@ -10944,6 +10944,83 @@ function retryCalendarMeetPreview(form) {
   prepareCalendarMeetPreview(form, state)
 }
 
+// Microsoft can't turn Teams off, so turning the switch off offers to replace
+// the meeting with a copy without Teams. Nothing changes until the organizer
+// confirms and saves.
+function toggleCalendarTeamsReplacement(toggle) {
+  var form = toggle.closest("[data-calendar-create-form]")
+  if (!form) return
+  var panel = form.querySelector("[data-calendar-teams-replace]")
+  panel.hidden = toggle.checked
+  panel.querySelector("[data-calendar-teams-replace-confirm]").checked = false
+  setCalendarCreateError(form, "")
+  updateCalendarCreateForm(form)
+}
+
+function calendarTeamsReplacing(form) {
+  var toggle = form.querySelector("[data-calendar-teams-replace-toggle]")
+  return !!(toggle && !toggle.checked && form.dataset.calendarTeamsReplaceDelete)
+}
+
+function calendarReplaceFailure(result, fallback) {
+  return (result && result.data && result.data.error) || fallback
+}
+
+// Create the copy first and delete the original only once the copy exists:
+// a failed delete leaves a duplicate the organizer can remove, never a lost
+// meeting. Each step uses the ordinary create and delete requests.
+function replaceCalendarTeamsMeeting(form) {
+  if (!form.querySelector("[data-calendar-teams-replace-confirm]").checked) {
+    setCalendarCreateError(form, "Confirm that you want to replace this meeting, or turn Teams back on.")
+    form.querySelector("[data-calendar-teams-replace-confirm]").focus()
+    return Promise.resolve()
+  }
+  syncCalendarDescription(form.querySelector("[data-calendar-rich-editor]"))
+  var source = form.querySelector('[name="source_id"]')
+  if (source) source.disabled = false
+  var payload = new URLSearchParams(new FormData(form))
+  ;["version", "edit_scope", "teams_meeting", "teams_draft_id"].forEach(function (name) { payload.delete(name) })
+  // Keep one identity across retries so a lost response can't create two copies.
+  if (!form._calendarReplaceRequestID) form._calendarReplaceRequestID = window.crypto.randomUUID()
+  payload.set("request_id", form._calendarReplaceRequestID)
+  form._calendarCreateBusy = true
+  setCalendarCreateError(form, "")
+  updateCalendarCreateForm(form)
+  var json = function (response) { return response.json().then(function (data) { return {ok: response.ok, data: data} }) }
+  return fetch("/api/calendar/events", {method: "POST", headers: {"Content-Type": "application/x-www-form-urlencoded", "Accept": "application/json"}, body: payload.toString()})
+    .then(json)
+    .then(function (created) {
+      if (!created.ok || !(created.data.event_id || created.data.series_id)) {
+        var message = calendarReplaceFailure(created, "Could not create the copy without Teams.")
+        setCalendarCreateError(form, message + (created.data && created.data.uncertain ? " Save again to check without creating a second copy." : " Nothing was changed."))
+        return
+      }
+      return fetch(form.action + "?" + form.dataset.calendarTeamsReplaceDelete, {method: "DELETE", headers: {"Accept": "application/json"}})
+        .then(json)
+        .then(function (deleted) {
+          if (!deleted.ok || deleted.data.deleted !== true) {
+            // The copy exists; never retry the whole replacement from here.
+            form._calendarCreateConflict = true
+            setCalendarCreateError(form, "The copy without Teams was created, but the original Teams meeting could not be deleted: " + calendarReplaceFailure(deleted, "the result could not be confirmed.") + " Open the original meeting and delete it yourself.")
+            scheduleCalendarCacheRefresh()
+            return
+          }
+          if (form.isConnected && window.tui && window.tui.dialog) window.tui.dialog.close("calendar-create-dialog")
+          showGoferToast({title: "Meeting replaced", description: "A copy without Teams was created and the original deleted. Guests were sent a cancellation and a new invitation.", variant: "success", icon: "success", duration: 6000})
+          scheduleCalendarCacheRefresh()
+        })
+        .catch(function () {
+          form._calendarCreateConflict = true
+          setCalendarCreateError(form, "The copy without Teams was created, but deleting the original could not be confirmed. Refresh calendars and delete the original Teams meeting if it's still there.")
+          scheduleCalendarCacheRefresh()
+        })
+    })
+    .catch(function () {
+      setCalendarCreateError(form, "Creating the copy could not be confirmed. Save again to check without creating a second copy.")
+    })
+    .finally(function () { form._calendarCreateBusy = false; updateCalendarCreateForm(form) })
+}
+
 // Turning off an existing Meet conference submits false through the hidden
 // field; the conference is only removed when the event is saved.
 function toggleCalendarMeetRemoval(toggle) {
@@ -11070,7 +11147,7 @@ function updateCalendarCreateForm(form) {
   submit.disabled = (editing ? locked || !allowed : busy || (!uncertain && !allowed)) || (!uncertain && (meetNotReady || teamsNotReady))
   submit.setAttribute("aria-busy", busy ? "true" : "false")
   form.querySelector("[data-calendar-create-spinner]").hidden = !busy
-  form.querySelector("[data-calendar-create-submit-label]").textContent = editing ? (busy ? "Saving..." : form.dataset.calendarEditSeries === "true" ? "Save series" : "Save changes") : busy ? "Creating…" : uncertain ? "Retry safely" : "Create event"
+  form.querySelector("[data-calendar-create-submit-label]").textContent = editing ? (busy ? "Saving..." : calendarTeamsReplacing(form) ? "Replace meeting" : form.dataset.calendarEditSeries === "true" ? "Save series" : "Save changes") : busy ? "Creating…" : uncertain ? "Retry safely" : "Create event"
   form.setAttribute("aria-busy", busy ? "true" : "false")
 }
 
@@ -11365,17 +11442,7 @@ function validateCalendarCreatePickers(form) {
   if (!form.querySelector('[name="all_day"]').checked) fields = fields.concat(["start_time", "end_time"])
   var repeat = form.querySelector('[name="repeat_frequency"]')
   var teams = form.querySelector('[name="teams_meeting"]')
-  if (teams && teams.checked && !teams.disabled && repeat && repeat.value !== "none") {
-    setCalendarCreateError(form, "Teams meetings currently support events that do not repeat. Choose Does not repeat or turn Teams off.")
-    teams.focus()
-    return false
-  }
   var meet = form.querySelector('[name="google_meet_meeting"]')
-  if (meet && meet.checked && !meet.disabled && repeat && repeat.value !== "none") {
-    setCalendarCreateError(form, "Google Meet meetings currently support events that do not repeat. Choose Does not repeat or turn Google Meet off.")
-    meet.focus()
-    return false
-  }
   var guests = form.querySelector('[name="guests"]')
   if (guests && guests.value.trim() && repeat && repeat.value !== "none" && calendarCreateSourceProvider(form) === "caldav") {
     setCalendarCreateError(form, "Guest invitations on CalDAV calendars currently support events that do not repeat. Remove the guests or choose Does not repeat.")
@@ -11426,6 +11493,7 @@ function submitCalendarCreate(form) {
   }
   var editing = !!form.dataset.calendarEventId
   if (form._calendarCreateBusy || (editing && (form._calendarCreateUncertain || form._calendarCreateConflict)) || (!form._calendarCreateUncertain && (!form.reportValidity() || !validateCalendarCreatePickers(form)))) return Promise.resolve()
+  if (editing && calendarTeamsReplacing(form)) return replaceCalendarTeamsMeeting(form)
   if (!form._calendarCreateUncertain) syncCalendarDescription(form.querySelector("[data-calendar-rich-editor]"))
   if (editing) ["source_id", "version", "request_id", "edit_scope"].forEach(function (name) {
     var input = form.querySelector('[name="' + name + '"]')

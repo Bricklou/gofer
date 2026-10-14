@@ -303,6 +303,9 @@ func finalizeCalendarTeamsDraft(ctx context.Context, source storage.CalendarSour
 			body.Content = calendar.DescriptionHTML(calendar.DraftDescription(draft)) + "<br>" + block
 		}
 		payload := map[string]any{"subject": draft.Summary, "body": body, "start": start, "end": end, "isAllDay": draft.AllDay, "location": outlookCalendarLocation{DisplayName: draft.Location}, "sensitivity": "normal", "showAs": "busy", "isReminderOn": true, "reminderMinutesBeforeStart": 15, "attendees": calendarMeetingOutlookGuests(draft, nil), "responseRequested": len(draft.Guests) > 0, "singleValueExtendedProperties": calendarTeamsDraftProperties(savedMarker)}
+		if draft.Recurrence != nil {
+			payload["recurrence"] = calendarOutlookRecurrence(draft)
+		}
 		var updated outlookCalendarUpdateEvent
 		if err := calendarUpdateJSON(ctx, endpoint, token, current.ODataETag, payload, &updated); err != nil {
 			return calendar.RemoteEvent{}, err
@@ -318,6 +321,9 @@ func finalizeCalendarTeamsDraft(ctx context.Context, source storage.CalendarSour
 	}
 	if current.ID != draft.TeamsRemoteID || calendarTeamsDraftMarker(current.outlookCalendarEvent) != savedMarker || current.IsCancelled || current.ChangeKey == "" || !calendarOutlookTeamsConfirmed(current.outlookCalendarEvent) || calendar.MeetingJoinURL(string(calendarOutlookMeetingJSON(current.outlookCalendarEvent))) != calendar.MeetingJoinURL(string(draft.TeamsConference)) {
 		return calendar.RemoteEvent{}, fmt.Errorf("Microsoft did not confirm the finalized Teams meeting")
+	}
+	if draft.Recurrence != nil && (current.Type != "seriesMaster" || !calendarRecurrenceMatchesDraft(current.Recurrence, draft)) {
+		return calendar.RemoteEvent{}, fmt.Errorf("Microsoft did not confirm the recurring series")
 	}
 	event, err := normalizeOutlookCalendarEvent(current.outlookCalendarEvent)
 	if err != nil {

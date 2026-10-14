@@ -16,7 +16,7 @@ import (
 func TestCalendarJSONOccurrenceMutation(t *testing.T) {
 	for _, graph := range []bool{false, true} {
 		for _, deleting := range []bool{false, true} {
-			for _, mode := range []string{"timed", "all-day", "exception", "wrong-parent", "master", "stale", "race", "guests", "organizer-guests", "guest-change", "invitation", "meeting", "unconfirmed", "wrong-result", "boundary"} {
+			for _, mode := range []string{"timed", "all-day", "exception", "wrong-parent", "master", "stale", "race", "guests", "organizer-guests", "guest-change", "invitation", "meeting", "organizer-meeting", "remove-meet", "add-teams", "unconfirmed", "wrong-result", "boundary"} {
 				t.Run(fmt.Sprintf("graph=%v/delete=%v/%s", graph, deleting, mode), func(t *testing.T) {
 					draft := calendarProviderDraft(t, mode == "all-day")
 					existing := storage.CalendarEvent{RemoteID: "instance", SeriesRemoteID: "master", ETag: `"v1"`, Description: "Old notes"}
@@ -51,10 +51,30 @@ func TestCalendarJSONOccurrenceMutation(t *testing.T) {
 							draft.Guests = []calendar.GuestDraft{{Email: "guest@example.com"}, {Email: "second@example.com"}}
 						}
 						existing.ResponseStatus, existing.AttendeesJSON = "organizer", `[{"email":"guest@example.com"}]`
+					case "add-teams":
+						// Teams is added to a whole series, never to one of its dates.
+						if graph && !deleting {
+							draft.TeamsMeeting, draft.TeamsMeetingSet = true, true
+						}
 					case "invitation":
 						current["organizer"], current["isOrganizer"] = map[string]bool{"self": false}, false
 					case "meeting":
 						current["isOnlineMeeting"], current["hangoutLink"] = true, "https://meet.example"
+					case "organizer-meeting", "remove-meet":
+						// A date of the organizer's Meet or Teams series keeps the series' meeting.
+						current["organizer"], current["isOrganizer"] = map[string]any{"self": true, "email": "owner@example.com"}, true
+						if graph {
+							current["isOnlineMeeting"], current["onlineMeetingProvider"] = true, "teamsForBusiness"
+							current["onlineMeeting"] = map[string]string{"joinUrl": "https://teams.microsoft.com/l/meetup-join/series"}
+							existing.SourceProvider, existing.OnlineMeetingJSON = "outlook", `{"joinUrl":"https://teams.microsoft.com/l/meetup-join/series"}`
+						} else {
+							current["iCalUID"], current["conferenceData"] = "uid", json.RawMessage(testGoogleMeet)
+							existing.SourceProvider, existing.OnlineMeetingJSON, existing.ICalUID = "gmail", testGoogleMeet, "uid"
+						}
+						existing.ResponseStatus = "organizer"
+						if mode == "remove-meet" {
+							draft.GoogleMeetMeetingSet = true
+						}
 					}
 					reads, writes := 0, 0
 					server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -146,6 +166,15 @@ func TestCalendarJSONOccurrenceMutation(t *testing.T) {
 						if !errors.Is(err, errCalendarUpdateConflict) || mode == "stale" && writes != 0 {
 							t.Fatalf("conflict: %d writes, %v", writes, err)
 						}
+					case "add-teams":
+						if graph && !deleting && (!errors.Is(err, errCalendarUpdateUnsupported) || writes != 0) {
+							t.Fatalf("added Teams to one date: %d writes, %v", writes, err)
+						}
+					case "remove-meet":
+						// Meet can be removed from one date; the series keeps it.
+						if err != nil || writes != 1 || (!graph && !deleting && calendarUpdateHasDetails(remote.OnlineMeeting)) {
+							t.Fatalf("remove Meet from one date: %d writes, %v, %s", writes, err, remote.OnlineMeeting)
+						}
 					case "wrong-parent", "master", "guests", "invitation", "meeting":
 						if !errors.Is(err, errCalendarUpdateUnsupported) || writes != 0 {
 							t.Fatalf("unsafe write: %d writes, %v", writes, err)
@@ -168,6 +197,9 @@ func TestCalendarJSONOccurrenceMutation(t *testing.T) {
 						}
 						if !deleting && (remote.RemoteID != existing.RemoteID || remote.SeriesRemoteID != "master" || !calendarUpdateMatchesDraft(remote, draft)) {
 							t.Fatalf("wrong saved occurrence: %+v", remote)
+						}
+						if mode == "organizer-meeting" && !deleting && calendar.MeetingJoinURL(string(remote.OnlineMeeting)) == "" {
+							t.Fatalf("date lost its series' meeting: %s", remote.OnlineMeeting)
 						}
 						if mode == "guest-change" && !deleting && !calendarMeetingGuestsMatch(remote.Attendees, draft.Guests, "owner@example.com") {
 							t.Fatalf("occurrence guests not saved: %s", remote.Attendees)

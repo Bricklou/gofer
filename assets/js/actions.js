@@ -112,6 +112,7 @@
     "toggleCalendarAuth",
     "toggleCalendarDescription",
     "toggleCalendarMeetRemoval",
+    "toggleCalendarTeamsReplacement",
     "toggleCardDAVAuth",
     "toggleComposeAttachments",
     "toggleEmailBodySchemeById",

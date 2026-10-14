@@ -124,12 +124,6 @@ func parseCalendarEventDraft(r *http.Request) (calendar.EventDraft, error) {
 		return draft, fmt.Errorf("invalid Teams meeting setting")
 	}
 	draft.TeamsMeeting = r.PostForm.Get("teams_meeting") == "true"
-	if draft.TeamsMeeting {
-		frequency := r.PostForm.Get("repeat_frequency")
-		if frequency != "" && frequency != "none" {
-			return draft, fmt.Errorf("Teams meetings currently support events that do not repeat in Gofer")
-		}
-	}
 	draft.TeamsDraftID = strings.TrimSpace(r.PostForm.Get("teams_draft_id"))
 	if draft.TeamsDraftID != "" {
 		id, err := uuid.Parse(draft.TeamsDraftID)
@@ -145,12 +139,6 @@ func parseCalendarEventDraft(r *http.Request) (calendar.EventDraft, error) {
 	draft.GoogleMeetMeeting = r.PostForm.Get("google_meet_meeting") == "true"
 	if draft.GoogleMeetMeeting && draft.TeamsMeeting {
 		return draft, fmt.Errorf("choose one meeting provider")
-	}
-	if draft.GoogleMeetMeeting {
-		frequency := r.PostForm.Get("repeat_frequency")
-		if frequency != "" && frequency != "none" {
-			return draft, fmt.Errorf("Google Meet meetings currently support events that do not repeat in Gofer")
-		}
 	}
 	draft.GoogleMeetDraftID = strings.TrimSpace(r.PostForm.Get("google_meet_draft_id"))
 	if draft.GoogleMeetDraftID != "" {
@@ -489,23 +477,30 @@ func (h *Handler) handleCreateCalendarEvent(w http.ResponseWriter, r *http.Reque
 		}
 	}
 	response := map[string]any{"event_id": result.EventID, "source_id": source.ID, "replayed": replayed, "hidden": source.IsHidden, "notify_guests": len(draft.Guests) > 0}
-	if draft.TeamsMeeting && source.Provider == providers.ProviderOutlook {
-		// Derive this from the durable result on both create and replay. Microsoft
-		// may save an ordinary appointment without enabling the requested meeting;
-		// cache that confirmed event instead of inviting a duplicate POST retry.
-		saved, readErr := h.db.GetCalendarEvent(ctx, userID, result.EventID)
-		response["teams_unconfirmed"] = readErr != nil || !calendarTeamsLinkConfirmed(calendarOutlookCachedMeetingJSON(saved))
-	}
-	if draft.GoogleMeetMeeting && source.Provider == providers.ProviderGmail {
-		saved, readErr := h.db.GetCalendarEvent(ctx, userID, result.EventID)
-		response["google_meet_unconfirmed"] = readErr != nil || !calendarGoogleMeetConfirmed(json.RawMessage(saved.OnlineMeetingJSON))
-	}
 	if draft.Recurrence != nil {
 		response["series_id"] = result.RemoteID
 		// We already own the source gate. Read real instances, never generate a
 		// guessed local series. A failed read is a refresh failure, not a failed
 		// creation; the durable request above prevents another provider write.
 		response["refresh_pending"] = !h.refreshCalendarSeries(ctx, source, draft)
+	}
+	// Derive this from the durable result on both create and replay. Microsoft
+	// may save an ordinary appointment without enabling the requested meeting;
+	// cache that confirmed event instead of inviting a duplicate POST retry.
+	// A series is read from one of its refreshed dates.
+	savedMeeting := func() (storage.CalendarEvent, error) {
+		if draft.Recurrence != nil {
+			return h.db.GetCalendarSeriesOccurrence(ctx, userID, source.ID, result.RemoteID)
+		}
+		return h.db.GetCalendarEvent(ctx, userID, result.EventID)
+	}
+	if draft.TeamsMeeting && source.Provider == providers.ProviderOutlook {
+		saved, readErr := savedMeeting()
+		response["teams_unconfirmed"] = readErr != nil || !calendarTeamsLinkConfirmed(calendarOutlookCachedMeetingJSON(saved))
+	}
+	if draft.GoogleMeetMeeting && source.Provider == providers.ProviderGmail {
+		saved, readErr := savedMeeting()
+		response["google_meet_unconfirmed"] = readErr != nil || !calendarGoogleMeetConfirmed(json.RawMessage(saved.OnlineMeetingJSON))
 	}
 	w.Header().Set("Content-Type", "application/json")
 	w.Header().Set("Cache-Control", "private, no-store")

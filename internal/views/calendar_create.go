@@ -6,8 +6,14 @@ import (
 	"time"
 )
 
-func calendarTeamsEventParams(id string) string {
-	raw, _ := json.Marshal(map[string]string{"event_id": id})
+func calendarTeamsEventParams(data CalendarCreateData) string {
+	scope := ""
+	if data.EditSeries {
+		scope = "series"
+	} else if data.EditOccurrence {
+		scope = "occurrence"
+	}
+	raw, _ := json.Marshal(map[string]string{"event_id": data.EventID, "edit_scope": scope})
 	return string(raw)
 }
 
@@ -40,9 +46,12 @@ type CalendarCreateData struct {
 	SourceID        string
 	TeamsState      string
 	MeetingJoinURL  string
-	Sources         []CalendarCreateSource
-	Date            string
-	StartTime       string
+	// TeamsReplaceDelete is the delete request that removes this Teams meeting
+	// once a copy without Teams is created. Empty when it can't be replaced.
+	TeamsReplaceDelete string
+	Sources            []CalendarCreateSource
+	Date               string
+	StartTime          string
 	// EndDate is inclusive for all-day form values, including edit prefill.
 	EndDate  string
 	EndTime  string
@@ -52,6 +61,10 @@ type CalendarCreateData struct {
 
 type CalendarTeamsData struct {
 	State, SourceID, Provider, JoinURL, EventID string
+	// Replaceable: an existing Teams meeting that can be replaced by a copy
+	// without Teams, since Microsoft can't turn Teams off. Series: that copy
+	// is the whole series.
+	Replaceable, Series bool
 }
 
 // calendarDialogClass sizes a calendar dialog as a bounded column: header and

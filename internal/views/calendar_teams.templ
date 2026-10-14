@@ -21,6 +21,7 @@ templ CalendarTeamsOption(data CalendarTeamsData) {
 	// An existing Meet conference can be removed: the switch drives a hidden
 	// field so turning it off submits false. Teams cannot be turned off.
 	{{ removable := data.State == "existing" && data.Provider == "gmail" }}
+	{{ replaceable := data.State == "existing" && data.Provider == "outlook" && data.Replaceable }}
 	if data.State == "existing" || data.State == "other-online" {
 		{{ name = "" }}
 	}
@@ -38,6 +39,8 @@ templ CalendarTeamsOption(data CalendarTeamsData) {
 				if removable {
 					<input type="hidden" name="google_meet_meeting" value="true" data-calendar-meet-existing/>
 					@switchcomp.Switch(switchcomp.Props{ID: id, Value: "true", Checked: true, Attributes: templ.Attributes{"data-calendar-teams-toggle": "", "data-calendar-teams-available": "true", "data-on-change": onAction("toggleCalendarMeetRemoval", actionElement)}})
+				} else if replaceable {
+					@switchcomp.Switch(switchcomp.Props{ID: id, Value: "true", Checked: true, Attributes: templ.Attributes{"data-calendar-teams-toggle": "", "data-calendar-teams-available": "true", "data-calendar-teams-replace-toggle": "", "data-on-change": onAction("toggleCalendarTeamsReplacement", actionElement)}})
 				} else {
 					@switchcomp.Switch(switchcomp.Props{ID: id, Name: name, Value: "true", Checked: data.State == "existing", Disabled: !available, Attributes: templ.Attributes{"data-calendar-teams-toggle": "", "data-calendar-teams-available": strconv.FormatBool(available)}})
 				}
@@ -66,6 +69,23 @@ templ CalendarTeamsOption(data CalendarTeamsData) {
 		}
 		if removable {
 			<p data-calendar-meet-removal hidden role="status" class="mt-2 text-xs text-muted-foreground">The Meet link is removed when you save. Guests are sent the update.</p>
+		}
+		if replaceable {
+			<div data-calendar-teams-replace hidden role="status" class="mt-2 space-y-2 rounded-md border border-border bg-muted/40 p-3 text-xs leading-relaxed text-muted-foreground">
+				<p class="font-medium text-foreground">Microsoft doesn’t allow turning Teams off on a meeting.</p>
+				<p>Instead, Gofer can replace it: when you save, it creates a copy of this meeting without Teams, then deletes this one.</p>
+				<ul class="list-disc space-y-1 pl-4">
+					<li>Guests get a cancellation for this meeting and an invitation to the copy, so their replies start over.</li>
+					if data.Series {
+						<li>The whole series is created again from its first date. Changes made to single dates aren’t kept.</li>
+					}
+					<li>The description is copied as it is above, including Microsoft’s Teams joining details. Delete them there if you don’t want them in the copy.</li>
+				</ul>
+				<label class="flex items-start gap-2 text-foreground">
+					<input type="checkbox" class="mt-0.5" data-calendar-teams-replace-confirm/>
+					<span>Replace this meeting with a copy without Teams</span>
+				</label>
+			</div>
 		}
 	}
 }

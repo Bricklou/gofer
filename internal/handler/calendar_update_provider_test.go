@@ -18,7 +18,7 @@ import (
 
 func TestCalendarJSONProviderUpdateConditionalAndPreserving(t *testing.T) {
 	for _, graph := range []bool{false, true} {
-		for _, mode := range []string{"timed", "all-day", "stale", "race", "guests", "unconfirmed", "recurring", "recurring-all-day", "recurring-mismatch", "recurring-missing", "already-recurring", "series", "series-all-day", "series-stale", "series-instance", "series-complex", "series-guests", "series-organizer-guests", "series-guest-change", "recurring-organizer-guests", "series-race"} {
+		for _, mode := range []string{"timed", "all-day", "stale", "race", "guests", "unconfirmed", "recurring", "recurring-all-day", "recurring-mismatch", "recurring-missing", "already-recurring", "series", "series-all-day", "series-stale", "series-instance", "series-complex", "series-guests", "series-organizer-guests", "series-guest-change", "recurring-organizer-guests", "series-meeting", "series-remove-meet", "series-race"} {
 			t.Run(fmt.Sprintf("graph=%v/%s", graph, mode), func(t *testing.T) {
 				draft := calendarProviderDraft(t, strings.HasSuffix(mode, "all-day"))
 				series := strings.HasPrefix(mode, "series")
@@ -95,6 +95,25 @@ func TestCalendarJSONProviderUpdateConditionalAndPreserving(t *testing.T) {
 					current["attendees"] = []any{map[string]any{"email": "guest@example.com", "emailAddress": map[string]string{"address": "guest@example.com"}, "type": "required"}}
 					existing.ResponseStatus, existing.AttendeesJSON = "organizer", `[{"email":"guest@example.com"}]`
 				}
+				// A Meet or Teams series keeps its meeting through edits; Meet can be
+				// removed from the whole series.
+				meeting := mode == "series-meeting" || mode == "series-remove-meet"
+				if meeting {
+					current["organizer"], current["isOrganizer"] = map[string]any{"self": true, "email": "owner@example.com"}, true
+					existing.ResponseStatus = "organizer"
+					if graph {
+						current["isOnlineMeeting"], current["onlineMeetingProvider"] = true, "teamsForBusiness"
+						current["onlineMeeting"] = map[string]string{"joinUrl": "https://teams.microsoft.com/l/meetup-join/series"}
+						existing.SourceProvider, existing.OnlineMeetingJSON = "outlook", `{"joinUrl":"https://teams.microsoft.com/l/meetup-join/series"}`
+					} else {
+						current["iCalUID"], current["conferenceData"] = "uid", json.RawMessage(testGoogleMeet)
+						existing.SourceProvider, existing.OnlineMeetingJSON, existing.ICalUID = "gmail", testGoogleMeet, "uid"
+					}
+				}
+				removingMeet := mode == "series-remove-meet" && !graph
+				if removingMeet {
+					draft.GoogleMeetMeetingSet = true
+				}
 				if mode == "series-guest-change" {
 					draft.GuestsSet = true
 					draft.Guests = []calendar.GuestDraft{{Email: "second@example.com"}}
@@ -159,8 +178,17 @@ func TestCalendarJSONProviderUpdateConditionalAndPreserving(t *testing.T) {
 							t.Error("unchanged structured location overwritten")
 						}
 					}
+					if value, exists := payload["conferenceData"]; exists != removingMeet || (exists && value != nil) {
+						t.Errorf("series conference mismatch: %v", payload["conferenceData"])
+					}
+					if !graph && meeting && r.URL.Query().Get("conferenceDataVersion") != "1" {
+						t.Error("Meet series edit without conferencing version")
+					}
 					for key, value := range payload {
 						current[key] = value
+					}
+					if removingMeet {
+						delete(current, "conferenceData")
 					}
 					if converting && graph {
 						current["type"] = "seriesMaster"
@@ -221,6 +249,9 @@ func TestCalendarJSONProviderUpdateConditionalAndPreserving(t *testing.T) {
 					}
 					if organizerGuests && !draft.GuestsSet && !calendarMeetingGuestsMatch(remote.Attendees, []calendar.GuestDraft{{Email: "guest@example.com"}}, "owner@example.com") {
 						t.Fatalf("series guests lost: %s", remote.Attendees)
+					}
+					if meeting && (calendar.MeetingJoinURL(string(remote.OnlineMeeting)) == "") != removingMeet {
+						t.Fatalf("series meeting after save: %s", remote.OnlineMeeting)
 					}
 					if mode == "series-guest-change" && !calendarMeetingGuestsMatch(remote.Attendees, draft.Guests, "owner@example.com") {
 						t.Fatalf("series guests not saved: %s", remote.Attendees)

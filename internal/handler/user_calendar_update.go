@@ -130,7 +130,7 @@ func (h *Handler) handleUserUpdateCalendarEvent(w http.ResponseWriter, r *http.R
 			}
 			restriction := calendarUpdateSavedRestriction(confirmed, draft)
 			if instance {
-				restriction = calendarOccurrenceRestriction(remote, event.SeriesRemoteID)
+				restriction = calendarOccurrenceRestriction(confirmed, event.SeriesRemoteID)
 			}
 			if remote.RemoteID != event.RemoteID || strings.TrimSpace(remote.ETag) == "" || restriction != "" || ((draft.Recurrence != nil || instance) && !calendarUpdateMatchesDraft(remote, draft)) {
 				return userCalendarMutationFailure{status: 502, message: "The provider's saved event could not be confirmed. Refresh the calendar and reopen the event.", uncertain: true}

@@ -26,9 +26,6 @@ func calendarEventDeleteRestriction(event storage.CalendarEvent) string {
 	if calendarStoredEditableOnline(event) && !calendarCachedOrganizer(event) {
 		return "Only the organizer can delete an online meeting."
 	}
-	if calendarStoredEditableOnline(event) && calendarEventIsSeries(event) {
-		return "Recurring online meetings cannot be deleted in Gofer yet."
-	}
 	return ""
 }
 

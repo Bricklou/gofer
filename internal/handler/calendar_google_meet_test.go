@@ -240,7 +240,7 @@ func TestGoogleMeetCreateConvertAndEdit(t *testing.T) {
 				} else {
 					remote, err = updateGoogleCalendarEvent(t.Context(), "token", "primary", existing, draft)
 				}
-				success := mode == "prepared" || mode == "success" || mode == "pending" || mode == "guests" || mode == "all-day" || mode == "retry" || (mode == "confirmation-failure" && operation == "create")
+				success := mode == "prepared" || mode == "success" || mode == "pending" || mode == "guests" || mode == "all-day" || mode == "retry" || (mode == "confirmation-failure" && operation == "create") || mode == "recurring"
 				if mode == "disable" || mode == "disable-guests" {
 					if err != nil || writes != 1 || calendarUpdateHasDetails(remote.OnlineMeeting) || !calendarUpdateMatchesDraft(remote, draft) {
 						t.Fatalf("remote=%#v err=%v writes=%d", remote, err, writes)
@@ -248,6 +248,9 @@ func TestGoogleMeetCreateConvertAndEdit(t *testing.T) {
 				} else if success {
 					if err != nil || remote.RemoteID != id || writes != 1 || !calendarGoogleMeetJSON(remote.OnlineMeeting) || !calendarUpdateMatchesDraft(remote, draft) {
 						t.Fatalf("remote=%#v err=%v writes=%d", remote, err, writes)
+					}
+					if mode == "recurring" && !calendarRecurrenceMatchesDraft(remote.Recurrence, draft) {
+						t.Fatalf("Meet series lost its repeat settings: %s", remote.Recurrence)
 					}
 					if mode == "pending" && calendarGoogleMeetConfirmed(remote.OnlineMeeting) {
 						t.Fatal("pending link claimed ready")
@@ -427,8 +430,8 @@ func TestGoogleMeetEditAccessRestrictsInvitationsAndRecurringEvents(t *testing.T
 	}
 	event.ResponseStatus = "organizer"
 	event.SeriesRemoteID = "master"
-	if _, reason, _ := h.calendarEventEditAccess(t.Context(), event); !strings.Contains(reason, "Recurring") {
-		t.Fatal("recurring online edit available")
+	if reason := calendarEventEditRestriction(event); reason != "" {
+		t.Fatal("organizer cannot edit a date of a Meet series", reason)
 	}
 }
 

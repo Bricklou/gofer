@@ -47,6 +47,7 @@ func CalendarTeamsOption(data CalendarTeamsData) templ.Component {
 			retryLabel = "Retry Google Meet availability check"
 		}
 		removable := data.State == "existing" && data.Provider == "gmail"
+		replaceable := data.State == "existing" && data.Provider == "outlook" && data.Replaceable
 		if data.State == "existing" || data.State == "other-online" {
 			name = ""
 		}
@@ -81,7 +82,7 @@ func CalendarTeamsOption(data CalendarTeamsData) templ.Component {
 				var templ_7745c5c3_Var4 string
 				templ_7745c5c3_Var4, templ_7745c5c3_Err = templ.JoinStringErrs(title)
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/calendar_teams.templ`, Line: 30, Col: 11}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/calendar_teams.templ`, Line: 31, Col: 11}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var4))
 				if templ_7745c5c3_Err != nil {
@@ -130,6 +131,11 @@ func CalendarTeamsOption(data CalendarTeamsData) templ.Component {
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
+			} else if replaceable {
+				templ_7745c5c3_Err = switchcomp.Switch(switchcomp.Props{ID: id, Value: "true", Checked: true, Attributes: templ.Attributes{"data-calendar-teams-toggle": "", "data-calendar-teams-available": "true", "data-calendar-teams-replace-toggle": "", "data-on-change": onAction("toggleCalendarTeamsReplacement", actionElement)}}).Render(ctx, templ_7745c5c3_Buffer)
+				if templ_7745c5c3_Err != nil {
+					return templ_7745c5c3_Err
+				}
 			} else {
 				templ_7745c5c3_Err = switchcomp.Switch(switchcomp.Props{ID: id, Name: name, Value: "true", Checked: data.State == "existing", Disabled: !available, Attributes: templ.Attributes{"data-calendar-teams-toggle": "", "data-calendar-teams-available": strconv.FormatBool(available)}}).Render(ctx, templ_7745c5c3_Buffer)
 				if templ_7745c5c3_Err != nil {
@@ -152,7 +158,7 @@ func CalendarTeamsOption(data CalendarTeamsData) templ.Component {
 				var templ_7745c5c3_Var6 string
 				templ_7745c5c3_Var6, templ_7745c5c3_Err = templ.JoinStringErrs(name)
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/calendar_teams.templ`, Line: 51, Col: 72}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/calendar_teams.templ`, Line: 54, Col: 72}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var6))
 				if templ_7745c5c3_Err != nil {
@@ -165,7 +171,7 @@ func CalendarTeamsOption(data CalendarTeamsData) templ.Component {
 				var templ_7745c5c3_Var7 string
 				templ_7745c5c3_Var7, templ_7745c5c3_Err = templ.JoinStringErrs(draftName)
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/calendar_teams.templ`, Line: 52, Col: 41}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/calendar_teams.templ`, Line: 55, Col: 41}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var7))
 				if templ_7745c5c3_Err != nil {
@@ -235,7 +241,7 @@ func CalendarTeamsOption(data CalendarTeamsData) templ.Component {
 				var templ_7745c5c3_Var10 templ.SafeURL
 				templ_7745c5c3_Var10, templ_7745c5c3_Err = templ.JoinURLErrs(templ.SafeURL(data.JoinURL))
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/calendar_teams.templ`, Line: 65, Col: 73}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/calendar_teams.templ`, Line: 68, Col: 73}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var10))
 				if templ_7745c5c3_Err != nil {
@@ -248,7 +254,7 @@ func CalendarTeamsOption(data CalendarTeamsData) templ.Component {
 				var templ_7745c5c3_Var11 string
 				templ_7745c5c3_Var11, templ_7745c5c3_Err = templ.JoinStringErrs(data.JoinURL)
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/calendar_teams.templ`, Line: 65, Col: 198}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/calendar_teams.templ`, Line: 68, Col: 198}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var11))
 				if templ_7745c5c3_Err != nil {
@@ -265,6 +271,26 @@ func CalendarTeamsOption(data CalendarTeamsData) templ.Component {
 			}
 			if removable {
 				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 16, "<p data-calendar-meet-removal hidden role=\"status\" class=\"mt-2 text-xs text-muted-foreground\">The Meet link is removed when you save. Guests are sent the update.</p>")
+				if templ_7745c5c3_Err != nil {
+					return templ_7745c5c3_Err
+				}
+			}
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 17, " ")
+			if templ_7745c5c3_Err != nil {
+				return templ_7745c5c3_Err
+			}
+			if replaceable {
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 18, "<div data-calendar-teams-replace hidden role=\"status\" class=\"mt-2 space-y-2 rounded-md border border-border bg-muted/40 p-3 text-xs leading-relaxed text-muted-foreground\"><p class=\"font-medium text-foreground\">Microsoft doesn’t allow turning Teams off on a meeting.</p><p>Instead, Gofer can replace it: when you save, it creates a copy of this meeting without Teams, then deletes this one.</p><ul class=\"list-disc space-y-1 pl-4\"><li>Guests get a cancellation for this meeting and an invitation to the copy, so their replies start over.</li>")
+				if templ_7745c5c3_Err != nil {
+					return templ_7745c5c3_Err
+				}
+				if data.Series {
+					templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 19, "<li>The whole series is created again from its first date. Changes made to single dates aren’t kept.</li>")
+					if templ_7745c5c3_Err != nil {
+						return templ_7745c5c3_Err
+					}
+				}
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 20, "<li>The description is copied as it is above, including Microsoft’s Teams joining details. Delete them there if you don’t want them in the copy.</li></ul><label class=\"flex items-start gap-2 text-foreground\"><input type=\"checkbox\" class=\"mt-0.5\" data-calendar-teams-replace-confirm> <span>Replace this meeting with a copy without Teams</span></label></div>")
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}

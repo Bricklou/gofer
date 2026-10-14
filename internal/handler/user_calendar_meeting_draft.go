@@ -25,7 +25,7 @@ func (p *userCalendarRequest) attachMeetingDraft(ctx context.Context, source sto
 		if target != "create:"+p.create.RequestID() || draft.RequestID != p.create.RequestID() {
 			return storage.ErrCalendarCreateConflict
 		}
-	} else if provider != "gmail" || target != "event:"+p.event.Event().ID || calendarEventIsSeries(p.event.Event()) {
+	} else if provider != "gmail" || target != "event:"+p.event.Event().ID {
 		return storage.ErrCalendarEventChanged
 	}
 	original := p.actionSource()
@@ -202,7 +202,7 @@ func (h *Handler) userCalendarMeetingDraftRequest(w http.ResponseWriter, r *http
 			if err := edit.mutationAccess(ctx, false); err != nil {
 				return err
 			}
-			if calendarStoredGoogleMeet(event.Event()) || calendarEventIsSeries(event.Event()) {
+			if calendarStoredGoogleMeet(event.Event()) {
 				return userCalendarFormFailure{403, "A Meet conference cannot be added to this event."}
 			}
 			p.meetingEvent = event

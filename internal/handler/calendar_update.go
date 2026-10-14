@@ -41,9 +41,6 @@ func calendarEventEditRestriction(event storage.CalendarEvent) string {
 	if calendarStoredEditableOnline(event) && !calendarCachedOrganizer(event) {
 		return "Only the organizer can edit an online meeting."
 	}
-	if calendarStoredEditableOnline(event) && calendarEventIsSeries(event) {
-		return "Recurring online meetings cannot be edited in Gofer yet."
-	}
 	return ""
 }
 
@@ -198,11 +195,21 @@ func calendarEditData(event storage.CalendarEvent, source storage.CalendarSource
 		data.TeamsState = "other-online"
 		if calendarOutlookTeamsJSON(calendarOutlookCachedMeetingJSON(event)) {
 			data.TeamsState = "existing"
+			// Microsoft can't turn Teams off, so the organizer may replace the
+			// meeting with a copy: the dialog creates it, then sends this delete.
+			if !occurrence && calendarCachedOrganizer(event) {
+				values := url.Values{"version": {event.ETag}}
+				if series {
+					values.Set("scope", "series")
+					values.Set("series_id", event.RemoteID)
+				}
+				data.TeamsReplaceDelete = values.Encode()
+			}
 		}
 	} else if calendarStoredGoogleMeet(event) {
 		data.TeamsState = "existing"
 		data.MeetingJoinURL = calendar.MeetingJoinURL(event.OnlineMeetingJSON)
-	} else if series || occurrence {
+	} else if occurrence && source.Provider == providers.ProviderOutlook {
 		data.TeamsState = "recurring"
 	}
 	if event.AllDay {
@@ -435,7 +442,7 @@ func (h *Handler) handleUpdateCalendarEvent(w http.ResponseWriter, r *http.Reque
 	}
 	restriction := calendarUpdateSavedRestriction(confirmed, draft)
 	if instance {
-		restriction = calendarOccurrenceRestriction(remote, event.SeriesRemoteID)
+		restriction = calendarOccurrenceRestriction(confirmed, event.SeriesRemoteID)
 	}
 	if remote.RemoteID != event.RemoteID || strings.TrimSpace(remote.ETag) == "" || restriction != "" || ((draft.Recurrence != nil || instance) && !calendarUpdateMatchesDraft(remote, draft)) {
 		calendarUpdateFailure(w, http.StatusBadGateway, "The provider's saved event could not be confirmed. Refresh the calendar and reopen the event.", true, false)

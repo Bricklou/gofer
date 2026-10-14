@@ -171,20 +171,6 @@ func (h *Handler) handleUserCreateCalendarEvent(w http.ResponseWriter, r *http.R
 				}
 			}
 			response = map[string]any{"event_id": result.EventID, "source_id": source.ID, "replayed": replayed, "hidden": source.IsHidden, "notify_guests": len(draft.Guests) > 0}
-			if draft.TeamsMeeting || draft.GoogleMeetMeeting {
-				var saved storage.CalendarEvent
-				readErr := h.userAccounts.WithAccountForUser(operation, owner, source.AccountID, func(_ *config.AccountStore, db *storage.DB) error {
-					var err error
-					saved, err = db.GetCalendarEvent(operation, owner, result.EventID)
-					return err
-				})
-				if draft.TeamsMeeting {
-					response["teams_unconfirmed"] = readErr != nil || !calendarTeamsLinkConfirmed(calendarOutlookCachedMeetingJSON(saved))
-				}
-				if draft.GoogleMeetMeeting {
-					response["google_meet_unconfirmed"] = readErr != nil || !calendarGoogleMeetConfirmed(json.RawMessage(saved.OnlineMeetingJSON))
-				}
-			}
 			return nil
 		})
 		if err != nil {
@@ -195,6 +181,26 @@ func (h *Handler) handleUserCreateCalendarEvent(w http.ResponseWriter, r *http.R
 			response["refresh_pending"] = !h.refreshUserCalendarCreatedSeries(ctx, source, draft)
 		} else if !replayed {
 			h.userIMAP.Events().Publish(mail.Event{Type: mail.EventCalendarChanged, UserID: owner, AccountID: source.AccountID, Payload: map[string]any{"source_id": source.ID, "event_id": result.EventID}})
+		}
+		// A series is cached as its dates, so its meeting is read from one of
+		// them once they are refreshed.
+		if draft.TeamsMeeting || draft.GoogleMeetMeeting {
+			var saved storage.CalendarEvent
+			readErr := h.userAccounts.WithAccountForUser(ctx, owner, source.AccountID, func(_ *config.AccountStore, db *storage.DB) error {
+				var err error
+				if draft.Recurrence != nil {
+					saved, err = db.GetCalendarSeriesOccurrence(ctx, owner, source.ID, result.RemoteID)
+				} else {
+					saved, err = db.GetCalendarEvent(ctx, owner, result.EventID)
+				}
+				return err
+			})
+			if draft.TeamsMeeting {
+				response["teams_unconfirmed"] = readErr != nil || !calendarTeamsLinkConfirmed(calendarOutlookCachedMeetingJSON(saved))
+			}
+			if draft.GoogleMeetMeeting {
+				response["google_meet_unconfirmed"] = readErr != nil || !calendarGoogleMeetConfirmed(json.RawMessage(saved.OnlineMeetingJSON))
+			}
 		}
 		return nil
 	})

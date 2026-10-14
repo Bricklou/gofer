@@ -157,6 +157,9 @@ func TestOutlookTeamsCreationAndConversion(t *testing.T) {
 					for key, value := range payload {
 						current[key] = value
 					}
+					if _, ok := payload["recurrence"]; ok {
+						current["type"] = "seriesMaster"
+					}
 					current["changeKey"] = "v2"
 					content := rich + `<hr><p><a href="https://teams.microsoft.com/l/meetup-join/test">Join Teams meeting</a></p>`
 					if mode == "body-lost" {
@@ -201,7 +204,7 @@ func TestOutlookTeamsCreationAndConversion(t *testing.T) {
 				} else {
 					remote, err = createOutlookCalendarEvent(t.Context(), "token", "primary", draft)
 				}
-				ok := mode == "success" || mode == "default-teams" || mode == "delayed-link" || mode == "guests" || mode == "personal-success" || mode == "personal-body-link" || mode == "personal-unknown-provider" || mode == "personal-legacy-provider"
+				ok := mode == "success" || mode == "default-teams" || mode == "delayed-link" || mode == "guests" || mode == "personal-success" || mode == "personal-body-link" || mode == "personal-unknown-provider" || mode == "personal-legacy-provider" || mode == "recurring"
 				if ok {
 					if err != nil || writes != 1 || !calendarOutlookTeamsJSON(remote.OnlineMeeting) || calendar.MeetingJoinURL(string(remote.OnlineMeeting)) == "" || !strings.Contains(remote.Description, rich) {
 						t.Fatalf("remote=%#v err=%v writes=%d", remote, err, writes)
