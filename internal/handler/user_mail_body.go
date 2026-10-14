@@ -6,11 +6,11 @@ import (
 	"errors"
 	"io"
 	"net/http"
-	"os"
 	"strconv"
 
 	"github.com/cristianadrielbraun/gofer/internal/mail/message"
 	"github.com/cristianadrielbraun/gofer/internal/storage"
+	"github.com/cristianadrielbraun/gofer/internal/store"
 )
 
 // Body reads use the local cache, optionally populated by the routed IMAP worker.
@@ -88,7 +88,7 @@ load:
 	}
 	if original && body == nil && rawPath != "" {
 		// Copy/parse saved MIME without pinning a database or writing a cached path.
-		if file, err := os.Open(rawPath); err == nil {
+		if file, err := store.OpenMessageFile(rawPath); err == nil {
 			raw, readErr := io.ReadAll(io.LimitReader(file, 35<<20+1))
 			_ = file.Close()
 			if readErr == nil && len(raw) <= 35<<20 {

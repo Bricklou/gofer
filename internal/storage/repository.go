@@ -12,7 +12,6 @@ import (
 	"html/template"
 	"log"
 	"math"
-	"os"
 	"regexp"
 	"strconv"
 	"strings"
@@ -22,6 +21,7 @@ import (
 	avatarresolver "github.com/cristianadrielbraun/gofer/internal/avatar"
 	mailmessage "github.com/cristianadrielbraun/gofer/internal/mail/message"
 	"github.com/cristianadrielbraun/gofer/internal/models"
+	"github.com/cristianadrielbraun/gofer/internal/store"
 	"github.com/google/uuid"
 )
 
@@ -56,14 +56,14 @@ func truncatePreview(s string) string {
 
 func previewFromBodyPaths(textPath, htmlPath string) string {
 	if textPath != "" {
-		if data, err := os.ReadFile(textPath); err == nil && len(data) > 0 {
+		if data, err := store.ReadMessageFile(textPath); err == nil && len(data) > 0 {
 			if preview := mailmessage.PreviewFromText(string(data)); preview != "" {
 				return preview
 			}
 		}
 	}
 	if htmlPath != "" {
-		if data, err := os.ReadFile(htmlPath); err == nil && len(data) > 0 {
+		if data, err := store.ReadMessageFile(htmlPath); err == nil && len(data) > 0 {
 			if preview := mailmessage.PreviewFromHTML(data); preview != "" {
 				return preview
 			}
@@ -1120,11 +1120,11 @@ func (db *DB) reindexMessagesSearchTx(ctx context.Context, tx *sql.Tx, messageID
 			continue
 		}
 		if doc.bodyTextPath.Valid && doc.bodyTextPath.String != "" {
-			if body, readErr := os.ReadFile(doc.bodyTextPath.String); readErr == nil {
+			if body, readErr := store.ReadMessageFile(doc.bodyTextPath.String); readErr == nil {
 				doc.body = string(body)
 			}
 		} else if doc.bodyHTMLPath.Valid && doc.bodyHTMLPath.String != "" {
-			if body, readErr := os.ReadFile(doc.bodyHTMLPath.String); readErr == nil {
+			if body, readErr := store.ReadMessageFile(doc.bodyHTMLPath.String); readErr == nil {
 				doc.body = mailmessage.TextFromHTML(body)
 			}
 		}
@@ -5438,7 +5438,7 @@ func (db *DB) getThreadMessages(ctx context.Context, accountID, threadID, userID
 			item.References = refs.String
 		}
 		if bodyTextPath.Valid && bodyTextPath.String != "" {
-			if data, err := os.ReadFile(bodyTextPath.String); err == nil {
+			if data, err := store.ReadMessageFile(bodyTextPath.String); err == nil {
 				item.TextBody = strings.TrimSpace(string(data))
 			} else {
 				item.TextBody = item.Preview
@@ -5572,18 +5572,18 @@ func (db *DB) getEmailByID(ctx context.Context, id, userID string) (*models.Emai
 	email.References = references
 
 	if bodyHTMLPath.Valid && bodyHTMLPath.String != "" {
-		if data, err := os.ReadFile(bodyHTMLPath.String); err == nil {
+		if data, err := store.ReadMessageFile(bodyHTMLPath.String); err == nil {
 			email.HTMLBody = string(data)
 		}
 	}
 	if bodyHTMLOriginalPath.Valid && bodyHTMLOriginalPath.String != "" {
-		if data, err := os.ReadFile(bodyHTMLOriginalPath.String); err == nil {
+		if data, err := store.ReadMessageFile(bodyHTMLOriginalPath.String); err == nil {
 			email.OriginalHTMLBody = string(data)
 		}
 	}
 
 	if bodyTextPath.Valid && bodyTextPath.String != "" {
-		data, err := os.ReadFile(bodyTextPath.String)
+		data, err := store.ReadMessageFile(bodyTextPath.String)
 		if err == nil {
 			email.TextBody = strings.TrimSpace(string(data))
 			email.Body = template.HTML("<pre style=\"white-space:pre-wrap;word-wrap:break-word;font-family:inherit\">" + template.HTML(template.HTMLEscapeString(string(data))) + "</pre>")
@@ -5592,7 +5592,7 @@ func (db *DB) getEmailByID(ctx context.Context, id, userID string) (*models.Emai
 			email.Body = template.HTML(fmt.Sprintf("<p>%s</p>", snippet))
 		}
 	} else if bodyHTMLPath.Valid && bodyHTMLPath.String != "" {
-		data, err := os.ReadFile(bodyHTMLPath.String)
+		data, err := store.ReadMessageFile(bodyHTMLPath.String)
 		if err == nil {
 			email.TextBody = stripHTMLTags(string(data))
 			email.Body = template.HTML(data)
@@ -6611,7 +6611,7 @@ func (db *DB) getEmailBody(ctx context.Context, id, userID string) ([]byte, erro
 	}
 
 	if bodyHTMLPath.Valid && bodyHTMLPath.String != "" {
-		data, err := os.ReadFile(bodyHTMLPath.String)
+		data, err := store.ReadMessageFile(bodyHTMLPath.String)
 		if err != nil {
 			return nil, fmt.Errorf("read html body: %w", err)
 		}
@@ -6619,7 +6619,7 @@ func (db *DB) getEmailBody(ctx context.Context, id, userID string) ([]byte, erro
 	}
 
 	if bodyTextPath.Valid && bodyTextPath.String != "" {
-		data, err := os.ReadFile(bodyTextPath.String)
+		data, err := store.ReadMessageFile(bodyTextPath.String)
 		if err != nil {
 			return nil, fmt.Errorf("read text body: %w", err)
 		}
@@ -6670,7 +6670,7 @@ func (db *DB) getEmailOriginalHTMLBody(ctx context.Context, id, userID string) (
 	if !bodyHTMLOriginalPath.Valid || bodyHTMLOriginalPath.String == "" {
 		return nil, nil
 	}
-	data, err := os.ReadFile(bodyHTMLOriginalPath.String)
+	data, err := store.ReadMessageFile(bodyHTMLOriginalPath.String)
 	if err != nil {
 		return nil, fmt.Errorf("read original html body: %w", err)
 	}

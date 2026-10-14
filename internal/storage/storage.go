@@ -16,6 +16,7 @@ import (
 	"sync"
 
 	mailmessage "github.com/cristianadrielbraun/gofer/internal/mail/message"
+	"github.com/cristianadrielbraun/gofer/internal/store"
 	_ "modernc.org/sqlite"
 )
 
@@ -3500,7 +3501,7 @@ func migrateV68ToV69(tx *sql.Tx) error {
 	}
 
 	for _, body := range bodies {
-		raw, err := os.ReadFile(body.path)
+		raw, err := store.ReadMessageFile(body.path)
 		if err != nil {
 			continue
 		}

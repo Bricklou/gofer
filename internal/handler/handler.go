@@ -1775,7 +1775,7 @@ func (h *Handler) originalBodyFromStoredMessage(ctx context.Context, emailID str
 			return nil, err
 		}
 		if storageInfo.RawPath != "" {
-			if raw, readErr := os.ReadFile(storageInfo.RawPath); readErr == nil {
+			if raw, readErr := store.ReadMessageFile(storageInfo.RawPath); readErr == nil {
 				if extracted, extractErr := message.ExtractHTMLBody(bytes.NewReader(raw)); extractErr == nil && len(extracted) > 0 {
 					body = extracted
 					if p, storeErr := h.blobStore.StoreBodyOriginalHTML(ctx, storageInfo.AccountID, msgID, extracted); storeErr == nil {

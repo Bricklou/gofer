@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"os"
 	"strconv"
 	"strings"
 	"time"
@@ -14,6 +13,7 @@ import (
 	"github.com/cristianadrielbraun/gofer/internal/calendar"
 	"github.com/cristianadrielbraun/gofer/internal/mail/message"
 	"github.com/cristianadrielbraun/gofer/internal/storage"
+	"github.com/cristianadrielbraun/gofer/internal/store"
 	"github.com/cristianadrielbraun/gofer/internal/views"
 	ical "github.com/emersion/go-ical"
 	"github.com/emersion/go-message/mail"
@@ -269,7 +269,7 @@ func (h *Handler) readMailCalendarEvents(ctx context.Context, emailID string) ([
 	}
 	var raw []byte
 	if info.RawPath != "" {
-		file, err := os.Open(info.RawPath)
+		file, err := store.OpenMessageFile(info.RawPath)
 		if err == nil {
 			raw, err = io.ReadAll(io.LimitReader(file, message.CalendarIncomingMaxSize+1))
 			file.Close()

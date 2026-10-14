@@ -8,7 +8,6 @@ import (
 	"io"
 	"log"
 	"net/http"
-	"os"
 	"strconv"
 	"strings"
 	"time"
@@ -16,6 +15,7 @@ import (
 	"github.com/cristianadrielbraun/gofer/internal/mail"
 	"github.com/cristianadrielbraun/gofer/internal/mail/message"
 	"github.com/cristianadrielbraun/gofer/internal/storage"
+	"github.com/cristianadrielbraun/gofer/internal/store"
 	ical "github.com/emersion/go-ical"
 )
 
@@ -59,7 +59,7 @@ func (h *Handler) processCalendarIncomingMessage(ctx context.Context, candidate 
 	}
 	var raw []byte
 	if info.RawPath != "" {
-		file, openErr := os.Open(info.RawPath)
+		file, openErr := store.OpenMessageFile(info.RawPath)
 		if openErr == nil {
 			raw, err = io.ReadAll(io.LimitReader(file, message.CalendarIncomingMaxSize+1))
 			file.Close()
