@@ -207,16 +207,27 @@ templ MailListToolbar(accounts []models.Account, activeFolder string, viewMode s
 					Size:       button.SizeIcon,
 					Class:      "h-7 w-7",
 					Disabled:   true,
-					Attributes: templ.Attributes{"data-mail-selection-action": "archive", "aria-label": "Archive selected messages"},
+					Attributes: templ.Attributes{"data-mail-selection-action": "archive", "aria-label": mailArchiveSelectionLabel(mailFolderIDIsArchive(activeFolder, accounts))},
 				}) {
-					@icon.Archive(icon.Props{Class: "size-3.5"})
+					<span class={ mailHiddenClass("", mailFolderIDIsArchive(activeFolder, accounts)) } data-mail-archive-icon>
+						@icon.Archive(icon.Props{Class: "size-3.5"})
+					</span>
+					<span class={ mailHiddenClass("", !mailFolderIDIsArchive(activeFolder, accounts)) } data-mail-unarchive-icon>
+						@icon.ArchiveRestore(icon.Props{Class: "size-3.5"})
+					</span>
 				}
 			}
 			@tooltip.Content(tooltip.ContentProps{
 				Position:  tooltip.PositionBottom,
 				ShowArrow: true,
 			}) {
-				Archive
+				<span data-mail-archive-tooltip>
+					if mailFolderIDIsArchive(activeFolder, accounts) {
+						Move to Inbox
+					} else {
+						Archive
+					}
+				</span>
 			}
 		}
 		@tooltip.Tooltip() {

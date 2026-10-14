@@ -211,6 +211,7 @@ func foreignMessageActionRequests(fixture messageActionOwnershipFixture) []messa
 		{name: "bulk read", method: http.MethodPost, path: "/api/messages/read", body: bulk(""), contentType: "application/json", handle: fixture.handler.handleMarkMessagesRead},
 		{name: "bulk star", method: http.MethodPost, path: "/api/messages/star", body: bulk(`,"state":"starred"`), contentType: "application/json", handle: fixture.handler.handleMarkMessagesStarred},
 		{name: "bulk archive", method: http.MethodPost, path: "/api/messages/archive", body: bulk(""), contentType: "application/json", handle: fixture.handler.handleArchiveMessages},
+		{name: "bulk unarchive", method: http.MethodPost, path: "/api/messages/unarchive", body: bulk(""), contentType: "application/json", handle: fixture.handler.handleUnarchiveMessages},
 		{name: "bulk delete", method: http.MethodPost, path: "/api/messages/delete", body: bulk(""), contentType: "application/json", handle: fixture.handler.handleDeleteMessages},
 		{name: "bulk spam", method: http.MethodPost, path: "/api/messages/spam", body: bulk(""), contentType: "application/json", handle: fixture.handler.handleMarkMessagesSpam},
 		{name: "bulk not spam", method: http.MethodPost, path: "/api/messages/not-spam", body: bulk(""), contentType: "application/json", handle: fixture.handler.handleMarkMessagesNotSpam},
@@ -278,6 +279,7 @@ func TestBulkMessageActionsRejectMixedOwnershipBeforeAnyMutation(t *testing.T) {
 			return mixedMessageActionBody(f)[:len(mixedMessageActionBody(f))-1] + `,"state":"starred"}`
 		}, handle: func(h *Handler) http.HandlerFunc { return h.handleMarkMessagesStarred }},
 		{name: "archive", path: "/api/messages/archive", body: mixedMessageActionBody, handle: func(h *Handler) http.HandlerFunc { return h.handleArchiveMessages }},
+		{name: "unarchive", path: "/api/messages/unarchive", body: mixedMessageActionBody, handle: func(h *Handler) http.HandlerFunc { return h.handleUnarchiveMessages }},
 		{name: "delete", path: "/api/messages/delete", body: mixedMessageActionBody, handle: func(h *Handler) http.HandlerFunc { return h.handleDeleteMessages }},
 		{name: "spam", path: "/api/messages/spam", body: mixedMessageActionBody, handle: func(h *Handler) http.HandlerFunc { return h.handleMarkMessagesSpam }},
 		{name: "label", path: "/api/messages/label", body: func(f messageActionOwnershipFixture) string {

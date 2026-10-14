@@ -210,6 +210,7 @@ func (h *Handler) RegisterUserStorageRoutes(ctx context.Context, mux *http.Serve
 	private("GET /mail/folder/{id}/ids", routed.handleMailItemIDs)
 	private("GET /mail/thread/{threadId}/subitems", routed.handleThreadSubItems)
 	private("GET /email/{id}", routed.handleEmailPartial)
+	private("GET /email/{id}/move", routed.handleMoveDialog)
 	private("GET /email/{id}/body", routed.handleUserEmailBody)
 	private("GET /api/inline-content/{messageID}/{contentID}", routed.handleUserInlineContent)
 	// Signed message-file links carry their owner instead of a session. The

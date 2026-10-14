@@ -1325,6 +1325,16 @@ html:root[data-theme="express"] :is(.account-wizard-card-footer, .account-wizard
   visibility: var(--xp-icon-paths, visible);
 }
 
+/* Move to Inbox is Archive's package with Tango's up arrow rising out of it,
+   both drawn large so the arrow stays legible at 16px. It comes
+   after the rule above because it draws two pictures. */
+[data-theme="express"] svg[data-lucide="archive-restore"] {
+  background:
+    image-set(url("/assets/icons/express/go-up-16.png") 1x, url("/assets/icons/express/go-up-32.png") 2x) right -2px top / 90% no-repeat,
+    image-set(url("/assets/icons/express/package-16.png") 1x, url("/assets/icons/express/package-32.png") 2x) center / contain no-repeat;
+  --xp-icon-paths: hidden;
+}
+
 /* === CALENDAR === */
 
 /* Previous/next and the week zoom buttons are separate raised buttons. */
@@ -2270,4 +2280,22 @@ html:root[data-theme="express"] :is([data-calendar-month-event], [data-calendar-
 
 [data-theme="express"] *::-webkit-scrollbar-corner {
   background: var(--xp-face);
+}
+
+/* === MOVE TO DIALOG === */
+
+/* The chosen folder is highlighted like a selected list item. */
+[data-theme="express"] [data-mail-move-folder][aria-selected="true"] {
+  border-radius: 0;
+  background: var(--xp-select);
+  color: var(--xp-select-foreground);
+}
+
+/* The folder list is a sunken white list box on the dialog's silver. */
+[data-theme="express"] [data-mail-move-list] {
+  border: none;
+  border-radius: 0;
+  background: var(--xp-light);
+  box-shadow: var(--xp-bevel-in);
+  padding: 4px;
 }

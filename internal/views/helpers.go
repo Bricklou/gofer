@@ -84,6 +84,50 @@ func mailEmailIsSpam(email *models.Email) bool {
 	return email.FolderID == "spam" || mailRoleIsSpam(email.FolderRole)
 }
 
+func mailRoleIsArchive(role string) bool {
+	return strings.TrimSpace(strings.ToLower(role)) == "archive"
+}
+
+func mailFolderIDIsArchive(folderID string, accounts []models.Account) bool {
+	if strings.TrimSpace(folderID) == "archive" {
+		return true
+	}
+	for _, account := range accounts {
+		for _, folder := range account.Folders {
+			if folder.ID == folderID && mailRoleIsArchive(folder.Role) {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+func mailEmailIsArchived(email *models.Email) bool {
+	return email != nil && (email.FolderID == "archive" || mailRoleIsArchive(email.FolderRole))
+}
+
+type mailMoveTarget struct {
+	Folder models.Folder
+	Depth  int
+}
+
+// mailMoveTargets flattens an account's folder tree for the Move to dialog,
+// leaving out Starred, which is not a place.
+func mailMoveTargets(folders []models.Folder) []mailMoveTarget {
+	var targets []mailMoveTarget
+	var walk func([]models.Folder, int)
+	walk = func(folders []models.Folder, depth int) {
+		for _, folder := range folders {
+			if folder.Role != "starred" {
+				targets = append(targets, mailMoveTarget{Folder: folder, Depth: depth})
+			}
+			walk(folder.Children, depth+1)
+		}
+	}
+	walk(folders, 0)
+	return targets
+}
+
 func mailRoleIsTrash(role string) bool {
 	return strings.TrimSpace(strings.ToLower(role)) == "trash"
 }
@@ -115,6 +159,20 @@ func mailDeleteActionClass(size, normal string, permanent bool) string {
 		return size + " border border-red-500/35 bg-red-500/12 text-red-700 shadow-[0_1px_2px_rgba(0,0,0,0.04)] hover:bg-red-500/20 hover:text-red-800 dark:border-red-300/20 dark:bg-red-300/10 dark:text-red-300 dark:hover:text-red-200"
 	}
 	return size + " " + normal
+}
+
+func mailArchiveSelectionLabel(unarchive bool) string {
+	if unarchive {
+		return "Move selected messages to Inbox"
+	}
+	return "Archive selected messages"
+}
+
+func mailHiddenClass(class string, hidden bool) string {
+	if hidden {
+		return strings.TrimSpace(class + " hidden")
+	}
+	return class
 }
 
 func mailDeleteSelectionLabel(permanent bool) string {

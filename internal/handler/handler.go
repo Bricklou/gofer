@@ -409,6 +409,7 @@ func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
 
 	mux.HandleFunc("GET /", h.handleIndex)
 	mux.HandleFunc("GET /email/{id}", h.handleEmailPartial)
+	mux.HandleFunc("GET /email/{id}/move", h.handleMoveDialog)
 	mux.HandleFunc("GET /api/mail/{id}/calendar", h.handleMailCalendarFooter)
 	mux.HandleFunc("GET /email/{id}/body", h.handleEmailBody)
 	mux.HandleFunc("GET /email/{id}/body/translated", h.handleTranslatedEmailBody)
@@ -533,6 +534,7 @@ func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("POST /api/messages/read", h.handleMarkMessagesRead)
 	mux.HandleFunc("POST /api/messages/star", h.handleMarkMessagesStarred)
 	mux.HandleFunc("POST /api/messages/archive", h.handleArchiveMessages)
+	mux.HandleFunc("POST /api/messages/unarchive", h.handleUnarchiveMessages)
 	mux.HandleFunc("POST /api/messages/delete", h.handleDeleteMessages)
 	mux.HandleFunc("POST /api/messages/spam", h.handleMarkMessagesSpam)
 	mux.HandleFunc("POST /api/messages/not-spam", h.handleMarkMessagesNotSpam)
@@ -708,6 +710,39 @@ func (h *Handler) handleEmailPartial(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 		return views.MailViewContent(email, thread), nil
+	})
+}
+
+// handleMoveDialog lists every account's folders for the Move to dialog.
+func (h *Handler) handleMoveDialog(w http.ResponseWriter, r *http.Request) {
+	emailID := r.PathValue("id")
+	if emailID == "" {
+		http.NotFound(w, r)
+		return
+	}
+	ctx := r.Context()
+	h.renderMailboxView(w, r, &ctx, func(h *Handler) (templ.Component, error) {
+		userID := h.userID(ctx)
+		folderID := r.URL.Query().Get("folder_id")
+		if folderID != "" {
+			var err error
+			folderID, err = h.resolveFolderID(ctx, userID, folderID)
+			if err != nil {
+				return nil, err
+			}
+		}
+		email, err := h.db.GetEmailByIDForFolderForUser(ctx, emailID, folderID, userID)
+		if err != nil {
+			return nil, err
+		}
+		if email == nil {
+			return nil, sql.ErrNoRows
+		}
+		accounts, err := h.db.GetAccounts(ctx, userID)
+		if err != nil {
+			return nil, err
+		}
+		return views.MailMoveDialog(email, accounts), nil
 	})
 }
 
@@ -5930,6 +5965,51 @@ func (h *Handler) handleArchiveMessages(w http.ResponseWriter, r *http.Request) 
 		updated++
 		h.publishThreadMutation(target.Infos)
 		h.publishMutation(currentInfo.AccountID, archiveFolderID)
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(map[string]int{"updated": updated})
+}
+
+// handleUnarchiveMessages moves archived messages back to their account's Inbox.
+// Messages of a thread that sit in other folders, such as Sent, stay put.
+func (h *Handler) handleUnarchiveMessages(w http.ResponseWriter, r *http.Request) {
+	payload, err := decodeMessageBulkRequest(r)
+	if err != nil {
+		http.Error(w, "invalid request body", http.StatusBadRequest)
+		return
+	}
+	ctx := h.messageMutationContext(r.Context())
+	targets, err := h.resolveOwnedMessageTargets(ctx, messageBulkTargets(payload), strings.TrimSpace(payload.FolderID), false)
+	if err != nil {
+		writeMessageTargetError(w, r, err)
+		return
+	}
+	updated := 0
+
+	for _, target := range targets {
+		var archived []storage.ThreadMessageMutationInfo
+		for _, info := range target.Infos {
+			if info.FolderRole == "archive" {
+				archived = append(archived, info)
+			}
+		}
+		if len(archived) == 0 {
+			continue
+		}
+		accountID := archived[0].AccountID
+		inboxFolderID, _, err := h.db.GetFolderIDByRole(ctx, accountID, "inbox")
+		if err != nil || inboxFolderID == "" {
+			continue
+		}
+		if err := h.queueMessageMoves(ctx, archived, inboxFolderID); err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		updated++
+		h.publishThreadMutation(archived)
+		h.publishMutation(accountID, inboxFolderID)
 	}
 
 	w.Header().Set("Content-Type", "application/json")

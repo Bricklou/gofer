@@ -1472,11 +1472,13 @@ document.addEventListener("DOMContentLoaded", function () {
     document.body.addEventListener("htmx:afterSettle", function () {
       seedMailSelectionFromActive()
       syncMailDeleteActionState()
+      syncMailArchiveActionState()
       syncMailSelectionControls()
     })
 
     seedMailSelectionFromActive()
     syncMailDeleteActionState()
+    syncMailArchiveActionState()
     syncMailSelectionControls()
     setupMailKeyboardShortcuts()
 
@@ -2210,17 +2212,18 @@ document.addEventListener("DOMContentLoaded", function () {
         return
       }
 
-      if (action === "archive" || action === "delete" || action === "star" || action === "spam" || action === "not-spam") {
+      if (action === "archive" && mailFolderIsArchive(currentMailListFolderID())) action = "unarchive"
+      if (action === "archive" || action === "unarchive" || action === "delete" || action === "star" || action === "spam" || action === "not-spam") {
         var targets = selectedMailTargets(ids)
         var current = virtualMailList && virtualMailList.selectedEmailId
-        var removesFromFolder = action === "archive" || action === "delete" || action === "spam" || action === "not-spam"
+        var removesFromFolder = action !== "star"
         if (removesFromFolder && current && ids.indexOf(current) !== -1) setMailViewEmpty()
         if (removesFromFolder) applyOptimisticRemove(ids)
         clearMailSelection()
-        var path = action === "archive" ? "/api/messages/archive" : (action === "delete" ? "/api/messages/delete" : (action === "spam" ? "/api/messages/spam" : (action === "not-spam" ? "/api/messages/not-spam" : "/api/messages/star")))
+        var path = action === "unarchive" ? "/api/messages/unarchive" : action === "archive" ? "/api/messages/archive" : (action === "delete" ? "/api/messages/delete" : (action === "spam" ? "/api/messages/spam" : (action === "not-spam" ? "/api/messages/not-spam" : "/api/messages/star")))
         var extra = action === "star" ? { state: "starred" } : null
         if (action === "delete") extra = { folder_id: currentMailListFolderID() }
-        if (action === "spam" || action === "not-spam") extra = { folder_id: currentMailListFolderID() }
+        if (action === "spam" || action === "not-spam" || action === "unarchive") extra = { folder_id: currentMailListFolderID() }
         sendBulkMessageAction(path, targets, extra).then(function () {
           if (virtualMailList && typeof virtualMailList.refreshCurrentFolder === "function") {
             virtualMailList.refreshCurrentFolder({ noAnimation: action === "star" }).catch(function () {})
@@ -6455,8 +6458,8 @@ document.addEventListener("DOMContentLoaded", function () {
     return '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" data-lucide="' + name + '" class="' + (className || "size-4") + '" aria-hidden="true">' + (MAIL_VIEW_SKELETON_ICONS[name] || "") + '</svg>'
   }
 
-  function mailViewSkeletonToolbarButton(name) {
-    return '<button type="button" disabled tabindex="-1" class="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-ink/25">' + mailViewSkeletonIcon(name) + '</button>'
+  function mailViewSkeletonToolbarButton(name, className) {
+    return '<button type="button" disabled tabindex="-1" class="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-ink/25">' + mailViewSkeletonIcon(name, className) + '</button>'
   }
 
   function mailViewSkeletonReplyButton(name, label) {
@@ -6489,7 +6492,7 @@ document.addEventListener("DOMContentLoaded", function () {
               mailViewSkeletonToolbarButton("archive") +
               mailViewSkeletonToolbarButton("trash-2") +
               '<div>' + mailViewSkeletonToolbarButton("shield-alert").replace('<button ', '<button data-mail-action="spam" ') + '</div>' +
-              mailViewSkeletonToolbarButton("star") +
+              mailViewSkeletonToolbarButton("star", "size-4 text-ink/30") +
               mailViewSkeletonToolbarButton("mail") +
             '</div>' +
             '<div class="mail-view-meta flex items-center gap-2">' +
@@ -15328,6 +15331,34 @@ function mailFolderIsTrash(folderID) {
   return false
 }
 
+function mailFolderIsArchive(folderID) {
+  folderID = String(folderID || "").trim()
+  if (!folderID) return false
+  if (folderID.toLowerCase() === "archive") return true
+  var links = document.querySelectorAll('aside a[hx-get^="/folder/"]')
+  for (var i = 0; i < links.length; i++) {
+    if ((links[i].getAttribute("hx-get") || "") !== "/folder/" + folderID) continue
+    return String(links[i].dataset.folderRole || "").toLowerCase() === "archive"
+  }
+  return false
+}
+
+// In the Archive folder the selection bar's Archive button moves mail back to
+// the Inbox instead.
+function syncMailArchiveActionState() {
+  var button = document.querySelector('[data-mail-selection-action="archive"]')
+  if (!button) return
+  var unarchive = mailFolderIsArchive(mailActionCurrentFolderID())
+  button.setAttribute("aria-label", unarchive ? "Move selected messages to Inbox" : "Archive selected messages")
+  var archiveIcon = button.querySelector("[data-mail-archive-icon]")
+  var inboxIcon = button.querySelector("[data-mail-unarchive-icon]")
+  if (archiveIcon) archiveIcon.classList.toggle("hidden", unarchive)
+  if (inboxIcon) inboxIcon.classList.toggle("hidden", !unarchive)
+  var root = button.closest("[data-tui-popover-root]")
+  var tooltip = root && root.querySelector("[data-mail-archive-tooltip]")
+  if (tooltip) tooltip.textContent = unarchive ? "Move to Inbox" : "Archive"
+}
+
 function syncMailDeleteActionState() {
   var button = document.querySelector('[data-mail-selection-action="delete"]')
   if (!button) return
@@ -15409,17 +15440,113 @@ function refreshAfterLabelMutation(emailId) {
   if (window.htmx) htmx.ajax("GET", mailViewRequestURL(emailId), { target: "#mail-view", swap: "innerHTML" })
 }
 
-function moveMessage(emailId, folderId) {
-  fetch("/api/messages/" + emailId + "/move", {
+function moveMessage(emailId, folderId, thread) {
+  closeMoveDialog()
+  moveMessagesOutOfFolder(emailId, "/api/messages/move", { targets: [{ id: String(emailId), thread: !!thread }], folder_id: folderId })
+}
+
+function unarchiveThread(emailId) {
+  moveMessagesOutOfFolder(emailId, "/api/messages/unarchive", { targets: [{ id: String(emailId), thread: true }], folder_id: mailActionCurrentFolderID() })
+}
+
+function moveMessagesOutOfFolder(emailId, path, body) {
+  var vml = beginOptimisticMailRemoval(emailId)
+  fetch(path, {
     method: "POST",
-    headers: { "Content-Type": "application/x-www-form-urlencoded" },
-    body: "folder_id=" + encodeURIComponent(folderId)
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body)
   })
-    .then(function () {
-      if (virtualMailList) virtualMailList.onNewEmail()
-      refreshSidebarUnread()
+    .then(function (response) {
+      if (!response.ok) throw new Error("move failed")
+      finishOptimisticMailRemoval(vml)
+    })
+    .catch(function () { restoreOptimisticMailRemoval(emailId, vml) })
+}
+
+// The Move to dialog is fetched when asked for: it lists the folders of the
+// email's account, which the page does not otherwise carry.
+function openMoveDialog(emailId, thread) {
+  var params = new URLSearchParams()
+  var folderID = mailActionCurrentFolderID()
+  if (folderID) params.set("folder_id", folderID)
+  var query = params.toString()
+  fetch("/email/" + encodeURIComponent(emailId) + "/move" + (query ? "?" + query : ""))
+    .then(function (response) {
+      if (!response.ok) throw new Error("move dialog unavailable")
+      return response.text()
+    })
+    .then(function (html) {
+      var host = document.getElementById("mail-move-dialog-host")
+      if (!host) {
+        host = document.createElement("div")
+        host.id = "mail-move-dialog-host"
+        document.body.appendChild(host)
+      }
+      host.innerHTML = html
+      if (window.tui && window.tui.dialog) {
+        window.tui.dialog.open("mail-move-dialog")
+        return
+      }
+      var content = host.querySelector("[data-tui-dialog-content]")
+      if (content && !content.open) {
+        try { content.showModal() } catch (_) {}
+      }
     })
     .catch(function () {})
+}
+
+// Clicking a folder only selects it; Move does the move.
+function selectMoveFolder(button) {
+  var dialog = document.getElementById("mail-move-dialog")
+  if (!dialog || !button || button.disabled) return
+  dialog.querySelectorAll('[data-mail-move-folder][aria-selected="true"]').forEach(function (other) {
+    other.setAttribute("aria-selected", "false")
+  })
+  button.setAttribute("aria-selected", "true")
+  var confirm = dialog.querySelector("[data-mail-move-confirm]")
+  if (confirm) confirm.disabled = false
+}
+
+function confirmMoveDialog(emailId, thread) {
+  var selected = document.querySelector('#mail-move-dialog [data-mail-move-folder][aria-selected="true"]')
+  if (!selected) return
+  moveMessage(emailId, selected.getAttribute("data-mail-move-folder"), thread)
+}
+
+// Search hides folders whose name doesn't match, and accounts left with none.
+// A hidden selection is dropped so Move never acts on a folder out of sight.
+function filterMoveFolders(input) {
+  var dialog = document.getElementById("mail-move-dialog")
+  if (!dialog) return
+  var query = String(input && input.value || "").trim().toLowerCase()
+  var anyVisible = false
+  dialog.querySelectorAll("[data-mail-move-account]").forEach(function (account) {
+    var accountVisible = false
+    account.querySelectorAll("[data-mail-move-folder]").forEach(function (folder) {
+      var match = !query || (folder.getAttribute("data-mail-move-name") || "").indexOf(query) !== -1
+      folder.classList.toggle("hidden", !match)
+      if (!match && folder.getAttribute("aria-selected") === "true") {
+        folder.setAttribute("aria-selected", "false")
+        var confirm = dialog.querySelector("[data-mail-move-confirm]")
+        if (confirm) confirm.disabled = true
+      }
+      if (match) accountVisible = true
+    })
+    account.classList.toggle("hidden", !accountVisible)
+    if (accountVisible) anyVisible = true
+  })
+  var empty = dialog.querySelector("[data-mail-move-empty]")
+  if (empty) empty.classList.toggle("hidden", anyVisible)
+}
+
+function closeMoveDialog() {
+  if (!document.getElementById("mail-move-dialog")) return
+  if (window.tui && window.tui.dialog) {
+    window.tui.dialog.close("mail-move-dialog")
+    return
+  }
+  var content = document.querySelector("#mail-move-dialog [data-tui-dialog-content]")
+  if (content && content.open) content.close()
 }
 
 function invalidateMailListItem(emailId) {
