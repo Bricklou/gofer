@@ -450,12 +450,9 @@ templ ComposeSchedulePopover(fromPane bool, buttonClass string) {
 								@selectbox.Value(selectbox.ValueProps{Placeholder: "HH", Class: "font-mono text-sm tabular-nums"})
 							}
 							@selectbox.Content(selectbox.ContentProps{NoSearch: true, DisableExclusive: true, Class: "[&>div>div]:max-h-52"}) {
-								@selectbox.Group() {
-									for hour := 0; hour < 24; hour++ {
-										{{ value := fmt.Sprintf("%02d", hour) }}
-										@selectbox.Item(selectbox.ItemProps{Value: value, Class: "font-mono text-sm tabular-nums"}) {
-											{ value }
-										}
+								@selectbox.Group(selectbox.GroupProps{Attributes: selectbox.LazyItems(scheduleTimeItems(24, 1))}) {
+									@selectbox.Item(selectbox.ItemProps{Value: "00", Class: "font-mono text-sm tabular-nums"}) {
+										00
 									}
 								}
 							}
@@ -466,12 +463,9 @@ templ ComposeSchedulePopover(fromPane bool, buttonClass string) {
 								@selectbox.Value(selectbox.ValueProps{Placeholder: "MM", Class: "font-mono text-sm tabular-nums"})
 							}
 							@selectbox.Content(selectbox.ContentProps{NoSearch: true, DisableExclusive: true, Class: "[&>div>div]:max-h-52"}) {
-								@selectbox.Group() {
-									for minute := 0; minute < 60; minute += 5 {
-										{{ value := fmt.Sprintf("%02d", minute) }}
-										@selectbox.Item(selectbox.ItemProps{Value: value, Class: "font-mono text-sm tabular-nums"}) {
-											{ value }
-										}
+								@selectbox.Group(selectbox.GroupProps{Attributes: selectbox.LazyItems(scheduleTimeItems(60, 5))}) {
+									@selectbox.Item(selectbox.ItemProps{Value: "00", Class: "font-mono text-sm tabular-nums"}) {
+										00
 									}
 								}
 							}

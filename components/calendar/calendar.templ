@@ -125,8 +125,6 @@ templ Calendar(props ...Props) {
 			data-tui-calendar-initial-year={ strconv.Itoa(initialYear) }
 			data-tui-calendar-selected-date={ initialSelectedISO }
 			data-tui-calendar-start-of-week={ int(initialStartOfWeek) }
-			data-tui-calendar-year-min={ strconv.Itoa(yearMenuMin(p)) }
-			data-tui-calendar-year-max={ strconv.Itoa(yearMenuMax(p)) }
 		>
 			<!-- Calendar Header -->
 			<div class="flex w-full items-center gap-2 mb-4">
@@ -143,10 +141,8 @@ templ Calendar(props ...Props) {
 							@selectbox.Value(selectbox.ValueProps{ID: p.ID + "-month-value", Placeholder: monthNames[currentMonth]})
 						}
 						@selectbox.Content(selectbox.ContentProps{NoSearch: true, DisableExclusive: true, Attributes: templ.Attributes{"aria-label": "Choose the Month"}}) {
-							@selectbox.Group() {
-								for i := 0; i < 12; i++ {
-									@selectbox.Item(selectbox.ItemProps{Value: strconv.Itoa(i), Selected: i == currentMonth, Attributes: templ.Attributes{"data-tui-calendar-month-index": strconv.Itoa(i)}}) { { monthNames[i] } }
-								}
+							@selectbox.Group(selectbox.GroupProps{Attributes: selectbox.LazyItems(monthMenuItems(monthNames))}) {
+								@selectbox.Item(selectbox.ItemProps{Value: strconv.Itoa(currentMonth), Selected: true, Attributes: templ.Attributes{"data-tui-calendar-month-index": strconv.Itoa(currentMonth)}}) { { monthNames[currentMonth] } }
 							}
 						}
 					}
@@ -155,9 +151,7 @@ templ Calendar(props ...Props) {
 							@selectbox.Value(selectbox.ValueProps{ID: p.ID + "-year-value", Placeholder: strconv.Itoa(currentYear)})
 						}
 						@selectbox.Content(selectbox.ContentProps{NoSearch: true, DisableExclusive: true, Attributes: templ.Attributes{"aria-label": "Choose the Year"}}) {
-							// Only the shown year is sent; calendar.js copies it into the
-							// other years of the range when the menu is first opened.
-							@selectbox.Group() {
+							@selectbox.Group(selectbox.GroupProps{Attributes: selectbox.LazyItems(yearMenuItems(p))}) {
 								@selectbox.Item(selectbox.ItemProps{Value: strconv.Itoa(currentYear), Selected: true}) { { strconv.Itoa(currentYear) } }
 							}
 						}
@@ -200,4 +194,22 @@ func yearMenuMax(p Props) int {
 		return p.MaxYear
 	}
 	return 2100
+}
+
+// The month and year menus are sent with their selected entry only; the
+// browser builds the rest from these lists (see selectbox.LazyItems).
+func monthMenuItems(names []string) []selectbox.LazyItem {
+	items := make([]selectbox.LazyItem, len(names))
+	for i, name := range names {
+		items[i] = selectbox.LazyItem{Value: strconv.Itoa(i), Label: name}
+	}
+	return items
+}
+
+func yearMenuItems(p Props) []selectbox.LazyItem {
+	var items []selectbox.LazyItem
+	for year := yearMenuMax(p); year >= yearMenuMin(p); year-- {
+		items = append(items, selectbox.LazyItem{Value: strconv.Itoa(year), Label: strconv.Itoa(year)})
+	}
+	return items
 }
