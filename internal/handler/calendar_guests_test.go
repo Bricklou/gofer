@@ -9,11 +9,13 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/cristianadrielbraun/gofer/internal/calendar"
 	"github.com/cristianadrielbraun/gofer/internal/config"
 	"github.com/cristianadrielbraun/gofer/internal/models"
 	"github.com/cristianadrielbraun/gofer/internal/storage"
+	ical "github.com/emersion/go-ical"
 )
 
 func TestCalendarGuestValidation(t *testing.T) {
@@ -289,11 +291,6 @@ func TestCalendarGuestCalDAVSchedulingAndDurableFallback(t *testing.T) {
 					t.Fatal(err)
 				}
 			}
-			repeating := draft
-			repeating.Recurrence = &calendar.RecurrenceDraft{Frequency: "weekly", Interval: 1, Count: 4}
-			if _, err := h.createCalDAVMeeting(t.Context(), source, credentials, repeating); !errors.Is(err, errCalendarUpdateUnsupported) || calendarCreateUncertain(err) || writes != 0 {
-				t.Fatalf("repeating CalDAV meeting reached a write: %v", err)
-			}
 			event, err := h.createCalDAVMeeting(t.Context(), source, credentials, draft)
 			if err != nil || event.ResponseStatus != "organizer" {
 				t.Fatalf("create=%#v err=%v", event, err)
@@ -428,18 +425,57 @@ func TestCalendarMeetingSafetyChecks(t *testing.T) {
 		t.Fatal("delegated meeting accepted")
 	}
 	delete(cal.Events()[0].Props.Get("ATTENDEE").Params, "DELEGATED-TO")
+	// A series is accepted, with dates changed on their own, as long as every
+	// date is this organizer's and follows the series' rule.
 	cal.Events()[0].Props.SetText("RRULE", "FREQ=DAILY")
+	if err := calendarMeetingCalDAVShape(cal, http.Header{}, "host@example.com"); err != nil {
+		t.Fatal(err)
+	}
+	date := cloneCalendarComponent(cal.Events()[0].Component)
+	delete(date.Props, "RRULE")
+	rid := ical.NewProp("RECURRENCE-ID")
+	rid.SetDateTime(time.Date(2026, 10, 3, 7, 0, 0, 0, time.UTC))
+	date.Props.Set(rid)
+	cal.Children = append(cal.Children, date)
+	if err := calendarMeetingCalDAVShape(cal, http.Header{}, "host@example.com"); err != nil {
+		t.Fatal(err)
+	}
+	date.Props.SetText("RRULE", "FREQ=WEEKLY")
 	if calendarMeetingCalDAVShape(cal, http.Header{}, "host@example.com") == nil {
-		t.Fatal("recurring meeting accepted")
+		t.Fatal("a date with its own repeat rule accepted")
+	}
+	delete(date.Props, "RRULE")
+	date.Props.Get("ORGANIZER").Value = "mailto:guest@example.com"
+	if calendarMeetingCalDAVShape(cal, http.Header{}, "host@example.com") == nil {
+		t.Fatal("a date organized by someone else accepted")
+	}
+	date.Props.Get("ORGANIZER").Value = "mailto:host@example.com"
+	delete(cal.Events()[0].Props, "RRULE")
+	if calendarMeetingCalDAVShape(cal, http.Header{}, "host@example.com") == nil {
+		t.Fatal("two events without a series accepted")
 	}
 }
 
-func TestCalendarRecurringMeetingEditableOnGoogleAndOutlookOnly(t *testing.T) {
+func TestCalendarRecurringMeetingEditableOnEveryCalendar(t *testing.T) {
 	event := storage.CalendarEvent{RemoteID: "instance", SeriesRemoteID: "master", ETag: `"v1"`, ResponseStatus: "organizer", AttendeesJSON: `[{"email":"guest@example.com"}]`}
-	for provider, editable := range map[string]bool{"gmail": true, "outlook": true, "caldav": false} {
+	for _, provider := range []string{"gmail", "outlook", "caldav"} {
 		source := storage.CalendarSource{Provider: provider, AccessRole: "owner"}
-		if reason := calendarEventMutationRestriction(event, source, true); (reason == "") != editable {
+		if reason := calendarEventMutationRestriction(event, source, true); reason != "" {
 			t.Errorf("%s: recurring meeting restriction %q", provider, reason)
 		}
+	}
+}
+
+// A CalDAV date of the account's own series meeting is the organizer's, by
+// address, though it carries no reply status of its own.
+func TestCalendarCalDAVMeetingDateIsTheOrganizers(t *testing.T) {
+	event := storage.CalendarEvent{RemoteID: "series.ics#recurrence=2026-11-10T09%3A00%3A00Z", SeriesRemoteID: "series.ics", ETag: `"v1"`, SourceProvider: "caldav",
+		OrganizerEmail: "admin@example.com", AccountEmail: "admin@example.com", AttendeesJSON: `[{"email":"guest@example.com","status":"NEEDS-ACTION"}]`, RecurrenceJSON: `["RECURRENCE-ID:2026-11-10T09:00:00Z"]`}
+	if err := calendarOccurrenceExistingRestriction(event); err != nil {
+		t.Fatal(err)
+	}
+	event.AccountEmail = "guest@example.com"
+	if calendarOccurrenceExistingRestriction(event) == nil {
+		t.Fatal("an invitation's date is editable")
 	}
 }

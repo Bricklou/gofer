@@ -275,7 +275,7 @@ func (db *DB) BeginUserCalendarIncomingDelivery(ctx context.Context, s *UserCale
 	e := event.Event()
 	source := event.Source()
 	c := s.candidate
-	if source.Provider != CalendarSourceProviderCalDAV || source.AccountID != c.AccountID || e.UserID != c.UserID || source.UserID != c.UserID || e.ICalUID == "" || e.SeriesRemoteID != "" || e.AccountEmail == "" || !strings.EqualFold(e.OrganizerEmail, e.AccountEmail) {
+	if source.Provider != CalendarSourceProviderCalDAV || source.AccountID != c.AccountID || e.UserID != c.UserID || source.UserID != c.UserID || e.ICalUID == "" || e.AccountEmail == "" || !strings.EqualFold(e.OrganizerEmail, e.AccountEmail) {
 		return nil, ErrCalendarIncomingChanged
 	}
 	var guests []struct{ Email string }

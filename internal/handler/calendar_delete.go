@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/cristianadrielbraun/gofer/internal/calendar"
 	"github.com/cristianadrielbraun/gofer/internal/mail"
 	"github.com/cristianadrielbraun/gofer/internal/providers"
 	"github.com/cristianadrielbraun/gofer/internal/storage"
@@ -56,7 +57,13 @@ func (h *Handler) deleteCalendarProviderEvent(ctx context.Context, source storag
 			return "", calendarDeletePreflightError{err}
 		}
 		if occurrence {
-			remote, err := updateCalDAVCalendarOccurrence(ctx, source, credentials.username, credentials.password, event, nil)
+			update := updateCalDAVCalendarOccurrence
+			if event.OrganizerEmail != "" || calendarUpdateHasDetails(json.RawMessage(event.AttendeesJSON)) {
+				update = func(ctx context.Context, source storage.CalendarSource, _, _ string, existing storage.CalendarEvent, draft *calendar.EventDraft) (calendar.RemoteEvent, error) {
+					return h.updateCalDAVMeetingOccurrence(ctx, source, credentials, existing, draft)
+				}
+			}
+			remote, err := update(ctx, source, credentials.username, credentials.password, event, nil)
 			return remote.ETag, err
 		}
 		if event.OrganizerEmail != "" || calendarUpdateHasDetails(json.RawMessage(event.AttendeesJSON)) {

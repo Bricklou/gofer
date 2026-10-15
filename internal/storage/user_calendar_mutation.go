@@ -210,6 +210,9 @@ func (db *DB) publishUserCalendarEvent(ctx context.Context, snapshot *UserCalend
 			row.event.ICalUID, row.event.OrganizerName, row.event.OrganizerEmail = event.ICalUID, event.OrganizerName, event.OrganizerEmail
 			row.event.ResponseStatus, row.event.AttendeesJSON, row.event.OnlineMeetingJSON = event.ResponseStatus, event.AttendeesJSON, event.OnlineMeetingJSON
 		}
+		if occurrence {
+			row.event.AttendeesJSON, row.event.OnlineMeetingJSON = calendarJSON(event.AttendeesJSON, "[]"), calendarJSON(event.OnlineMeetingJSON, "{}")
+		}
 		expected[existing.ID] = row
 	case CalendarPublishDelete, CalendarPublishOccurrenceDelete:
 		var occurrence *CalendarEvent

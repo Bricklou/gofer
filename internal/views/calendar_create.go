@@ -75,12 +75,3 @@ func calendarDialogClass(width string) string {
 		" max-h-[calc(100dvh-2rem)] [&_[data-tui-dialog-panel]]:flex [&_[data-tui-dialog-panel]]:max-h-[calc(100dvh-2rem)]" +
 		" [&_[data-tui-dialog-panel]]:min-h-0 [&_[data-tui-dialog-panel]]:flex-col [&_[data-tui-dialog-panel]]:gap-0 [&_[data-tui-dialog-panel]]:p-0"
 }
-
-// Google and Outlook send guests the updates for a whole series or a single
-// date. CalDAV meetings are written by Gofer and only cover single events.
-func calendarGuestsEditable(data CalendarCreateData) bool {
-	if !data.EditSeries && !data.EditOccurrence {
-		return true
-	}
-	return len(data.Sources) == 1 && (data.Sources[0].Provider == "gmail" || data.Sources[0].Provider == "outlook")
-}

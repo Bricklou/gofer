@@ -72,9 +72,6 @@ func (h *Handler) handleUserUpdateCalendarEvent(w http.ResponseWriter, r *http.R
 				return err
 			}
 			event := original
-			if draft.Recurrence != nil && source.Provider == storage.CalendarSourceProviderCalDAV && calendarUpdateHasDetails(json.RawMessage(event.AttendeesJSON)) {
-				return userCalendarMutationFailure{status: 400, message: "Recurring meetings with guests are not supported yet."}
-			}
 			draft.OrganizerEmail, draft.OrganizerName = event.OrganizerEmail, event.OrganizerName
 			if calendarCachedOrganizer(event) {
 				event.ResponseStatus = "organizer"
@@ -112,6 +109,8 @@ func (h *Handler) handleUserUpdateCalendarEvent(w http.ResponseWriter, r *http.R
 				var provider calendarCreateProviderError
 				var configuration calendarReplyConfigurationError
 				switch {
+				case errors.Is(err, errCalendarSeriesDatesReset):
+					return err
 				case errors.As(err, &configuration), errors.Is(err, errCalendarOccurrenceBoundary):
 					return userCalendarMutationFailure{status: 400, message: err.Error()}
 				case errors.Is(err, errCalendarUpdateConflict):

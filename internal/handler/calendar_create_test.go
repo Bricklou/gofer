@@ -307,3 +307,20 @@ func TestCalendarNewEventAlwaysSelectsOneConfiguredCalendar(t *testing.T) {
 		}
 	}
 }
+
+// A copy replacing a Teams meeting is created without Microsoft's joining
+// details, so it isn't read as a Teams meeting again.
+func TestCalendarCreateRemovesTeamsDetailsWhenAsked(t *testing.T) {
+	dots := strings.Repeat(".", 40)
+	values := calendarCreateForm()
+	values.Set("description_html", "<p>Agenda<br>"+dots+"<br>Join the Teams meeting<br><a href=\"https://teams.live.com/meet/123\">https://teams.live.com/meet/123</a><br>"+dots+"</p>")
+	draft, err := parseCalendarEventDraft(calendarCreateHTTPRequest(values, "one"))
+	if err != nil || !strings.Contains(*draft.DescriptionHTML, "teams.live.com") {
+		t.Fatalf("details removed without being asked: %v", err)
+	}
+	values.Set("remove_teams_details", "true")
+	draft, err = parseCalendarEventDraft(calendarCreateHTTPRequest(values, "one"))
+	if err != nil || strings.Contains(*draft.DescriptionHTML, "teams.live.com") || strings.Contains(draft.Description, "teams.live.com") || !strings.Contains(draft.Description, "Agenda") {
+		t.Fatalf("Teams details kept: %v %q %q", err, *draft.DescriptionHTML, draft.Description)
+	}
+}

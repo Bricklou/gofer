@@ -25,20 +25,20 @@ func TestUserCalendarIncomingResponseClaimsRejectForeignAndDiagnosticInputs(t *t
 		t.Fatal(err)
 	}
 	stamp := time.Now().Add(-time.Hour).UTC().Truncate(time.Second)
-	if _, err := accounts.ReserveCalendarIncomingResponse(t.Context(), m, event, 0, stamp, "ACCEPTED"); err == nil {
+	if _, err := accounts.ReserveCalendarIncomingResponse(t.Context(), m, event, "", 0, stamp, "ACCEPTED"); err == nil {
 		t.Fatal("unassociated message reserved native response")
 	}
 	m, err = accounts.BeginCalendarIncomingDelivery(t.Context(), m, event)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := accounts.ReserveCalendarIncomingResponse(t.Context(), m, foreign, 0, stamp, "ACCEPTED"); err == nil {
+	if _, err := accounts.ReserveCalendarIncomingResponse(t.Context(), m, foreign, "", 0, stamp, "ACCEPTED"); err == nil {
 		t.Fatal("foreign same-ID event claimed")
 	}
 	if err := accounts.ValidateCalendarIncomingResponse(t.Context(), &UserCalendarIncomingResponseClaim{}); err == nil {
 		t.Fatal("unsealed response claim accepted")
 	}
-	claim, err := accounts.ReserveCalendarIncomingResponse(t.Context(), m, event, 0, stamp, "ACCEPTED")
+	claim, err := accounts.ReserveCalendarIncomingResponse(t.Context(), m, event, "", 0, stamp, "ACCEPTED")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -46,10 +46,10 @@ func TestUserCalendarIncomingResponseClaimsRejectForeignAndDiagnosticInputs(t *t
 		t.Fatal(err)
 	}
 	// Same timestamp and another status cannot replace the accepted intent.
-	if _, err := accounts.ReserveCalendarIncomingResponse(t.Context(), m, event, 0, stamp, "DECLINED"); !errors.Is(err, storage.ErrCalendarIncomingChanged) {
+	if _, err := accounts.ReserveCalendarIncomingResponse(t.Context(), m, event, "", 0, stamp, "DECLINED"); !errors.Is(err, storage.ErrCalendarIncomingChanged) {
 		t.Fatal("equal-stamp conflict replaced intent", err)
 	}
-	newer, err := accounts.ReserveCalendarIncomingResponse(t.Context(), m, event, 0, stamp.Add(time.Minute), "DECLINED")
+	newer, err := accounts.ReserveCalendarIncomingResponse(t.Context(), m, event, "", 0, stamp.Add(time.Minute), "DECLINED")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -108,7 +108,7 @@ func TestUserCalendarIncomingReservationRechecksAfterWriterAndTriggers(t *testin
 			}); err != nil {
 				t.Fatal(err)
 			}
-			if _, err := accounts.ReserveCalendarIncomingResponse(t.Context(), m, event, 0, time.Now().Add(-time.Hour), "ACCEPTED"); err == nil {
+			if _, err := accounts.ReserveCalendarIncomingResponse(t.Context(), m, event, "", 0, time.Now().Add(-time.Hour), "ACCEPTED"); err == nil {
 				t.Fatal("faulty reservation committed")
 			}
 			if err := accounts.ValidateCalendarIncomingAssociation(t.Context(), m, event); err != nil {

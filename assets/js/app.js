@@ -10983,6 +10983,7 @@ function replaceCalendarTeamsMeeting(form) {
   // Keep one identity across retries so a lost response can't create two copies.
   if (!form._calendarReplaceRequestID) form._calendarReplaceRequestID = window.crypto.randomUUID()
   payload.set("request_id", form._calendarReplaceRequestID)
+  payload.set("remove_teams_details", "true")
   form._calendarCreateBusy = true
   setCalendarCreateError(form, "")
   updateCalendarCreateForm(form)
@@ -11428,14 +11429,6 @@ function selectCalendarGuest(button) {
   input.focus()
 }
 
-// Google and Outlook send guests the updates for repeating meetings; CalDAV
-// meetings with guests still have to be single events.
-function calendarCreateSourceProvider(form) {
-  var source = form.querySelector('[name="source_id"]')
-  var choice = source && Array.from(form.querySelectorAll("[data-calendar-source-provider]")).find(function (item) { return item.dataset.tuiSelectboxValue === source.value })
-  return choice ? choice.dataset.calendarSourceProvider : ""
-}
-
 function validateCalendarCreatePickers(form) {
   adjustCalendarCreateAllDayRange(form)
   var fields = ["start_date", "end_date", "timezone"]
@@ -11443,12 +11436,6 @@ function validateCalendarCreatePickers(form) {
   var repeat = form.querySelector('[name="repeat_frequency"]')
   var teams = form.querySelector('[name="teams_meeting"]')
   var meet = form.querySelector('[name="google_meet_meeting"]')
-  var guests = form.querySelector('[name="guests"]')
-  if (guests && guests.value.trim() && repeat && repeat.value !== "none" && calendarCreateSourceProvider(form) === "caldav") {
-    setCalendarCreateError(form, "Guest invitations on CalDAV calendars currently support events that do not repeat. Remove the guests or choose Does not repeat.")
-    guests.focus()
-    return false
-  }
   var meetDraft = form.querySelector('[name="google_meet_draft_id"]')
   if (meet && meet.checked && !meet.disabled && (!meetDraft || !meetDraft.value)) {
     setCalendarCreateError(form, "Wait for the Google Meet link before saving, or turn Google Meet off.")
@@ -11509,6 +11496,13 @@ function submitCalendarCreate(form) {
       return response.json().then(function (data) { return {ok: response.ok, data: data} })
     })
     .then(function (result) {
+      if (!result.ok && result.data.confirm === "reset_series_dates") {
+        // Nothing was saved: let the organizer confirm and save again.
+        var reset = form.querySelector("[data-calendar-series-reset]")
+        if (reset) reset.hidden = false
+        setCalendarCreateError(form, result.data.error)
+        return
+      }
       if (!result.ok) {
         form._calendarCreateUncertain = !!result.data.uncertain
         form._calendarCreateConflict = editing && !!result.data.conflict

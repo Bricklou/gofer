@@ -30,14 +30,14 @@ func (s *UserAccountStore) ValidateCalendarIncomingAssociation(ctx context.Conte
 	})
 }
 
-func (s *UserAccountStore) FindCalendarIncomingEvent(ctx context.Context, c *UserCalendarIncomingMessageSnapshot, uid string) (*UserCalendarEventSnapshot, error) {
+func (s *UserAccountStore) FindCalendarIncomingEvent(ctx context.Context, c *UserCalendarIncomingMessageSnapshot, uid, date, attendee string) (*UserCalendarEventSnapshot, error) {
 	if err := s.ValidateCalendarIncomingMessage(ctx, c); err != nil {
 		return nil, err
 	}
 	var event storage.CalendarEvent
 	err := s.WithAccountForUser(ctx, c.service.OwnerID(), c.service.AccountID(), func(_ *AccountStore, db *storage.DB) error {
 		var err error
-		event, err = db.FindCalendarIncomingEvent(ctx, c.service.OwnerID(), c.service.AccountID(), uid)
+		event, err = db.FindCalendarIncomingEvent(ctx, c.service.OwnerID(), c.service.AccountID(), uid, date, attendee)
 		return err
 	})
 	if err != nil {
@@ -64,7 +64,7 @@ func (s *UserAccountStore) incomingResponseGuard(ctx context.Context, c *UserCal
 	return guard, nil
 }
 
-func (s *UserAccountStore) ReserveCalendarIncomingResponse(ctx context.Context, c *UserCalendarIncomingMessageSnapshot, event *UserCalendarEventSnapshot, sequence int, stamp time.Time, response string) (*UserCalendarIncomingResponseClaim, error) {
+func (s *UserAccountStore) ReserveCalendarIncomingResponse(ctx context.Context, c *UserCalendarIncomingMessageSnapshot, event *UserCalendarEventSnapshot, date string, sequence int, stamp time.Time, response string) (*UserCalendarIncomingResponseClaim, error) {
 	guard, err := s.incomingResponseGuard(ctx, c, event)
 	if err != nil {
 		return nil, err
@@ -72,7 +72,7 @@ func (s *UserAccountStore) ReserveCalendarIncomingResponse(ctx context.Context, 
 	claim := &UserCalendarIncomingResponseClaim{repository: s, message: c, event: event}
 	err = s.WithAccountForUser(ctx, c.service.OwnerID(), c.service.AccountID(), func(_ *AccountStore, db *storage.DB) error {
 		var err error
-		claim.claim, err = db.ReserveUserCalendarIncomingResponse(ctx, c.message, event.event, sequence, stamp, response, guard)
+		claim.claim, err = db.ReserveUserCalendarIncomingResponse(ctx, c.message, event.event, date, sequence, stamp, response, guard)
 		return err
 	})
 	if err != nil {

@@ -43,7 +43,15 @@ func TestCalendarIncomingMIMEAndValidation(t *testing.T) {
 		"delegation": func(s string) string {
 			return strings.Replace(s, "PARTSTAT=ACCEPTED", "PARTSTAT=ACCEPTED;SENT-BY=\"mailto:delegate@example.com\"", 1)
 		},
-		"repeat":            func(s string) string { return strings.Replace(s, "END:VEVENT", "RRULE:FREQ=DAILY\r\nEND:VEVENT", 1) },
+		"extra dates": func(s string) string {
+			return strings.Replace(s, "END:VEVENT", "RDATE:20261003T070000Z\r\nEND:VEVENT", 1)
+		},
+		"date and rule": func(s string) string {
+			return strings.Replace(s, "END:VEVENT", "RECURRENCE-ID:20261003T070000Z\r\nRRULE:FREQ=DAILY\r\nEND:VEVENT", 1)
+		},
+		"this and following": func(s string) string {
+			return strings.Replace(s, "END:VEVENT", "RECURRENCE-ID;RANGE=THISANDFUTURE:20261003T070000Z\r\nEND:VEVENT", 1)
+		},
 		"sequence":          func(s string) string { return strings.Replace(s, "SEQUENCE:2", "SEQUENCE:-1", 1) },
 		"missing timestamp": func(s string) string { return strings.Replace(s, "DTSTAMP:", "X-IGNORE:", 1) },
 		"unknown response":  func(s string) string { return strings.Replace(s, "PARTSTAT=ACCEPTED", "PARTSTAT=DELEGATED", 1) },
@@ -105,5 +113,22 @@ func TestCalendarIncomingDKIMAuthentication(t *testing.T) {
 	}
 	if err := VerifyCalendarIncomingSender(t.Context(), raw, "guest@example.com", func(context.Context, string) ([]string, error) { return nil, fmt.Errorf("DNS temporarily unavailable") }); !errors.Is(err, ErrCalendarReplyAuthenticationTemporary) {
 		t.Fatalf("DNS failure not retryable: %v", err)
+	}
+}
+
+// A reply to a whole series may repeat its rule; one to a single date names it.
+func TestCalendarIncomingSeriesAndDateReplies(t *testing.T) {
+	for name, tc := range map[string]struct{ add, date string }{
+		"series":     {"RRULE:FREQ=WEEKLY;COUNT=4\r\n", ""},
+		"timed date": {"RECURRENCE-ID;TZID=Europe/Prague:20261009T090000\r\n", "2026-10-09T07:00:00Z"},
+		"all-day":    {"RECURRENCE-ID;VALUE=DATE:20261009\r\n", "2026-10-09"},
+	} {
+		t.Run(name, func(t *testing.T) {
+			body := strings.Replace(incomingTestCalendar(), "END:VEVENT", tc.add+"END:VEVENT", 1)
+			reply, err := ExtractCalendarIncomingReply(incomingTestMail(body))
+			if err != nil || reply == nil || reply.RecurrenceID != tc.date {
+				t.Fatalf("reply=%+v err=%v", reply, err)
+			}
+		})
 	}
 }

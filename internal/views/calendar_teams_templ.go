@@ -290,7 +290,7 @@ func CalendarTeamsOption(data CalendarTeamsData) templ.Component {
 						return templ_7745c5c3_Err
 					}
 				}
-				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 20, "<li>The description is copied as it is above, including Microsoft’s Teams joining details. Delete them there if you don’t want them in the copy.</li></ul><label class=\"flex items-start gap-2 text-foreground\"><input type=\"checkbox\" class=\"mt-0.5\" data-calendar-teams-replace-confirm> <span>Replace this meeting with a copy without Teams</span></label></div>")
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 20, "<li>The description is copied without Microsoft’s Teams joining details, which would point to the deleted meeting.</li></ul><label class=\"flex items-start gap-2 text-foreground\"><input type=\"checkbox\" class=\"mt-0.5\" data-calendar-teams-replace-confirm> <span>Replace this meeting with a copy without Teams</span></label></div>")
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}

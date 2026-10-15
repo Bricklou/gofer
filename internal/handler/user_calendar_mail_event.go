@@ -88,17 +88,23 @@ func (h *Handler) matchUserMailCalendarEvent(ctx context.Context, account string
 }
 
 func (h *Handler) handleUserMailCalendarFooter(w http.ResponseWriter, r *http.Request) {
-	w.Header().Set("Cache-Control", "private, no-store")
-	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	ctx, cancel := context.WithTimeout(r.Context(), 30*time.Second)
 	defer cancel()
+	h.renderUserMailCalendarFooter(ctx, w, r.PathValue("id"), r.URL.Query().Get("refresh") == "1", "", "")
+}
+
+// renderUserMailCalendarFooter shows an email's calendar events; note, when
+// set, replaces what the card for event uid says.
+func (h *Handler) renderUserMailCalendarFooter(ctx context.Context, w http.ResponseWriter, emailID string, refresh bool, uid, note string) {
+	w.Header().Set("Cache-Control", "private, no-store")
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	var cards []views.MailCalendarEventData
 	err := h.userIMAP.RunUserServiceWork(ctx, h.userID(ctx), func(ctx context.Context) error {
-		items, raw, location, err := h.readUserMailCalendarEvents(ctx, r.PathValue("id"))
+		items, raw, location, err := h.readUserMailCalendarEvents(ctx, emailID)
 		if err != nil {
 			return err
 		}
-		if r.URL.Query().Get("refresh") == "1" && len(items) > 0 {
+		if refresh && len(items) > 0 {
 			start := time.Now()
 			if items[0].Start != nil {
 				start = *items[0].Start
@@ -120,7 +126,21 @@ func (h *Handler) handleUserMailCalendarFooter(w http.ResponseWriter, r *http.Re
 				allowed = calendarResponseRestriction(event, source) == "" && h.userCalendarWriteAuthorized(ctx, source)
 				snapshots = append(snapshots, snapshot)
 			}
-			cards = append(cards, mailCalendarEventCard(item, event, snapshot != nil, location, r.PathValue("id"), func(storage.CalendarEvent) bool { return allowed }))
+			card := mailCalendarEventCard(item, event, snapshot != nil, location, emailID, func(storage.CalendarEvent) bool { return allowed })
+			var candidates []storage.CalendarEvent
+			var sources []storage.CalendarSource
+			if err := h.userAccounts.WithAccountForUser(ctx, h.userID(ctx), raw.AccountID(), func(_ *config.AccountStore, db *storage.DB) error {
+				candidates, _ = db.ListMailCalendarEvents(ctx, h.userID(ctx), raw.AccountID(), item.UID)
+				sources, _ = db.ListSelectedCalendarSources(ctx, h.userID(ctx))
+				return nil
+			}); err != nil {
+				return err
+			}
+			mailCalendarInvitationCard(&card, item, candidates, sources, raw.AccountID(), raw.EmailAddress())
+			if note != "" && item.UID == uid {
+				card.Note, card.Invitation = note, nil
+			}
+			cards = append(cards, card)
 		}
 		for _, snapshot := range snapshots {
 			if err := h.userAccounts.ValidateCalendarEvent(ctx, snapshot); err != nil {
@@ -133,5 +153,84 @@ func (h *Handler) handleUserMailCalendarFooter(w http.ResponseWriter, r *http.Re
 		w.WriteHeader(http.StatusNoContent)
 		return
 	}
-	_ = views.MailCalendarFooter(r.PathValue("id"), cards).Render(ctx, w)
+	_ = views.MailCalendarFooter(emailID, cards).Render(ctx, w)
+}
+
+// handleUserMailCalendarInvitation adds an email's invitation to a CalDAV
+// calendar of the owner's account, or updates or removes the event it is for.
+func (h *Handler) handleUserMailCalendarInvitation(w http.ResponseWriter, r *http.Request) {
+	if r.ParseForm() != nil {
+		http.Error(w, "The request could not be read.", http.StatusBadRequest)
+		return
+	}
+	uid, sourceID := r.PostForm.Get("uid"), r.PostForm.Get("source_id")
+	ctx, cancel := context.WithTimeout(context.WithoutCancel(r.Context()), calendarSourceTimeout)
+	defer cancel()
+	emailID, owner := r.PathValue("id"), h.userID(r.Context())
+	if uid == "" || len(uid) > 1024 {
+		h.renderUserMailCalendarFooter(ctx, w, emailID, false, uid, "The invitation could not be read.")
+		return
+	}
+	err := h.userIMAP.RunUserServiceWork(ctx, owner, func(ctx context.Context) error {
+		_, raw, _, err := h.readUserMailCalendarEvents(ctx, emailID)
+		if err != nil {
+			return err
+		}
+		invitation, err := readMailInvitation(raw.Bytes(), uid, raw.EmailAddress())
+		if err != nil {
+			return err
+		}
+		var candidates []storage.CalendarEvent
+		var sources []storage.CalendarSource
+		if err := h.userAccounts.WithAccountForUser(ctx, owner, raw.AccountID(), func(_ *config.AccountStore, db *storage.DB) error {
+			var err error
+			if candidates, err = db.ListMailCalendarEvents(ctx, owner, raw.AccountID(), uid); err != nil {
+				return err
+			}
+			sources, err = db.ListSelectedCalendarSources(ctx, owner)
+			return err
+		}); err != nil {
+			return err
+		}
+		source, existing, err := mailCalendarInvitationTarget(candidates, sources, raw.AccountID(), sourceID)
+		if err != nil {
+			return err
+		}
+		p := &userCalendarRequest{h: h}
+		if existing.ID != "" {
+			if p.event, err = h.userAccounts.SnapshotCalendarEvent(ctx, owner, existing.ID); err != nil {
+				return err
+			}
+			existing, source = p.event.Event(), p.event.Source()
+		} else if p.source, err = h.userAccounts.SnapshotCalendarSource(ctx, owner, source.ID); err != nil {
+			return err
+		} else {
+			source = p.source.Source()
+		}
+		if source.AccountID != raw.AccountID() || !h.userCalendarWriteAuthorized(ctx, source) {
+			return calendarInvitationRefusal("this account can't write to its calendar")
+		}
+		return h.userIMAP.RunAccountService(ctx, owner, source.AccountID, mail.AccountServiceCalendar, calendarSourceTimeout, func(operation context.Context) error {
+			unlock, err := h.lockCalendarCreate(operation, source)
+			if err != nil {
+				return err
+			}
+			defer unlock()
+			action, err := p.actionContext(operation, true)
+			if err != nil {
+				return err
+			}
+			credentials, err := p.actionCredentials()
+			if err != nil {
+				return err
+			}
+			_, err = applyCalDAVInvitation(action, source, credentials, invitation, existing)
+			return err
+		})
+	})
+	if err != nil {
+		h.renderUserMailCalendarFooter(ctx, w, emailID, false, uid, mailCalendarInvitationFailure(err))
+		return
+	}
+	h.renderUserMailCalendarFooter(ctx, w, emailID, true, "", "")
 }

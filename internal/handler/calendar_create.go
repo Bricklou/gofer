@@ -111,7 +111,7 @@ func parseCalendarEventDraft(r *http.Request) (calendar.EventDraft, error) {
 		return calendar.EventDraft{}, fmt.Errorf("invalid event form")
 	}
 	allowed := map[string]bool{"request_id": true, "source_id": true, "summary": true, "description": true, "location": true, "timezone": true, "all_day": true, "start_date": true, "end_date": true, "start_time": true, "end_time": true,
-		"repeat_frequency": true, "repeat_interval": true, "repeat_end": true, "repeat_until": true, "repeat_count": true, "guests": true, "description_html": true, "teams_meeting": true, "teams_draft_id": true, "google_meet_meeting": true, "google_meet_draft_id": true}
+		"repeat_frequency": true, "repeat_interval": true, "repeat_end": true, "repeat_until": true, "repeat_count": true, "guests": true, "description_html": true, "teams_meeting": true, "teams_draft_id": true, "google_meet_meeting": true, "google_meet_draft_id": true, "reset_series_dates": true, "remove_teams_details": true}
 	for name, values := range r.PostForm {
 		if !allowed[name] || len(values) != 1 {
 			return calendar.EventDraft{}, fmt.Errorf("this form contains unsupported or duplicate event fields")
@@ -132,6 +132,10 @@ func parseCalendarEventDraft(r *http.Request) (calendar.EventDraft, error) {
 		}
 		draft.TeamsDraftID = id.String()
 	}
+	if value := r.PostForm.Get("reset_series_dates"); value != "" && value != "true" {
+		return draft, fmt.Errorf("invalid series confirmation")
+	}
+	draft.ResetSeriesDates = r.PostForm.Get("reset_series_dates") == "true"
 	draft.GoogleMeetMeetingSet = r.PostForm.Has("google_meet_meeting")
 	if value := r.PostForm.Get("google_meet_meeting"); value != "" && value != "true" && value != "false" {
 		return draft, fmt.Errorf("invalid Google Meet meeting setting")
@@ -156,6 +160,18 @@ func parseCalendarEventDraft(r *http.Request) (calendar.EventDraft, error) {
 		safe := calendar.SanitizeDescriptionHTML(raw)
 		draft.DescriptionHTML = &safe
 		draft.Description = calendar.DescriptionPlainText(safe)
+	}
+	// A copy replacing a Teams meeting leaves out Microsoft's joining details,
+	// which would point to the deleted meeting.
+	if value := r.PostForm.Get("remove_teams_details"); value != "" && value != "true" {
+		return draft, fmt.Errorf("invalid Teams details setting")
+	} else if value == "true" {
+		draft.Description = strings.TrimSpace(calendar.RemoveTeamsJoinBlock(draft.Description))
+		if draft.DescriptionHTML != nil {
+			safe := calendar.SanitizeDescriptionHTML(calendar.RemoveTeamsJoinBlock(*draft.DescriptionHTML))
+			draft.DescriptionHTML = &safe
+			draft.Description = calendar.DescriptionPlainText(safe)
+		}
 	}
 	id, err := uuid.Parse(draft.RequestID)
 	if err != nil || id == uuid.Nil {

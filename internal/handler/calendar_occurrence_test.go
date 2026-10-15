@@ -3,6 +3,7 @@ package handler
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"errors"
 	"net/http"
 	"net/http/httptest"
@@ -43,6 +44,8 @@ func TestCalendarOccurrenceEditorAndUpdateOnlySelectedEvent(t *testing.T) {
 		}
 		result := calendarCreatedRemote(draft)
 		result.RemoteID, result.SeriesRemoteID, result.ETag, result.ICalUID = event.RemoteID, event.SeriesRemoteID, `"occurrence-v2"`, event.ICalUID
+		// The date's own guests, as the provider saved them.
+		result.Attendees, result.ResponseStatus = json.RawMessage(`[{"email":"date-guest@example.com"}]`), "organizer"
 		return result, nil
 	}
 	form := calendarCreateForm()
@@ -58,6 +61,9 @@ func TestCalendarOccurrenceEditorAndUpdateOnlySelectedEvent(t *testing.T) {
 	got, err := h.db.GetCalendarEvent(t.Context(), "one", "edit-event")
 	if err != nil || got.Summary != "Planning" || got.SeriesRemoteID != "master" || got.ETag != `"occurrence-v2"` || got.StartAt.Day() != 3 {
 		t.Fatalf("selected cache: %+v %v", got, err)
+	}
+	if !strings.Contains(got.AttendeesJSON, "date-guest@example.com") {
+		t.Fatalf("the date's guests not cached: %s", got.AttendeesJSON)
 	}
 	sibling, err := h.db.GetCalendarEvent(t.Context(), "one", "untouched")
 	if err != nil || sibling.Summary != "Keep me" || sibling.ETag != `"sibling"` {

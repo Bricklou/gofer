@@ -79,7 +79,7 @@ templ CalendarTeamsOption(data CalendarTeamsData) {
 					if data.Series {
 						<li>The whole series is created again from its first date. Changes made to single dates aren’t kept.</li>
 					}
-					<li>The description is copied as it is above, including Microsoft’s Teams joining details. Delete them there if you don’t want them in the copy.</li>
+					<li>The description is copied without Microsoft’s Teams joining details, which would point to the deleted meeting.</li>
 				</ul>
 				<label class="flex items-start gap-2 text-foreground">
 					<input type="checkbox" class="mt-0.5" data-calendar-teams-replace-confirm/>

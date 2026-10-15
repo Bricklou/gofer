@@ -775,7 +775,14 @@ func updateCalDAVCalendarEventScope(ctx context.Context, source storage.Calendar
 	if existing.ICalUID != "" && before.ICalUID != existing.ICalUID {
 		return calendar.RemoteEvent{}, errCalendarUpdateConflict
 	}
-	props := current.Events()[0].Props
+	// A series' own event is edited; its dates changed one by one follow.
+	master := calendarMeetingMaster(current)
+	if master == nil {
+		return calendar.RemoteEvent{}, errCalendarUpdateUnsupported
+	}
+	dated := series && (len(current.Events()) > 1 || master.Props.Get("EXDATE") != nil)
+	previous := cloneCalendarComponent(master)
+	props := master.Props
 	for _, name := range []string{"SUMMARY", "DESCRIPTION", "LOCATION", "DTSTART", "DTEND", "X-GOFER-TIMEZONE"} {
 		if name == "DESCRIPTION" {
 			continue
@@ -806,6 +813,11 @@ func updateCalDAVCalendarEventScope(ctx context.Context, source storage.Calendar
 	now := time.Now().UTC()
 	props.SetDateTime("DTSTAMP", now)
 	props.SetDateTime("LAST-MODIFIED", now)
+	if dated {
+		if err := calendarMeetingCarryDates(current, previous, master, draft.ResetSeriesDates, "", "", "0"); err != nil {
+			return calendar.RemoteEvent{}, err
+		}
+	}
 	var body bytes.Buffer
 	if err := ical.NewEncoder(&body).Encode(current); err != nil {
 		return calendar.RemoteEvent{}, err
@@ -842,7 +854,15 @@ func updateCalDAVCalendarEventScope(ctx context.Context, source storage.Calendar
 	if calendarUpdateValidETag(putETag, false) && putETag != etag {
 		return calendar.RemoteEvent{}, fmt.Errorf("CalDAV event changed again before the update could be confirmed")
 	}
-	updated, err := calendarUpdateCalDAVConfirmedEvent(confirmed, headers, endpoint, etag, location, draft)
+	// The changed dates must come back exactly as written.
+	if dated && !calendarOccurrenceResourceMatches(current, confirmed) {
+		return calendar.RemoteEvent{}, fmt.Errorf("CalDAV did not confirm the series' dates")
+	}
+	own, err := calendarCalDAVSeriesOwnEvent(confirmed, headers)
+	if err != nil {
+		return calendar.RemoteEvent{}, fmt.Errorf("CalDAV did not confirm a supported updated event: %v", err)
+	}
+	updated, err := calendarUpdateCalDAVConfirmedEvent(own, headers, endpoint, etag, location, draft)
 	if err != nil {
 		return calendar.RemoteEvent{}, err
 	}
@@ -852,7 +872,7 @@ func updateCalDAVCalendarEventScope(ctx context.Context, source storage.Calendar
 	if !calendarUpdateMatchesDraft(updated, draft) {
 		return calendar.RemoteEvent{}, fmt.Errorf("CalDAV did not confirm the submitted event changes")
 	}
-	if zone, _ := confirmed.Events()[0].Props.Text("X-GOFER-TIMEZONE"); zone == draft.TimeZone {
+	if zone, _ := own.Events()[0].Props.Text("X-GOFER-TIMEZONE"); zone == draft.TimeZone {
 		updated.StartTimeZone, updated.EndTimeZone = zone, zone
 	}
 	return updated, nil

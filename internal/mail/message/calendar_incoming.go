@@ -25,8 +25,11 @@ const CalendarIncomingMaxSize = 8 << 20
 // content. Only one existing attendee's participation status may be applied.
 type CalendarIncomingReply struct {
 	UID, Organizer, Attendee, Status, From string
-	Sequence                               int
-	Stamp                                  time.Time
+	// RecurrenceID names the date of a series the reply is for, as a UTC
+	// RFC 3339 time or a YYYY-MM-DD date; empty for a whole meeting or series.
+	RecurrenceID string
+	Sequence     int
+	Stamp        time.Time
 }
 
 var ErrCalendarReplyAuthentication = errors.New("calendar reply sender could not be authenticated")
@@ -138,9 +141,23 @@ func ExtractCalendarIncomingReply(raw []byte) (reply *CalendarIncomingReply, err
 			return nil, fmt.Errorf("ambiguous %s", name)
 		}
 	}
-	for _, name := range []string{"RECURRENCE-ID", "RRULE", "RDATE", "EXDATE"} {
-		if len(props[name]) != 0 {
-			return nil, fmt.Errorf("recurring replies are not supported")
+	// A reply for a whole series may repeat its rule; one for a single date
+	// names that date instead.
+	if len(props["RDATE"]) != 0 || len(props["EXRULE"]) != 0 || len(props["RECURRENCE-ID"]) > 1 || (len(props["RECURRENCE-ID"]) == 1 && (len(props["RRULE"]) != 0 || len(props["EXDATE"]) != 0)) {
+		return nil, fmt.Errorf("unsupported recurring reply")
+	}
+	recurrenceID := ""
+	if rid := props.Get("RECURRENCE-ID"); rid != nil {
+		if rid.Params.Get("RANGE") != "" {
+			return nil, fmt.Errorf("unsupported recurring reply")
+		}
+		at, err := rid.DateTime(time.UTC)
+		if err != nil {
+			return nil, fmt.Errorf("invalid reply date")
+		}
+		recurrenceID = at.UTC().Format(time.RFC3339)
+		if rid.ValueType() == ical.ValueDate {
+			recurrenceID = at.Format("2006-01-02")
 		}
 	}
 	if len(props["SEQUENCE"]) > 1 {
@@ -181,7 +198,7 @@ func ExtractCalendarIncomingReply(raw []byte) (reply *CalendarIncomingReply, err
 	if err != nil || uid == "" || len(uid) > 1024 || strings.ContainsAny(uid, "\r\n\x00") || organizer == "" || attendee == "" || !strings.EqualFold(from[0].Address, attendee) {
 		return nil, fmt.Errorf("reply identity does not match its sender")
 	}
-	return &CalendarIncomingReply{UID: uid, Organizer: organizer, Attendee: attendee, From: strings.ToLower(from[0].Address), Status: status, Sequence: sequence, Stamp: stamp.UTC()}, nil
+	return &CalendarIncomingReply{UID: uid, Organizer: organizer, Attendee: attendee, From: strings.ToLower(from[0].Address), Status: status, RecurrenceID: recurrenceID, Sequence: sequence, Stamp: stamp.UTC()}, nil
 }
 
 // Verify the signature ourselves; arbitrary Authentication-Results headers

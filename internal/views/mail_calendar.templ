@@ -53,6 +53,14 @@ templ MailCalendarFooter(emailID string, events []MailCalendarEventData) {
 							}
 						</div>
 					}
+					if event.Invitation != nil {
+						<div class="space-y-1 text-xs" data-mail-calendar-invitation>
+							if event.Invitation.Note != "" {
+								<p class="text-ink/60">{ event.Invitation.Note }</p>
+							}
+							<button type="button" class="font-medium underline underline-offset-2" hx-post={ "/api/mail/" + emailID + "/calendar/invitation" } hx-vals={ mailCalendarInvitationValues(*event.Invitation) } hx-target="closest [data-mail-calendar-footer]" hx-swap="innerHTML" hx-sync="closest [data-mail-calendar-footer]:replace" hx-disabled-elt="this">{ event.Invitation.Label }</button>
+						</div>
+					}
 					if event.Response != nil {
 						<div data-mail-calendar-response data-calendar-response-container>
 							@MailCalendarResponseForm(*event.Response)

@@ -412,6 +412,7 @@ func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /email/{id}/move", h.handleMoveDialog)
 	mux.HandleFunc("POST /mail/labels-dialog", h.handleLabelsDialog)
 	mux.HandleFunc("GET /api/mail/{id}/calendar", h.handleMailCalendarFooter)
+	mux.HandleFunc("POST /api/mail/{id}/calendar/invitation", h.handleMailCalendarInvitation)
 	mux.HandleFunc("GET /email/{id}/body", h.handleEmailBody)
 	mux.HandleFunc("GET /email/{id}/body/translated", h.handleTranslatedEmailBody)
 	mux.HandleFunc("GET /folder/{id}", h.handleFolderPartial)

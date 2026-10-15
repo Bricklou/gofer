@@ -3,6 +3,7 @@ package handler
 import (
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -259,13 +260,20 @@ func mailCalendarEvents(raw []byte, accountEmail string, location *time.Location
 }
 
 func (h *Handler) readMailCalendarEvents(ctx context.Context, emailID string) ([]mailCalendarEvent, string, error) {
+	items, accountID, _, _, err := h.readMailCalendarMessage(ctx, emailID)
+	return items, accountID, err
+}
+
+// readMailCalendarMessage returns an email's calendar events, account, raw
+// message and the account's address.
+func (h *Handler) readMailCalendarMessage(ctx context.Context, emailID string) ([]mailCalendarEvent, string, []byte, string, error) {
 	email, err := h.db.GetEmailByIDForUser(ctx, emailID, h.userID(ctx))
 	if err != nil || email == nil {
-		return nil, "", fmt.Errorf("email unavailable")
+		return nil, "", nil, "", fmt.Errorf("email unavailable")
 	}
 	info, err := h.db.GetMessageStorageInfoForUser(ctx, mustMailID(emailID), h.userID(ctx))
 	if err != nil || info == nil {
-		return nil, "", fmt.Errorf("email unavailable")
+		return nil, "", nil, "", fmt.Errorf("email unavailable")
 	}
 	var raw []byte
 	if info.RawPath != "" {
@@ -281,11 +289,11 @@ func (h *Handler) readMailCalendarEvents(ctx context.Context, emailID string) ([
 	if raw == nil {
 		fetchInfo, err := h.db.GetMessageFetchInfoForUser(ctx, mustMailID(emailID), h.userID(ctx))
 		if err != nil || fetchInfo == nil {
-			return nil, email.AccountID, err
+			return nil, email.AccountID, nil, "", err
 		}
 		raw, err = h.fetchBodyRemote(ctx, mustMailID(emailID), fetchInfo)
 		if err != nil {
-			return nil, email.AccountID, err
+			return nil, email.AccountID, nil, "", err
 		}
 		if len(raw) <= message.CalendarIncomingMaxSize && h.blobStore != nil {
 			if path, err := h.blobStore.StoreRaw(ctx, email.AccountID, mustMailID(emailID), raw); err == nil {
@@ -299,7 +307,7 @@ func (h *Handler) readMailCalendarEvents(ctx context.Context, emailID string) ([
 	if zone, err := time.LoadLocation(h.db.GetUISettings(ctx, h.userID(ctx))["timezone"]); err == nil {
 		location = zone
 	}
-	return mailCalendarEvents(raw, address, location), email.AccountID, nil
+	return mailCalendarEvents(raw, address, location), email.AccountID, raw, address, nil
 }
 
 func (h *Handler) matchMailCalendarEvent(ctx context.Context, accountID string, item mailCalendarEvent) (storage.CalendarEvent, bool) {
@@ -314,16 +322,22 @@ func (h *Handler) matchMailCalendarEvent(ctx context.Context, accountID string, 
 }
 
 func (h *Handler) handleMailCalendarFooter(w http.ResponseWriter, r *http.Request) {
-	w.Header().Set("Cache-Control", "private, no-store")
-	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	ctx, cancel := context.WithTimeout(r.Context(), 30*time.Second)
 	defer cancel()
-	items, accountID, err := h.readMailCalendarEvents(ctx, r.PathValue("id"))
+	h.renderMailCalendarFooter(ctx, w, r.PathValue("id"), r.URL.Query().Get("refresh") == "1", "", "")
+}
+
+// renderMailCalendarFooter shows an email's calendar events; note, when set,
+// replaces what the card for event uid says.
+func (h *Handler) renderMailCalendarFooter(ctx context.Context, w http.ResponseWriter, emailID string, refresh bool, uid, note string) {
+	w.Header().Set("Cache-Control", "private, no-store")
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	items, accountID, _, address, err := h.readMailCalendarMessage(ctx, emailID)
 	if err != nil {
 		w.WriteHeader(http.StatusNoContent)
 		return
 	}
-	if r.URL.Query().Get("refresh") == "1" && len(items) > 0 {
+	if refresh && len(items) > 0 {
 		start := time.Now()
 		if items[0].Start != nil {
 			start = *items[0].Start
@@ -335,16 +349,109 @@ func (h *Handler) handleMailCalendarFooter(w http.ResponseWriter, r *http.Reques
 	if zone, err := time.LoadLocation(h.db.GetUISettings(ctx, h.userID(ctx))["timezone"]); err == nil {
 		location = zone
 	}
+	sources, _ := h.db.ListSelectedCalendarSources(ctx, h.userID(ctx))
 	var cards []views.MailCalendarEventData
 	for _, item := range items {
 		event, matched := h.matchMailCalendarEvent(ctx, accountID, item)
-		card := mailCalendarEventCard(item, event, matched, location, r.PathValue("id"), func(event storage.CalendarEvent) bool {
+		card := mailCalendarEventCard(item, event, matched, location, emailID, func(event storage.CalendarEvent) bool {
 			_, err := h.calendarResponseAccess(ctx, event)
 			return err == nil
 		})
+		candidates, _ := h.db.ListMailCalendarEvents(ctx, h.userID(ctx), accountID, item.UID)
+		mailCalendarInvitationCard(&card, item, candidates, sources, accountID, address)
+		if note != "" && item.UID == uid {
+			card.Note, card.Invitation = note, nil
+		}
 		cards = append(cards, card)
 	}
-	_ = views.MailCalendarFooter(r.PathValue("id"), cards).Render(ctx, w)
+	_ = views.MailCalendarFooter(emailID, cards).Render(ctx, w)
+}
+
+// mailCalendarInvitationCard adds the CalDAV add/update/remove offer to a card.
+func mailCalendarInvitationCard(card *views.MailCalendarEventData, item mailCalendarEvent, candidates []storage.CalendarEvent, sources []storage.CalendarSource, accountID, address string) {
+	card.Invitation = mailCalendarInvitationOffer(item, candidates, sources, accountID, address)
+	if card.Invitation != nil && card.Invitation.SourceID != "" {
+		card.Note = "" // Instead of "could not be matched to an event".
+	}
+}
+
+// handleMailCalendarInvitation adds an email's invitation to a CalDAV
+// calendar, or updates or removes the event it is for, then shows the card.
+func (h *Handler) handleMailCalendarInvitation(w http.ResponseWriter, r *http.Request) {
+	if r.ParseForm() != nil {
+		http.Error(w, "The request could not be read.", http.StatusBadRequest)
+		return
+	}
+	uid, sourceID := r.PostForm.Get("uid"), r.PostForm.Get("source_id")
+	ctx, cancel := context.WithTimeout(context.WithoutCancel(r.Context()), calendarSourceTimeout)
+	defer cancel()
+	emailID := r.PathValue("id")
+	fail := func(message string) { h.renderMailCalendarFooter(ctx, w, emailID, false, uid, message) }
+	_, accountID, raw, address, err := h.readMailCalendarMessage(ctx, emailID)
+	if err != nil || uid == "" || len(uid) > 1024 {
+		fail("The invitation could not be read.")
+		return
+	}
+	invitation, err := readMailInvitation(raw, uid, address)
+	if err != nil {
+		fail(mailCalendarInvitationFailure(err))
+		return
+	}
+	userID := h.userID(ctx)
+	candidates, err := h.db.ListMailCalendarEvents(ctx, userID, accountID, uid)
+	if err != nil {
+		fail("The calendar could not be read. Try again.")
+		return
+	}
+	sources, err := h.db.ListSelectedCalendarSources(ctx, userID)
+	if err != nil {
+		fail("The calendar could not be read. Try again.")
+		return
+	}
+	source, existing, err := mailCalendarInvitationTarget(candidates, sources, accountID, sourceID)
+	if err != nil {
+		fail(mailCalendarInvitationFailure(err))
+		return
+	}
+	if !h.calendarWriteAuthorized(ctx, source) {
+		fail("This account can't write to its calendar. Check it in Accounts.")
+		return
+	}
+	unlock, err := h.lockCalendarCreate(ctx, source)
+	if err != nil {
+		fail("Calendar is still refreshing. Try again.")
+		return
+	}
+	credentials := h.calendarUpdateCredentials(ctx, source)
+	if credentials.err == nil {
+		_, err = applyCalDAVInvitation(ctx, source, credentials, invitation, existing)
+	} else {
+		err = credentials.err
+	}
+	unlock()
+	if err != nil {
+		fail(mailCalendarInvitationFailure(err))
+		return
+	}
+	h.renderMailCalendarFooter(ctx, w, emailID, true, "", "")
+}
+
+func mailCalendarInvitationFailure(err error) string {
+	switch {
+	case errors.Is(err, errCalendarUpdateConflict):
+		return "The event changed in your calendar. Refresh and try again."
+	case errors.Is(err, errCalendarUpdateUnsupported):
+		return err.Error()
+	}
+	var provider calendarCreateProviderError
+	if errors.As(err, &provider) && provider.Status == http.StatusPreconditionFailed {
+		return "The event changed in your calendar. Refresh and try again."
+	}
+	var refusal calendarInvitationRefusal
+	if errors.As(err, &refusal) {
+		return "Gofer can't do this: " + refusal.Error() + "."
+	}
+	return "The calendar didn't accept the change. Try again."
 }
 
 func matchMailCalendarEvents(events []storage.CalendarEvent, item mailCalendarEvent) (storage.CalendarEvent, bool) {

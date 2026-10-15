@@ -21,8 +21,9 @@ import (
 	"github.com/google/uuid"
 )
 
+// A scheduling message for one event, or for a series with its changed dates.
 func calendarNotificationICS(source *ical.Calendar, method string, guests []calendar.GuestDraft) (string, error) {
-	if method != "REQUEST" && method != "CANCEL" || len(source.Events()) != 1 {
+	if method != "REQUEST" && method != "CANCEL" || len(source.Events()) == 0 {
 		return "", fmt.Errorf("invalid scheduling message")
 	}
 	cal := ical.NewCalendar()
@@ -34,43 +35,45 @@ func calendarNotificationICS(source *ical.Calendar, method string, guests []cale
 			cal.Children = append(cal.Children, cloneCalendarComponent(child))
 		}
 	}
-	event := cloneCalendarComponent(source.Events()[0].Component)
 	allowed := map[string]bool{}
-	for _, name := range []string{"UID", "DTSTAMP", "SEQUENCE", "DTSTART", "DTEND", "DURATION", "SUMMARY", "DESCRIPTION", "X-ALT-DESC", "LOCATION", "STATUS", "ORGANIZER", "ATTENDEE", "TRANSP", "CLASS", "URL"} {
+	for _, name := range []string{"UID", "DTSTAMP", "SEQUENCE", "DTSTART", "DTEND", "DURATION", "SUMMARY", "DESCRIPTION", "X-ALT-DESC", "LOCATION", "STATUS", "ORGANIZER", "ATTENDEE", "TRANSP", "CLASS", "URL", "RRULE", "EXDATE", "RECURRENCE-ID"} {
 		allowed[name] = true
 	}
-	for name := range event.Props {
-		if !allowed[name] {
-			delete(event.Props, name)
-		}
+	wanted := map[string]bool{}
+	for _, guest := range guests {
+		wanted[guest.Email] = true
 	}
-	event.Children = nil // Personal alarms and private metadata stay on DAV.
-	for name, props := range event.Props {
-		for i := range props {
-			for param := range props[i].Params {
-				if strings.HasPrefix(param, "SCHEDULE-") {
-					delete(props[i].Params, param)
+	for _, original := range source.Events() {
+		event := cloneCalendarComponent(original.Component)
+		for name := range event.Props {
+			if !allowed[name] {
+				delete(event.Props, name)
+			}
+		}
+		event.Children = nil // Personal alarms and private metadata stay on DAV.
+		for name, props := range event.Props {
+			for i := range props {
+				for param := range props[i].Params {
+					if strings.HasPrefix(param, "SCHEDULE-") {
+						delete(props[i].Params, param)
+					}
 				}
 			}
+			event.Props[name] = props
 		}
-		event.Props[name] = props
-	}
-	event.Props.SetDateTime("DTSTAMP", time.Now().UTC())
-	if method == "CANCEL" {
-		event.Props.SetText("STATUS", "CANCELLED")
-		wanted := map[string]bool{}
-		for _, guest := range guests {
-			wanted[guest.Email] = true
-		}
-		var people []ical.Prop
-		for _, person := range event.Props["ATTENDEE"] {
-			if wanted[calendarReplyAddress(person.Value)] {
-				people = append(people, person)
+		event.Props.SetDateTime("DTSTAMP", time.Now().UTC())
+		if method == "CANCEL" {
+			event.Props.SetText("STATUS", "CANCELLED")
+			var people []ical.Prop
+			for _, person := range event.Props["ATTENDEE"] {
+				if wanted[calendarReplyAddress(person.Value)] {
+					people = append(people, person)
+				}
 			}
+			event.Props["ATTENDEE"] = people
 		}
-		event.Props["ATTENDEE"] = people
+		cal.Children = append(cal.Children, event)
 	}
-	cal.Children = append(cal.Children, event)
 	return encodeCalendarReply(cal)
 }
 
@@ -126,7 +129,11 @@ func (h *Handler) queueCalendarNotification(ctx context.Context, source storage.
 			return err
 		}
 	}
-	summary, _ := cal.Events()[0].Props.Text("SUMMARY")
+	summaryEvent := calendarMeetingMaster(cal)
+	if summaryEvent == nil {
+		summaryEvent = cal.Events()[0].Component
+	}
+	summary, _ := summaryEvent.Props.Text("SUMMARY")
 	label := "Invitation"
 	if method == "CANCEL" {
 		label = "Canceled"
@@ -201,12 +208,19 @@ func (h *Handler) beforeCalendarNotificationSend(ctx context.Context, send stora
 		return unlock, err
 	}
 	icalMessage, err := calendarUpdateDecodeICS([]byte(note.Calendar))
-	if err != nil || len(icalMessage.Events()) != 1 || icalMessage.Props.Get("METHOD") == nil || icalMessage.Props.Get("METHOD").Value != note.Method || icalMessage.Events()[0].Props.Get("ORGANIZER") == nil || calendarReplyAddress(icalMessage.Events()[0].Props.Get("ORGANIZER").Value) != strings.ToLower(account.Email) {
+	if err != nil || len(icalMessage.Events()) == 0 || icalMessage.Props.Get("METHOD") == nil || icalMessage.Props.Get("METHOD").Value != note.Method || (note.Method == "CANCEL" && len(icalMessage.Events()) != 1) {
 		return unlock, fmt.Errorf("invalid meeting organizer notification")
 	}
+	// An invitation may cover a series and its changed dates; each is from
+	// this organizer, and its recipients are the guests of any of them.
 	allowed := map[string]bool{}
-	for _, person := range icalMessage.Events()[0].Props["ATTENDEE"] {
-		allowed[calendarReplyAddress(person.Value)] = true
+	for _, event := range icalMessage.Events() {
+		if event.Props.Get("ORGANIZER") == nil || calendarReplyAddress(event.Props.Get("ORGANIZER").Value) != strings.ToLower(account.Email) {
+			return unlock, fmt.Errorf("invalid meeting organizer notification")
+		}
+		for _, person := range event.Props["ATTENDEE"] {
+			allowed[calendarReplyAddress(person.Value)] = true
+		}
 	}
 	if len(send.EnvelopeRecipients) == 0 {
 		return unlock, fmt.Errorf("no meeting recipients")
@@ -244,12 +258,13 @@ func (h *Handler) beforeCalendarNotificationSend(ctx context.Context, send stora
 	}
 	matches := calendarMeetingResourceMatches(desired, current)
 	if note.Method == "CANCEL" {
-		matches = calendarNotificationRemovedGuestsMatch(desired, current, send.EnvelopeRecipients)
+		// A cancellation for one date of a series names that date.
+		matches = calendarNotificationRemovedGuestsMatch(desired, current, send.EnvelopeRecipients, calendarMeetingDateKey(icalMessage.Events()[0].Component))
 	}
 	if !matches {
 		return unlock, markOutgoingSendRetryable(fmt.Errorf("notification is waiting for the matching saved meeting; refresh the calendar"))
 	}
-	if current.Events()[0].Props.Get("ORGANIZER").Params.Get("SCHEDULE-AGENT") != "CLIENT" {
+	if master := calendarMeetingMaster(current); master == nil || master.Props.Get("ORGANIZER").Params.Get("SCHEDULE-AGENT") != "CLIENT" {
 		return unlock, fmt.Errorf("the calendar server now handles guest notifications")
 	}
 	return unlock, nil
@@ -257,11 +272,14 @@ func (h *Handler) beforeCalendarNotificationSend(ctx context.Context, send stora
 
 // A later organizer update must not suppress a pending removal cancellation.
 // Conversely, re-adding that guest must prevent a stale cancellation email.
-func calendarNotificationRemovedGuestsMatch(expected, actual *ical.Calendar, recipients []string) bool {
-	if len(expected.Events()) != 1 || len(actual.Events()) != 1 {
+// For one date of a series (key), only that date is checked: the guests must
+// no longer be invited to it, or the date must be gone from the series.
+func calendarNotificationRemovedGuestsMatch(expected, actual *ical.Calendar, recipients []string, key string) bool {
+	expectedMaster, actualMaster := calendarMeetingMaster(expected), calendarMeetingMaster(actual)
+	if expectedMaster == nil || actualMaster == nil {
 		return false
 	}
-	left, right := expected.Events()[0].Props, actual.Events()[0].Props
+	left, right := expectedMaster.Props, actualMaster.Props
 	if left.Get("UID") == nil || right.Get("UID") == nil || left.Get("UID").Value != right.Get("UID").Value || left.Get("ORGANIZER") == nil || right.Get("ORGANIZER") == nil {
 		return false
 	}
@@ -269,11 +287,22 @@ func calendarNotificationRemovedGuestsMatch(expected, actual *ical.Calendar, rec
 	if err := calendarMeetingCalDAVShape(actual, http.Header{}, organizer); err != nil {
 		return false
 	}
-	a, err := calendarMeetingSequence(expected, false)
+	before, after := expectedMaster, actualMaster
+	if key != "" {
+		if date := calendarMeetingComponent(expected, key); date != nil {
+			before = date
+		}
+		if date := calendarMeetingComponent(actual, key); date != nil {
+			after = date
+		} else if calendarMeetingExcluded(actualMaster, key) {
+			return true
+		}
+	}
+	a, err := calendarMeetingComponentSequence(before, false)
 	if err != nil {
 		return false
 	}
-	b, err := calendarMeetingSequence(actual, false)
+	b, err := calendarMeetingComponentSequence(after, false)
 	if err != nil {
 		return false
 	}
@@ -282,10 +311,19 @@ func calendarNotificationRemovedGuestsMatch(expected, actual *ical.Calendar, rec
 	if newSequence < oldSequence {
 		return false
 	}
-	for _, person := range right["ATTENDEE"] {
-		for _, recipient := range recipients {
-			if calendarReplyAddress(person.Value) == strings.ToLower(recipient) {
-				return false
+	invited := []*ical.Component{after}
+	if key == "" {
+		invited = nil
+		for _, event := range actual.Events() {
+			invited = append(invited, event.Component)
+		}
+	}
+	for _, event := range invited {
+		for _, person := range event.Props["ATTENDEE"] {
+			for _, recipient := range recipients {
+				if calendarReplyAddress(person.Value) == strings.ToLower(recipient) {
+					return false
+				}
 			}
 		}
 	}

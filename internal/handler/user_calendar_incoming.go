@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/cristianadrielbraun/gofer/internal/config"
 	"github.com/cristianadrielbraun/gofer/internal/mail"
 	"github.com/cristianadrielbraun/gofer/internal/mail/message"
 	"github.com/cristianadrielbraun/gofer/internal/storage"
@@ -39,7 +40,10 @@ func (h *Handler) processUserCalendarIncoming(ctx context.Context, candidate sto
 	if err != nil {
 		return err
 	}
-	return h.userIMAP.RunAccountService(ctx, candidate.UserID, candidate.AccountID, mail.AccountServiceCalendar, 30*time.Second, func(operation context.Context) error {
+	// A reply to a series changes many cached dates; they are refreshed from
+	// the server once the reply's own operation has released its locks.
+	var series *config.UserCalendarEventSnapshot
+	err = h.userIMAP.RunAccountService(ctx, candidate.UserID, candidate.AccountID, mail.AccountServiceCalendar, 30*time.Second, func(operation context.Context) error {
 		if err := h.userAccounts.ValidateCalendarIncomingMessage(operation, claim); err != nil {
 			return err
 		}
@@ -58,7 +62,7 @@ func (h *Handler) processUserCalendarIncoming(ctx context.Context, candidate sto
 			if err != nil || reply == nil || reply.From != candidate.From {
 				return fmt.Errorf("%w: no supported reply from the invited guest", errCalendarIncomingIgnored)
 			}
-			event, err := h.userAccounts.FindCalendarIncomingEvent(operation, claim, reply.UID)
+			event, err := h.userAccounts.FindCalendarIncomingEvent(operation, claim, reply.UID, reply.RecurrenceID, reply.Attendee)
 			if errors.Is(err, sql.ErrNoRows) {
 				return errCalendarIncomingIgnored
 			}
@@ -95,10 +99,13 @@ func (h *Handler) processUserCalendarIncoming(ctx context.Context, candidate sto
 			if err != nil {
 				return err
 			}
+			if event.Event().SeriesRemoteID != "" {
+				defer func() { series = event }()
+			}
 			return applyCalendarIncomingCalDAV(action, event.Source(), event.Event(), *reply, credentials,
 				func(ctx context.Context) (bool, error) {
 					var err error
-					p.incomingResponse, err = h.userAccounts.ReserveCalendarIncomingResponse(ctx, claim, event, reply.Sequence, reply.Stamp, reply.Status)
+					p.incomingResponse, err = h.userAccounts.ReserveCalendarIncomingResponse(ctx, claim, event, reply.RecurrenceID, reply.Sequence, reply.Stamp, reply.Status)
 					if errors.Is(err, storage.ErrCalendarIncomingChanged) {
 						return false, nil
 					}
@@ -118,8 +125,15 @@ func (h *Handler) processUserCalendarIncoming(ctx context.Context, candidate sto
 		finishCtx, cancel := context.WithTimeout(context.WithoutCancel(operation), 5*time.Second)
 		defer cancel()
 		_, finishErr := h.userAccounts.FinishCalendarIncomingDelivery(finishCtx, claim, state, note, reason)
+		if err != nil {
+			series = nil
+		}
 		return errors.Join(err, finishErr)
 	})
+	if err == nil && series != nil {
+		h.refreshUserCalendarEditedSeries(ctx, series.Source(), series.Event())
+	}
+	return err
 }
 
 func calendarIncomingOutcome(err error) (state, note, reason string) {

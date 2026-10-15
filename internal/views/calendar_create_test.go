@@ -242,20 +242,3 @@ func TestCalendarCreateEmptySelectorIsDisabled(t *testing.T) {
 		t.Error("The empty selector needs an explicit placeholder")
 	}
 }
-
-func TestCalendarGuestsEditableForRecurringGoogleAndOutlook(t *testing.T) {
-	for _, tc := range []struct {
-		data CalendarCreateData
-		want bool
-	}{
-		{CalendarCreateData{}, true},
-		{CalendarCreateData{EditSeries: true, Sources: []CalendarCreateSource{{Provider: "gmail"}}}, true},
-		{CalendarCreateData{EditOccurrence: true, Sources: []CalendarCreateSource{{Provider: "outlook"}}}, true},
-		{CalendarCreateData{EditSeries: true, Sources: []CalendarCreateSource{{Provider: "caldav"}}}, false},
-		{CalendarCreateData{EditOccurrence: true, Sources: []CalendarCreateSource{{Provider: "caldav"}}}, false},
-	} {
-		if got := calendarGuestsEditable(tc.data); got != tc.want {
-			t.Errorf("calendarGuestsEditable(%+v) = %v, want %v", tc.data, got, tc.want)
-		}
-	}
-}

@@ -263,7 +263,7 @@ func TestCalendarJSONProviderUpdateConditionalAndPreserving(t *testing.T) {
 }
 
 func TestCalendarCalDAVUpdatePreservesResourceAndConfirmsSave(t *testing.T) {
-	for _, mode := range []string{"timed", "all-day", "race", "confirmation-failure", "confirmation-mismatch", "guests", "recurring", "recurring-all-day", "recurring-missing", "recurring-mismatch", "already-recurring", "series", "series-all-day", "series-exceptions", "series-complex", "series-instance", "series-race"} {
+	for _, mode := range []string{"timed", "all-day", "race", "confirmation-failure", "confirmation-mismatch", "guests", "recurring", "recurring-all-day", "recurring-missing", "recurring-mismatch", "already-recurring", "series", "series-all-day", "series-exceptions", "series-dates-title", "series-dates-reset", "series-complex", "series-instance", "series-race"} {
 		t.Run(mode, func(t *testing.T) {
 			draft := calendarProviderDraft(t, strings.HasSuffix(mode, "all-day"))
 			series := strings.HasPrefix(mode, "series")
@@ -289,8 +289,20 @@ func TestCalendarCalDAVUpdatePreservesResourceAndConfirmsSave(t *testing.T) {
 			if mode == "series-complex" {
 				raw = strings.Replace(raw, "FREQ=DAILY;INTERVAL=1;COUNT=6", "FREQ=WEEKLY;BYDAY=MO,WE", 1)
 			}
-			if mode == "series-exceptions" {
+			// Dates removed or changed one by one: a new title reaches a changed
+			// date that kept the series' title; a new time or repeat rule needs
+			// the organizer's confirmation to reset them.
+			dated := mode == "series-exceptions" || strings.HasPrefix(mode, "series-dates")
+			if dated {
 				raw = strings.Replace(raw, "END:VEVENT", "EXDATE:20261003T070000Z\r\nEND:VEVENT", 1)
+				raw = strings.Replace(raw, "END:VCALENDAR", "BEGIN:VEVENT\r\nUID:"+draft.RequestID+"@gofer\r\nRECURRENCE-ID:20261004T070000Z\r\nDTSTAMP:20261001T000000Z\r\nDTSTART:20261004T080000Z\r\nDTEND:20261004T090000Z\r\nSUMMARY:Planning\r\nEND:VEVENT\r\nEND:VCALENDAR", 1)
+			}
+			if mode == "series-dates-title" {
+				draft.Recurrence = before.Recurrence
+				draft.Summary = "Renamed"
+			}
+			if mode == "series-dates-reset" {
+				draft.ResetSeriesDates = true
 			}
 			if mode == "series-instance" {
 				raw = strings.Replace(raw, "END:VEVENT", "RECURRENCE-ID:20261002T070000Z\r\nEND:VEVENT", 1)
@@ -369,7 +381,11 @@ func TestCalendarCalDAVUpdatePreservesResourceAndConfirmsSave(t *testing.T) {
 				if !errors.Is(err, errCalendarUpdateConflict) {
 					t.Fatalf("expected conflict, got %v", err)
 				}
-			case "guests", "already-recurring", "series-exceptions", "series-instance", "series-complex":
+			case "series-exceptions":
+				if !errors.Is(err, errCalendarSeriesDatesReset) || puts != 0 {
+					t.Fatalf("dates reset without confirmation: %v", err)
+				}
+			case "guests", "already-recurring", "series-instance", "series-complex":
 				if !errors.Is(err, errCalendarUpdateUnsupported) || puts != 0 {
 					t.Fatalf("guest event written: %v", err)
 				}
@@ -392,6 +408,18 @@ func TestCalendarCalDAVUpdatePreservesResourceAndConfirmsSave(t *testing.T) {
 					}
 					if !draft.AllDay && (!strings.Contains(raw, "BEGIN:VTIMEZONE") || saved.Events()[0].Props.Get("DTSTART").Params.Get("TZID") != draft.TimeZone) {
 						t.Fatal("timed series conversion discarded DST timezone definitions")
+					}
+				}
+				switch mode {
+				case "series-dates-title":
+					date := calendarMeetingComponent(saved, "2026-10-04T07:00:00Z")
+					summary, _ := date.Props.Text("SUMMARY")
+					if date == nil || summary != "Renamed" || date.Props.Get("DTSTART").Value != "20261004T080000Z" || saved.Events()[0].Props.Get("EXDATE") == nil {
+						t.Fatalf("changed and removed dates not kept: %s", raw)
+					}
+				case "series-dates-reset":
+					if len(saved.Events()) != 1 || saved.Events()[0].Props.Get("EXDATE") != nil {
+						t.Fatalf("dates not reset: %s", raw)
 					}
 				}
 			}

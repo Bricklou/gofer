@@ -43,7 +43,9 @@ func calendarOccurrenceExistingRestriction(existing storage.CalendarEvent) error
 	}, existing.SeriesRemoteID); reason != "" {
 		return calendarUpdateUnsupported(reason)
 	}
+	// CalDAV marks the organizer by address, not by a reply status.
 	existing.SeriesRemoteID, existing.RecurrenceJSON = "", "[]"
+	existing.ResponseStatus = calendarStoredOrganizerStatus(existing)
 	return calendarUpdateExistingRestriction(existing)
 }
 

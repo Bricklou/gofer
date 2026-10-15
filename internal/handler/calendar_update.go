@@ -60,9 +60,6 @@ func calendarEventMutationRestriction(event storage.CalendarEvent, source storag
 	if !calendarSourceWritable(source) {
 		return "This calendar is read-only."
 	}
-	if series && source.Provider == storage.CalendarSourceProviderCalDAV && calendarUpdateHasDetails(json.RawMessage(event.AttendeesJSON)) {
-		return "Recurring meetings with guests cannot be edited yet."
-	}
 	if reason := calendarStoredEditRestriction(event); reason != "" {
 		return reason
 	}
@@ -252,6 +249,18 @@ func parseCalendarUpdateDraft(r *http.Request) (calendar.EventDraft, string, err
 	return draft, versions[0], err
 }
 
+// errCalendarSeriesDatesReset asks the organizer to confirm a series change
+// that can't keep the dates changed one by one; nothing was saved.
+var errCalendarSeriesDatesReset = errors.New("Changing the time or repeat of this series resets the dates changed one by one: their own changes are discarded, removed dates come back, and guests get the whole series again.")
+
+// calendarSeriesResetFailure asks the dialog to confirm, then save again.
+func calendarSeriesResetFailure(w http.ResponseWriter) {
+	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("Cache-Control", "private, no-store")
+	w.WriteHeader(http.StatusConflict)
+	_ = json.NewEncoder(w).Encode(map[string]any{"error": errCalendarSeriesDatesReset.Error(), "confirm": "reset_series_dates", "uncertain": false, "conflict": false})
+}
+
 func calendarUpdateFailure(w http.ResponseWriter, status int, message string, uncertain, conflict bool) {
 	w.Header().Set("Content-Type", "application/json")
 	w.Header().Set("Cache-Control", "private, no-store")
@@ -278,8 +287,8 @@ func (h *Handler) updateCalendarProviderEvent(ctx context.Context, source storag
 			return calendar.RemoteEvent{}, err
 		}
 		if occurrence {
-			if len(draft.Guests) > 0 {
-				return calendar.RemoteEvent{}, calendarDeletePreflightError{calendarUpdateUnsupported("Recurring meetings with guests are not supported on CalDAV calendars yet.")}
+			if len(draft.Guests) > 0 || event.OrganizerEmail != "" || calendarUpdateHasDetails(json.RawMessage(event.AttendeesJSON)) {
+				return h.updateCalDAVMeetingOccurrence(ctx, source, credentials, event, &draft)
 			}
 			return updateCalDAVCalendarOccurrence(ctx, source, credentials.username, credentials.password, event, &draft)
 		}
@@ -377,10 +386,6 @@ func (h *Handler) handleUpdateCalendarEvent(w http.ResponseWriter, r *http.Reque
 		return
 	}
 	occurrence := event
-	if draft.Recurrence != nil && source.Provider == storage.CalendarSourceProviderCalDAV && calendarUpdateHasDetails(json.RawMessage(event.AttendeesJSON)) {
-		calendarUpdateFailure(w, 400, "Recurring meetings with guests are not supported yet.", false, false)
-		return
-	}
 	draft.OrganizerEmail, draft.OrganizerName = event.OrganizerEmail, event.OrganizerName
 	if calendarCachedOrganizer(event) {
 		event.ResponseStatus = "organizer"
@@ -416,6 +421,8 @@ func (h *Handler) handleUpdateCalendarEvent(w http.ResponseWriter, r *http.Reque
 		var preflight calendarDeletePreflightError
 		var configuration calendarReplyConfigurationError
 		switch {
+		case errors.Is(err, errCalendarSeriesDatesReset):
+			calendarSeriesResetFailure(w)
 		case errors.As(err, &configuration):
 			calendarUpdateFailure(w, http.StatusBadRequest, configuration.Error(), false, false)
 		case errors.Is(err, errCalendarOccurrenceBoundary):

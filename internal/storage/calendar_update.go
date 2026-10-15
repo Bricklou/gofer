@@ -145,6 +145,11 @@ func completeCalendarUpdateTx(ctx context.Context, tx *sql.Tx, userID, eventID, 
 		}
 	}
 	if occurrence {
+		// A date of a series can have its own guests and meeting link.
+		if _, err := tx.ExecContext(ctx, `UPDATE calendar_events SET attendees_json=?,online_meeting_json=? WHERE id=? AND user_id=? AND source_id=? AND etag=?`,
+			calendarJSON(event.AttendeesJSON, "[]"), calendarJSON(event.OnlineMeetingJSON, "{}"), eventID, userID, sourceID, event.ETag); err != nil {
+			return err
+		}
 		if err := advanceCalendarOccurrenceResourceVersion(ctx, tx, userID, sourceID, expectedETag, event); err != nil {
 			return err
 		}

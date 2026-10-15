@@ -3,7 +3,10 @@ package storage
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"fmt"
+	"net/url"
+	"strings"
 	"time"
 )
 
@@ -116,8 +119,12 @@ func (db *DB) FinishCalendarIncomingDelivery(ctx context.Context, m CalendarInco
 	return err
 }
 
-func (db *DB) FindCalendarIncomingEvent(ctx context.Context, userID, accountID, uid string) (CalendarEvent, error) {
-	rows, err := db.Read().QueryContext(ctx, calendarEventSelect+` AND account.id=? AND source.provider='caldav' AND event.ical_uid=? AND event.series_remote_id='' LIMIT 2`, userID, accountID, uid)
+// FindCalendarIncomingEvent returns the cached meeting a guest's reply is
+// for. A series is cached as its dates, all in one resource: the reply is
+// associated with the date it names (date, as cached), or else with a date the
+// guest is invited to.
+func (db *DB) FindCalendarIncomingEvent(ctx context.Context, userID, accountID, uid, date, attendee string) (CalendarEvent, error) {
+	rows, err := db.Read().QueryContext(ctx, calendarEventSelect+` AND account.id=? AND source.provider='caldav' AND event.ical_uid=? AND event.is_deleted=0 ORDER BY event.id`, userID, accountID, uid)
 	if err != nil {
 		return CalendarEvent{}, err
 	}
@@ -133,10 +140,57 @@ func (db *DB) FindCalendarIncomingEvent(ctx context.Context, userID, accountID, 
 	if err := rows.Err(); err != nil {
 		return CalendarEvent{}, err
 	}
-	if len(matches) != 1 {
+	if len(matches) == 0 {
 		return CalendarEvent{}, sql.ErrNoRows
 	}
-	return matches[0], nil
+	series := matches[0].SeriesRemoteID
+	for _, e := range matches {
+		if e.SeriesRemoteID != series || (series == "" && len(matches) != 1) {
+			return CalendarEvent{}, sql.ErrNoRows // Ambiguous: several resources share the UID.
+		}
+	}
+	if series == "" {
+		if date != "" {
+			return CalendarEvent{}, sql.ErrNoRows
+		}
+		return matches[0], nil
+	}
+	if date != "" {
+		for _, e := range matches {
+			if e.RemoteID == series+"#recurrence="+url.QueryEscape(date) {
+				return e, nil
+			}
+		}
+		return CalendarEvent{}, sql.ErrNoRows // That date isn't cached; it can't be checked.
+	}
+	for _, e := range matches {
+		if calendarIncomingInvited(e.AttendeesJSON, attendee) {
+			return e, nil
+		}
+	}
+	return CalendarEvent{}, sql.ErrNoRows
+}
+
+func calendarIncomingInvited(attendees, attendee string) bool {
+	var guests []struct{ Email string }
+	if json.Unmarshal([]byte(attendees), &guests) != nil {
+		return false
+	}
+	for _, g := range guests {
+		if strings.EqualFold(g.Email, attendee) {
+			return true
+		}
+	}
+	return false
+}
+
+// CalendarIncomingResponseKey identifies what a guest replied to: the meeting
+// or whole series by its UID, or one date of a series by its UID and date.
+func CalendarIncomingResponseKey(uid, date string) string {
+	if date == "" {
+		return uid
+	}
+	return uid + "\x00" + date
 }
 
 // Reserve the newest authenticated reply before PUT. An ambiguous write may

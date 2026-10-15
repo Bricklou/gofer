@@ -162,3 +162,38 @@ func meetingJoinURLFromDescription(value string, recognize func(string) string) 
 	}
 	return ""
 }
+
+// Microsoft writes a meeting's Teams joining details into its description,
+// between two separator lines (underscores or dots).
+var teamsBlockSeparator = regexp.MustCompile(`[_.─━]{20,}`)
+var teamsBlockLink = regexp.MustCompile(`(?i)https?://(teams\.live\.com|teams\.microsoft\.com|teams\.cloud\.microsoft)/`)
+
+// RemoveTeamsJoinBlock removes Microsoft's Teams joining details from a
+// description (text or HTML): from a separator line followed by a Teams link
+// to the next separator line, or to the end when there is none. Separators
+// without a Teams link between them are the organizer's own and stay.
+func RemoveTeamsJoinBlock(value string) string {
+	separators := teamsBlockSeparator.FindAllStringIndex(value, -1)
+	for i, start := range separators {
+		end := len(value)
+		if i+1 < len(separators) {
+			end = separators[i+1][1]
+		}
+		if !teamsBlockLink.MatchString(value[start[1]:end]) {
+			continue
+		}
+		rest := value[end:]
+		// Drop the line break that ended the closing separator.
+		for _, lineEnd := range []string{"<br>", "<br/>", "<br />", "\r\n", "\n"} {
+			if strings.HasPrefix(strings.ToLower(rest), lineEnd) {
+				rest = rest[len(lineEnd):]
+				break
+			}
+		}
+		if strings.TrimSpace(rest) == "" {
+			return strings.TrimRight(value[:start[0]], " \t\r\n")
+		}
+		return value[:start[0]] + rest
+	}
+	return value
+}

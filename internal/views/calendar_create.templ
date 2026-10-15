@@ -140,36 +140,34 @@ templ CalendarCreateDialog(data CalendarCreateData) {
 							}
 							@input.Input(input.Props{ID: "calendar-create-location", Name: "location", Value: data.Location, Placeholder: "Add location", Attributes: templ.Attributes{"maxlength": "1024"}})
 						}
-						if calendarGuestsEditable(data) {
-							@calendarDialogRow(icon.Users(icon.Props{Class: "size-4"}), "pt-2.5") {
-								<div class="relative space-y-1.5">
-									@label.Label(label.Props{For: "calendar-create-guests", Class: "sr-only"}) {
-										Guests
+						@calendarDialogRow(icon.Users(icon.Props{Class: "size-4"}), "pt-2.5") {
+							<div class="relative space-y-1.5">
+								@label.Label(label.Props{For: "calendar-create-guests", Class: "sr-only"}) {
+									Guests
+								}
+								@popover.Root(popover.RootProps{ID: "calendar-guests-dropdown"}) {
+									@popover.Trigger(popover.TriggerProps{TriggerType: popover.TriggerTypeManual}) {
+										@input.Input(input.Props{
+											ID: "calendar-create-guests", Type: input.TypeText, Name: "guests", Value: data.Guests,
+											Placeholder: "Add guests by name or email",
+											Attributes: templ.Attributes{
+												"maxlength": "16384", "autocomplete": "off",
+												"data-1p-ignore": "true", "data-bwignore": "true", "data-lpignore": "true",
+												"hx-get": "/api/calendar/guest-suggestions", "hx-trigger": "input changed delay:200ms",
+												"hx-params": "guests", "hx-target": "#calendar-guest-suggestions", "hx-sync": "this:replace",
+												"role": "combobox", "aria-autocomplete": "list", "aria-expanded": "false", "aria-controls": "calendar-guest-suggestions",
+												"data-on-focus": onAction("updateCalendarGuestDropdown", actionClosest("[data-calendar-create-form]")),
+												"data-on-click": onAction("updateCalendarGuestDropdown", actionClosest("[data-calendar-create-form]")),
+												"data-on-keydown": onAction("handleCalendarGuestKeydown", actionEvent, actionElement),
+											},
+										})
 									}
-									@popover.Root(popover.RootProps{ID: "calendar-guests-dropdown"}) {
-										@popover.Trigger(popover.TriggerProps{TriggerType: popover.TriggerTypeManual}) {
-											@input.Input(input.Props{
-												ID: "calendar-create-guests", Type: input.TypeText, Name: "guests", Value: data.Guests,
-												Placeholder: "Add guests by name or email",
-												Attributes: templ.Attributes{
-													"maxlength": "16384", "autocomplete": "off",
-													"data-1p-ignore": "true", "data-bwignore": "true", "data-lpignore": "true",
-													"hx-get": "/api/calendar/guest-suggestions", "hx-trigger": "input changed delay:200ms",
-													"hx-params": "guests", "hx-target": "#calendar-guest-suggestions", "hx-sync": "this:replace",
-													"role": "combobox", "aria-autocomplete": "list", "aria-expanded": "false", "aria-controls": "calendar-guest-suggestions",
-													"data-on-focus": onAction("updateCalendarGuestDropdown", actionClosest("[data-calendar-create-form]")),
-													"data-on-click": onAction("updateCalendarGuestDropdown", actionClosest("[data-calendar-create-form]")),
-													"data-on-keydown": onAction("handleCalendarGuestKeydown", actionEvent, actionElement),
-												},
-											})
-										}
-										@popover.Content(popover.ContentProps{Placement: popover.PlacementBottomStart, Exclusive: true, Class: "z-50 max-w-[calc(100vw-2rem)] overflow-hidden rounded-md border bg-popover p-1 text-popover-foreground shadow-md", Attributes: templ.Attributes{"data-calendar-guests-dropdown-content": "", "data-on-toggle": onAction("syncCalendarGuestDropdownState", actionElement, actionEvent)}}) {
-											<div id="calendar-guest-suggestions" class="max-h-60 overflow-y-auto" role="listbox" aria-label="Matching contacts"></div>
-										}
+									@popover.Content(popover.ContentProps{Placement: popover.PlacementBottomStart, Exclusive: true, Class: "z-50 max-w-[calc(100vw-2rem)] overflow-hidden rounded-md border bg-popover p-1 text-popover-foreground shadow-md", Attributes: templ.Attributes{"data-calendar-guests-dropdown-content": "", "data-on-toggle": onAction("syncCalendarGuestDropdownState", actionElement, actionEvent)}}) {
+										<div id="calendar-guest-suggestions" class="max-h-60 overflow-y-auto" role="listbox" aria-label="Matching contacts"></div>
 									}
-									<p class="text-xs text-muted-foreground" data-calendar-guests-help>Separate guests with commas. Saving sends invitations and updates.</p>
-								</div>
-							}
+								}
+								<p class="text-xs text-muted-foreground" data-calendar-guests-help>Separate guests with commas. Saving sends invitations and updates.</p>
+							</div>
 						}
 						<template data-calendar-teams-checking>
 							@CalendarTeamsOption(CalendarTeamsData{State:"checking"})
@@ -187,6 +185,14 @@ templ CalendarCreateDialog(data CalendarCreateData) {
 						}
 					</div>
 				</div>
+				if data.EditSeries {
+					// Shown when the server asks: a time or repeat change resets the
+					// dates changed one by one, which the organizer has to confirm.
+					<label data-calendar-series-reset hidden class="flex shrink-0 items-start gap-2 border-t border-border px-5 pt-3 text-sm sm:px-6">
+						<input type="checkbox" name="reset_series_dates" value="true" class="mt-0.5"/>
+						<span>Reset the dates changed one by one and save the series</span>
+					</label>
+				}
 				<p data-calendar-create-error role="alert" aria-atomic="true" tabindex="-1" hidden class="max-h-24 shrink-0 overflow-y-auto border-t border-border px-5 py-3 text-sm leading-relaxed text-destructive sm:px-6"></p>
 				<footer class="flex shrink-0 items-center justify-end gap-2 border-t border-border px-5 py-3 sm:px-6">
 					@button.Button(button.Props{Variant: button.VariantGhost, Class: "font-semibold", Attributes: templ.Attributes{"data-tui-dialog-close": ""}}) {

@@ -8,6 +8,7 @@ import (
 	"io"
 	"log"
 	"net/http"
+	"net/url"
 	"strconv"
 	"strings"
 	"time"
@@ -87,7 +88,7 @@ func (h *Handler) processCalendarIncomingMessage(ctx context.Context, candidate 
 	}
 	// Associate only syntactically valid replies for this organizer and a
 	// currently invited guest. This is diagnostic metadata, not authentication.
-	event, err := h.db.FindCalendarIncomingEvent(ctx, candidate.UserID, candidate.AccountID, reply.UID)
+	event, err := h.db.FindCalendarIncomingEvent(ctx, candidate.UserID, candidate.AccountID, reply.UID, reply.RecurrenceID, reply.Attendee)
 	if errors.Is(err, sql.ErrNoRows) {
 		return errCalendarIncomingIgnored
 	}
@@ -114,7 +115,7 @@ func (h *Handler) processCalendarIncomingMessage(ctx context.Context, candidate 
 }
 
 func (h *Handler) applyCalendarIncomingReply(ctx context.Context, candidate storage.CalendarIncomingMessage, reply message.CalendarIncomingReply) error {
-	existing, err := h.db.FindCalendarIncomingEvent(ctx, candidate.UserID, candidate.AccountID, reply.UID)
+	existing, err := h.db.FindCalendarIncomingEvent(ctx, candidate.UserID, candidate.AccountID, reply.UID, reply.RecurrenceID, reply.Attendee)
 	if errors.Is(err, sql.ErrNoRows) {
 		return errCalendarIncomingIgnored
 	}
@@ -156,9 +157,12 @@ func (h *Handler) applyCalendarIncomingReply(ctx context.Context, candidate stor
 	if credentials.err != nil {
 		return credentials.err
 	}
-	return applyCalendarIncomingCalDAV(ctx, source, existing, reply, credentials,
+	err = applyCalendarIncomingCalDAV(ctx, source, existing, reply, credentials,
 		func(ctx context.Context) (bool, error) {
-			return h.db.ReserveCalendarIncomingResponse(ctx, existing, reply.Attendee, reply.Sequence, reply.Stamp, reply.Status)
+			// A series' date is reserved apart from the whole series.
+			reserved := existing
+			reserved.ICalUID = storage.CalendarIncomingResponseKey(existing.ICalUID, reply.RecurrenceID)
+			return h.db.ReserveCalendarIncomingResponse(ctx, reserved, reply.Attendee, reply.Sequence, reply.Stamp, reply.Status)
 		}, func(ctx context.Context, updated storage.CalendarEvent) error {
 			if err := h.db.CompleteCalendarIncomingResponse(ctx, existing, updated); err != nil {
 				return err
@@ -168,15 +172,26 @@ func (h *Handler) applyCalendarIncomingReply(ctx context.Context, candidate stor
 			}
 			return nil
 		})
+	// A reply to a series changes many cached dates: refresh them.
+	if err == nil && existing.SeriesRemoteID != "" {
+		h.refreshCalendarEditedSeries(ctx, source, existing)
+	}
+	return err
 }
 
 // Both layouts share authentication-independent CalDAV revision checks and the
 // minimal PARTSTAT merge. The caller supplies guarded reservation/publication.
+// A reply for a series changes its own event, and one for a single date that
+// date's event, which is created from the series when it has none yet.
 func applyCalendarIncomingCalDAV(ctx context.Context, source storage.CalendarSource, existing storage.CalendarEvent, reply message.CalendarIncomingReply, credentials calendarCredentials, reserve func(context.Context) (bool, error), publish func(context.Context, storage.CalendarEvent) error) error {
 	if _, err := resolveCalDAVHref(credentials.baseURL, source.RemoteID); err != nil {
 		return err
 	}
-	endpoint, err := calendarUpdateCalDAVEndpoint(source, existing)
+	resource := existing
+	if existing.SeriesRemoteID != "" {
+		resource = storage.CalendarEvent{RemoteID: existing.SeriesRemoteID}
+	}
+	endpoint, err := calendarUpdateCalDAVEndpoint(source, resource)
 	if err != nil {
 		return err
 	}
@@ -195,15 +210,36 @@ func applyCalendarIncomingCalDAV(ctx context.Context, source storage.CalendarSou
 		}
 		return err
 	}
-	props := current.Events()[0].Props
-	organizer := props.Get("ORGANIZER")
-	if before.ICalUID != reply.UID || organizer == nil {
+	master := calendarMeetingMaster(current)
+	organizer := master.Props.Get("ORGANIZER")
+	if before.ICalUID != reply.UID || organizer == nil || (reply.RecurrenceID != "" && master.Props.Get("RRULE") == nil) {
 		return errCalendarIncomingIgnored
 	}
 	if organizer.Params.Get("SCHEDULE-AGENT") != "CLIENT" {
 		return errCalendarIncomingServerManaged
 	}
-	sequence, err := calendarMeetingSequence(current, false)
+	target := calendarMeetingComponent(current, reply.RecurrenceID)
+	created := false
+	if target == nil {
+		// A date with no event of its own: check with the server that it is a
+		// date of the series, then add its event, as the series has it.
+		if existing.RemoteID != existing.SeriesRemoteID+"#recurrence="+url.QueryEscape(reply.RecurrenceID) || existing.ETag != headers.Get("ETag") || calendarMeetingExcluded(master, reply.RecurrenceID) {
+			return errCalendarIncomingIgnored
+		}
+		_, _, rid, err := calendarCalDAVOccurrenceResource(current, headers, existing, true)
+		if err != nil {
+			return errCalendarIncomingIgnored
+		}
+		if err := calendarCalDAVVerifyOccurrence(ctx, source, credentials.username, credentials.password, existing, true); err != nil {
+			return errCalendarIncomingIgnored
+		}
+		if target, err = calendarMeetingDateEvent(master, rid); err != nil {
+			return errCalendarIncomingIgnored
+		}
+		created = true
+	}
+	props := target.Props
+	sequence, err := calendarMeetingComponentSequence(target, false)
 	if err != nil {
 		return errCalendarIncomingIgnored
 	}
@@ -236,11 +272,15 @@ func applyCalendarIncomingCalDAV(ctx context.Context, source storage.CalendarSou
 		return errCalendarIncomingIgnored
 	}
 	confirmed, responseHeaders := current, headers
-	if props["ATTENDEE"][index].Params.Get("PARTSTAT") != reply.Status {
+	if created || props["ATTENDEE"][index].Params.Get("PARTSTAT") != reply.Status {
 		// Merge only PARTSTAT. Preserve private properties, other guests, alarms,
 		// the organizer's SEQUENCE/DTSTAMP, and the selected scheduling agent.
 		desired := &ical.Calendar{Component: cloneCalendarComponent(current.Component)}
-		desired.Events()[0].Props["ATTENDEE"][index].Params.Set("PARTSTAT", reply.Status)
+		if created {
+			desired.Children = append(desired.Children, cloneCalendarComponent(target))
+		}
+		person := &calendarMeetingComponent(desired, reply.RecurrenceID).Props["ATTENDEE"][index]
+		person.Params.Set("PARTSTAT", reply.Status)
 		body, err := encodeCalendarReply(desired)
 		if err != nil {
 			return err
@@ -278,13 +318,17 @@ func applyCalendarIncomingCalDAV(ctx context.Context, source storage.CalendarSou
 	if err != nil {
 		return err
 	}
-	confirmedProps := confirmed.Events()[0].Props
-	confirmedSequence, err := calendarMeetingSequence(confirmed, false)
-	if err != nil || updated.ICalUID != reply.UID || confirmedSequence != strconv.Itoa(reply.Sequence) || confirmedProps.Get("ORGANIZER").Params.Get("SCHEDULE-AGENT") != "CLIENT" {
+	saved := calendarMeetingComponent(confirmed, reply.RecurrenceID)
+	confirmedMaster := calendarMeetingMaster(confirmed)
+	if saved == nil || confirmedMaster == nil {
+		return fmt.Errorf("calendar reply identity or revision was not confirmed")
+	}
+	confirmedSequence, err := calendarMeetingComponentSequence(saved, false)
+	if err != nil || updated.ICalUID != reply.UID || confirmedSequence != strconv.Itoa(reply.Sequence) || confirmedMaster.Props.Get("ORGANIZER").Params.Get("SCHEDULE-AGENT") != "CLIENT" {
 		return fmt.Errorf("calendar reply identity or revision was not confirmed")
 	}
 	matched := 0
-	for _, person := range confirmedProps["ATTENDEE"] {
+	for _, person := range saved.Props["ATTENDEE"] {
 		if calendarReplyAddress(person.Value) == reply.Attendee && person.Params.Get("PARTSTAT") == reply.Status {
 			matched++
 		}
@@ -292,5 +336,20 @@ func applyCalendarIncomingCalDAV(ctx context.Context, source storage.CalendarSou
 	if matched != 1 {
 		return fmt.Errorf("calendar server did not confirm the guest response")
 	}
-	return publish(ctx, calendarStorageEvent(existing.UserID, existing.SourceID, updated))
+	if existing.SeriesRemoteID == "" {
+		return publish(ctx, calendarStorageEvent(existing.UserID, existing.SourceID, updated))
+	}
+	// A series is cached as its dates: record the reply on the associated
+	// date with the guests it changed; the caller then refreshes the series'
+	// dates from the server.
+	plain := cloneCalendarComponent(saved)
+	delete(plain.Props, "RRULE")
+	delete(plain.Props, "EXDATE")
+	guests, err := normalizeCalDAVEvent(ical.Event{Component: plain}, endpoint, responseHeaders.Get("ETag"), time.UTC)
+	if err != nil {
+		return err
+	}
+	row := existing
+	row.ETag, row.AttendeesJSON, row.ResponseStatus = responseHeaders.Get("ETag"), string(guests.Attendees), "organizer"
+	return publish(ctx, row)
 }

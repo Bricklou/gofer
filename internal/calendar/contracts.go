@@ -110,6 +110,9 @@ type EventDraft struct {
 	TeamsMeetingSet      bool            `json:"-"` // Distinguish an explicit disable from an omitted field.
 	GoogleMeetMeeting    bool            `json:",omitempty"`
 	GoogleMeetMeetingSet bool            `json:"-"`
+	// ResetSeriesDates confirms that changing a series' time or repeat rule
+	// resets the dates changed one by one (CalDAV meetings).
+	ResetSeriesDates     bool            `json:"-"`
 	GoogleMeetDraftID    string          `json:",omitempty"`
 	GoogleMeetConference json.RawMessage `json:"-"`
 	Location             string

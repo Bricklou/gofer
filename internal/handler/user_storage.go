@@ -293,6 +293,7 @@ func (h *Handler) RegisterUserStorageRoutes(ctx context.Context, mux *http.Serve
 		private("GET /api/remote-assets/{messageID}/{filename}", routed.handleUserRemoteAsset)
 		private("POST /api/messages/{id}/refetch", routed.handleUserRefetchBody)
 		private("GET /api/mail/{id}/calendar", routed.handleUserMailCalendarFooter)
+		private("POST /api/mail/{id}/calendar/invitation", routed.handleUserMailCalendarInvitation)
 		private("GET /api/calendar/events/new", routed.handleUserNewCalendarEvent)
 		private("POST /api/calendar/events", routed.handleUserCreateCalendarEvent)
 		private("PATCH /api/calendar/events/{id}", routed.handleUserUpdateCalendarEvent)

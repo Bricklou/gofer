@@ -1,6 +1,9 @@
 package calendar
 
-import "testing"
+import (
+	"strings"
+	"testing"
+)
 
 func TestMeetingJoinURL(t *testing.T) {
 	for _, test := range []struct{ raw, want string }{
@@ -95,5 +98,27 @@ func TestGoogleMeetJoinLinks(t *testing.T) {
 		if (GoogleMeetJoinURL(tc.url) != "") != tc.valid {
 			t.Errorf("incorrect join recognition for %q", tc.url)
 		}
+	}
+}
+
+func TestRemoveTeamsJoinBlock(t *testing.T) {
+	dots := strings.Repeat(".", 40)
+	html := "<div>Agenda for the week.<br>\n" + dots + "<br>\nJoin the Teams meeting<br>\n<a href=\"https://teams.live.com/meet/123?p=x\">https://teams.live.com/meet/123?p=x</a><br>\nMeeting ID: 123<br>\n" + dots + "<br>\n</div>"
+	if got := RemoveTeamsJoinBlock(html); strings.Contains(got, "teams.live.com") || strings.Contains(got, dots) || !strings.Contains(got, "Agenda for the week.") || !strings.HasSuffix(got, "</div>") {
+		t.Fatalf("HTML block not removed: %q", got)
+	}
+	underscores := strings.Repeat("_", 80)
+	text := "Notes\n" + underscores + "\nMicrosoft Teams meeting\nJoin: https://teams.microsoft.com/l/meetup-join/abc\n" + underscores + "\nAfter"
+	if got := RemoveTeamsJoinBlock(text); got != "Notes\nAfter" {
+		t.Fatalf("text block not removed: %q", got)
+	}
+	// A separator of the organizer's own, without a Teams link, stays.
+	own := "Part one\n" + underscores + "\nPart two"
+	if got := RemoveTeamsJoinBlock(own); got != own {
+		t.Fatalf("organizer's separator removed: %q", got)
+	}
+	// A block cut off before its closing separator is removed to the end.
+	if got := RemoveTeamsJoinBlock("Notes\n" + underscores + "\nJoin https://teams.live.com/meet/1"); got != "Notes" {
+		t.Fatalf("open block not removed: %q", got)
 	}
 }

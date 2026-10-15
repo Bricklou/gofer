@@ -3,6 +3,8 @@ package storage
 import (
 	"database/sql"
 	"errors"
+	"fmt"
+	"net/url"
 	"path/filepath"
 	"testing"
 	"time"
@@ -58,11 +60,11 @@ func TestCalendarIncomingStorageMigrationScopeAndRecovery(t *testing.T) {
 	if err != nil || len(messages) != 1 {
 		t.Fatal("due retry lost")
 	}
-	event, err = db.FindCalendarIncomingEvent(t.Context(), "owner", "account", "uid")
+	event, err = db.FindCalendarIncomingEvent(t.Context(), "owner", "account", "uid", "", "")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := db.FindCalendarIncomingEvent(t.Context(), "foreign", "account", "uid"); !errors.Is(err, sql.ErrNoRows) {
+	if _, err := db.FindCalendarIncomingEvent(t.Context(), "foreign", "account", "uid", "", ""); !errors.Is(err, sql.ErrNoRows) {
 		t.Fatal("foreign UID lookup allowed")
 	}
 	stamp := time.Now().UTC().Truncate(time.Second)
@@ -116,5 +118,49 @@ func TestCalendarIncomingStorageMigrationScopeAndRecovery(t *testing.T) {
 	var count int
 	if err := db.Read().QueryRow(`SELECT count(*) FROM calendar_incoming_messages`).Scan(&count); err != nil || count != 0 {
 		t.Fatal("mail deletion did not retire its receipt")
+	}
+}
+
+// A reply to a series is matched with the cached date it names, or with a
+// date the guest is invited to; a series' date is reserved apart from it.
+func TestCalendarIncomingSeriesMatchesItsDates(t *testing.T) {
+	db, err := New(filepath.Join(t.TempDir(), "incoming.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { db.Close() }()
+	if _, err := db.Write().Exec(`INSERT INTO users(id,username,username_normalized) VALUES('owner','owner','owner');
+ INSERT INTO accounts(id,user_id,provider,email_address) VALUES('account','owner','imap','owner@example.com');`); err != nil {
+		t.Fatal(err)
+	}
+	if err := db.ReplaceCalendarSources(t.Context(), "owner", "account", "caldav", []CalendarSource{{ID: "source", RemoteID: "https://cal.example.com/", IsSelected: true}}); err != nil {
+		t.Fatal(err)
+	}
+	var events []CalendarEvent
+	first := time.Date(2026, 10, 2, 7, 0, 0, 0, time.UTC)
+	for i, guests := range []string{`[{"email":"other@example.com"}]`, `[{"email":"guest@example.com"}]`} {
+		start := first.AddDate(0, 0, 7*i)
+		end := start.Add(time.Hour)
+		key := start.Format(time.RFC3339)
+		events = append(events, CalendarEvent{ID: fmt.Sprint("date-", i), RemoteID: "series.ics#recurrence=" + url.QueryEscape(key), SeriesRemoteID: "series.ics", ICalUID: "uid", ETag: `"v1"`,
+			OrganizerEmail: "owner@example.com", StartAt: &start, EndAt: &end, AttendeesJSON: guests, RecurrenceJSON: `["RECURRENCE-ID:` + key + `"]`})
+	}
+	if err := db.ReplaceCalendarEvents(t.Context(), "owner", "source", events, first.Add(-time.Hour), first.AddDate(0, 1, 0)); err != nil {
+		t.Fatal(err)
+	}
+	if event, err := db.FindCalendarIncomingEvent(t.Context(), "owner", "account", "uid", "", "guest@example.com"); err != nil || event.ID != "date-1" {
+		t.Fatalf("series reply matched %+v %v", event, err)
+	}
+	if event, err := db.FindCalendarIncomingEvent(t.Context(), "owner", "account", "uid", first.Format(time.RFC3339), "guest@example.com"); err != nil || event.ID != "date-0" {
+		t.Fatalf("date reply matched %+v %v", event, err)
+	}
+	if _, err := db.FindCalendarIncomingEvent(t.Context(), "owner", "account", "uid", first.AddDate(0, 0, 21).Format(time.RFC3339), "guest@example.com"); !errors.Is(err, sql.ErrNoRows) {
+		t.Fatal("reply for an uncached date matched")
+	}
+	if _, err := db.FindCalendarIncomingEvent(t.Context(), "owner", "account", "uid", "", "stranger@example.com"); !errors.Is(err, sql.ErrNoRows) {
+		t.Fatal("reply from someone not invited matched")
+	}
+	if CalendarIncomingResponseKey("uid", "") == CalendarIncomingResponseKey("uid", first.Format(time.RFC3339)) {
+		t.Fatal("a date is reserved together with its series")
 	}
 }

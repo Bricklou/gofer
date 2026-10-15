@@ -195,6 +195,12 @@ func calendarOutlookSeriesEvent(remote outlookCalendarUpdateEvent) (calendar.Rem
 }
 
 func calendarCalDAVSeriesEvent(cal *ical.Calendar, headers http.Header, endpoint string, location *time.Location) (calendar.RemoteEvent, error) {
+	// A series with dates changed or removed one by one is read from its own
+	// event, once each of those dates passes the same checks.
+	cal, err := calendarCalDAVSeriesOwnEvent(cal, headers)
+	if err != nil {
+		return calendar.RemoteEvent{}, err
+	}
 	if len(cal.Events()) != 1 || len(cal.Events()[0].Props["RRULE"]) != 1 {
 		return calendar.RemoteEvent{}, calendarUpdateUnsupported(calendarSeriesUnsupported)
 	}
@@ -270,7 +276,9 @@ func readCalendarProviderSeriesWithCredentials(ctx context.Context, source stora
 		cal, headers, getErr := calendarUpdateCalDAVGet(ctx, client, endpoint, credentials.username, credentials.password)
 		err = getErr
 		if err == nil {
-			if calendarOccurrenceScope(deletingScope) {
+			if master := calendarMeetingMaster(cal); master != nil && (master.Props.Get("ORGANIZER") != nil || master.Props.Get("ATTENDEE") != nil) {
+				event, err = calendarCalDAVMeetingSeriesEvent(cal, headers, endpoint, occurrence.AccountEmail)
+			} else if calendarOccurrenceScope(deletingScope) {
 				event, err = calendarCalDAVDeleteSeriesEvent(cal, headers, endpoint, location)
 			} else {
 				event, err = calendarCalDAVSeriesEvent(cal, headers, endpoint, location)

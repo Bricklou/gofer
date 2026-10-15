@@ -265,8 +265,10 @@ func TestCalendarCalDAVSeriesDeletionAfterOneOffChanges(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := calendarCalDAVSeriesEvent(cal, headers, endpoint, time.UTC); err == nil {
-		t.Fatal("series editing must not silently discard exceptions")
+	// The series opens for editing; saving keeps its changed dates, or asks
+	// to reset them (TestCalendarCalDAVUpdatePreservesResourceAndConfirmsSave).
+	if _, err := calendarCalDAVSeriesEvent(cal, headers, endpoint, time.UTC); err != nil {
+		t.Fatal(err)
 	}
 	if err := deleteCalDAVCalendarEventScope(t.Context(), storage.CalendarSource{RemoteID: server.URL + "/cal/"}, "user", "pass", calendarStorageEvent("owner", "source", remote), true); err != nil || writes != 1 {
 		t.Fatalf("delete after one-off changes: writes=%d err=%v", writes, err)

@@ -82,7 +82,7 @@ func (db *DB) CompleteCalendarIncomingResponse(ctx context.Context, existing Cal
 func calendarResponseValues(existing, event CalendarEvent, organizer bool) (calendarMutationValues, error) {
 	validResponse := event.ResponseStatus == "accepted" || event.ResponseStatus == "tentative" || event.ResponseStatus == "declined"
 	if organizer {
-		validResponse = existing.SourceProvider == CalendarSourceProviderCalDAV && event.ResponseStatus == "organizer" && existing.AccountEmail != "" && strings.EqualFold(event.OrganizerEmail, existing.AccountEmail) && event.ICalUID == existing.ICalUID && event.SeriesRemoteID == ""
+		validResponse = existing.SourceProvider == CalendarSourceProviderCalDAV && event.ResponseStatus == "organizer" && existing.AccountEmail != "" && strings.EqualFold(event.OrganizerEmail, existing.AccountEmail) && event.ICalUID == existing.ICalUID
 	}
 	if event.RemoteID != existing.RemoteID || event.SeriesRemoteID != existing.SeriesRemoteID || event.ETag == "" || event.IsDeleted || event.Status == "cancelled" || !json.Valid([]byte(event.AttendeesJSON)) ||
 		!validResponse {

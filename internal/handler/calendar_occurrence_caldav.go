@@ -52,10 +52,17 @@ func calendarRecurrenceKey(prop *ical.Prop, location *time.Location) (string, er
 // Inspect the complete resource, not just the expanded cached occurrence.
 // Preserve other exceptions and alarms, but never act on scheduling resources,
 // unrelated UIDs, floating/custom zones, or THISANDFUTURE range exceptions.
-func calendarCalDAVOccurrenceResource(cal *ical.Calendar, headers http.Header, existing storage.CalendarEvent) (*ical.Component, *ical.Component, *ical.Prop, error) {
+// A meeting the organizer owns (checked by the caller) may carry guests and
+// a scheduling version.
+func calendarCalDAVOccurrenceResource(cal *ical.Calendar, headers http.Header, existing storage.CalendarEvent, meeting ...bool) (*ical.Component, *ical.Component, *ical.Prop, error) {
 	var master, selected *ical.Component
-	if cal.Props.Get("METHOD") != nil || headers.Get("Schedule-Tag") != "" || existing.ICalUID == "" {
+	organized := len(meeting) == 1 && meeting[0]
+	if cal.Props.Get("METHOD") != nil || (headers.Get("Schedule-Tag") != "" && !organized) || existing.ICalUID == "" {
 		return nil, nil, nil, calendarUpdateUnsupported("Invitations cannot be changed in Gofer yet.")
+	}
+	if organized {
+		headers = headers.Clone()
+		headers.Del("Schedule-Tag")
 	}
 	for _, component := range cal.Children {
 		if component.Name == ical.CompTimezone {
@@ -74,6 +81,10 @@ func calendarCalDAVOccurrenceResource(cal *ical.Calendar, headers http.Header, e
 		check := cloneCalendarComponent(component)
 		for _, name := range []string{"RRULE", "RDATE", "EXDATE", "EXRULE", "RECURRENCE-ID"} {
 			delete(check.Props, name)
+		}
+		if organized {
+			delete(check.Props, "ORGANIZER")
+			delete(check.Props, "ATTENDEE")
 		}
 		if component.Props.Get("RECURRENCE-ID") != nil {
 			for _, name := range []string{"RRULE", "RDATE", "EXDATE", "EXRULE"} {
@@ -139,7 +150,7 @@ func calendarCalDAVOccurrenceResource(cal *ical.Calendar, headers http.Header, e
 
 // Ask the provider to prove membership at the resource version we just read.
 // Never guess recurrence dates locally, or send an instance fragment as a URL.
-func calendarCalDAVVerifyOccurrence(ctx context.Context, source storage.CalendarSource, username, password string, existing storage.CalendarEvent) error {
+func calendarCalDAVVerifyOccurrence(ctx context.Context, source storage.CalendarSource, username, password string, existing storage.CalendarEvent, meeting ...bool) error {
 	component, err := calendarCalDAVReadOccurrence(ctx, source, username, password, existing)
 	if err != nil {
 		return err
@@ -147,6 +158,9 @@ func calendarCalDAVVerifyOccurrence(ctx context.Context, source storage.Calendar
 	remote, err := normalizeCalDAVEvent(ical.Event{Component: component}, existing.SeriesRemoteID, existing.ETag, time.UTC)
 	if remote.SeriesRemoteID == "" {
 		remote.RemoteID, remote.SeriesRemoteID = existing.RemoteID, existing.SeriesRemoteID
+	}
+	if len(meeting) == 1 && meeting[0] {
+		remote.ResponseStatus = "organizer" // The caller checked the organizer.
 	}
 	if err != nil || calendarOccurrenceRestriction(remote, existing.SeriesRemoteID) != "" {
 		return errCalendarUpdateConflict

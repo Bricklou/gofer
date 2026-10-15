@@ -24,6 +24,10 @@ type userCalendarMutationFailure struct {
 func (e userCalendarMutationFailure) Error() string { return e.message }
 
 func userCalendarMutationError(w http.ResponseWriter, err error, uncertain bool) {
+	if errors.Is(err, errCalendarSeriesDatesReset) {
+		calendarSeriesResetFailure(w)
+		return
+	}
 	var failure userCalendarMutationFailure
 	if errors.As(err, &failure) {
 		calendarUpdateFailure(w, failure.status, failure.message, failure.uncertain, failure.conflict)
