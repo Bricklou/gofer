@@ -189,7 +189,11 @@ func calendarEditData(event storage.CalendarEvent, source storage.CalendarSource
 	// same, and saving keeps the zone it is shown in. A series keeps its zone,
 	// which decides its times across daylight-saving changes.
 	if zone, err := time.LoadLocation(event.StartTimeZone); err == nil && event.StartTimeZone != "" && event.StartTimeZone != "Local" && (series || occurrence || !calendarZoneIsUTC(zone)) {
-		location = zone
+		// A zone that keeps the same clocks as the user's, such as Budapest for
+		// someone in Prague, is shown as the user's own.
+		if location.String() == "Local" || !calendarZonesMatch(zone, location) {
+			location = zone
+		}
 	}
 	if location.String() == "Local" {
 		location = time.UTC
@@ -541,4 +545,36 @@ func calendarEventTypeRestriction(eventType string) string {
 		return "Change this kind of event in Google Calendar."
 	}
 	return "Only regular events can be changed in Gofer."
+}
+
+// calendarZonesMatch reports whether two zones keep the same clocks, from two
+// years ago to ten years ahead.
+func calendarZonesMatch(a, b *time.Location) bool {
+	if a == nil || b == nil {
+		return false
+	}
+	if a.String() == b.String() {
+		return true
+	}
+	now := time.Now()
+	end := now.AddDate(10, 0, 0)
+	for at := now.AddDate(-2, 0, 0); at.Before(end); {
+		_, offsetA := at.In(a).Zone()
+		_, offsetB := at.In(b).Zone()
+		if offsetA != offsetB {
+			return false
+		}
+		// On to the next change in either zone.
+		_, nextA := at.In(a).ZoneBounds()
+		_, nextB := at.In(b).ZoneBounds()
+		next := nextA
+		if next.IsZero() || (!nextB.IsZero() && nextB.Before(next)) {
+			next = nextB
+		}
+		if next.IsZero() {
+			break
+		}
+		at = next
+	}
+	return true
 }

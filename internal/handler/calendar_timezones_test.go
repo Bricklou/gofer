@@ -69,6 +69,11 @@ func TestCalendarEditorShowsUTCEventsInTheUsersZone(t *testing.T) {
 	if data, _ := calendarEditData(event, source, "", prague, false, false, nil); data.TimeZone != "America/New_York" || data.StartTime != "03:00" {
 		t.Fatalf("event zone: %s %s", data.TimeZone, data.StartTime)
 	}
+	// Budapest keeps Prague's clocks, so the event opens in Prague.
+	event.StartTimeZone = "Europe/Budapest"
+	if data, _ := calendarEditData(event, source, "", prague, true, false, nil); data.TimeZone != "Europe/Prague" || data.StartTime != "09:00" {
+		t.Fatalf("same clocks: %s %s", data.TimeZone, data.StartTime)
+	}
 }
 
 // A range picked in the week view fills the new event's times.
@@ -84,6 +89,23 @@ func TestCalendarNewEventRange(t *testing.T) {
 	for _, bad := range [][2]string{{"2026-11-03T13:00", "2026-11-03T12:00"}, {"2026-11-03T13:00", ""}, {"soon", "2026-11-03T14:00"}, {"2026-11-03T13:00", "2026-12-20T13:00"}} {
 		if calendarNewEventRange(&data, bad[0], bad[1], prague) == nil {
 			t.Errorf("accepted %v", bad)
+		}
+	}
+}
+
+// An event in a zone with the user's own clocks opens in the user's zone.
+func TestCalendarZonesMatch(t *testing.T) {
+	load := func(name string) *time.Location {
+		location, err := time.LoadLocation(name)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return location
+	}
+	prague := load("Europe/Prague")
+	for name, want := range map[string]bool{"Europe/Budapest": true, "Europe/Berlin": true, "Europe/Prague": true, "Europe/London": false, "Africa/Lagos": false, "UTC": false, "America/New_York": false} {
+		if got := calendarZonesMatch(load(name), prague); got != want {
+			t.Errorf("%s: %v, want %v", name, got, want)
 		}
 	}
 }

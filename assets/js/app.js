@@ -17370,11 +17370,16 @@ var CALENDAR_DRAG_SNAP = 15 * 60000
 
 document.addEventListener("pointerdown", function (event) {
   if (event.button !== 0 || event.pointerType === "touch" || _calendarDrag) return
+  _calendarDrag = calendarDragAt(event)
+})
+
+// The drag a press on an event would start, if it can be moved.
+function calendarDragAt(event) {
   var el = event.target.closest && event.target.closest("[data-calendar-move]")
   var calendar = el && el.closest("#calendar-main")
-  if (!el || el.disabled || !calendar || calendar.hasAttribute("data-calendar-loading")) return
-  _calendarDrag = {el: el, resize: !!event.target.closest("[data-calendar-resize]"), x: event.clientX, y: event.clientY, started: false}
-})
+  if (!el || el.disabled || !calendar || calendar.hasAttribute("data-calendar-loading")) return null
+  return {el: el, resize: !!event.target.closest("[data-calendar-resize]"), x: event.clientX, y: event.clientY, started: false}
+}
 
 document.addEventListener("pointermove", function (event) {
   var drag = _calendarDrag
@@ -17906,7 +17911,13 @@ function confirmCalendarMove(point, guests, move, cancel) {
     if (moving) move()
     else cancel()
   }
-  var outside = function (event) { if (!box.contains(event.target)) close(false) }
+  // A press elsewhere only closes it; what was pressed doesn't also act.
+  var outside = function (event) {
+    if (box.contains(event.target)) return
+    event.stopPropagation()
+    close(false)
+    swallowCalendarClick()
+  }
   var escape = function (event) {
     if (event.key !== "Escape") return
     event.preventDefault()
@@ -17921,37 +17932,123 @@ function confirmCalendarMove(point, guests, move, cancel) {
   box.querySelector("[data-calendar-move-confirm-button]").focus()
 }
 
+// Drops the click that follows the press being released, if there is one.
+function swallowCalendarClick() {
+  var swallow = function (event) {
+    event.preventDefault()
+    event.stopPropagation()
+  }
+  var released = function () {
+    document.removeEventListener("pointerup", released, true)
+    document.removeEventListener("pointercancel", released, true)
+    setTimeout(function () { document.removeEventListener("click", swallow, true) }, 0)
+  }
+  document.addEventListener("click", swallow, true)
+  document.addEventListener("pointerup", released, true)
+  document.addEventListener("pointercancel", released, true)
+}
+
 // Drag over empty time in the week view to pick a range, then let go to open
 // a new event with those times.
 var _calendarPick = null
 
 document.addEventListener("pointerdown", function (event) {
   if (event.button !== 0 || event.pointerType === "touch" || _calendarDrag || _calendarPick) return
-  var column = event.target.closest && event.target.closest("#calendar-main [data-calendar-timed-column]")
-  if (!column || event.target.closest("[data-calendar-event-trigger], .calendar-drag-slot") || column.closest("#calendar-main").hasAttribute("data-calendar-loading")) return
-  _calendarPick = {column: column, y: event.clientY, anchor: calendarColumnMinute(column, event.clientY), started: false}
+  _calendarPick = calendarPickAt(event)
 })
+
+// The range a press on empty week time would start picking.
+function calendarPickAt(event) {
+  var column = event.target.closest && event.target.closest("#calendar-main [data-calendar-timed-column]")
+  if (!column || event.target.closest("[data-calendar-event-trigger], .calendar-drag-slot") || column.closest("#calendar-main").hasAttribute("data-calendar-loading")) return null
+  return {column: column, y: event.clientY, anchor: calendarColumnMinute(column, event.clientY), started: false}
+}
+
+function startCalendarPick(pick) {
+  pick.started = true
+  document.body.style.userSelect = "none"
+  pick.slot = document.createElement("div")
+  pick.slot.className = "calendar-drag-slot calendar-pick-slot"
+  pick.slot.setAttribute("aria-hidden", "true")
+  pick.column.appendChild(pick.slot)
+}
 
 document.addEventListener("pointermove", function (event) {
   var pick = _calendarPick
   if (!pick) return
   if (!pick.started) {
     if (Math.abs(event.clientY - pick.y) < 5) return
-    pick.started = true
-    document.body.style.userSelect = "none"
-    pick.slot = document.createElement("div")
-    pick.slot.className = "calendar-drag-slot calendar-pick-slot"
-    pick.slot.setAttribute("aria-hidden", "true")
-    pick.column.appendChild(pick.slot)
+    startCalendarPick(pick)
   }
   event.preventDefault()
-  var minute = calendarColumnMinute(pick.column, event.clientY)
+  updateCalendarPick(pick, event.clientY)
+})
+
+function updateCalendarPick(pick, clientY) {
+  var minute = calendarColumnMinute(pick.column, clientY)
   pick.start = Math.floor(Math.min(pick.anchor, minute) / 15) * 15
   pick.end = Math.min(1440, Math.max(pick.start + 15, Math.ceil(Math.max(pick.anchor, minute) / 15) * 15))
   var top = calendarColumnPosition(pick.column, pick.start)
   pick.slot.style.top = top + "px"
   pick.slot.style.height = Math.max(22, calendarColumnPosition(pick.column, pick.end) - top) + "px"
   pick.slot.textContent = calendarMinuteLabel(pick.start) + "–" + (pick.end === 1440 ? "24:00" : calendarMinuteLabel(pick.end))
+}
+
+// On touch screens, pressing and holding starts the same drag, or picks a
+// range on empty week time, so that a swipe still scrolls the calendar.
+var _calendarHold = null
+var CALENDAR_HOLD_MS = 450
+
+document.addEventListener("pointerdown", function (event) {
+  if (event.pointerType !== "touch" || !event.isPrimary || _calendarDrag || _calendarPick) return
+  cancelCalendarHold()
+  var drag = calendarDragAt(event)
+  var pick = drag ? null : calendarPickAt(event)
+  if (!drag && !pick) return
+  var hold = {start: {x: event.clientX, y: event.clientY}, x: event.clientX, y: event.clientY, id: event.pointerId}
+  hold.timer = setTimeout(function () {
+    _calendarHold = null
+    var point = {clientX: hold.x, clientY: hold.y}
+    if (drag) {
+      if (!startCalendarDrag(drag, point)) return
+      _calendarDrag = drag
+      updateCalendarDrag(drag, point)
+    } else {
+      _calendarPick = pick
+      startCalendarPick(pick)
+      updateCalendarPick(pick, hold.y)
+    }
+    if (navigator.vibrate) navigator.vibrate(10)
+  }, CALENDAR_HOLD_MS)
+  _calendarHold = hold
+})
+
+// Moving before the hold is up is a scroll; so is lifting the finger a tap.
+document.addEventListener("pointermove", function (event) {
+  var hold = _calendarHold
+  if (!hold || event.pointerId !== hold.id) return
+  hold.x = event.clientX
+  hold.y = event.clientY
+  if (Math.abs(event.clientX - hold.start.x) > 8 || Math.abs(event.clientY - hold.start.y) > 8) cancelCalendarHold()
+})
+
+document.addEventListener("pointerup", cancelCalendarHold)
+document.addEventListener("pointercancel", cancelCalendarHold)
+
+function cancelCalendarHold() {
+  if (!_calendarHold) return
+  clearTimeout(_calendarHold.timer)
+  _calendarHold = null
+}
+
+// Once a touch drag has started, the finger moves it instead of scrolling,
+// and holding doesn't open the browser's menu.
+document.addEventListener("touchmove", function (event) {
+  if ((_calendarDrag && _calendarDrag.started) || (_calendarPick && _calendarPick.started)) event.preventDefault()
+}, {passive: false})
+
+document.addEventListener("contextmenu", function (event) {
+  if (_calendarHold || (_calendarDrag && _calendarDrag.started) || (_calendarPick && _calendarPick.started)) event.preventDefault()
 })
 
 document.addEventListener("pointerup", function () {

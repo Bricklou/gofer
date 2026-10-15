@@ -6273,6 +6273,20 @@ html:not([data-theme="express"]) [data-mode-dark-tip] {
   opacity: 0.45;
 }
 
+/* Pressing and holding an event or empty week time on a touch screen starts a
+   drag, not the browser's callout. */
+#calendar-main [data-calendar-move],
+#calendar-main [data-calendar-timed-column] {
+  -webkit-touch-callout: none;
+}
+
+/* A finger needs more than the thin strip to grab an event's end. */
+@media (pointer: coarse) {
+  #calendar-main [data-calendar-resize] {
+    height: 0.75rem;
+  }
+}
+
 /* Dragging a calendar event: the card under the pointer, like a dragged email;
    in the week view, the outline where it lands; in the month view, the day. */
 .calendar-drag-card {
