@@ -17876,6 +17876,9 @@ function moveCalendarEvent(el, change, revert, point) {
         if (input) input.disabled = false
       })
       var fields = new FormData(form)
+      // Where it was, for undoing the move.
+      var back = {id: el.dataset.calendarMove, occurrence: el.dataset.calendarMoveOccurrence === "true", fields: {}}
+      ;["start_date", "start_time", "end_date", "end_time", "timezone"].forEach(function (name) { back.fields[name] = fields.get(name) })
       if (change.start === undefined) {
         if (fields.get("all_day") !== "true") { undo("This event is no longer an all-day event. Refresh the calendar."); return }
         fields.set("start_date", calendarAddISODays(fields.get("start_date"), change.days))
@@ -17889,14 +17892,18 @@ function moveCalendarEvent(el, change, revert, point) {
         fields.set("end_date", end.date)
         fields.set("end_time", end.time)
       }
-      var save = function () { saveCalendarMove(form.getAttribute("action"), fields, undo) }
+      var guests = (fields.get("guests") || "").trim() !== ""
+      back.guests = guests
+      var save = function () { saveCalendarMove(form.getAttribute("action"), fields, undo, back) }
       // Ask first, where the event was dropped; guests are sent the change.
-      confirmCalendarMove(point, (fields.get("guests") || "").trim() !== "", save, function () { undo() })
+      confirmCalendarMove(point, guests, save, function () { undo() })
     })
     .catch(function () { undo("Could not load the event. Try again.") })
 }
 
-function saveCalendarMove(action, fields, undo) {
+// back, when given, is where the event was: the message that it moved offers
+// to put it back there.
+function saveCalendarMove(action, fields, undo, back) {
   fetch(action, {method: "PATCH", headers: {"Content-Type": "application/x-www-form-urlencoded", "Accept": "application/json"}, body: new URLSearchParams(fields).toString()})
     .then(function (response) {
       return response.json().then(function (data) { return {ok: response.ok, data: data} })
@@ -17909,13 +17916,54 @@ function saveCalendarMove(action, fields, undo) {
         if (result.data.uncertain || result.data.conflict) scheduleCalendarCacheRefresh()
         return
       }
-      showGoferToast({title: "Event moved", description: result.data.notify_guests ? "Guest notifications are being delivered." : "Saved to your calendar.", variant: "success", icon: "success", duration: 3500})
+      var description = result.data.notify_guests ? "Guest notifications are being delivered." : "Saved to your calendar."
+      if (!back) {
+        showGoferToast({title: "Move undone", description: description, variant: "success", icon: "success", duration: 3500})
+      } else {
+        var toast = showGoferToast({title: "Event moved", description: description, variant: "success", icon: "success", duration: 10000, secondaryActionLabel: "Undo", onSecondaryAction: function () {
+          var card = toast && toast.querySelector(".gofer-toast-card")
+          var at = card ? card.getBoundingClientRect() : null
+          if (toast) dismissGoferToast(toast)
+          undoCalendarMove(back, at)
+        }})
+      }
       scheduleCalendarCacheRefresh()
     })
     .catch(function () {
       undo("The move could not be confirmed. Refresh the calendar to check the event.")
       scheduleCalendarCacheRefresh()
     })
+}
+
+// Moves an event back where it was before it was dragged. The event was saved
+// since, so the editor's form is read again for its new version.
+function undoCalendarMove(back, at) {
+  var fail = function (message) {
+    showGoferToast({title: "Move not undone", description: message, variant: "error", icon: "error", duration: 8000, dismissible: true})
+  }
+  var url = "/api/calendar/events/" + encodeURIComponent(back.id) + "/edit" + (back.occurrence ? "?scope=occurrence" : "")
+  fetch(url, {headers: {"Accept": "text/html"}})
+    .then(function (response) {
+      return response.text().then(function (text) { return {ok: response.ok, text: text} })
+    })
+    .then(function (result) {
+      if (!result.ok) { fail(result.text.trim().length < 300 ? result.text.trim() : "This event can't be edited right now."); return }
+      var form = new DOMParser().parseFromString(result.text, "text/html").querySelector("[data-calendar-create-form]")
+      if (!form) { fail("This event can't be edited right now."); return }
+      ;["source_id", "version", "request_id", "edit_scope"].forEach(function (name) {
+        var input = form.querySelector('[name="' + name + '"]')
+        if (input) input.disabled = false
+      })
+      var fields = new FormData(form)
+      Object.keys(back.fields).forEach(function (name) {
+        if (back.fields[name] !== null) fields.set(name, back.fields[name])
+      })
+      var save = function () { saveCalendarMove(form.getAttribute("action"), fields, fail) }
+      if (!back.guests) { save(); return }
+      // Guests are sent the old time again, so ask first, where the message was.
+      confirmCalendarMove({x: at ? at.left : NaN, y: at ? at.top : NaN, title: "Move this meeting back?", detail: "Guests will be sent the old time.", action: "Move back and notify guests"}, true, save, function () {})
+    })
+    .catch(function () { fail("Could not load the event. Try again.") })
 }
 
 // Asks, next to where an event was dropped, before it is moved; a meeting's
@@ -17926,9 +17974,9 @@ function confirmCalendarMove(point, guests, move, cancel) {
   var box = document.createElement("div")
   box.dataset.calendarMoveConfirm = ""
   box.setAttribute("role", "dialog")
-  var title = guests ? "Move this meeting?" : point.resize ? "Change when this event ends?" : "Move this event?"
-  var detail = (point.when ? point.when + ". " : "") + (guests ? "Guests will be sent the new time." : "")
-  var action = guests ? "Move and notify guests" : point.resize ? "Save" : "Move"
+  var title = point.title || (guests ? "Move this meeting?" : point.resize ? "Change when this event ends?" : "Move this event?")
+  var detail = point.detail || ((point.when ? point.when + ". " : "") + (guests ? "Guests will be sent the new time." : ""))
+  var action = point.action || (guests ? "Move and notify guests" : point.resize ? "Save" : "Move")
   box.setAttribute("aria-label", title)
   box.className = "fixed z-[70] w-72 max-w-[calc(100vw-1rem)] rounded-lg border bg-popover p-3 text-sm text-popover-foreground shadow-lg"
   box.innerHTML = '<p class="font-semibold">' + _escapeComposeHTML(title) + '</p>' +
