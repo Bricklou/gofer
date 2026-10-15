@@ -203,7 +203,6 @@ func calendarUpdateMatchesDraft(event calendar.RemoteEvent, draft calendar.Event
 // Extra fields remain local to updates; the read/create wire types stay intact.
 type googleCalendarUpdateEvent struct {
 	googleCalendarEvent
-	EventType         string                       `json:"eventType"`
 	AttendeesOmitted  bool                         `json:"attendeesOmitted"`
 	Locked            bool                         `json:"locked"`
 	OriginalStartTime *googleCalendarEventDateTime `json:"originalStartTime"`

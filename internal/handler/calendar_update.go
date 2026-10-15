@@ -21,6 +21,9 @@ import (
 )
 
 func calendarStoredEditRestriction(event storage.CalendarEvent) string {
+	if reason := calendarEventTypeRestriction(event.EventType); reason != "" {
+		return reason
+	}
 	if calendarStoredEditableOnline(event) {
 		event.OnlineMeetingJSON = "{}"
 	}
@@ -522,4 +525,20 @@ func calendarZoneIsUTC(location *time.Location) bool {
 		return true
 	}
 	return false
+}
+
+// calendarEventTypeRestriction says why an event that isn't an ordinary one
+// can't be changed in Gofer, such as a birthday Google makes from a contact.
+func calendarEventTypeRestriction(eventType string) string {
+	switch eventType {
+	case "", "default":
+		return ""
+	case "birthday":
+		return "Birthdays come from your contacts. Change the date in the contact."
+	case "fromGmail":
+		return "Google made this event from an email. Change it in Google Calendar."
+	case "outOfOffice", "focusTime", "workingLocation":
+		return "Change this kind of event in Google Calendar."
+	}
+	return "Only regular events can be changed in Gofer."
 }

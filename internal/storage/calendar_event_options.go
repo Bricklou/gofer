@@ -86,3 +86,39 @@ func migrateV110ToV111(db *sql.DB) error {
 	}
 	return tx.Commit()
 }
+
+// migrateV111ToV112 adds each cached event's kind when it isn't an ordinary
+// event. Events cached before count as ordinary until they sync again.
+func migrateV111ToV112(db *sql.DB) error {
+	tx, err := db.Begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	var version int
+	if err := tx.QueryRow(`SELECT COALESCE(MAX(version),0) FROM schema_version`).Scan(&version); err != nil {
+		return err
+	}
+	if version >= 112 {
+		return nil
+	}
+	exists, err := tableExistsTx(tx, "calendar_events")
+	if err != nil {
+		return err
+	}
+	if exists {
+		present, err := columnExistsTx(tx, "calendar_events", "event_type")
+		if err != nil {
+			return err
+		}
+		if !present {
+			if _, err := tx.Exec(`ALTER TABLE calendar_events ADD COLUMN event_type TEXT NOT NULL DEFAULT ''`); err != nil {
+				return err
+			}
+		}
+	}
+	if err := markSchemaVersion(tx, 112); err != nil {
+		return err
+	}
+	return tx.Commit()
+}

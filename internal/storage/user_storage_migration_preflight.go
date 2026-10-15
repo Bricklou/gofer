@@ -131,7 +131,7 @@ func InspectUserStorageMigration(ctx context.Context, sourcePath string) (UserSt
 }
 
 func migrationSharedVersionSupported(version int) bool {
-	return version >= 105 && version <= 111
+	return version >= 105 && version <= 112
 }
 
 // These recognized shared schemas differ only in the explicitly handled push
@@ -404,11 +404,13 @@ func migrationSourceColumns(ctx context.Context, tx *sql.Tx, table *UserStorageM
 	} else if table.Name == "web_push_subscriptions" && version < 106 {
 		missing = []string{"revision"}
 	} else if table.Name == "calendar_events" && version < 109 {
-		missing = []string{"reminder_minutes", "show_as", "is_private"}
+		missing = []string{"reminder_minutes", "show_as", "is_private", "event_type"}
 	} else if table.Name == "calendar_events" && version < 110 {
-		missing = []string{"show_as", "is_private"}
+		missing = []string{"show_as", "is_private", "event_type"}
 	} else if table.Name == "calendar_events" && version < 111 {
-		missing = []string{"is_private"}
+		missing = []string{"is_private", "event_type"}
+	} else if table.Name == "calendar_events" && version < 112 {
+		missing = []string{"event_type"}
 	}
 	for _, name := range missing {
 		if actual[name] {

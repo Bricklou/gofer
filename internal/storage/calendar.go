@@ -80,7 +80,10 @@ type CalendarEvent struct {
 	// working_elsewhere (the last three only on Outlook); empty when unknown.
 	ShowAs string
 	// Private hides the event's details from people who share the calendar.
-	Private           bool
+	Private bool
+	// EventType is the provider's kind of event when it isn't an ordinary
+	// one, such as Google's "birthday"; empty otherwise.
+	EventType         string
 	HTMLLink          string
 	ProviderCreatedAt *time.Time
 	ProviderUpdatedAt *time.Time
@@ -608,8 +611,8 @@ func replaceCalendarEventsTx(ctx context.Context, tx *sql.Tx, userID, sourceID s
 				status, summary, description, location, organizer_name, organizer_email,
 				all_day, start_date, end_date, start_at, end_at, start_timezone,
 				end_timezone, recurrence_json, attendees_json, online_meeting_json,
-				html_link, provider_created_at, provider_updated_at, is_deleted, response_status, reminder_minutes, show_as, is_private
-			) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+				html_link, provider_created_at, provider_updated_at, is_deleted, response_status, reminder_minutes, show_as, is_private, event_type
+			) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 			ON CONFLICT(source_id, remote_id) DO UPDATE SET
 				user_id = excluded.user_id,
 				ical_uid = excluded.ical_uid,
@@ -639,6 +642,7 @@ func replaceCalendarEventsTx(ctx context.Context, tx *sql.Tx, userID, sourceID s
 				reminder_minutes = excluded.reminder_minutes,
 				show_as = excluded.show_as,
 				is_private = excluded.is_private,
+				event_type = excluded.event_type,
 				updated_at = CURRENT_TIMESTAMP`,
 			eventID, userID, sourceID, remoteID,
 			strings.TrimSpace(event.ICalUID), strings.TrimSpace(event.SeriesRemoteID), strings.TrimSpace(event.ETag),
@@ -648,7 +652,7 @@ func replaceCalendarEventsTx(ctx context.Context, tx *sql.Tx, userID, sourceID s
 			strings.TrimSpace(event.StartTimeZone), strings.TrimSpace(event.EndTimeZone),
 			calendarJSON(event.RecurrenceJSON, "[]"), calendarJSON(event.AttendeesJSON, "[]"),
 			calendarJSON(event.OnlineMeetingJSON, "{}"), strings.TrimSpace(event.HTMLLink),
-			calendarEventTimeValue(event.ProviderCreatedAt), calendarEventTimeValue(event.ProviderUpdatedAt), calendarBoolInt(event.IsDeleted), event.ResponseStatus, calendarReminderValue(event.ReminderMinutes), CalendarShowAsValue(event.ShowAs), calendarBoolInt(event.Private))
+			calendarEventTimeValue(event.ProviderCreatedAt), calendarEventTimeValue(event.ProviderUpdatedAt), calendarBoolInt(event.IsDeleted), event.ResponseStatus, calendarReminderValue(event.ReminderMinutes), CalendarShowAsValue(event.ShowAs), calendarBoolInt(event.Private), strings.TrimSpace(event.EventType))
 		if err := calendarSyncOneRow(result, err); err != nil {
 			return fmt.Errorf("upsert calendar event %q: %w", remoteID, err)
 		}
@@ -711,7 +715,7 @@ const calendarEventColumns = `
 		       event.recurrence_json, event.attendees_json, event.online_meeting_json,
 		       event.html_link, event.provider_created_at, event.provider_updated_at,
 		       event.is_deleted, source.name, source.color, source.is_hidden, event.response_status,
-		       source.provider, account.email_address, event.reminder_minutes, event.show_as, event.is_private`
+		       source.provider, account.email_address, event.reminder_minutes, event.show_as, event.is_private, event.event_type`
 
 const calendarEventFrom = `
 		FROM calendar_events event
@@ -791,7 +795,7 @@ func scanCalendarEvent(row interface{ Scan(...any) error }) (CalendarEvent, erro
 		&event.OnlineMeetingJSON, &event.HTMLLink, &providerCreatedAt, &providerUpdatedAt,
 		&isDeleted, &event.SourceName, &event.SourceColor, &sourceHidden,
 		&event.ResponseStatus,
-		&event.SourceProvider, &event.AccountEmail, &reminder, &event.ShowAs, &private,
+		&event.SourceProvider, &event.AccountEmail, &reminder, &event.ShowAs, &private, &event.EventType,
 	); err != nil {
 		return CalendarEvent{}, err
 	}

@@ -193,3 +193,30 @@ func TestCalendarEventMovable(t *testing.T) {
 		t.Fatal("a cancelled event can be dragged")
 	}
 }
+
+// Google's birthdays and other special events are kept as such and can't be
+// changed or dragged in Gofer.
+func TestCalendarSpecialGoogleEventsAreNotEditable(t *testing.T) {
+	for kind, want := range map[string]string{"birthday": "birthday", "fromGmail": "fromGmail", "default": "", "": ""} {
+		var google googleCalendarEvent
+		_ = json.Unmarshal([]byte(`{"id":"g","start":{"date":"2026-11-27"},"end":{"date":"2026-11-28"},"eventType":"`+kind+`"}`), &google)
+		if event, err := normalizeGoogleCalendarEvent(google); err != nil || event.EventType != want {
+			t.Errorf("%q: %q %v", kind, event.EventType, err)
+		}
+	}
+	owned := storage.CalendarSource{ID: "source", Provider: "gmail", AccessRole: "owner"}
+	birthday := storage.CalendarEvent{ID: "b", SourceID: "source", RemoteID: "b_20261127", SeriesRemoteID: "b", ETag: `"v1"`, Summary: "Birthday", AllDay: true, StartDate: "2026-11-27", EndDate: "2026-11-28", EventType: "birthday"}
+	if calendarEventMovable(birthday, owned) {
+		t.Fatal("a birthday can be dragged")
+	}
+	if reason := calendarEventMutationRestriction(birthday, owned, true); !strings.Contains(reason, "contact") {
+		t.Fatalf("birthday reason: %q", reason)
+	}
+	birthday.EventType = ""
+	if !calendarEventMovable(birthday, owned) {
+		t.Fatal("an ordinary date of a series can't be dragged")
+	}
+	if calendarEventTypeRestriction("somethingNew") == "" {
+		t.Fatal("an unknown kind of event can be changed")
+	}
+}

@@ -75,7 +75,10 @@ type googleCalendarEvent struct {
 	// Visibility is "private" or "confidential" for an event whose details
 	// people who share the calendar can't see.
 	Visibility string `json:"visibility"`
-	Reminders  struct {
+	// EventType is "default" for an ordinary event; others, such as
+	// birthdays, Google lets only Google Calendar change.
+	EventType string `json:"eventType"`
+	Reminders struct {
 		UseDefault bool                     `json:"useDefault"`
 		Overrides  []googleCalendarReminder `json:"overrides"`
 	} `json:"reminders"`
@@ -300,6 +303,9 @@ func normalizeGoogleCalendarEvent(remote googleCalendarEvent) (calendar.RemoteEv
 		event.ShowAs = "free"
 	}
 	event.Private = remote.Visibility == "private" || remote.Visibility == "confidential"
+	if remote.EventType != "default" {
+		event.EventType = strings.TrimSpace(remote.EventType)
+	}
 
 	var err error
 	event.ProviderCreatedAt, err = parseGoogleCalendarTimestamp(remote.Created)

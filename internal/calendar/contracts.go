@@ -76,6 +76,9 @@ type RemoteEvent struct {
 	ShowAs string
 	// Private hides the event's details from people who share the calendar.
 	Private bool
+	// EventType is the provider's kind of event when it isn't an ordinary
+	// one, such as Google's "birthday"; empty otherwise.
+	EventType string
 
 	ProviderCreatedAt *time.Time
 	ProviderUpdatedAt *time.Time

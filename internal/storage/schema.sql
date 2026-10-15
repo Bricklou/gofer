@@ -1373,6 +1373,7 @@ CREATE TABLE IF NOT EXISTS calendar_events (
     reminder_minutes INTEGER NOT NULL DEFAULT -1 CHECK (reminder_minutes >= -1),
     show_as TEXT NOT NULL DEFAULT '' CHECK (show_as IN ('', 'busy', 'free', 'tentative', 'oof', 'working_elsewhere')),
     is_private INTEGER NOT NULL DEFAULT 0 CHECK (is_private IN (0, 1)),
+    event_type TEXT NOT NULL DEFAULT '',
     html_link TEXT NOT NULL DEFAULT '',
     provider_created_at DATETIME,
     provider_updated_at DATETIME,
@@ -1642,4 +1643,4 @@ CREATE TABLE IF NOT EXISTS calendar_teams_drafts (
 );
 
 -- Schema version marker for fresh installs
-INSERT OR REPLACE INTO schema_version (version) VALUES (111);
+INSERT OR REPLACE INTO schema_version (version) VALUES (112);
