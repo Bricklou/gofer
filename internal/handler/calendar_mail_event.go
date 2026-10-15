@@ -23,6 +23,7 @@ import (
 type mailCalendarEvent struct {
 	UID, Method, Summary, Location, Organizer, OrganizerName, Reply, JoinURL string
 	Start, End, Recurrence                                                   *time.Time
+	Modified                                                                 *time.Time // LAST-MODIFIED, or else DTSTAMP
 	StartDate, EndDate, WallStart, WallEnd, Zone                             string
 	AllDay, Recurring, Invited, HasRecurrence, Cancelled                     bool
 }
@@ -179,6 +180,13 @@ func mailCalendarEvents(raw []byte, accountEmail string, location *time.Location
 			item.Cancelled = item.Method == "CANCEL" || strings.EqualFold(status, "CANCELLED")
 			item.Summary, _ = props.Text("SUMMARY")
 			item.Location, _ = props.Text("LOCATION")
+			for _, name := range []string{"LAST-MODIFIED", "DTSTAMP"} {
+				if prop := props.Get(name); prop != nil && item.Modified == nil {
+					if at, err := prop.DateTime(time.UTC); err == nil {
+						item.Modified = &at
+					}
+				}
+			}
 			if organizer := props.Get("ORGANIZER"); organizer != nil {
 				item.Organizer = calendarReplyAddress(organizer.Value)
 				item.OrganizerName = organizer.Params.Get("CN")
@@ -358,7 +366,7 @@ func (h *Handler) renderMailCalendarFooter(ctx context.Context, w http.ResponseW
 			return err == nil
 		})
 		candidates, _ := h.db.ListMailCalendarEvents(ctx, h.userID(ctx), accountID, item.UID)
-		mailCalendarInvitationCard(&card, item, candidates, sources, accountID, address)
+		mailCalendarInvitationCard(&card, item, candidates, sources, accountID, address, location)
 		if note != "" && item.UID == uid {
 			card.Note, card.Invitation = note, nil
 		}
@@ -368,10 +376,16 @@ func (h *Handler) renderMailCalendarFooter(ctx context.Context, w http.ResponseW
 }
 
 // mailCalendarInvitationCard adds the CalDAV add/update/remove offer to a card.
-func mailCalendarInvitationCard(card *views.MailCalendarEventData, item mailCalendarEvent, candidates []storage.CalendarEvent, sources []storage.CalendarSource, accountID, address string) {
+// An invitation with changes not in the calendar yet shows the email's details,
+// not the calendar's older ones.
+func mailCalendarInvitationCard(card *views.MailCalendarEventData, item mailCalendarEvent, candidates []storage.CalendarEvent, sources []storage.CalendarSource, accountID, address string, location *time.Location) {
 	card.Invitation = mailCalendarInvitationOffer(item, candidates, sources, accountID, address)
 	if card.Invitation != nil && card.Invitation.SourceID != "" {
 		card.Note = "" // Instead of "could not be matched to an event".
+	}
+	if card.Invitation != nil && card.Invitation.SourceID == "" && item.Method == "REQUEST" {
+		latest := mailCalendarCard(item, location)
+		card.Summary, card.Date, card.Time, card.Location = latest.Summary, latest.Date, latest.Time, latest.Location
 	}
 }
 

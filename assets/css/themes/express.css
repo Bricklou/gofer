@@ -314,6 +314,12 @@
   background: var(--xp-title) top / 100% 36px no-repeat local, var(--background);
 }
 
+/* A calendar dialog caps its panel at the screen's height; the strip above
+   it takes part of that, or the footer would end below the screen. */
+[data-theme="express"] dialog.calendar-dialog[data-tui-dialog-content]:not(.bg-transparent) > [data-tui-dialog-panel] {
+  max-height: calc(100dvh - 2rem - 36px);
+}
+
 /* Each dialog lays out its own header, so the title and the close button are
    placed against the dialog itself: the panel stops being their frame. */
 [data-theme="express"] dialog[data-tui-dialog-content]:not(.bg-transparent) > [data-tui-dialog-panel] {

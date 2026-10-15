@@ -136,7 +136,7 @@ func (h *Handler) renderUserMailCalendarFooter(ctx context.Context, w http.Respo
 			}); err != nil {
 				return err
 			}
-			mailCalendarInvitationCard(&card, item, candidates, sources, raw.AccountID(), raw.EmailAddress())
+			mailCalendarInvitationCard(&card, item, candidates, sources, raw.AccountID(), raw.EmailAddress(), location)
 			if note != "" && item.UID == uid {
 				card.Note, card.Invitation = note, nil
 			}

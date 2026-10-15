@@ -153,3 +153,20 @@ func TestCalendarOccurrenceDeleteKeepsOtherOccurrences(t *testing.T) {
 		t.Fatal("sibling deleted")
 	}
 }
+
+// A CalDAV date listed in UTC is edited in its series' time zone.
+func TestCalendarCalDAVDateUsesItsSeriesZone(t *testing.T) {
+	date := storage.CalendarEvent{StartTimeZone: "UTC", EndTimeZone: "UTC"}
+	caldav, google := storage.CalendarSource{Provider: "caldav"}, storage.CalendarSource{Provider: "gmail"}
+	if !calendarOccurrenceNeedsSeriesZone(date, caldav) || calendarOccurrenceNeedsSeriesZone(date, google) {
+		t.Fatal("wrong calendars read their series' zone")
+	}
+	calendarOccurrenceUseSeriesZone(&date, storage.CalendarEvent{StartTimeZone: "Europe/Prague"})
+	if date.StartTimeZone != "Europe/Prague" || date.EndTimeZone != "Europe/Prague" {
+		t.Fatalf("date zone %s", date.StartTimeZone)
+	}
+	calendarOccurrenceUseSeriesZone(&date, storage.CalendarEvent{StartTimeZone: "Not/AZone"})
+	if date.StartTimeZone != "Europe/Prague" {
+		t.Fatal("an unknown zone replaced the date's")
+	}
+}

@@ -344,10 +344,19 @@ func mailCalendarInvitationOffer(item mailCalendarEvent, candidates []storage.Ca
 	return nil
 }
 
-// mailCalendarInvitationChanged reports whether an invitation differs from
-// the cached event, or the date of a series, it is for.
+// mailCalendarInvitationChanged reports whether an invitation is newer than,
+// and differs from, the cached event or the date of a series it is for. An
+// older email, or one whose age can't be told, never replaces the calendar.
 func mailCalendarInvitationChanged(item mailCalendarEvent, existing []storage.CalendarEvent) bool {
 	event := existing[0]
+	if item.Modified == nil {
+		return false
+	}
+	for _, candidate := range existing {
+		if candidate.ProviderUpdatedAt == nil || !item.Modified.After(*candidate.ProviderUpdatedAt) {
+			return false
+		}
+	}
 	if item.Recurrence != nil {
 		found := false
 		for _, candidate := range existing {

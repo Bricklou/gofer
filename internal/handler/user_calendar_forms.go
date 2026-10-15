@@ -146,6 +146,11 @@ func (h *Handler) handleUserEditCalendarEvent(w http.ResponseWriter, r *http.Req
 			if err := calendarOccurrenceExistingRestriction(event); err != nil {
 				return userCalendarFormFailure{http.StatusConflict, err.Error()}
 			}
+			if calendarOccurrenceNeedsSeriesZone(event, source) {
+				if master, err := p.readSeries(ctx, false); err == nil {
+					calendarOccurrenceUseSeriesZone(&event, master)
+				}
+			}
 		}
 		var repeat *calendar.RecurrenceDraft
 		if series {

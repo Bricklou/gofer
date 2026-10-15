@@ -17296,3 +17296,29 @@ function collapseComposeFullWidth() {
     preview.removeAttribute('src')
   }, true)
 })()
+
+// Escape closes an open menu inside a dialog, and only that menu: the browser
+// would otherwise also cancel the dialog once the menu has closed itself.
+document.addEventListener("keydown", function (event) {
+  if (event.key !== "Escape") return
+  var open = document.querySelector("dialog[open] :popover-open")
+  var dialog = open && open.closest("dialog")
+  if (dialog) dialog._goferEscapeClosesMenu = true
+}, true)
+
+document.addEventListener("cancel", function (event) {
+  var dialog = event.target
+  if (!dialog || !dialog._goferEscapeClosesMenu) return
+  dialog._goferEscapeClosesMenu = false
+  event.preventDefault()
+  event.stopImmediatePropagation()
+  dialog.querySelectorAll(":popover-open").forEach(function (content) {
+    if (window.tui && window.tui.popover && window.tui.popover.closeElement) window.tui.popover.closeElement(content)
+    else if (content.hidePopover) content.hidePopover()
+  })
+}, true)
+
+document.addEventListener("keyup", function (event) {
+  if (event.key !== "Escape") return
+  document.querySelectorAll("dialog").forEach(function (dialog) { dialog._goferEscapeClosesMenu = false })
+}, true)

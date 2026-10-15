@@ -126,6 +126,13 @@ func (h *Handler) handleEditCalendarEvent(w http.ResponseWriter, r *http.Request
 			http.Error(w, err.Error(), http.StatusConflict)
 			return
 		}
+		if calendarOccurrenceNeedsSeriesZone(event, source) {
+			ctx, cancel := context.WithTimeout(r.Context(), 15*time.Second)
+			if master, err := h.readCalendarProviderSeries(ctx, source, event); err == nil {
+				calendarOccurrenceUseSeriesZone(&event, master)
+			}
+			cancel()
+		}
 	}
 	var repeat *calendar.RecurrenceDraft
 	if series {

@@ -152,8 +152,9 @@ func TestCalDAVInvitationAddUpdateAndCancel(t *testing.T) {
 func TestMailCalendarInvitationOffer(t *testing.T) {
 	sources := []storage.CalendarSource{{ID: "caldav", AccountID: "account", Provider: "caldav", Name: "Personal", AccessRole: "owner"}}
 	start, end := time.Date(2026, 10, 2, 7, 0, 0, 0, time.UTC), time.Date(2026, 10, 2, 8, 0, 0, 0, time.UTC)
-	item := mailCalendarEvent{UID: "invite-uid", Method: "REQUEST", Summary: "Planning", Organizer: "host@example.com", Invited: true, Start: &start, End: &end}
-	cached := storage.CalendarEvent{ID: "event", SourceProvider: "caldav", Summary: "Planning", StartAt: &start, EndAt: &end, OrganizerEmail: "host@example.com", AccountEmail: "guest@example.com"}
+	saved, newer := time.Date(2026, 10, 1, 9, 0, 0, 0, time.UTC), time.Date(2026, 10, 2, 9, 0, 0, 0, time.UTC)
+	item := mailCalendarEvent{UID: "invite-uid", Method: "REQUEST", Summary: "Planning", Organizer: "host@example.com", Invited: true, Start: &start, End: &end, Modified: &newer}
+	cached := storage.CalendarEvent{ID: "event", SourceProvider: "caldav", Summary: "Planning", StartAt: &start, EndAt: &end, OrganizerEmail: "host@example.com", AccountEmail: "guest@example.com", ProviderUpdatedAt: &saved}
 	label := func(item mailCalendarEvent, candidates []storage.CalendarEvent, sources []storage.CalendarSource) string {
 		if offer := mailCalendarInvitationOffer(item, candidates, sources, "account", "guest@example.com"); offer != nil {
 			return offer.Label
@@ -170,6 +171,17 @@ func TestMailCalendarInvitationOffer(t *testing.T) {
 	changed.Summary = "Moved planning"
 	if got := label(changed, []storage.CalendarEvent{cached}, sources); got != "Update in calendar" {
 		t.Errorf("changed invitation: %q", got)
+	}
+	// An older email, or one whose age is unknown, never offers to replace the calendar.
+	older := changed
+	older.Modified = &saved
+	if got := label(older, []storage.CalendarEvent{cached}, sources); got != "" {
+		t.Errorf("older invitation: %q", got)
+	}
+	undated := changed
+	undated.Modified = nil
+	if got := label(undated, []storage.CalendarEvent{cached}, sources); got != "" {
+		t.Errorf("undated invitation: %q", got)
 	}
 	cancel := item
 	cancel.Method, cancel.Cancelled = "CANCEL", true
@@ -191,5 +203,21 @@ func TestMailCalendarInvitationOffer(t *testing.T) {
 	own.Organizer = "guest@example.com"
 	if got := label(own, nil, sources); got != "" {
 		t.Errorf("the account's own meeting: %q", got)
+	}
+}
+
+// A card offering to update the calendar shows the invitation's new details.
+func TestMailCalendarInvitationCardShowsTheNewDetails(t *testing.T) {
+	sources := []storage.CalendarSource{{ID: "caldav", AccountID: "account", Provider: "caldav", Name: "Personal", AccessRole: "owner"}}
+	old, oldEnd := time.Date(2026, 12, 1, 14, 0, 0, 0, time.UTC), time.Date(2026, 12, 1, 15, 0, 0, 0, time.UTC)
+	moved, movedEnd := old.Add(time.Hour), oldEnd.Add(time.Hour)
+	saved, newer := time.Date(2026, 10, 1, 9, 0, 0, 0, time.UTC), time.Date(2026, 10, 2, 9, 0, 0, 0, time.UTC)
+	cached := storage.CalendarEvent{ID: "event", SourceProvider: "caldav", Summary: "Planning", StartAt: &old, EndAt: &oldEnd, OrganizerEmail: "host@example.com", AccountEmail: "guest@example.com", ProviderUpdatedAt: &saved}
+	item := mailCalendarEvent{UID: "invite-uid", Method: "REQUEST", Summary: "Planning", Organizer: "host@example.com", Invited: true, Start: &moved, End: &movedEnd, Modified: &newer}
+	card := mailCalendarEventCard(item, cached, true, time.UTC, "1", func(storage.CalendarEvent) bool { return true })
+	before := card.Time
+	mailCalendarInvitationCard(&card, item, []storage.CalendarEvent{cached}, sources, "account", "guest@example.com", time.UTC)
+	if card.Invitation == nil || card.Invitation.Label != "Update in calendar" || card.Time == before || card.Time != mailCalendarCard(item, time.UTC).Time {
+		t.Fatalf("card shows %q (was %q), offer %+v", card.Time, before, card.Invitation)
 	}
 }
