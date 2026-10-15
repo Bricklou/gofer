@@ -189,6 +189,9 @@ func (h *Handler) handleUserNewCalendarEvent(w http.ResponseWriter, r *http.Requ
 			}
 			return grant
 		})
+		if formErr == nil {
+			formErr = calendarNewEventRange(&data, r.URL.Query().Get("start"), r.URL.Query().Get("end"), location)
+		}
 		return ctx.Err()
 	})
 	if err != nil {

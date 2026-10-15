@@ -10345,11 +10345,21 @@ document.body.addEventListener("htmx:afterRequest", function (event) {
 })
 
 var _calendarCreateDialogRequest = null
+var _calendarCreateRange = null
 
 function configureCalendarCreateDialog(event) {
   if (event.detail.elt && event.detail.elt.hasAttribute("data-calendar-edit-trigger")) return
   var calendar = document.getElementById("calendar-main")
   if (!calendar) return
+  // A range picked in the week view opens the editor with its times.
+  var range = _calendarCreateRange
+  _calendarCreateRange = null
+  if (range) {
+    event.detail.parameters.date = range.date
+    event.detail.parameters.start = range.start
+    event.detail.parameters.end = range.end
+    return
+  }
   var selected = _calendarSelectedDay && _calendarSelectedDay.period === calendar.dataset.calendarPeriod ? _calendarSelectedDay.date : ""
   event.detail.parameters.date = selected || (calendar.dataset.calendarView === "week" ? calendar.dataset.calendarDate : calendar.dataset.calendarTodayDate.slice(0, 7) === calendar.dataset.calendarMonth ? calendar.dataset.calendarTodayDate : calendar.dataset.calendarMonth + "-01")
 }
@@ -17909,4 +17919,90 @@ function confirmCalendarMove(point, guests, move, cancel) {
   document.addEventListener("pointerdown", outside, true)
   document.addEventListener("keydown", escape, true)
   box.querySelector("[data-calendar-move-confirm-button]").focus()
+}
+
+// Drag over empty time in the week view to pick a range, then let go to open
+// a new event with those times.
+var _calendarPick = null
+
+document.addEventListener("pointerdown", function (event) {
+  if (event.button !== 0 || event.pointerType === "touch" || _calendarDrag || _calendarPick) return
+  var column = event.target.closest && event.target.closest("#calendar-main [data-calendar-timed-column]")
+  if (!column || event.target.closest("[data-calendar-event-trigger], .calendar-drag-slot") || column.closest("#calendar-main").hasAttribute("data-calendar-loading")) return
+  _calendarPick = {column: column, y: event.clientY, anchor: calendarColumnMinute(column, event.clientY), started: false}
+})
+
+document.addEventListener("pointermove", function (event) {
+  var pick = _calendarPick
+  if (!pick) return
+  if (!pick.started) {
+    if (Math.abs(event.clientY - pick.y) < 5) return
+    pick.started = true
+    document.body.style.userSelect = "none"
+    pick.slot = document.createElement("div")
+    pick.slot.className = "calendar-drag-slot calendar-pick-slot"
+    pick.slot.setAttribute("aria-hidden", "true")
+    pick.column.appendChild(pick.slot)
+  }
+  event.preventDefault()
+  var minute = calendarColumnMinute(pick.column, event.clientY)
+  pick.start = Math.floor(Math.min(pick.anchor, minute) / 15) * 15
+  pick.end = Math.min(1440, Math.max(pick.start + 15, Math.ceil(Math.max(pick.anchor, minute) / 15) * 15))
+  var top = calendarColumnPosition(pick.column, pick.start)
+  pick.slot.style.top = top + "px"
+  pick.slot.style.height = Math.max(22, calendarColumnPosition(pick.column, pick.end) - top) + "px"
+  pick.slot.textContent = calendarMinuteLabel(pick.start) + "–" + (pick.end === 1440 ? "24:00" : calendarMinuteLabel(pick.end))
+})
+
+document.addEventListener("pointerup", function () {
+  var pick = _calendarPick
+  _calendarPick = null
+  if (!pick || !pick.started) return
+  document.body.style.userSelect = ""
+  _calendarDragSuppressClick = true
+  setTimeout(function () { _calendarDragSuppressClick = false }, 0)
+  // After the click is let through again, so the editor's button works.
+  setTimeout(function () { openCalendarPick(pick) }, 0)
+})
+
+document.addEventListener("pointercancel", function () {
+  if (_calendarPick && _calendarPick.slot) _calendarPick.slot.remove()
+  document.body.style.userSelect = ""
+  _calendarPick = null
+})
+
+document.addEventListener("keydown", function (event) {
+  if (event.key !== "Escape" || !_calendarPick || !_calendarPick.started) return
+  event.preventDefault()
+  event.stopPropagation()
+  _calendarPick.slot.remove()
+  document.body.style.userSelect = ""
+  _calendarPick = null
+}, true)
+
+// The minute of the day under the pointer in a week column.
+function calendarColumnMinute(column, clientY) {
+  var axis = column.closest("[data-calendar-week-grid]")._calendarWeekAxis
+  var box = column.getBoundingClientRect()
+  var offset = Math.max(0, Math.min(box.height, clientY - box.top))
+  return Math.max(0, Math.min(1440, axis ? _calendarWeekMinuteAtPosition(offset, axis) : offset / box.height * 1440))
+}
+
+// Opens the new event editor with the picked range; the outline stays until
+// the editor is open.
+function openCalendarPick(pick) {
+  var trigger = document.querySelector("[data-calendar-create-trigger]:not([data-calendar-edit-trigger])")
+  if (!trigger || trigger.disabled || !window.htmx) { pick.slot.remove(); return }
+  var date = pick.column.dataset.calendarTimedColumn
+  var time = function (minute) {
+    return minute === 1440 ? calendarAddISODays(date, 1) + "T00:00" : date + "T" + calendarMinuteLabel(minute)
+  }
+  _calendarCreateRange = {date: date, start: time(pick.start), end: time(pick.end)}
+  var done = function (event) {
+    if (event.detail.elt !== trigger) return
+    document.body.removeEventListener("htmx:afterRequest", done)
+    setTimeout(function () { pick.slot.remove() }, 150)
+  }
+  document.body.addEventListener("htmx:afterRequest", done)
+  trigger.click()
 }

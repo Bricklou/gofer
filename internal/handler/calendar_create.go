@@ -60,6 +60,9 @@ func (h *Handler) handleNewCalendarEvent(w http.ResponseWriter, r *http.Request)
 	}
 	location := viewsCalendarLocation(h.db.GetUISettings(ctx, userID))
 	data, err := calendarNewEventData(r.URL.Query().Get("date"), time.Now(), location, sources, accountNames, func(source storage.CalendarSource) bool { return h.calendarWriteAuthorized(ctx, source) })
+	if err == nil {
+		err = calendarNewEventRange(&data, r.URL.Query().Get("start"), r.URL.Query().Get("end"), location)
+	}
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
@@ -105,6 +108,25 @@ func calendarNewEventData(selectedDate string, currentTime time.Time, location *
 		data.SourceID = data.Sources[0].ID
 	}
 	return data, nil
+}
+
+// calendarNewEventRange fills a new event's times from a range picked in the
+// week view: local date-times, such as 2026-11-03T09:00.
+func calendarNewEventRange(data *views.CalendarCreateData, start, end string, location *time.Location) error {
+	if start == "" && end == "" {
+		return nil
+	}
+	from, err := time.ParseInLocation("2006-01-02T15:04", start, location)
+	if err != nil {
+		return errors.New("invalid start time")
+	}
+	to, err := time.ParseInLocation("2006-01-02T15:04", end, location)
+	if err != nil || !to.After(from) || to.Sub(from) > 31*24*time.Hour {
+		return errors.New("invalid end time")
+	}
+	data.Date, data.StartTime = from.Format("2006-01-02"), from.Format("15:04")
+	data.EndDate, data.EndTime = to.Format("2006-01-02"), to.Format("15:04")
+	return nil
 }
 
 func parseCalendarEventDraft(r *http.Request) (calendar.EventDraft, error) {

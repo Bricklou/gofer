@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/cristianadrielbraun/gofer/internal/storage"
+	"github.com/cristianadrielbraun/gofer/internal/views"
 )
 
 func TestOutlookWindowsZonesLoad(t *testing.T) {
@@ -67,5 +68,22 @@ func TestCalendarEditorShowsUTCEventsInTheUsersZone(t *testing.T) {
 	event.StartTimeZone = "America/New_York"
 	if data, _ := calendarEditData(event, source, "", prague, false, false, nil); data.TimeZone != "America/New_York" || data.StartTime != "03:00" {
 		t.Fatalf("event zone: %s %s", data.TimeZone, data.StartTime)
+	}
+}
+
+// A range picked in the week view fills the new event's times.
+func TestCalendarNewEventRange(t *testing.T) {
+	prague, _ := time.LoadLocation("Europe/Prague")
+	data := views.CalendarCreateData{Date: "2026-11-03", StartTime: "09:00", EndDate: "2026-11-03", EndTime: "10:00"}
+	if err := calendarNewEventRange(&data, "", "", prague); err != nil || data.StartTime != "09:00" {
+		t.Fatal("no range changed the times")
+	}
+	if err := calendarNewEventRange(&data, "2026-11-03T13:15", "2026-11-04T00:00", prague); err != nil || data.Date != "2026-11-03" || data.StartTime != "13:15" || data.EndDate != "2026-11-04" || data.EndTime != "00:00" {
+		t.Fatalf("range: %+v %v", data, err)
+	}
+	for _, bad := range [][2]string{{"2026-11-03T13:00", "2026-11-03T12:00"}, {"2026-11-03T13:00", ""}, {"soon", "2026-11-03T14:00"}, {"2026-11-03T13:00", "2026-12-20T13:00"}} {
+		if calendarNewEventRange(&data, bad[0], bad[1], prague) == nil {
+			t.Errorf("accepted %v", bad)
+		}
 	}
 }
