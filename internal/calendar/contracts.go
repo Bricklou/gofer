@@ -71,6 +71,9 @@ type RemoteEvent struct {
 	// ReminderMinutes is the event's earliest pop-up reminder, in minutes
 	// before it starts; nil when it has none.
 	ReminderMinutes *int
+	// ShowAs is how the event marks its time: busy, free, tentative, oof or
+	// working_elsewhere; empty when the provider doesn't say.
+	ShowAs string
 
 	ProviderCreatedAt *time.Time
 	ProviderUpdatedAt *time.Time
@@ -119,8 +122,10 @@ type EventDraft struct {
 	// ReminderSet says the reminder was chosen; otherwise a new event gets the
 	// calendar's default and an edit leaves it as it is. ReminderMinutes is
 	// minutes before the start, or nil for no reminder.
-	ReminderSet          bool            `json:",omitempty"`
-	ReminderMinutes      *int            `json:",omitempty"`
+	ReminderSet     bool `json:",omitempty"`
+	ReminderMinutes *int `json:",omitempty"`
+	// ShowAs is the chosen busy or free state; empty leaves it as it is.
+	ShowAs               string          `json:",omitempty"`
 	GoogleMeetDraftID    string          `json:",omitempty"`
 	GoogleMeetConference json.RawMessage `json:"-"`
 	Location             string

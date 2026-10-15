@@ -11,6 +11,7 @@ import (
 type CalendarEventDetails struct {
 	Event                 CalendarEvent
 	Reminder              string // e.g. "15 minutes before"; empty when it has none
+	ShowAs                string // e.g. "Free"; empty when the provider doesn't say
 	Description           string
 	DescriptionHTML       string
 	JoinURL               string

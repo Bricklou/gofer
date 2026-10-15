@@ -370,6 +370,9 @@ func (h *Handler) updateCalDAVMeetingOccurrence(ctx context.Context, source stor
 		if draft.ReminderSet && !calendarSameReminder(draft.ReminderMinutes, existing.ReminderMinutes) {
 			calDAVSetReminder(override, draft.ReminderMinutes)
 		}
+		if draft.ShowAs != "" && !calendarSameShowAs(draft.ShowAs, existing.ShowAs) {
+			calDAVSetShowAs(override, draft.ShowAs)
+		}
 		// Keep each remaining guest's reply; add new guests as Gofer invites them.
 		var people []ical.Prop
 		for _, person := range override.Props["ATTENDEE"] {

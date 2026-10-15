@@ -349,6 +349,9 @@ func updateGoogleCalendarEventScope(ctx context.Context, token, remoteCalendarID
 	if draft.ReminderSet && !calendarSameReminder(draft.ReminderMinutes, existing.ReminderMinutes) {
 		payload["reminders"] = googleCalendarReminderPayload(draft.ReminderMinutes, current.Reminders.Overrides)
 	}
+	if draft.ShowAs != "" && !calendarSameShowAs(draft.ShowAs, existing.ShowAs) {
+		payload["transparency"] = googleCalendarTransparency(draft.ShowAs)
+	}
 	if addingMeet {
 		if len(draft.GoogleMeetConference) > 0 {
 			payload["conferenceData"] = draft.GoogleMeetConference
@@ -571,6 +574,9 @@ func updateOutlookCalendarEventScope(ctx context.Context, token, remoteCalendarI
 	}
 	if draft.ReminderSet && !calendarSameReminder(draft.ReminderMinutes, existing.ReminderMinutes) {
 		outlookCalendarReminderPayload(payload, draft.ReminderMinutes)
+	}
+	if draft.ShowAs != "" && !calendarSameShowAs(draft.ShowAs, existing.ShowAs) {
+		payload["showAs"] = outlookCalendarShowAsValue(draft.ShowAs)
 	}
 	var updated outlookCalendarUpdateEvent
 	if err := calendarUpdateJSON(ctx, endpoint, token, current.ODataETag, payload, &updated); err != nil {
@@ -804,6 +810,9 @@ func updateCalDAVCalendarEventScope(ctx context.Context, source storage.Calendar
 	delete(props, "DURATION") // DTEND and DURATION are mutually exclusive.
 	if draft.ReminderSet && !calendarSameReminder(draft.ReminderMinutes, existing.ReminderMinutes) {
 		calDAVSetReminder(master, draft.ReminderMinutes)
+	}
+	if draft.ShowAs != "" && !calendarSameShowAs(draft.ShowAs, existing.ShowAs) {
+		calDAVSetShowAs(master, draft.ShowAs)
 	}
 	if draft.Recurrence != nil {
 		props.Set(edited.Events()[0].Props.Get("RRULE"))

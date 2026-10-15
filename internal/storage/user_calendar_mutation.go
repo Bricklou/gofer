@@ -210,6 +210,7 @@ func (db *DB) publishUserCalendarEvent(ctx context.Context, snapshot *UserCalend
 		if minutes := calendarReminderValue(event.ReminderMinutes); minutes >= 0 {
 			row.event.ReminderMinutes = &minutes
 		}
+		row.event.ShowAs = CalendarShowAsValue(event.ShowAs)
 		if online {
 			row.event.ICalUID, row.event.OrganizerName, row.event.OrganizerEmail = event.ICalUID, event.OrganizerName, event.OrganizerEmail
 			row.event.ResponseStatus, row.event.AttendeesJSON, row.event.OnlineMeetingJSON = event.ResponseStatus, event.AttendeesJSON, event.OnlineMeetingJSON

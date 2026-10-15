@@ -52,7 +52,9 @@ type CalendarCreateData struct {
 	TeamsReplaceDelete string
 	// Reminder is the event's reminder in minutes, "none", or empty for a new
 	// event, which keeps the calendar's default.
-	Reminder  string
+	Reminder string
+	// ShowAs is how the event marks its time; empty means busy.
+	ShowAs    string
 	Sources   []CalendarCreateSource
 	Date      string
 	StartTime string
@@ -123,4 +125,32 @@ func plural(n int, unit string) string {
 		return "1 " + unit
 	}
 	return strconv.Itoa(n) + " " + unit + "s"
+}
+
+// calendarShowAsChoices lists busy and free, keeping an Outlook event's other
+// state when it has one.
+func calendarShowAsChoices(data CalendarCreateData) (string, [][2]string) {
+	choices := [][2]string{{"busy", "Busy"}, {"free", "Free"}}
+	switch data.ShowAs {
+	case "", "busy":
+		return "busy", choices
+	case "free":
+		return "free", choices
+	}
+	return data.ShowAs, append(choices, [2]string{data.ShowAs, CalendarShowAsLabel(data.ShowAs)})
+}
+
+// CalendarShowAsLabel names how an event marks its time.
+func CalendarShowAsLabel(showAs string) string {
+	switch showAs {
+	case "free":
+		return "Free"
+	case "tentative":
+		return "Tentative"
+	case "oof":
+		return "Away"
+	case "working_elsewhere":
+		return "Working elsewhere"
+	}
+	return "Busy"
 }

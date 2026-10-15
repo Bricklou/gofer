@@ -309,6 +309,7 @@ func normalizeOutlookCalendarEvent(remote outlookCalendarEvent) (calendar.Remote
 		minutes := *remote.ReminderMinutes
 		event.ReminderMinutes = &minutes
 	}
+	event.ShowAs = outlookCalendarShowAs(remote.ShowAs)
 	if event.Description == "" && remote.Body.ContentType == "" {
 		event.Description = strings.TrimSpace(remote.BodyPreview)
 	}
@@ -475,4 +476,23 @@ func outlookCalendarReminderPayload(payload map[string]any, minutes *int) {
 	if minutes != nil {
 		payload["reminderMinutesBeforeStart"] = *minutes
 	}
+}
+
+// outlookCalendarShowAs maps Microsoft's showAs to Gofer's value, and back
+// with outlookCalendarShowAsValue.
+func outlookCalendarShowAs(value string) string {
+	switch value {
+	case "free", "tentative", "busy", "oof":
+		return value
+	case "workingElsewhere":
+		return "working_elsewhere"
+	}
+	return ""
+}
+
+func outlookCalendarShowAsValue(showAs string) string {
+	if showAs == "working_elsewhere" {
+		return "workingElsewhere"
+	}
+	return showAs
 }

@@ -310,6 +310,10 @@ func finalizeCalendarTeamsDraft(ctx context.Context, source storage.CalendarSour
 		if draft.ReminderSet {
 			outlookCalendarReminderPayload(payload, draft.ReminderMinutes)
 		}
+		// The placeholder left the time free; the meeting shows the chosen state.
+		if draft.ShowAs != "" {
+			payload["showAs"] = outlookCalendarShowAsValue(draft.ShowAs)
+		}
 		var updated outlookCalendarUpdateEvent
 		if err := calendarUpdateJSON(ctx, endpoint, token, current.ODataETag, payload, &updated); err != nil {
 			return calendar.RemoteEvent{}, err

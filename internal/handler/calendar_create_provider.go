@@ -124,6 +124,9 @@ func createGoogleCalendarEvent(ctx context.Context, token, remoteCalendarID stri
 	if draft.ReminderSet {
 		payload["reminders"] = googleCalendarReminderPayload(draft.ReminderMinutes, nil)
 	}
+	if draft.ShowAs != "" {
+		payload["transparency"] = googleCalendarTransparency(draft.ShowAs)
+	}
 	endpoint := googleCalendarAPIBaseURL + "/calendars/" + url.PathEscape(remoteCalendarID) + "/events"
 	var remote struct {
 		googleCalendarEvent
@@ -227,6 +230,9 @@ func createOutlookCalendarEvent(ctx context.Context, token, remoteCalendarID str
 	}
 	if draft.ReminderSet {
 		outlookCalendarReminderPayload(payload, draft.ReminderMinutes)
+	}
+	if draft.ShowAs != "" {
+		payload["showAs"] = outlookCalendarShowAsValue(draft.ShowAs)
 	}
 	var remote outlookCalendarEvent
 	endpoint := outlookGraphBaseURL + "/me/calendars/" + url.PathEscape(remoteCalendarID) + "/events"
@@ -353,6 +359,9 @@ func calendarCreateICS(draft calendar.EventDraft) (string, error) {
 	}
 	if draft.ReminderSet {
 		calDAVSetReminder(event.Component, draft.ReminderMinutes)
+	}
+	if draft.ShowAs != "" {
+		calDAVSetShowAs(event.Component, draft.ShowAs)
 	}
 	cal.Children = append(cal.Children, event.Component)
 	var output bytes.Buffer

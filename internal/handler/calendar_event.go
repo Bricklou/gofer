@@ -73,6 +73,7 @@ func calendarEventDetails(event storage.CalendarEvent) views.CalendarEventDetail
 	}
 	return views.CalendarEventDetails{
 		Reminder:        reminder,
+		ShowAs:          calendarShowAsDetail(event.ShowAs),
 		Event:           calendarViewEvent(event),
 		Description:     calendarDescriptionText(event.Description),
 		DescriptionHTML: calendar.DescriptionHTML(event.Description),
@@ -147,4 +148,11 @@ func calendarEventParticipants(raw string) []views.CalendarEventParticipant {
 		})
 	}
 	return result
+}
+
+func calendarShowAsDetail(showAs string) string {
+	if showAs == "" {
+		return ""
+	}
+	return views.CalendarShowAsLabel(showAs)
 }

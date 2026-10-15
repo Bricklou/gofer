@@ -154,6 +154,26 @@ templ CalendarCreateDialog(data CalendarCreateData) {
 								}
 							}
 						}
+						@calendarDialogRow(icon.CalendarCheck(icon.Props{Class: "size-4"}), "pt-2.5") {
+							{{ showAs, showAsChoices := calendarShowAsChoices(data) }}
+							@label.Label(label.Props{For: "calendar-create-show-as", Class: "sr-only"}) {
+								Show as
+							}
+							@selectbox.SelectBox() {
+								@selectbox.Trigger(selectbox.TriggerProps{ID: "calendar-create-show-as", Name: "show_as", DisableClear: true, Attributes: templ.Attributes{"value": showAs}}) {
+									@selectbox.Value(selectbox.ValueProps{Placeholder: "Show as"})
+								}
+								@selectbox.Content(selectbox.ContentProps{NoSearch: true, Class: "mobile-sheet"}) {
+									@selectbox.Group() {
+										for _, choice := range showAsChoices {
+											@selectbox.Item(selectbox.ItemProps{Value: choice[0], Selected: choice[0] == showAs}) {
+												{ choice[1] }
+											}
+										}
+									}
+								}
+							}
+						}
 						@calendarDialogRow(icon.MapPin(icon.Props{Class: "size-4"}), "pt-2.5") {
 							@label.Label(label.Props{For: "calendar-create-location", Class: "sr-only"}) {
 								Location

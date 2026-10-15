@@ -282,21 +282,26 @@ func TestUserStorageMigrationPreflightHonorsRuntimeLockCancellationAndMissingFil
 }
 
 func TestUserStorageMigrationPreflightAcceptsMainSchemaAndKeepsHistoricalClaimsUnchanged(t *testing.T) {
-	for _, mode := range []string{"main-105", "main-105-no-push-table", "partial-105-claim", "shared-106", "shared-107", "shared-108", "shared-109"} {
+	for _, mode := range []string{"main-105", "main-105-no-push-table", "partial-105-claim", "shared-106", "shared-107", "shared-108", "shared-109", "shared-110"} {
 		t.Run(mode, func(t *testing.T) {
 			db := sharedMigrationFixture(t)
-			version := 109
+			version := 110
+			if mode != "shared-110" {
+				// Before events kept how they mark their time.
+				migrationFixtureSQL(t, db, `ALTER TABLE calendar_events DROP COLUMN show_as; DELETE FROM schema_version; INSERT INTO schema_version(version) VALUES(109)`)
+				version = 109
+			}
 			if mode == "shared-108" {
 				// Before events kept their reminder.
 				migrationFixtureSQL(t, db, `ALTER TABLE calendar_events DROP COLUMN reminder_minutes; DELETE FROM schema_version; INSERT INTO schema_version(version) VALUES(108)`)
 				version = 108
 			}
-			if mode != "shared-108" && mode != "shared-109" {
+			if mode != "shared-108" && mode != "shared-109" && mode != "shared-110" {
 				migrationFixtureSQL(t, db, withoutFolderThreadTracking+`;
 DELETE FROM schema_version; INSERT INTO schema_version(version) VALUES(107)`)
 				version = 107
 			}
-			if mode != "shared-107" && mode != "shared-108" && mode != "shared-109" {
+			if mode != "shared-107" && mode != "shared-108" && mode != "shared-109" && mode != "shared-110" {
 				version = 106
 				if mode != "shared-106" {
 					version = 105
@@ -314,7 +319,7 @@ DELETE FROM schema_version; INSERT INTO schema_version(version) VALUES(107)`)
 				}
 			}
 			migrationFixtureSQL(t, db, `INSERT INTO calendar_response_requests(user_id,source_id,remote_id,version,response) VALUES('alice','alice-calendar','original-resource','original-etag','accepted')`)
-			if mode == "partial-105-claim" || mode == "shared-107" || mode == "shared-108" || mode == "shared-109" {
+			if mode == "partial-105-claim" || mode == "shared-107" || mode == "shared-108" || mode == "shared-109" || mode == "shared-110" {
 				migrationFixtureSQL(t, db, `UPDATE calendar_response_requests SET claim_id='original-nonce'`)
 			}
 			path := db.Path()
@@ -329,7 +334,7 @@ DELETE FROM schema_version; INSERT INTO schema_version(version) VALUES(107)`)
 			if err != nil || report.SchemaVersion != version || report.TargetSchemaVersion != CurrentSchemaVersion {
 				t.Fatal("supported shared schema rejected", report, err)
 			}
-			wantClaim := mode == "partial-105-claim" || mode == "shared-107" || mode == "shared-108" || mode == "shared-109"
+			wantClaim := mode == "partial-105-claim" || mode == "shared-107" || mode == "shared-108" || mode == "shared-109" || mode == "shared-110"
 			foundResponse := false
 			for _, table := range report.Tables {
 				if table.Name == "calendar_response_requests" {
@@ -370,7 +375,7 @@ DELETE FROM schema_version; INSERT INTO schema_version(version) VALUES(107)`)
 func TestUserStorageMigrationPreflightRejectsUnknownVersionsAndFalseUpgradeMarkers(t *testing.T) {
 	for _, query := range []string{
 		`DELETE FROM schema_version; INSERT INTO schema_version(version) VALUES(104)`,
-		`DELETE FROM schema_version; INSERT INTO schema_version(version) VALUES(110)`,
+		`DELETE FROM schema_version; INSERT INTO schema_version(version) VALUES(111)`,
 		`DROP TABLE folder_thread_dirty`,
 		`ALTER TABLE calendar_response_requests DROP COLUMN claim_id`,
 		`DELETE FROM schema_version; INSERT INTO schema_version(version) VALUES(106); ALTER TABLE web_push_subscriptions DROP COLUMN revision`,

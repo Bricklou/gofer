@@ -70,7 +70,9 @@ type googleCalendarEvent struct {
 		Private map[string]string `json:"private"`
 	} `json:"extendedProperties"`
 	HangoutLink string `json:"hangoutLink"`
-	Reminders   struct {
+	// Transparency is "transparent" for an event that leaves the time free.
+	Transparency string `json:"transparency"`
+	Reminders    struct {
 		UseDefault bool                     `json:"useDefault"`
 		Overrides  []googleCalendarReminder `json:"overrides"`
 	} `json:"reminders"`
@@ -289,6 +291,10 @@ func normalizeGoogleCalendarEvent(remote googleCalendarEvent) (calendar.RemoteEv
 	event.OnlineMeeting = calendarGoogleMeetingJSON(remote)
 	if !remote.Reminders.UseDefault {
 		event.ReminderMinutes = googleCalendarEarliestReminder(remote.Reminders.Overrides)
+	}
+	event.ShowAs = "busy"
+	if remote.Transparency == "transparent" {
+		event.ShowAs = "free"
 	}
 
 	var err error
@@ -609,4 +615,13 @@ func googleCalendarReminderPayload(minutes *int, current []googleCalendarReminde
 		overrides = append(overrides, googleCalendarReminder{Method: "popup", Minutes: *minutes})
 	}
 	return map[string]any{"useDefault": false, "overrides": overrides}
+}
+
+// googleCalendarTransparency is Google's value for a show-as choice: Google
+// has only busy and free, so the other Outlook states count as busy.
+func googleCalendarTransparency(showAs string) string {
+	if showAs == "free" {
+		return "transparent"
+	}
+	return "opaque"
 }

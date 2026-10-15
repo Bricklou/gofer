@@ -342,6 +342,10 @@ func normalizeCalDAVEvent(component ical.Event, href, etag string, location *tim
 	if event.StartAt != nil {
 		event.ReminderMinutes = calDAVEarliestReminder(component.Component, *event.StartAt)
 	}
+	event.ShowAs = "busy"
+	if transparency, _ := component.Props.Text("TRANSP"); strings.EqualFold(strings.TrimSpace(transparency), "TRANSPARENT") {
+		event.ShowAs = "free"
+	}
 	return event, nil
 }
 
@@ -456,4 +460,23 @@ func calDAVReminderTrigger(minutes int) string {
 // calendarSameReminder reports whether a chosen reminder is the one saved.
 func calendarSameReminder(a, b *int) bool {
 	return (a == nil) == (b == nil) && (a == nil || *a == *b)
+}
+
+// calDAVSetShowAs marks the event's time busy or free; CalDAV has only these
+// two, so the other Outlook states count as busy.
+func calDAVSetShowAs(component *ical.Component, showAs string) {
+	value := "OPAQUE"
+	if showAs == "free" {
+		value = "TRANSPARENT"
+	}
+	component.Props.SetText("TRANSP", value)
+}
+
+// calendarSameShowAs reports whether a chosen show-as is the one saved; an
+// event that doesn't say is busy.
+func calendarSameShowAs(chosen, saved string) bool {
+	if saved == "" {
+		saved = "busy"
+	}
+	return chosen == saved
 }
