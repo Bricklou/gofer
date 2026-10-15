@@ -29,6 +29,9 @@ type CalendarEventDetails struct {
 	DeleteVersion         string
 	Response              *CalendarResponseData
 	Delivery              *CalendarDeliveryData
+	// Forward is how an invitation can be forwarded: "outlook" by Microsoft,
+	// "caldav" by email from the account; empty when it can't be.
+	Forward string
 }
 
 type CalendarDeliveryData struct {

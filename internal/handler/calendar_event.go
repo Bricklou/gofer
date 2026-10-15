@@ -56,6 +56,9 @@ func (h *Handler) handleCalendarEvent(w http.ResponseWriter, r *http.Request) {
 				data.Ready = false
 			}
 			details.Response = &data
+			if calendarForwardProvider(source.Provider) {
+				details.Forward = source.Provider
+			}
 		}
 	}
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")

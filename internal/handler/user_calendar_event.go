@@ -49,6 +49,9 @@ func userCalendarDetailAccess(details *views.CalendarEventDetails, event storage
 			data.Ready = false
 		}
 		details.Response = &data
+		if calendarForwardProvider(source.Provider) {
+			details.Forward = source.Provider
+		}
 	}
 }
 

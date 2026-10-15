@@ -49,6 +49,7 @@ type outgoingMessageSnapshot struct {
 	HTMLBody             string                        `json:"html_body,omitempty"`
 	CalendarReply        string                        `json:"calendar_reply,omitempty"`
 	CalendarNotification *message.CalendarNotification `json:"calendar_notification,omitempty"`
+	CalendarForward      string                        `json:"calendar_forward,omitempty"`
 	InReplyTo            string                        `json:"in_reply_to,omitempty"`
 	References           string                        `json:"references,omitempty"`
 	MessageID            string                        `json:"message_id"`
@@ -78,6 +79,7 @@ func snapshotOutgoingMessage(msg *message.OutgoingMessage) outgoingMessageSnapsh
 		HTMLBody:             msg.HTMLBody,
 		CalendarReply:        msg.CalendarReply,
 		CalendarNotification: msg.CalendarNotification,
+		CalendarForward:      msg.CalendarForward,
 		InReplyTo:            msg.InReplyTo,
 		References:           msg.References,
 		MessageID:            msg.MessageID,
@@ -98,6 +100,7 @@ func (snapshot outgoingMessageSnapshot) outgoingMessage() *message.OutgoingMessa
 		HTMLBody:             snapshot.HTMLBody,
 		CalendarReply:        snapshot.CalendarReply,
 		CalendarNotification: snapshot.CalendarNotification,
+		CalendarForward:      snapshot.CalendarForward,
 		InReplyTo:            snapshot.InReplyTo,
 		References:           snapshot.References,
 		MessageID:            snapshot.MessageID,

@@ -308,6 +308,7 @@ func (h *Handler) RegisterUserStorageRoutes(ctx context.Context, mux *http.Serve
 		private("POST /api/calendar/events/{id}/delivery/{sendID}/retry", routed.handleUserCalendarDeliveryRetry)
 		private("GET /api/calendar/events/{id}/response", routed.handleUserCalendarResponseForm)
 		private("POST /api/calendar/events/{id}/response", routed.handleUserCalendarResponse)
+		private("POST /api/calendar/events/{id}/forward", routed.handleUserCalendarForward)
 		private("GET /api/calendar/replies/{id}", routed.handleUserCalendarReplyStatus)
 		private("POST /api/calendar/replies/{id}", routed.handleUserCalendarReplyAction)
 		private("GET /api/calendar/events/{id}/edit", routed.handleUserEditCalendarEvent)

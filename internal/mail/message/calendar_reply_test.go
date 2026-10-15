@@ -92,3 +92,32 @@ func TestCalendarOrganizerNotificationMIME(t *testing.T) {
 		})
 	}
 }
+
+func TestCalendarForwardMIME(t *testing.T) {
+	ics := "BEGIN:VCALENDAR\r\nVERSION:2.0\r\nMETHOD:REQUEST\r\nBEGIN:VEVENT\r\nUID:meeting\r\nORGANIZER:mailto:host@example.com\r\nATTENDEE:mailto:new@example.com\r\nEND:VEVENT\r\nEND:VCALENDAR\r\n"
+	raw, err := BuildMIMEMessage(&OutgoingMessage{FromEmail: "guest@example.com", To: []*mail.Address{{Address: "new@example.com"}}, TextBody: "Forwarded.", CalendarForward: ics})
+	if err != nil {
+		t.Fatal(err)
+	}
+	msg, err := mail.ReadMessage(bytes.NewReader(raw))
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, params, err := mime.ParseMediaType(msg.Header.Get("Content-Type"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	parts := multipart.NewReader(msg.Body, params["boundary"])
+	if _, err := parts.NextPart(); err != nil {
+		t.Fatal(err)
+	}
+	part, err := parts.NextPart()
+	if err != nil {
+		t.Fatal(err)
+	}
+	ct, params, _ := mime.ParseMediaType(part.Header.Get("Content-Type"))
+	data, _ := io.ReadAll(part)
+	if ct != "text/calendar" || params["method"] != "REQUEST" || string(data) != ics {
+		t.Fatalf("wrong forward MIME: %s %v", data, part.Header)
+	}
+}

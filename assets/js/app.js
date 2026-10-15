@@ -11759,6 +11759,48 @@ function setCalendarDeleteError(form, message) {
   if (message && form.isConnected) error.focus()
 }
 
+// Forwarding an invitation: sent without leaving the event's details.
+document.addEventListener("submit", function (event) {
+  var form = event.target.closest && event.target.closest("[data-calendar-forward-form]")
+  if (!form) return
+  event.preventDefault()
+  if (form._calendarForwardBusy) return
+  var error = form.querySelector("[data-calendar-forward-error]")
+  var submit = form.querySelector("[data-calendar-forward-submit]")
+  var fail = function (message) {
+    form._calendarForwardBusy = false
+    submit.disabled = false
+    error.textContent = message
+    error.hidden = false
+  }
+  form._calendarForwardBusy = true
+  submit.disabled = true
+  error.hidden = true
+  fetch(form.getAttribute("action"), {method: "POST", headers: {"Content-Type": "application/x-www-form-urlencoded", "Accept": "application/json"}, body: new URLSearchParams(new FormData(form)).toString()})
+    .then(function (response) {
+      return response.json().then(function (data) { return {ok: response.ok, data: data} })
+    })
+    .then(function (result) {
+      if (!result.ok || result.data.forwarded !== true) { fail(result.data.error || "Could not forward the invitation."); return }
+      form._calendarForwardBusy = false
+      submit.disabled = false
+      form.reset()
+      var root = form.closest("[data-tui-popover-root]")
+      if (root && window.tui && window.tui.popover) window.tui.popover.closeElement(root)
+      showGoferToast({title: "Invitation forwarded", description: result.data.delivery === "email" ? "It's being sent from your account." : "Sent by Microsoft.", variant: "success", icon: "success", duration: 3500})
+    })
+    .catch(function () { fail("Could not forward the invitation. Check your connection and try again.") })
+})
+
+document.addEventListener("click", function (event) {
+  var cancel = event.target.closest && event.target.closest("[data-calendar-forward-cancel]")
+  if (!cancel || !window.tui || !window.tui.popover) return
+  var root = cancel.closest("[data-tui-popover-root]")
+  window.tui.popover.closeElement(root)
+  var trigger = root && root.querySelector("[data-calendar-forward-trigger]")
+  if (trigger) trigger.focus()
+})
+
 document.addEventListener("click", function (event) {
   var cancel = event.target.closest && event.target.closest("[data-calendar-delete-cancel]")
   if (!cancel || !window.tui || !window.tui.popover) return

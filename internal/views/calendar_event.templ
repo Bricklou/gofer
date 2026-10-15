@@ -53,6 +53,9 @@ templ CalendarEventDialog(details CalendarEventDetails, location *time.Location)
 							@CalendarEventEditAction(details, "Edit", "", false)
 						}
 					}
+					if details.Forward != "" {
+						@CalendarEventForward(details)
+					}
 					if details.CanDelete {
 						{{
 							deleteLabel := "Delete event"
@@ -241,6 +244,46 @@ templ CalendarEventGuests(details CalendarEventDetails) {
 			@CalendarDeliveryStatus(*details.Delivery)
 		}
 	</section>
+}
+
+// Forwarding an invitation to someone else, from its details.
+templ CalendarEventForward(details CalendarEventDetails) {
+	@popover.Root(popover.RootProps{ID: "calendar-event-forward"}) {
+		@popover.Trigger() {
+			@button.Button(button.Props{Variant: button.VariantGhost, Size: button.SizeIcon, Class: "size-8 text-muted-foreground", Attributes: templ.Attributes{"data-calendar-forward-trigger": "", "aria-haspopup": "dialog", "aria-controls": "calendar-event-forward-content", "aria-label": "Forward invitation", "title": "Forward invitation"}}) {
+				@icon.Forward(icon.Props{Class: "size-4"})
+			}
+		}
+		@popover.Content(popover.ContentProps{ID: "calendar-event-forward-content", Placement: popover.PlacementBottomEnd, Class: "mobile-sheet w-80 p-4", Attributes: templ.Attributes{"role": "dialog", "aria-labelledby": "calendar-event-forward-title"}}) {
+			<form class="space-y-3" data-calendar-forward-form action={ templ.SafeURL(calendarEventDetailsURL(details.Event.ID) + "/forward") }>
+				<h3 id="calendar-event-forward-title" class="font-semibold">Forward invitation</h3>
+				<div class="space-y-1.5">
+					<label for="calendar-forward-recipients" class="text-xs font-medium">To</label>
+					<input id="calendar-forward-recipients" name="recipients" type="text" required autocomplete="off" placeholder="Email addresses" class="h-8 w-full rounded-md border border-input bg-background px-2.5 text-sm shadow-xs focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"/>
+				</div>
+				<div class="space-y-1.5">
+					<label for="calendar-forward-comment" class="text-xs font-medium">Message <span class="font-normal text-muted-foreground">(optional)</span></label>
+					<textarea id="calendar-forward-comment" name="comment" rows="2" class="w-full resize-none rounded-md border border-input bg-background px-2.5 py-1.5 text-sm shadow-xs focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"></textarea>
+				</div>
+				<p class="text-xs leading-relaxed text-muted-foreground">
+					if details.Forward == "caldav" {
+						Gofer emails the invitation from this account. The organizer isn't told until the new guests answer.
+					} else {
+						Microsoft sends the invitation. With a work or school account, it also tells the organizer.
+					}
+				</p>
+				<p data-calendar-forward-error hidden role="alert" class="text-xs leading-relaxed text-destructive"></p>
+				<div class="flex justify-end gap-2">
+					@button.Button(button.Props{Variant: button.VariantOutline, Size: button.SizeSm, Attributes: templ.Attributes{"data-calendar-forward-cancel": ""}}) {
+						Cancel
+					}
+					@button.Button(button.Props{Type: button.TypeSubmit, Size: button.SizeSm, Attributes: templ.Attributes{"data-calendar-forward-submit": ""}}) {
+						Forward
+					}
+				</div>
+			</form>
+		}
+	}
 }
 
 templ CalendarEventEditAction(details CalendarEventDetails, text, scope string, menu bool) {
