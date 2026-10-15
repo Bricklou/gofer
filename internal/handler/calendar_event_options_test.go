@@ -5,6 +5,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/cristianadrielbraun/gofer/internal/storage"
 )
 
 // Each provider says whether an event leaves the time free.
@@ -166,5 +168,28 @@ func TestCalendarOutlookUnchangedSince(t *testing.T) {
 	cached.SeriesRemoteID = "series"
 	if calendarOutlookUnchangedSince(read(base), cached) {
 		t.Fatal("a series occurrence was let through")
+	}
+}
+
+// Only events the editor would open can be dragged; a date of a series moves alone.
+func TestCalendarEventMovable(t *testing.T) {
+	start, end := time.Date(2026, 11, 3, 9, 0, 0, 0, time.UTC), time.Date(2026, 11, 3, 10, 0, 0, 0, time.UTC)
+	owned := storage.CalendarSource{ID: "source", Provider: "gmail", AccessRole: "owner"}
+	plain := storage.CalendarEvent{ID: "plain", SourceID: "source", RemoteID: "plain", ETag: `"v1"`, Summary: "Review", StartAt: &start, EndAt: &end}
+	occurrence := plain
+	occurrence.ID, occurrence.RemoteID, occurrence.SeriesRemoteID = "date", "series_20261103", "series"
+	views := calendarViewEvents([]storage.CalendarEvent{plain, occurrence, {ID: "elsewhere", SourceID: "other", ETag: `"v1"`, StartAt: &start, EndAt: &end}}, []storage.CalendarSource{owned})
+	if !views[0].Movable || views[0].Occurrence || !views[1].Movable || !views[1].Occurrence || views[2].Movable {
+		t.Fatalf("movable: %+v", views)
+	}
+	readOnly := owned
+	readOnly.AccessRole = "reader"
+	if calendarEventMovable(plain, readOnly) {
+		t.Fatal("an event on a read-only calendar can be dragged")
+	}
+	cancelled := plain
+	cancelled.Status = "cancelled"
+	if calendarEventMovable(cancelled, owned) {
+		t.Fatal("a cancelled event can be dragged")
 	}
 }

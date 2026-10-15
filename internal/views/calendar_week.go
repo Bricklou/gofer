@@ -254,3 +254,13 @@ func calendarWeekColumnClass(day CalendarDay) string {
 	}
 	return classes
 }
+
+// calendarBlockResizable reports whether a movable event lies within this day,
+// so its end can be dragged.
+func calendarBlockResizable(block CalendarTimedBlock, day CalendarDay) bool {
+	event := block.Event
+	if !event.Movable || event.StartAt == nil || event.EndAt == nil {
+		return false
+	}
+	return !event.StartAt.Before(day.Date) && !event.EndAt.After(day.Date.AddDate(0, 0, 1))
+}

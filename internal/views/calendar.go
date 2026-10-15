@@ -2,8 +2,11 @@ package views
 
 import (
 	"net/url"
+	"strconv"
 	"strings"
 	"time"
+
+	"github.com/a-h/templ"
 
 	"github.com/cristianadrielbraun/gofer/internal/models"
 )
@@ -78,6 +81,10 @@ type CalendarEvent struct {
 	EndDate        string
 	StartAt        *time.Time
 	EndAt          *time.Time
+	// Movable events can be dragged to a new time; an Occurrence moves alone,
+	// leaving the rest of its series.
+	Movable    bool
+	Occurrence bool
 }
 
 func NewCalendarMonthData(at time.Time) CalendarMonthData {
@@ -472,5 +479,19 @@ func calendarAccountProviderLabel(account models.Account) string {
 			return "Mailbox"
 		}
 		return strings.ToUpper(provider[:1]) + provider[1:]
+	}
+}
+
+// calendarMoveAttributes marks an event that can be dragged to a new time,
+// with what the page needs to move it: its id, scope and current times.
+func calendarMoveAttributes(event CalendarEvent) templ.Attributes {
+	if !event.Movable {
+		return templ.Attributes{}
+	}
+	return templ.Attributes{
+		"data-calendar-move":            event.ID,
+		"data-calendar-move-occurrence": strconv.FormatBool(event.Occurrence),
+		"data-calendar-move-start":      calendarEventTimestamp(event.StartAt),
+		"data-calendar-move-end":        calendarEventTimestamp(event.EndAt),
 	}
 }

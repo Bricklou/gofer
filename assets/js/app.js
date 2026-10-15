@@ -2390,8 +2390,8 @@ document.addEventListener("DOMContentLoaded", function () {
         var top = parseFloat(image.style.top) || 0
         image.animate(
           [
-            { transform: "translate(" + (home.left - left) + "px, " + (home.top - top) + "px) rotate(0deg)", width: (home.width + MAIL_DRAG_IMAGE_STACK_ROOM) + "px" },
-            { transform: "translate(0, 0) rotate(-2deg)", width: image.style.width },
+            { transform: "translate(" + (home.left - left) + "px, " + (home.top - top) + "px)", width: (home.width + MAIL_DRAG_IMAGE_STACK_ROOM) + "px" },
+            { transform: "translate(0, 0)", width: image.style.width },
           ],
           { duration: 220, easing: "cubic-bezier(0.2, 0.8, 0.2, 1)", fill: "forwards" }
         )
@@ -2423,7 +2423,7 @@ document.addEventListener("DOMContentLoaded", function () {
           var dx = to.left + Math.min(to.width, 40) / 2 - from.left
           var dy = to.top + to.height / 2 - from.top
           animation = image.animate(
-            [{ transform: "scale(1) rotate(-2deg)", opacity: 1 }, { transform: "translate(" + dx + "px, " + dy + "px) scale(0.12) rotate(0deg)", opacity: 0 }],
+            [{ transform: "scale(1)", opacity: 1 }, { transform: "translate(" + dx + "px, " + dy + "px) scale(0.12)", opacity: 0 }],
             { duration: 260, easing: "cubic-bezier(0.5, 0, 0.75, 0)", fill: "forwards" }
           )
           dropTarget.animate(
@@ -2440,11 +2440,11 @@ document.addEventListener("DOMContentLoaded", function () {
           var homeWidth = home ? home.width + MAIL_DRAG_IMAGE_STACK_ROOM : width
           var keyframes = visible
             ? [
-                { transform: "translate(0, 0) rotate(-2deg)", width: width + "px", opacity: 1 },
-                { transform: "translate(" + (home.left - left) + "px, " + (home.top - top) + "px) rotate(0deg)", width: homeWidth + "px", opacity: 1, offset: 0.85 },
-                { transform: "translate(" + (home.left - left) + "px, " + (home.top - top) + "px) rotate(0deg)", width: homeWidth + "px", opacity: 0 },
+                { transform: "translate(0, 0)", width: width + "px", opacity: 1 },
+                { transform: "translate(" + (home.left - left) + "px, " + (home.top - top) + "px)", width: homeWidth + "px", opacity: 1, offset: 0.85 },
+                { transform: "translate(" + (home.left - left) + "px, " + (home.top - top) + "px)", width: homeWidth + "px", opacity: 0 },
               ]
-            : [{ transform: "rotate(-2deg)", opacity: 1 }, { transform: "scale(0.96) rotate(0deg)", opacity: 0 }]
+            : [{ transform: "none", opacity: 1 }, { transform: "scale(0.96)", opacity: 0 }]
           animation = image.animate(keyframes, { duration: visible ? 280 : 160, easing: "cubic-bezier(0.2, 0.8, 0.2, 1)", fill: "forwards" })
         }
         animation.onfinish = function () { image.remove() }
@@ -17349,3 +17349,564 @@ document.addEventListener("keyup", function (event) {
   if (event.key !== "Escape") return
   document.querySelectorAll("dialog").forEach(function (dialog) { dialog._goferEscapeClosesMenu = false })
 }, true)
+
+// Calendar drag and drop: drag an event to move it, or the bottom edge of a
+// timed event in the week view to change its end. The move is saved with the
+// editor's own form, read from the edit endpoint, so it goes through the same
+// checks as an edit; only the dates and times change.
+var _calendarDrag = null
+var _calendarDragSuppressClick = false
+var CALENDAR_DRAG_SNAP = 15 * 60000
+
+document.addEventListener("pointerdown", function (event) {
+  if (event.button !== 0 || event.pointerType === "touch" || _calendarDrag) return
+  var el = event.target.closest && event.target.closest("[data-calendar-move]")
+  var calendar = el && el.closest("#calendar-main")
+  if (!el || el.disabled || !calendar || calendar.hasAttribute("data-calendar-loading")) return
+  _calendarDrag = {el: el, resize: !!event.target.closest("[data-calendar-resize]"), x: event.clientX, y: event.clientY, started: false}
+})
+
+document.addEventListener("pointermove", function (event) {
+  var drag = _calendarDrag
+  if (!drag) return
+  if (!drag.started) {
+    if (Math.abs(event.clientX - drag.x) < 5 && Math.abs(event.clientY - drag.y) < 5) return
+    if (!startCalendarDrag(drag, event)) { _calendarDrag = null; return }
+  }
+  event.preventDefault()
+  updateCalendarDrag(drag, event)
+})
+
+document.addEventListener("pointerup", function (event) {
+  var drag = _calendarDrag
+  if (!drag) return
+  _calendarDrag = null
+  if (!drag.started) return
+  _calendarDragSuppressClick = true
+  setTimeout(function () { _calendarDragSuppressClick = false }, 0)
+  updateCalendarDrag(drag, event)
+  drag.dropX = event.clientX
+  drag.dropY = event.clientY
+  finishCalendarDrag(drag, true)
+})
+
+document.addEventListener("pointercancel", function () {
+  if (_calendarDrag && _calendarDrag.started) finishCalendarDrag(_calendarDrag, false)
+  _calendarDrag = null
+})
+
+document.addEventListener("keydown", function (event) {
+  if (event.key !== "Escape" || !_calendarDrag || !_calendarDrag.started) return
+  event.preventDefault()
+  event.stopPropagation()
+  finishCalendarDrag(_calendarDrag, false)
+  _calendarDrag = null
+}, true)
+
+// A drop is not a click: don't also open the event.
+document.addEventListener("click", function (event) {
+  if (!_calendarDragSuppressClick) return
+  event.preventDefault()
+  event.stopPropagation()
+}, true)
+
+// The local midnight a day starts at, from its header or month cell.
+function calendarDayStartMs(iso) {
+  var cell = document.querySelector('#calendar-main [data-calendar-day="' + iso + '"][data-calendar-day-start]')
+  return cell ? Date.parse(cell.dataset.calendarDayStart) : NaN
+}
+
+function calendarISODays(from, to) {
+  var a = from.split("-"), b = to.split("-")
+  return Math.round((Date.UTC(b[0], b[1] - 1, b[2]) - Date.UTC(a[0], a[1] - 1, a[2])) / 86400000)
+}
+
+function calendarAddISODays(iso, days) {
+  var parts = iso.split("-")
+  return new Date(Date.UTC(parts[0], parts[1] - 1, Number(parts[2]) + days)).toISOString().slice(0, 10)
+}
+
+function calendarMinuteLabel(minute) {
+  minute = ((Math.round(minute) % 1440) + 1440) % 1440
+  return String(Math.floor(minute / 60)).padStart(2, "0") + ":" + String(minute % 60).padStart(2, "0")
+}
+
+function calendarDragAnimates() {
+  return typeof Element.prototype.animate === "function" && !(window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches)
+}
+
+function calendarFade(elements, from, to, duration, delay) {
+  if (!calendarDragAnimates()) return
+  elements.forEach(function (element) {
+    element.animate([{opacity: from}, {opacity: to}], {duration: duration, delay: delay || 0, easing: "ease-out", fill: "backwards"})
+  })
+}
+
+function startCalendarDrag(drag, event) {
+  var el = drag.el
+  drag.start = Date.parse(el.dataset.calendarMoveStart)
+  drag.end = Date.parse(el.dataset.calendarMoveEnd)
+  if (el.hasAttribute("data-calendar-week-event")) {
+    var column = el.closest("[data-calendar-timed-column]")
+    if (!column || isNaN(drag.start) || isNaN(drag.end)) return false
+    drag.kind = "timed"
+    drag.column = column
+    // Where in the event it was grabbed, so it moves with the pointer.
+    drag.grab = calendarTimedPointer(column, event.clientY) - drag.start
+    if (drag.resize) {
+      drag.height = el.offsetHeight
+      drag.top = el.getBoundingClientRect().top
+      drag.label = el.querySelector("[data-calendar-week-event-time]")
+      drag.labelText = drag.label && drag.label.textContent
+      drag.labelHidden = drag.label && drag.label.hidden
+    }
+  } else {
+    drag.kind = el.dataset.calendarEventAllDay === "true" ? "days" : "shift"
+    var origin = el.closest("[data-calendar-all-day-column]") || el.closest("[data-calendar-day]")
+    drag.origin = origin && (origin.dataset.calendarAllDayColumn || origin.dataset.calendarDay)
+    if (!drag.origin || (drag.kind === "shift" && (isNaN(drag.start) || isNaN(drag.end)))) return false
+  }
+  if (!drag.resize) liftCalendarDragCard(drag, event)
+  drag.started = true
+  if (!drag.resize) el.style.opacity = "0.35"
+  document.body.style.userSelect = "none"
+  document.body.style.cursor = drag.resize ? "ns-resize" : "grabbing"
+  return true
+}
+
+// The card that follows the pointer while an event is dragged, like a dragged
+// email: the event's color and title, and where it would go.
+function liftCalendarDragCard(drag, event) {
+  var card = document.createElement("div")
+  card.className = "calendar-drag-card"
+  card.setAttribute("aria-hidden", "true")
+  var title = document.createElement("div")
+  title.className = "calendar-drag-card-title"
+  var dot = drag.el.querySelector(".rounded-full")
+  if (dot) title.appendChild(dot.cloneNode(true))
+  var text = document.createElement("span")
+  var summary = drag.el.querySelector("[data-calendar-event-text]") || drag.el.querySelector("[data-calendar-event-summary]")
+  text.textContent = summary ? summary.textContent.trim() : ""
+  title.appendChild(text)
+  var when = document.createElement("div")
+  when.className = "calendar-drag-card-time"
+  card.appendChild(title)
+  card.appendChild(when)
+  document.body.appendChild(card)
+  drag.card = card
+  drag.cardTime = when
+  moveCalendarDragCard(drag, event.clientX, event.clientY)
+  if (!calendarDragAnimates()) return
+  var from = drag.el.getBoundingClientRect(), to = card.getBoundingClientRect()
+  card.animate([
+    {transform: "translate(" + (from.left - to.left) + "px, " + (from.top - to.top) + "px)", opacity: 0.6},
+    {transform: "translate(0, 0)", opacity: 1},
+  ], {duration: 200, easing: "cubic-bezier(0.2, 0.8, 0.2, 1)"})
+}
+
+function moveCalendarDragCard(drag, x, y) {
+  if (!drag.card) return
+  drag.card.style.left = Math.min(x + 14, window.innerWidth - drag.card.offsetWidth - 8) + "px"
+  drag.card.style.top = Math.min(y + 12, window.innerHeight - drag.card.offsetHeight - 8) + "px"
+}
+
+// The instant under the pointer in a week column. Hours can have different
+// heights (empty ones are condensed), so the grid's own axis maps it.
+function calendarTimedPointer(column, clientY) {
+  var axis = column.closest("[data-calendar-week-grid]")._calendarWeekAxis
+  var box = column.getBoundingClientRect()
+  var offset = Math.max(0, Math.min(box.height, clientY - box.top))
+  var minute = axis ? _calendarWeekMinuteAtPosition(offset, axis) : offset / box.height * 1440
+  return calendarDayStartMs(column.dataset.calendarTimedColumn) + Math.max(0, Math.min(1440, minute)) * 60000
+}
+
+// Where a minute of the day is in a week column, in pixels.
+function calendarColumnPosition(column, minute) {
+  var axis = column.closest("[data-calendar-week-grid]")._calendarWeekAxis
+  minute = Math.max(0, Math.min(1440, minute))
+  return axis ? _calendarWeekMinutePosition(minute, axis) : minute / 1440 * column.clientHeight
+}
+
+function calendarDayTitle(iso) {
+  var cell = document.querySelector('#calendar-main [data-calendar-day="' + iso + '"][data-calendar-day-title]')
+  return cell ? cell.dataset.calendarDayTitle : iso
+}
+
+function updateCalendarDrag(drag, event) {
+  moveCalendarDragCard(drag, event.clientX, event.clientY)
+  if (drag.kind === "timed" && drag.resize) {
+    // The end follows the pointer smoothly; the label shows where it snaps.
+    var dayStart = calendarDayStartMs(drag.column.dataset.calendarTimedColumn)
+    var pointer = calendarTimedPointer(drag.column, event.clientY)
+    drag.newStart = drag.start
+    drag.newEnd = Math.max(drag.start + CALENDAR_DRAG_SNAP, dayStart + Math.round((pointer - dayStart) / CALENDAR_DRAG_SNAP) * CALENDAR_DRAG_SNAP)
+    drag.el.style.height = Math.max(22, event.clientY - drag.top) + "px"
+    if (drag.label) {
+      drag.label.hidden = false
+      drag.label.textContent = calendarMinuteLabel((drag.start - dayStart) / 60000) + "–" + calendarMinuteLabel((drag.newEnd - dayStart) / 60000)
+    }
+    return
+  }
+  if (drag.kind === "timed") {
+    var under = document.elementFromPoint(event.clientX, event.clientY)
+    var column = under && under.closest && under.closest("#calendar-main [data-calendar-timed-column]")
+    if (!column) return
+    var columnStart = calendarDayStartMs(column.dataset.calendarTimedColumn)
+    var at = calendarTimedPointer(column, event.clientY)
+    drag.newStart = columnStart + Math.round((at - drag.grab - columnStart) / CALENDAR_DRAG_SNAP) * CALENDAR_DRAG_SNAP
+    drag.newEnd = drag.newStart + (drag.end - drag.start)
+    drag.target = column
+    drawCalendarDragSlot(drag, column, columnStart)
+    var startMinute = (drag.newStart - columnStart) / 60000
+    drag.cardTime.textContent = calendarDayTitle(column.dataset.calendarTimedColumn) + " · " + calendarMinuteLabel(startMinute) + "–" + calendarMinuteLabel(startMinute + (drag.end - drag.start) / 60000)
+    return
+  }
+  var hit = document.elementFromPoint(event.clientX, event.clientY)
+  var selector = drag.el.hasAttribute("data-calendar-week-all-day") ? "#calendar-main [data-calendar-all-day-column]" : "#calendar-main [data-calendar-day][data-calendar-week-start]"
+  var target = hit && hit.closest && hit.closest(selector)
+  if (drag.target && drag.target !== target) drag.target.classList.remove("calendar-drag-target")
+  drag.target = target
+  if (!target) return
+  target.classList.add("calendar-drag-target")
+  var day = target.dataset.calendarAllDayColumn || target.dataset.calendarDay
+  var label = calendarDayTitle(day)
+  if (drag.kind === "shift") {
+    var originStart = calendarDayStartMs(drag.origin)
+    var minute = (drag.start - originStart) / 60000
+    label += " · " + calendarMinuteLabel(minute) + "–" + calendarMinuteLabel(minute + (drag.end - drag.start) / 60000)
+  }
+  drag.cardTime.textContent = label
+}
+
+// The dashed outline in the week grid where a timed event would land.
+function drawCalendarDragSlot(drag, column, dayStart) {
+  if (!drag.slot) {
+    drag.slot = document.createElement("div")
+    drag.slot.className = "calendar-drag-slot"
+    drag.slot.setAttribute("aria-hidden", "true")
+  }
+  if (drag.slot.parentNode !== column) {
+    // A new column: appear in place, without gliding from the old one.
+    drag.slot.style.transition = "none"
+    column.appendChild(drag.slot)
+  }
+  var top = calendarColumnPosition(column, (drag.newStart - dayStart) / 60000)
+  drag.slot.style.top = top + "px"
+  drag.slot.style.height = Math.max(22, calendarColumnPosition(column, (drag.newEnd - dayStart) / 60000) - top) + "px"
+  drag.slot.offsetHeight
+  drag.slot.style.transition = ""
+}
+
+function finishCalendarDrag(drag, drop) {
+  document.body.style.userSelect = ""
+  document.body.style.cursor = ""
+  if (drag.target && drag.target.classList) drag.target.classList.remove("calendar-drag-target")
+  var change = null
+  if (drop && drag.kind === "timed" && drag.newStart !== undefined && (drag.newStart !== drag.start || drag.newEnd !== drag.end)) {
+    change = {start: drag.newStart, end: drag.newEnd}
+  } else if (drop && drag.target && drag.kind !== "timed") {
+    var day = drag.target.dataset.calendarAllDayColumn || drag.target.dataset.calendarDay
+    var days = calendarISODays(drag.origin, day)
+    if (days !== 0 && drag.kind === "days") change = {days: days}
+    if (days !== 0 && drag.kind === "shift") {
+      // Keep the wall time: shift by the distance between the two midnights.
+      var shift = calendarDayStartMs(day) - calendarDayStartMs(drag.origin)
+      if (!isNaN(shift)) change = {start: drag.start + shift, end: drag.end + shift, days: days}
+    }
+  }
+  if (!change) { cancelCalendarDrag(drag); return }
+  // What the confirmation says: the new day and time, or the new end.
+  var when = drag.cardTime ? drag.cardTime.textContent : ""
+  if (drag.resize) {
+    var dayStart = calendarDayStartMs(drag.column.dataset.calendarTimedColumn)
+    when = "Ends at " + calendarMinuteLabel((change.end - dayStart) / 60000)
+  }
+  var revert = placeCalendarDrop(drag, change)
+  moveCalendarEvent(drag.el, change, revert, {x: drag.dropX, y: drag.dropY, when: when, resize: !!drag.resize})
+}
+
+// Dropped nowhere, or cancelled: the card goes back to the event and fades.
+function cancelCalendarDrag(drag) {
+  drag.el.style.opacity = ""
+  if (drag.slot) drag.slot.remove()
+  if (drag.resize) {
+    settleCalendarHeight(drag.el, drag.height)
+    if (drag.label) { drag.label.textContent = drag.labelText; drag.label.hidden = drag.labelHidden }
+  }
+  var card = drag.card
+  if (!card) return
+  if (!calendarDragAnimates()) { card.remove(); return }
+  var from = card.getBoundingClientRect(), to = drag.el.getBoundingClientRect()
+  var animation = card.animate([
+    {transform: "translate(0, 0)", opacity: 1},
+    {transform: "translate(" + (to.left - from.left) + "px, " + (to.top - from.top) + "px)", opacity: 0},
+  ], {duration: 220, easing: "cubic-bezier(0.2, 0.8, 0.2, 1)", fill: "forwards"})
+  animation.onfinish = animation.oncancel = function () { card.remove() }
+}
+
+function settleCalendarHeight(el, height) {
+  var from = el.offsetHeight
+  el.style.height = height + "px"
+  if (calendarDragAnimates() && Math.abs(from - height) > 1) el.animate([{height: from + "px"}, {height: height + "px"}], {duration: 140, easing: "ease-out"})
+}
+
+// Shows the event where it was dropped while the move is confirmed and saved;
+// the calendar is redrawn once it is. Returns what puts it back.
+function placeCalendarDrop(drag, change) {
+  var el = drag.el
+  var calendar = document.getElementById("calendar-main")
+  var undo = []
+  var placed = []
+  var landing = drag.target && drag.target.getBoundingClientRect ? drag.target.getBoundingClientRect() : null
+  el.style.opacity = ""
+  if (drag.kind === "timed" && drag.resize) {
+    var dayStart = calendarDayStartMs(drag.column.dataset.calendarTimedColumn)
+    var top = calendarColumnPosition(drag.column, (drag.start - dayStart) / 60000)
+    settleCalendarHeight(el, Math.max(22, calendarColumnPosition(drag.column, (drag.newEnd - dayStart) / 60000) - top))
+    undo.push(function () {
+      el.style.height = drag.height + "px"
+      if (drag.label) { drag.label.textContent = drag.labelText; drag.label.hidden = drag.labelHidden }
+    })
+  } else if (drag.kind === "timed") {
+    var column = drag.target
+    var columnStart = calendarDayStartMs(column.dataset.calendarTimedColumn)
+    var withinDay = drag.start >= calendarDayStartMs(drag.column.dataset.calendarTimedColumn) && drag.end <= calendarDayStartMs(drag.column.dataset.calendarTimedColumn) + 86400000
+    landing = drag.slot.getBoundingClientRect()
+    if (withinDay && change.end <= columnStart + 86400000) {
+      var saved = {parent: el.parentNode, next: el.nextSibling, style: el.getAttribute("style")}
+      var label = el.querySelector("[data-calendar-week-event-time]")
+      var labelText = label && label.textContent
+      column.appendChild(el)
+      el.style.top = drag.slot.style.top
+      el.style.height = drag.slot.style.height
+      el.style.left = "2px"
+      el.style.width = "calc(100% - 4px)"
+      if (label) label.textContent = calendarMinuteLabel((change.start - columnStart) / 60000) + "–" + calendarMinuteLabel((change.end - columnStart) / 60000)
+      drag.slot.remove()
+      placed.push(el)
+      undo.push(function () {
+        calendarPutBack(el, saved)
+        el.setAttribute("style", saved.style || "")
+        if (label) label.textContent = labelText
+      })
+    } else {
+      // Split across days: the outline stays until the calendar is redrawn.
+      undo.push(function () { drag.slot.remove() })
+    }
+  } else {
+    var allDayRow = el.hasAttribute("data-calendar-week-all-day")
+    var id = el.dataset.calendarMove
+    var chips = Array.from(calendar.querySelectorAll(allDayRow ? '[data-calendar-week-all-day="' + id + '"]' : '[data-calendar-month-event="' + id + '"]'))
+    var created = []
+    chips.forEach(function (chip) {
+      var cell = chip.closest(allDayRow ? "[data-calendar-all-day-column]" : "[data-calendar-day]")
+      var from = cell && (cell.dataset.calendarAllDayColumn || cell.dataset.calendarDay)
+      var list = from && calendarDropList(calendar, allDayRow, calendarAddISODays(from, change.days), cell, created)
+      var saved = {parent: chip.parentNode, next: chip.nextSibling, style: chip.getAttribute("style"), hidden: chip.hidden}
+      if (list) { list.appendChild(chip); chip.hidden = false; chip.style.display = ""; placed.push(chip) }
+      else { chip.hidden = true; chip.style.display = "none" }
+      undo.push(function () {
+        calendarPutBack(chip, saved)
+        chip.setAttribute("style", saved.style || "")
+        chip.hidden = saved.hidden
+      })
+    })
+    undo.push(function () { created.forEach(function (node) { node.remove() }) })
+    relayoutCalendarDrop(calendar)
+  }
+  landCalendarDragCard(drag, landing, placed)
+  return function () {
+    // Back where it was: fade out here, then in there.
+    var shown = placed.length ? placed : [el]
+    var restored = false
+    var restore = function () {
+      if (restored) return
+      restored = true
+      fading.forEach(function (animation) { animation.cancel() })
+      undo.slice().reverse().forEach(function (step) { step() })
+      if (!drag.resize && drag.kind !== "timed") relayoutCalendarDrop(calendar)
+      calendarFade([el].concat(placed), 0, 1, 180)
+    }
+    var fading = []
+    if (!calendarDragAnimates()) { restore(); return }
+    fading = shown.map(function (node) { return node.animate([{opacity: 1}, {opacity: 0}], {duration: 140, easing: "ease-in", fill: "forwards"}) })
+    // Put it back even if the fade is interrupted or never runs.
+    fading[0].onfinish = fading[0].oncancel = restore
+    setTimeout(restore, 400)
+  }
+}
+
+// Puts a moved element back where it was. What followed it there may itself
+// have moved or gone, such as the landing outline in the same column.
+function calendarPutBack(node, saved) {
+  var next = saved.next && saved.next.parentNode === saved.parent ? saved.next : null
+  saved.parent.insertBefore(node, next)
+}
+
+// The list a moved chip goes into on another day; a day without events gets
+// one like the day the event came from.
+function calendarDropList(calendar, allDayRow, iso, originCell, created) {
+  if (allDayRow) return calendar.querySelector('[data-calendar-all-day-column="' + iso + '"]')
+  var cell = calendar.querySelector('[data-calendar-day="' + iso + '"][data-calendar-week-start]')
+  if (!cell) return null
+  var list = cell.querySelector("[data-calendar-month-event-list]")
+  if (list) return list
+  var events = originCell.querySelector("[data-calendar-month-events]")
+  if (!events) return null
+  var container = events.cloneNode(false)
+  list = events.querySelector("[data-calendar-month-event-list]").cloneNode(false)
+  container.appendChild(list)
+  var overflow = events.querySelector("[data-calendar-day-overflow]")
+  if (overflow) {
+    overflow = overflow.cloneNode(true)
+    overflow.dataset.calendarSelectDay = iso
+    container.appendChild(overflow)
+  }
+  container.hidden = false
+  cell.appendChild(container)
+  created.push(container)
+  return list
+}
+
+function relayoutCalendarDrop(calendar) {
+  var grid = calendar.querySelector("[data-calendar-week-grid]")
+  if (grid) layoutCalendarWeekAllDay(grid)
+  else layoutCalendarMonth(calendar)
+}
+
+// Dropped: the card glides into the spot and fades as the event appears there.
+function landCalendarDragCard(drag, landing, placed) {
+  var card = drag.card
+  if (!card) return
+  if (!calendarDragAnimates() || !landing) { card.remove(); return }
+  var from = card.getBoundingClientRect()
+  var animation = card.animate([
+    {transform: "translate(0, 0)", opacity: 1},
+    {transform: "translate(" + (landing.left + 4 - from.left) + "px, " + (landing.top + 2 - from.top) + "px) scale(0.92)", opacity: 0},
+  ], {duration: 200, easing: "cubic-bezier(0.2, 0.8, 0.2, 1)", fill: "forwards"})
+  animation.onfinish = animation.oncancel = function () { card.remove() }
+  calendarFade(placed, 0, 1, 160, 90)
+}
+
+// The date and time an instant has in a time zone, as the editor's fields.
+function calendarZonedFields(ms, zone) {
+  var parts = {}
+  new Intl.DateTimeFormat("en-CA", {timeZone: zone, year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", hourCycle: "h23"}).formatToParts(new Date(ms)).forEach(function (part) { parts[part.type] = part.value })
+  return {date: parts.year + "-" + parts.month + "-" + parts.day, time: parts.hour + ":" + parts.minute}
+}
+
+// Saves a dropped event, or puts it back (revert) when that isn't possible.
+function moveCalendarEvent(el, change, revert, point) {
+  var undo = function (message) {
+    revert()
+    if (message) showGoferToast({title: "Event not moved", description: message, variant: "error", icon: "error", duration: 8000, dismissible: true})
+  }
+  var url = "/api/calendar/events/" + encodeURIComponent(el.dataset.calendarMove) + "/edit" + (el.dataset.calendarMoveOccurrence === "true" ? "?scope=occurrence" : "")
+  fetch(url, {headers: {"Accept": "text/html"}})
+    .then(function (response) {
+      return response.text().then(function (text) { return {ok: response.ok, text: text} })
+    })
+    .then(function (result) {
+      if (!result.ok) { undo(result.text.trim().length < 300 ? result.text.trim() : "This event can't be edited right now."); return }
+      var form = new DOMParser().parseFromString(result.text, "text/html").querySelector("[data-calendar-create-form]")
+      if (!form) { undo("This event can't be edited right now."); return }
+      // The editor enables these before saving, too.
+      ["source_id", "version", "request_id", "edit_scope"].forEach(function (name) {
+        var input = form.querySelector('[name="' + name + '"]')
+        if (input) input.disabled = false
+      })
+      var fields = new FormData(form)
+      if (change.start === undefined) {
+        if (fields.get("all_day") !== "true") { undo("This event is no longer an all-day event. Refresh the calendar."); return }
+        fields.set("start_date", calendarAddISODays(fields.get("start_date"), change.days))
+        fields.set("end_date", calendarAddISODays(fields.get("end_date"), change.days))
+      } else {
+        var zone = fields.get("timezone")
+        if (fields.get("all_day") === "true" || !zone) { undo("This event's times changed. Refresh the calendar."); return }
+        var start = calendarZonedFields(change.start, zone), end = calendarZonedFields(change.end, zone)
+        fields.set("start_date", start.date)
+        fields.set("start_time", start.time)
+        fields.set("end_date", end.date)
+        fields.set("end_time", end.time)
+      }
+      var save = function () { saveCalendarMove(form.getAttribute("action"), fields, undo) }
+      // Ask first, where the event was dropped; guests are sent the change.
+      confirmCalendarMove(point, (fields.get("guests") || "").trim() !== "", save, function () { undo() })
+    })
+    .catch(function () { undo("Could not load the event. Try again.") })
+}
+
+function saveCalendarMove(action, fields, undo) {
+  fetch(action, {method: "PATCH", headers: {"Content-Type": "application/x-www-form-urlencoded", "Accept": "application/json"}, body: new URLSearchParams(fields).toString()})
+    .then(function (response) {
+      return response.json().then(function (data) { return {ok: response.ok, data: data} })
+    })
+    .then(function (result) {
+      if (!result.ok || result.data.saved !== true) {
+        var message = result.data.error || "Could not move the event."
+        if (result.data.confirm === "reset_series_dates") message = "Open the series in the editor to change its time."
+        undo(message)
+        if (result.data.uncertain || result.data.conflict) scheduleCalendarCacheRefresh()
+        return
+      }
+      showGoferToast({title: "Event moved", description: result.data.notify_guests ? "Guest notifications are being delivered." : "Saved to your calendar.", variant: "success", icon: "success", duration: 3500})
+      scheduleCalendarCacheRefresh()
+    })
+    .catch(function () {
+      undo("The move could not be confirmed. Refresh the calendar to check the event.")
+      scheduleCalendarCacheRefresh()
+    })
+}
+
+// Asks, next to where an event was dropped, before it is moved; a meeting's
+// guests are sent the change. Clicking elsewhere or Escape cancels it.
+function confirmCalendarMove(point, guests, move, cancel) {
+  var existing = document.querySelector("[data-calendar-move-confirm]")
+  if (existing && existing._calendarCancel) existing._calendarCancel()
+  var box = document.createElement("div")
+  box.dataset.calendarMoveConfirm = ""
+  box.setAttribute("role", "dialog")
+  var title = guests ? "Move this meeting?" : point.resize ? "Change when this event ends?" : "Move this event?"
+  var detail = (point.when ? point.when + ". " : "") + (guests ? "Guests will be sent the new time." : "")
+  var action = guests ? "Move and notify guests" : point.resize ? "Save" : "Move"
+  box.setAttribute("aria-label", title)
+  box.className = "fixed z-[70] w-72 max-w-[calc(100vw-1rem)] rounded-lg border bg-popover p-3 text-sm text-popover-foreground shadow-lg"
+  box.innerHTML = '<p class="font-semibold">' + _escapeComposeHTML(title) + '</p>' +
+    (detail.trim() ? '<p class="mt-1 text-xs text-muted-foreground">' + _escapeComposeHTML(detail.trim()) + '</p>' : '') +
+    '<div class="mt-3 flex justify-end gap-2">' +
+      '<button type="button" data-calendar-move-cancel class="inline-flex h-8 cursor-pointer items-center justify-center rounded-md border bg-background px-3 text-sm font-medium shadow-xs hover:bg-accent hover:text-accent-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">Cancel</button>' +
+      '<button type="button" data-calendar-move-confirm-button class="inline-flex h-8 cursor-pointer items-center justify-center rounded-md bg-primary px-3 text-sm font-medium text-primary-foreground shadow-xs hover:bg-primary/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">' + _escapeComposeHTML(action) + '</button>' +
+    '</div>'
+  document.body.appendChild(box)
+  // Just below and to the right of the drop, kept on screen.
+  var x = point && isFinite(point.x) ? point.x : window.innerWidth / 2
+  var y = point && isFinite(point.y) ? point.y : window.innerHeight / 2
+  var width = box.offsetWidth, height = box.offsetHeight, margin = 8
+  var left = Math.min(Math.max(margin, x + 12), window.innerWidth - width - margin)
+  var top = y + 12 + height > window.innerHeight - margin ? y - height - 12 : y + 12
+  box.style.left = left + "px"
+  box.style.top = Math.max(margin, top) + "px"
+  var closed = false
+  var close = function (moving) {
+    if (closed) return
+    closed = true
+    box.remove()
+    document.removeEventListener("pointerdown", outside, true)
+    document.removeEventListener("keydown", escape, true)
+    if (moving) move()
+    else cancel()
+  }
+  var outside = function (event) { if (!box.contains(event.target)) close(false) }
+  var escape = function (event) {
+    if (event.key !== "Escape") return
+    event.preventDefault()
+    event.stopPropagation()
+    close(false)
+  }
+  box._calendarCancel = function () { close(false) }
+  box.querySelector("[data-calendar-move-cancel]").addEventListener("click", function () { close(false) })
+  box.querySelector("[data-calendar-move-confirm-button]").addEventListener("click", function () { close(true) })
+  document.addEventListener("pointerdown", outside, true)
+  document.addEventListener("keydown", escape, true)
+  box.querySelector("[data-calendar-move-confirm-button]").focus()
+}

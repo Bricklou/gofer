@@ -215,3 +215,26 @@ func TestCalendarResponsiveHeightAndZoomMarkup(t *testing.T) {
 		}
 	}
 }
+
+func TestCalendarMoveAttributesAndResize(t *testing.T) {
+	location := time.UTC
+	day := CalendarDay{Date: time.Date(2026, 11, 3, 0, 0, 0, 0, location)}
+	start, end := day.Date.Add(9*time.Hour), day.Date.Add(10*time.Hour)
+	event := CalendarEvent{ID: "event", StartAt: &start, EndAt: &end}
+	if len(calendarMoveAttributes(event)) != 0 || calendarBlockResizable(CalendarTimedBlock{Event: event}, day) {
+		t.Fatal("an event that can't move is draggable")
+	}
+	event.Movable, event.Occurrence = true, true
+	attributes := calendarMoveAttributes(event)
+	if attributes["data-calendar-move"] != "event" || attributes["data-calendar-move-occurrence"] != "true" || attributes["data-calendar-move-start"] != "2026-11-03T09:00:00Z" {
+		t.Fatalf("attributes: %v", attributes)
+	}
+	if !calendarBlockResizable(CalendarTimedBlock{Event: event}, day) {
+		t.Fatal("an event within the day can't be resized")
+	}
+	late := day.Date.Add(26 * time.Hour)
+	event.EndAt = &late
+	if calendarBlockResizable(CalendarTimedBlock{Event: event}, day) {
+		t.Fatal("an event ending the next day can be resized on its first day")
+	}
+}

@@ -43,7 +43,7 @@ func (h *Handler) handleCalendar(w http.ResponseWriter, r *http.Request) {
 			month.SyncError = true
 			month.SyncMessage = "Calendar cache failed: " + eventsErr.Error()
 		} else {
-			month.Events = calendarViewEvents(events)
+			month.Events = calendarViewEvents(events, sources)
 		}
 
 		if r.Header.Get("HX-Request") == "true" {
@@ -111,7 +111,7 @@ func (h *Handler) handleCalendarSync(w http.ResponseWriter, r *http.Request) {
 		month.SyncError = true
 		month.SyncMessage = "Could not load cached calendar events."
 	} else {
-		month.Events = calendarViewEvents(events)
+		month.Events = calendarViewEvents(events, sources)
 	}
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	if month.SyncError {
@@ -169,12 +169,33 @@ func applyCalendarSyncSummary(month *views.CalendarMonthData, sources []storage.
 	}
 }
 
-func calendarViewEvents(events []storage.CalendarEvent) []views.CalendarEvent {
+func calendarViewEvents(events []storage.CalendarEvent, sources []storage.CalendarSource) []views.CalendarEvent {
+	byID := make(map[string]storage.CalendarSource, len(sources))
+	for _, source := range sources {
+		byID[source.ID] = source
+	}
 	result := make([]views.CalendarEvent, 0, len(events))
 	for _, event := range events {
-		result = append(result, calendarViewEvent(event))
+		view := calendarViewEvent(event)
+		if source, ok := byID[event.SourceID]; ok {
+			view.Movable, view.Occurrence = calendarEventMovable(event, source), event.SeriesRemoteID != ""
+		}
+		result = append(result, view)
 	}
 	return result
+}
+
+// calendarEventMovable reports whether the editor would open this event, or
+// this date of a series, so it can be dragged to a new time. Write access
+// and the provider's own checks are still verified when it is saved.
+func calendarEventMovable(event storage.CalendarEvent, source storage.CalendarSource) bool {
+	if calendarEventEditRestriction(event) != "" {
+		return false
+	}
+	if event.SeriesRemoteID != "" {
+		return calendarEventMutationRestriction(event, source, true) == "" && calendarOccurrenceExistingRestriction(event) == nil
+	}
+	return !calendarEventIsSeries(event) && calendarEventMutationRestriction(event, source, false) == ""
 }
 
 func calendarSourcesAllHidden(sources []storage.CalendarSource) bool {

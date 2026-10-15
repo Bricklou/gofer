@@ -6273,6 +6273,73 @@ html:not([data-theme="express"]) [data-mode-dark-tip] {
   opacity: 0.45;
 }
 
+/* Dragging a calendar event: the card under the pointer, like a dragged email;
+   in the week view, the outline where it lands; in the month view, the day. */
+.calendar-drag-card {
+  position: fixed;
+  top: -10000px;
+  left: 0;
+  z-index: 1000;
+  max-width: 16rem;
+  padding: 0.375rem 0.625rem;
+  border: 1px solid var(--border);
+  border-radius: 0.5rem;
+  background: var(--card);
+  color: var(--card-foreground);
+  box-shadow: 0 6px 16px rgb(0 0 0 / 0.18);
+  font-size: 11px;
+  line-height: 1.3;
+  pointer-events: none;
+}
+
+.calendar-drag-card-title {
+  display: flex;
+  align-items: center;
+  gap: 0.375rem;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.calendar-drag-card-title > span:last-child {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.calendar-drag-card-time {
+  margin-top: 0.125rem;
+  color: var(--primary);
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.calendar-drag-card-time:empty {
+  display: none;
+}
+
+.calendar-drag-slot {
+  position: absolute;
+  left: 2px;
+  right: 2px;
+  z-index: 30;
+  border: 2px dashed var(--primary);
+  border-radius: 0.25rem;
+  background: color-mix(in srgb, var(--primary) 10%, transparent);
+  pointer-events: none;
+  transition: top 90ms ease-out, height 90ms ease-out;
+}
+
+.calendar-drag-target {
+  box-shadow: inset 0 0 0 2px var(--primary);
+  background: color-mix(in srgb, var(--primary) 6%, transparent);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .calendar-drag-slot {
+    transition: none;
+  }
+}
+
 aside a[data-mail-drop-active] {
   background: color-mix(in srgb, var(--sidebar-primary) 15%, transparent);
   color: var(--sidebar-primary);

@@ -323,7 +323,7 @@ func (h *Handler) handleUserCalendarSync(w http.ResponseWriter, r *http.Request)
 		if err != nil {
 			return err
 		}
-		month.Events = calendarViewEvents(events)
+		month.Events = calendarViewEvents(events, sources)
 		return nil
 	})
 	if readErr != nil {
