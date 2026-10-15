@@ -80,6 +80,14 @@ func copyUserStorageMigrationRows(ctx context.Context, sourcePath string, destin
 		if _, err := tx.ExecContext(ctx, `INSERT INTO main.folder_thread_dirty(folder_id, thread_key) SELECT id, ? FROM main.folders`, folderThreadRebuildKey); err != nil {
 			return err
 		}
+		// Copied mail was read before, or came before Gofer read mail for
+		// invitations: it isn't read again for them.
+		if _, err := tx.ExecContext(ctx, `DELETE FROM main.calendar_invitation_messages`); err != nil {
+			return err
+		}
+		if _, err := tx.ExecContext(ctx, calendarInvitationSeenSQL); err != nil {
+			return err
+		}
 		if owner == "" {
 			// A missing historic revision gets a fresh destination identity. An
 			// existing registration revision is copied byte for byte above.

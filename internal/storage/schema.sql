@@ -1642,5 +1642,14 @@ CREATE TABLE IF NOT EXISTS calendar_teams_drafts (
  PRIMARY KEY(user_id,source_id,draft_id)
 );
 
+CREATE TABLE IF NOT EXISTS calendar_invitation_messages (
+ message_id INTEGER PRIMARY KEY REFERENCES messages(id) ON DELETE CASCADE,
+ state TEXT NOT NULL CHECK(state IN ('complete','ignored','retry')),
+ next_attempt_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+ attempts INTEGER NOT NULL DEFAULT 0,
+ last_error TEXT NOT NULL DEFAULT '',
+ updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
 -- Schema version marker for fresh installs
-INSERT OR REPLACE INTO schema_version (version) VALUES (112);
+INSERT OR REPLACE INTO schema_version (version) VALUES (113);

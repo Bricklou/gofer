@@ -20,9 +20,11 @@ import (
 
 // Invitations from email to a CalDAV calendar. Google and Outlook put an
 // invitation in the invited account's calendar themselves; a CalDAV server
-// doesn't, so the invited person adds it from the email, and answers it there
-// as usual. A later invitation for it updates it, and a cancellation removes
-// it. Gofer only acts when asked, and only on events organized by someone else.
+// doesn't, so Gofer does: an invitation its organizer's domain signed is added
+// by itself (see calendar_invitation_auto.go), and any other the invited
+// person adds from the email. Either way it is answered there as usual. A later
+// invitation for it updates it, and a cancellation removes it. Gofer only acts
+// on events organized by someone else.
 
 // calendarInvitationRefusal says why Gofer won't add, update or remove an
 // invitation's event; it is shown to the person as it is.
@@ -33,12 +35,14 @@ func (e calendarInvitationRefusal) Error() string { return string(e) }
 // mailInvitation is the scheduling message in an email for one event UID.
 type mailInvitation struct {
 	method, organizer string
+	forwardedBy       string         // Who sent it on, when not its organizer.
 	calendar          *ical.Calendar // The message's time zones and its events for the UID.
 }
 
 // readMailInvitation finds the REQUEST or CANCEL for uid in an email, and
-// checks it is from its organizer and invites (or cancels for) the account.
-func readMailInvitation(raw []byte, uid, account string) (invitation mailInvitation, err error) {
+// checks it invites (or cancels for) the account. It must come from its
+// organizer, unless forwarded is allowed.
+func readMailInvitation(raw []byte, uid, account string, forwarded bool) (invitation mailInvitation, err error) {
 	defer func() {
 		if recover() != nil {
 			err = calendarInvitationRefusal("the invitation could not be read")
@@ -109,23 +113,76 @@ func readMailInvitation(raw []byte, uid, account string) (invitation mailInvitat
 		if len(selected.Events()) == 0 {
 			continue
 		}
+		calendarInvitationZones(selected)
 		invitation = mailInvitation{method: method, calendar: selected}
-		return invitation, calendarInvitationCheck(&invitation, strings.ToLower(from.Address), strings.ToLower(account))
+		return invitation, calendarInvitationCheck(&invitation, strings.ToLower(from.Address), strings.ToLower(account), forwarded)
 	}
 	return invitation, calendarInvitationRefusal("the email has no invitation for this event")
 }
 
-// Every event must come from the email's sender as its organizer, list the
-// account as a guest, and otherwise be an ordinary event or series date.
-func calendarInvitationCheck(invitation *mailInvitation, from, account string) error {
+// calendarInvitationZones names Windows time zones, as Outlook writes them,
+// by their IANA names, which Gofer and every calendar read; the zones' own
+// rules stay with them. Unknown zones are left as they are.
+func calendarInvitationZones(cal *ical.Calendar) {
+	renamed := map[string]string{}
+	for _, event := range cal.Events() {
+		for name, props := range event.Props {
+			for i := range props {
+				zone := props[i].Params.Get("TZID")
+				if zone == "" {
+					continue
+				}
+				if _, err := time.LoadLocation(zone); err == nil {
+					continue
+				}
+				if location := outlookCalendarTimeLocation(zone); location != time.UTC {
+					props[i].Params.Set("TZID", location.String())
+					renamed[zone] = location.String()
+				}
+			}
+			event.Props[name] = props
+		}
+	}
+	named := map[string]bool{}
+	children := cal.Children[:0]
+	for _, child := range cal.Children {
+		if child.Name == ical.CompTimezone {
+			zone, _ := child.Props.Text("TZID")
+			if name, ok := renamed[zone]; ok {
+				zone = name
+				child.Props.SetText("TZID", name)
+			}
+			if named[zone] {
+				continue
+			}
+			named[zone] = true
+		}
+		children = append(children, child)
+	}
+	cal.Children = children
+}
+
+// Every event must have one organizer, the email's sender unless forwarded
+// invitations are allowed, list the account as a guest, and otherwise be an
+// ordinary event or series date.
+func calendarInvitationCheck(invitation *mailInvitation, from, account string, forwarded bool) error {
 	cal := invitation.calendar
 	seen := map[string]bool{}
+	organizer := ""
 	for _, event := range cal.Events() {
 		props := event.Props
-		if len(props["ORGANIZER"]) != 1 || calendarReplyAddress(props.Get("ORGANIZER").Value) != from {
+		address := ""
+		if len(props["ORGANIZER"]) == 1 {
+			address = calendarReplyAddress(props.Get("ORGANIZER").Value)
+		}
+		if address == "" || (organizer != "" && address != organizer) {
+			return calendarInvitationRefusal("the invitation has no single organizer")
+		}
+		organizer = address
+		if address != from && !forwarded {
 			return calendarInvitationRefusal("the invitation isn't from its organizer")
 		}
-		if from == account {
+		if address == account {
 			return calendarInvitationRefusal("you organize this event")
 		}
 		invited := false
@@ -156,7 +213,10 @@ func calendarInvitationCheck(invitation *mailInvitation, from, account string) e
 			}
 		}
 	}
-	invitation.organizer = from
+	invitation.organizer = organizer
+	if organizer != from {
+		invitation.forwardedBy = from
+	}
 	return nil
 }
 
@@ -189,6 +249,10 @@ func applyCalDAVInvitation(ctx context.Context, source storage.CalendarSource, c
 	}
 	if _, err := resolveCalDAVHref(credentials.baseURL, source.RemoteID); err != nil {
 		return "", err
+	}
+	// Anyone can forward an invitation; only its organizer can change it.
+	if invitation.forwardedBy != "" && existing.ID != "" {
+		return "", calendarInvitationRefusal("only the organizer can change an event that's already in your calendar")
 	}
 	client := calendarDeleteClient(davHTTPTransport)
 	put := func(endpoint string, cal *ical.Calendar, match string) error {
@@ -310,6 +374,7 @@ func applyCalDAVInvitation(ctx context.Context, source storage.CalendarSource, c
 // invitation in a CalDAV calendar of the invited account: add it, update the
 // event it is for, or remove that event. Nil when the event is in another
 // kind of calendar, which handles invitations itself, or is the account's own.
+// A forwarded invitation can only be added.
 func mailCalendarInvitationOffer(item mailCalendarEvent, candidates []storage.CalendarEvent, sources []storage.CalendarSource, accountID, account string) *views.MailCalendarInvitation {
 	if item.Organizer == "" || strings.EqualFold(item.Organizer, account) || (item.Method != "REQUEST" && item.Method != "CANCEL") {
 		return nil
@@ -333,9 +398,16 @@ func mailCalendarInvitationOffer(item mailCalendarEvent, candidates []storage.Ca
 	if len(writable) == 0 {
 		return nil
 	}
+	forwarded := item.From != "" && !strings.EqualFold(item.From, item.Organizer)
 	switch {
 	case item.Method == "REQUEST" && item.Invited && !item.Cancelled && len(existing) == 0:
-		return &views.MailCalendarInvitation{Label: "Add to calendar", Note: "This calendar doesn't add invitations by itself. Add it to " + writable[0].Name + " to see it there and answer it.", UID: item.UID, SourceID: writable[0].ID}
+		note := "Add it to " + writable[0].Name + " to see it there and answer it."
+		if forwarded {
+			note = "Forwarded by " + item.From + ". " + note
+		}
+		return &views.MailCalendarInvitation{Label: "Add to calendar", Note: note, UID: item.UID, SourceID: writable[0].ID}
+	case forwarded:
+		return nil
 	case item.Method == "REQUEST" && item.Invited && !item.Cancelled && mailCalendarInvitationChanged(item, existing):
 		return &views.MailCalendarInvitation{Label: "Update in calendar", Note: "This invitation has changes that aren't in your calendar yet.", UID: item.UID}
 	case item.Method == "CANCEL" && len(existing) > 0:

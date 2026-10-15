@@ -217,6 +217,11 @@ func (w *userCalendarWorkers) process(parent context.Context, job userCalendarJo
 	if ctx.Err() != nil {
 		return
 	}
+	invitationErr := w.h.runUserCalendarInvitations(ctx, job.owner, job.account)
+	w.report(ctx, "add invitations from email", invitationErr)
+	if ctx.Err() != nil {
+		return
+	}
 	var start, end time.Time
 	err = w.h.userAccounts.WithAccountForUser(ctx, job.owner, job.account, func(_ *config.AccountStore, db *storage.DB) error {
 		start, end = calendarBackgroundWindow(now, viewsCalendarLocation(db.GetUISettings(ctx, job.owner)))

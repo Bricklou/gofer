@@ -22,6 +22,7 @@ import (
 
 type mailCalendarEvent struct {
 	UID, Method, Summary, Location, Organizer, OrganizerName, Reply, JoinURL string
+	From                                                                     string // The email's sender.
 	Start, End, Recurrence                                                   *time.Time
 	Modified                                                                 *time.Time // LAST-MODIFIED, or else DTSTAMP
 	StartDate, EndDate, WallStart, WallEnd, Zone                             string
@@ -136,6 +137,10 @@ func mailCalendarEvents(raw []byte, accountEmail string, location *time.Location
 		return nil
 	}
 	defer reader.Close()
+	var from string
+	if senders, err := reader.Header.AddressList("From"); err == nil && len(senders) == 1 {
+		from = strings.ToLower(senders[0].Address)
+	}
 	seen := make(map[string]bool)
 	for count := 0; count < 64 && len(events) < 8; count++ {
 		part, err := reader.NextPart()
@@ -175,7 +180,7 @@ func mailCalendarEvents(raw []byte, accountEmail string, location *time.Location
 			if err != nil || uid == "" || len(uid) > 1024 || len(props["UID"]) != 1 {
 				continue
 			}
-			item := mailCalendarEvent{UID: uid, Method: strings.ToUpper(method)}
+			item := mailCalendarEvent{UID: uid, Method: strings.ToUpper(method), From: from}
 			status, _ := props.Text("STATUS")
 			item.Cancelled = item.Method == "CANCEL" || strings.EqualFold(status, "CANCELLED")
 			item.Summary, _ = props.Text("SUMMARY")
@@ -406,43 +411,11 @@ func (h *Handler) handleMailCalendarInvitation(w http.ResponseWriter, r *http.Re
 		fail("The invitation could not be read.")
 		return
 	}
-	invitation, err := readMailInvitation(raw, uid, address)
-	if err != nil {
-		fail(mailCalendarInvitationFailure(err))
-		return
+	// Asked for, a forwarded invitation can be added too.
+	invitation, err := readMailInvitation(raw, uid, address, true)
+	if err == nil {
+		err = h.applyMailInvitation(ctx, accountID, invitation, uid, sourceID)
 	}
-	userID := h.userID(ctx)
-	candidates, err := h.db.ListMailCalendarEvents(ctx, userID, accountID, uid)
-	if err != nil {
-		fail("The calendar could not be read. Try again.")
-		return
-	}
-	sources, err := h.db.ListSelectedCalendarSources(ctx, userID)
-	if err != nil {
-		fail("The calendar could not be read. Try again.")
-		return
-	}
-	source, existing, err := mailCalendarInvitationTarget(candidates, sources, accountID, sourceID)
-	if err != nil {
-		fail(mailCalendarInvitationFailure(err))
-		return
-	}
-	if !h.calendarWriteAuthorized(ctx, source) {
-		fail("This account can't write to its calendar. Check it in Accounts.")
-		return
-	}
-	unlock, err := h.lockCalendarCreate(ctx, source)
-	if err != nil {
-		fail("Calendar is still refreshing. Try again.")
-		return
-	}
-	credentials := h.calendarUpdateCredentials(ctx, source)
-	if credentials.err == nil {
-		_, err = applyCalDAVInvitation(ctx, source, credentials, invitation, existing)
-	} else {
-		err = credentials.err
-	}
-	unlock()
 	if err != nil {
 		fail(mailCalendarInvitationFailure(err))
 		return
@@ -450,7 +423,48 @@ func (h *Handler) handleMailCalendarInvitation(w http.ResponseWriter, r *http.Re
 	h.renderMailCalendarFooter(ctx, w, emailID, true, "", "")
 }
 
+// mailInvitationProblem is a failure already worded for the email's card.
+type mailInvitationProblem string
+
+func (e mailInvitationProblem) Error() string { return string(e) }
+
+// applyMailInvitation adds the invitation for uid to calendar sourceID, or
+// updates or removes the event it is for in its own calendar.
+func (h *Handler) applyMailInvitation(ctx context.Context, accountID string, invitation mailInvitation, uid, sourceID string) error {
+	userID := h.userID(ctx)
+	candidates, err := h.db.ListMailCalendarEvents(ctx, userID, accountID, uid)
+	if err != nil {
+		return mailInvitationProblem("The calendar could not be read. Try again.")
+	}
+	sources, err := h.db.ListSelectedCalendarSources(ctx, userID)
+	if err != nil {
+		return mailInvitationProblem("The calendar could not be read. Try again.")
+	}
+	source, existing, err := mailCalendarInvitationTarget(candidates, sources, accountID, sourceID)
+	if err != nil {
+		return err
+	}
+	if !h.calendarWriteAuthorized(ctx, source) {
+		return mailInvitationProblem("This account can't write to its calendar. Check it in Accounts.")
+	}
+	unlock, err := h.lockCalendarCreate(ctx, source)
+	if err != nil {
+		return mailInvitationProblem("Calendar is still refreshing. Try again.")
+	}
+	defer unlock()
+	credentials := h.calendarUpdateCredentials(ctx, source)
+	if credentials.err != nil {
+		return credentials.err
+	}
+	_, err = applyCalDAVInvitation(ctx, source, credentials, invitation, existing)
+	return err
+}
+
 func mailCalendarInvitationFailure(err error) string {
+	var problem mailInvitationProblem
+	if errors.As(err, &problem) {
+		return string(problem)
+	}
 	switch {
 	case errors.Is(err, errCalendarUpdateConflict):
 		return "The event changed in your calendar. Refresh and try again."

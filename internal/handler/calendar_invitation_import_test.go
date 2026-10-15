@@ -24,7 +24,7 @@ func invitationTestEvent(sequence, extra string) string {
 }
 
 func TestMailInvitationIsFromItsOrganizerToTheAccount(t *testing.T) {
-	if _, err := readMailInvitation(invitationTestMail("host@example.com", "REQUEST", invitationTestEvent("0", "")), "invite-uid", "guest@example.com"); err != nil {
+	if _, err := readMailInvitation(invitationTestMail("host@example.com", "REQUEST", invitationTestEvent("0", "")), "invite-uid", "guest@example.com", false); err != nil {
 		t.Fatal(err)
 	}
 	for name, raw := range map[string][]byte{
@@ -37,7 +37,7 @@ func TestMailInvitationIsFromItsOrganizerToTheAccount(t *testing.T) {
 		"extra dates":     invitationTestMail("host@example.com", "REQUEST", invitationTestEvent("0", "RDATE:20261005T070000Z\r\n")),
 		"invalid version": invitationTestMail("host@example.com", "REQUEST", invitationTestEvent("x", "")),
 	} {
-		if _, err := readMailInvitation(raw, "invite-uid", "guest@example.com"); err == nil {
+		if _, err := readMailInvitation(raw, "invite-uid", "guest@example.com", false); err == nil {
 			t.Errorf("%s accepted", name)
 		}
 	}
@@ -90,7 +90,7 @@ func TestCalDAVInvitationAddUpdateAndCancel(t *testing.T) {
 	credentials := calendarCredentials{username: "user", password: "pass", baseURL: source.RemoteID}
 	invitation := func(method, events string) mailInvitation {
 		t.Helper()
-		result, err := readMailInvitation(invitationTestMail("host@example.com", method, events), "invite-uid", "guest@example.com")
+		result, err := readMailInvitation(invitationTestMail("host@example.com", method, events), "invite-uid", "guest@example.com", false)
 		if err != nil {
 			t.Fatal(err)
 		}

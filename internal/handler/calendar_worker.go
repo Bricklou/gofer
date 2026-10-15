@@ -30,6 +30,7 @@ func (h *Handler) StartCalendarSync(ctx context.Context) {
 		go func() {
 			h.runCalendarSyncTick(ctx, time.Now())
 			h.runCalendarIncomingTick(ctx)
+			h.runCalendarInvitationTick(ctx)
 			h.runCalendarMeetDraftCleanupTick(ctx)
 			h.runCalendarTeamsDraftCleanupTick(ctx)
 			ticker := time.NewTicker(30 * time.Second)
@@ -42,6 +43,7 @@ func (h *Handler) StartCalendarSync(ctx context.Context) {
 					h.runCalendarReminderTick(ctx, now)
 					h.runCalendarSyncTick(ctx, now)
 					h.runCalendarIncomingTick(ctx)
+					h.runCalendarInvitationTick(ctx)
 					h.runCalendarMeetDraftCleanupTick(ctx)
 					h.runCalendarTeamsDraftCleanupTick(ctx)
 				}

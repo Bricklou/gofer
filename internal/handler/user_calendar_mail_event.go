@@ -176,61 +176,68 @@ func (h *Handler) handleUserMailCalendarInvitation(w http.ResponseWriter, r *htt
 		if err != nil {
 			return err
 		}
-		invitation, err := readMailInvitation(raw.Bytes(), uid, raw.EmailAddress())
+		// Asked for, a forwarded invitation can be added too.
+		invitation, err := readMailInvitation(raw.Bytes(), uid, raw.EmailAddress(), true)
 		if err != nil {
 			return err
 		}
-		var candidates []storage.CalendarEvent
-		var sources []storage.CalendarSource
-		if err := h.userAccounts.WithAccountForUser(ctx, owner, raw.AccountID(), func(_ *config.AccountStore, db *storage.DB) error {
-			var err error
-			if candidates, err = db.ListMailCalendarEvents(ctx, owner, raw.AccountID(), uid); err != nil {
-				return err
-			}
-			sources, err = db.ListSelectedCalendarSources(ctx, owner)
-			return err
-		}); err != nil {
-			return err
-		}
-		source, existing, err := mailCalendarInvitationTarget(candidates, sources, raw.AccountID(), sourceID)
-		if err != nil {
-			return err
-		}
-		p := &userCalendarRequest{h: h}
-		if existing.ID != "" {
-			if p.event, err = h.userAccounts.SnapshotCalendarEvent(ctx, owner, existing.ID); err != nil {
-				return err
-			}
-			existing, source = p.event.Event(), p.event.Source()
-		} else if p.source, err = h.userAccounts.SnapshotCalendarSource(ctx, owner, source.ID); err != nil {
-			return err
-		} else {
-			source = p.source.Source()
-		}
-		if source.AccountID != raw.AccountID() || !h.userCalendarWriteAuthorized(ctx, source) {
-			return calendarInvitationRefusal("this account can't write to its calendar")
-		}
-		return h.userIMAP.RunAccountService(ctx, owner, source.AccountID, mail.AccountServiceCalendar, calendarSourceTimeout, func(operation context.Context) error {
-			unlock, err := h.lockCalendarCreate(operation, source)
-			if err != nil {
-				return err
-			}
-			defer unlock()
-			action, err := p.actionContext(operation, true)
-			if err != nil {
-				return err
-			}
-			credentials, err := p.actionCredentials()
-			if err != nil {
-				return err
-			}
-			_, err = applyCalDAVInvitation(action, source, credentials, invitation, existing)
-			return err
-		})
+		return h.applyUserMailInvitation(ctx, owner, raw.AccountID(), invitation, uid, sourceID)
 	})
 	if err != nil {
 		h.renderUserMailCalendarFooter(ctx, w, emailID, false, uid, mailCalendarInvitationFailure(err))
 		return
 	}
 	h.renderUserMailCalendarFooter(ctx, w, emailID, true, "", "")
+}
+
+// applyUserMailInvitation adds the invitation for uid to the owner's calendar
+// sourceID, or updates or removes the event it is for in its own calendar.
+func (h *Handler) applyUserMailInvitation(ctx context.Context, owner, account string, invitation mailInvitation, uid, sourceID string) error {
+	var candidates []storage.CalendarEvent
+	var sources []storage.CalendarSource
+	if err := h.userAccounts.WithAccountForUser(ctx, owner, account, func(_ *config.AccountStore, db *storage.DB) error {
+		var err error
+		if candidates, err = db.ListMailCalendarEvents(ctx, owner, account, uid); err != nil {
+			return err
+		}
+		sources, err = db.ListSelectedCalendarSources(ctx, owner)
+		return err
+	}); err != nil {
+		return err
+	}
+	source, existing, err := mailCalendarInvitationTarget(candidates, sources, account, sourceID)
+	if err != nil {
+		return err
+	}
+	p := &userCalendarRequest{h: h}
+	if existing.ID != "" {
+		if p.event, err = h.userAccounts.SnapshotCalendarEvent(ctx, owner, existing.ID); err != nil {
+			return err
+		}
+		existing, source = p.event.Event(), p.event.Source()
+	} else if p.source, err = h.userAccounts.SnapshotCalendarSource(ctx, owner, source.ID); err != nil {
+		return err
+	} else {
+		source = p.source.Source()
+	}
+	if source.AccountID != account || !h.userCalendarWriteAuthorized(ctx, source) {
+		return calendarInvitationRefusal("this account can't write to its calendar")
+	}
+	return h.userIMAP.RunAccountService(ctx, owner, source.AccountID, mail.AccountServiceCalendar, calendarSourceTimeout, func(operation context.Context) error {
+		unlock, err := h.lockCalendarCreate(operation, source)
+		if err != nil {
+			return err
+		}
+		defer unlock()
+		action, err := p.actionContext(operation, true)
+		if err != nil {
+			return err
+		}
+		credentials, err := p.actionCredentials()
+		if err != nil {
+			return err
+		}
+		_, err = applyCalDAVInvitation(action, source, credentials, invitation, existing)
+		return err
+	})
 }
