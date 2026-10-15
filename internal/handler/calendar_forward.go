@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/mail"
+	"net/url"
 	"strings"
 	"time"
 
@@ -92,7 +93,14 @@ func (h *Handler) forwardCalendarInvitation(ctx context.Context, source storage.
 	case source.Provider == storage.CalendarSourceProviderCalDAV && target.CalDAV != nil:
 		return "email", h.emailCalendarForward(ctx, source, target.CalDAV.Calendar, storage.OutgoingTransportSMTP, target.Event.Summary, recipients, comment, queue)
 	case source.Provider == providers.ProviderGmail && target.Google != nil:
-		cal, err := googleCalendarForwardCalendar(target.Google.googleCalendarEvent)
+		var exceptions []googleCalendarUpdateEvent
+		if len(target.Google.Recurrence) > 0 {
+			var err error
+			if exceptions, err = googleCalendarSeriesExceptions(ctx, source, target); err != nil {
+				return "", err
+			}
+		}
+		cal, err := googleCalendarForwardCalendar(target.Google.googleCalendarEvent, exceptions)
 		if err != nil {
 			return "", err
 		}
@@ -100,6 +108,33 @@ func (h *Handler) forwardCalendarInvitation(ctx context.Context, source storage.
 		return "email", h.emailCalendarForward(ctx, source, cal, storage.OutgoingTransportGmail, target.Event.Summary, recipients, comment, queue)
 	}
 	return "", calendarForwardFailure{http.StatusBadRequest, "This calendar can't forward invitations."}
+}
+
+// googleCalendarSeriesExceptions are the series' dates changed or deleted on
+// their own. Google lists them with the series under its iCalendar UID.
+func googleCalendarSeriesExceptions(ctx context.Context, source storage.CalendarSource, target calendarResponseTarget) ([]googleCalendarUpdateEvent, error) {
+	var exceptions []googleCalendarUpdateEvent
+	values := url.Values{"iCalUID": {target.Google.ICalUID}, "showDeleted": {"true"}, "maxResults": {"250"}}
+	for page := 0; page < 8; page++ {
+		var listed struct {
+			Items         []googleCalendarUpdateEvent `json:"items"`
+			NextPageToken string                      `json:"nextPageToken"`
+		}
+		endpoint := googleCalendarAPIBaseURL + "/calendars/" + url.PathEscape(source.RemoteID) + "/events?" + values.Encode()
+		if err := calendarCreateJSON(ctx, http.MethodGet, endpoint, target.Token, nil, &listed); err != nil {
+			return nil, err
+		}
+		for _, item := range listed.Items {
+			if item.RecurringEventID == target.Google.ID && item.OriginalStartTime != nil {
+				exceptions = append(exceptions, item)
+			}
+		}
+		if listed.NextPageToken == "" {
+			return exceptions, nil
+		}
+		values.Set("pageToken", listed.NextPageToken)
+	}
+	return nil, calendarForwardFailure{http.StatusBadRequest, "This series has too many changed dates to forward."}
 }
 
 // emailCalendarForward queues the invitation in cal, sent on to the

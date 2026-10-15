@@ -96,7 +96,7 @@ func TestGoogleCalendarForwardCalendar(t *testing.T) {
 		"recurrence":["RRULE:FREQ=WEEKLY;BYDAY=TU","EXDATE;TZID=Europe/Prague:20261110T090000"]}`), &remote); err != nil {
 		t.Fatal(err)
 	}
-	cal, err := googleCalendarForwardCalendar(remote)
+	cal, err := googleCalendarForwardCalendar(remote, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -112,15 +112,52 @@ func TestGoogleCalendarForwardCalendar(t *testing.T) {
 	}
 	// A rule that isn't one stays out.
 	remote.Recurrence = []string{"SUMMARY:Injected"}
-	if _, err := googleCalendarForwardCalendar(remote); err == nil {
+	if _, err := googleCalendarForwardCalendar(remote, nil); err == nil {
 		t.Fatal("accepted a line that is not a repeat rule")
 	}
 	// An all-day event keeps its dates.
 	remote.Recurrence = nil
 	remote.Start, remote.End = googleCalendarEventDateTime{Date: "2026-11-03"}, googleCalendarEventDateTime{Date: "2026-11-04"}
-	cal, _ = googleCalendarForwardCalendar(remote)
+	cal, _ = googleCalendarForwardCalendar(remote, nil)
 	body, _ = calendarForwardICS(cal, nil)
 	if !strings.Contains(body, "DTSTART;VALUE=DATE:20261103") || !strings.Contains(body, "DTEND;VALUE=DATE:20261104") {
 		t.Fatalf("all-day dates:\n%s", body)
+	}
+}
+
+// A series' dates changed on their own go with it, and its deleted dates
+// are left out of it.
+func TestGoogleCalendarForwardSeriesExceptions(t *testing.T) {
+	var remote googleCalendarEvent
+	var exceptions []googleCalendarUpdateEvent
+	if err := json.Unmarshal([]byte(`{"id":"weekly","iCalUID":"weekly@google.com","summary":"Weekly review","organizer":{"email":"host@example.com"},
+		"start":{"dateTime":"2026-11-03T09:00:00+01:00","timeZone":"Europe/Prague"},"end":{"dateTime":"2026-11-03T10:00:00+01:00","timeZone":"Europe/Prague"},
+		"recurrence":["RRULE:FREQ=WEEKLY;BYDAY=TU"]}`), &remote); err != nil {
+		t.Fatal(err)
+	}
+	if err := json.Unmarshal([]byte(`[
+		{"id":"weekly_moved","iCalUID":"weekly@google.com","recurringEventId":"weekly","status":"confirmed","summary":"Weekly review, later","organizer":{"email":"host@example.com"},
+		 "originalStartTime":{"dateTime":"2026-11-10T09:00:00+01:00","timeZone":"Europe/Prague"},
+		 "start":{"dateTime":"2026-11-10T11:00:00+01:00","timeZone":"Europe/Prague"},"end":{"dateTime":"2026-11-10T12:00:00+01:00","timeZone":"Europe/Prague"}},
+		{"id":"weekly_gone","iCalUID":"weekly@google.com","recurringEventId":"weekly","status":"cancelled","originalStartTime":{"dateTime":"2026-11-17T08:00:00Z"}},
+		{"id":"other","iCalUID":"other@google.com","recurringEventId":"weekly","status":"cancelled","originalStartTime":{"dateTime":"2026-11-24T08:00:00Z"}}]`), &exceptions); err != nil {
+		t.Fatal(err)
+	}
+	cal, err := googleCalendarForwardCalendar(remote, exceptions)
+	if err != nil {
+		t.Fatal(err)
+	}
+	body, err := calendarForwardICS(cal, []*mail.Address{{Address: "new@example.com"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	unfolded := strings.ReplaceAll(body, "\r\n ", "")
+	for _, want := range []string{"EXDATE;TZID=Europe/Prague:20261117T090000", "RECURRENCE-ID;TZID=Europe/Prague:20261110T090000", "DTSTART;TZID=Europe/Prague:20261110T110000", `SUMMARY:Weekly review\, later`} {
+		if !strings.Contains(unfolded, want) {
+			t.Errorf("missing %q in\n%s", want, body)
+		}
+	}
+	if strings.Count(body, "BEGIN:VEVENT") != 2 || strings.Count(body, "BEGIN:VTIMEZONE") != 1 || strings.Count(body, "mailto:new@example.com") != 2 || strings.Contains(body, "20261124") {
+		t.Fatalf("series:\n%s", body)
 	}
 }

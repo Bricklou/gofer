@@ -2482,7 +2482,7 @@ body.mail-list-column-resizing {
   border-radius: min(0.25rem, var(--radius));
 }
 
-[data-calendar-agenda-event] {
+:is([data-calendar-agenda-event], [data-calendar-month-grid]) {
   border-radius: calc(var(--radius) + min(var(--radius), 4px));
 }
 
