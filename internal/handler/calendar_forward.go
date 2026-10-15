@@ -19,8 +19,9 @@ import (
 )
 
 // Forwarding passes an invitation you received on to someone else. Microsoft
-// does it itself; for CalDAV, Gofer emails the invitation from your account,
-// the way other mail apps do. Google has no way to do it, so it is not offered.
+// does it itself. For CalDAV and Google, Gofer emails the invitation from your
+// account, the way other mail apps do: Google's API lets a guest change only
+// their own copy of a meeting.
 
 const calendarForwardMaxRecipients = 50
 
@@ -32,7 +33,7 @@ type calendarForwardFailure struct {
 func (f calendarForwardFailure) Error() string { return f.message }
 
 func calendarForwardProvider(provider string) bool {
-	return provider == providers.ProviderOutlook || provider == storage.CalendarSourceProviderCalDAV
+	return provider == providers.ProviderOutlook || provider == providers.ProviderGmail || provider == storage.CalendarSourceProviderCalDAV
 }
 
 // The whole meeting is forwarded: a series, when it repeats.
@@ -89,30 +90,43 @@ func (h *Handler) forwardCalendarInvitation(ctx context.Context, source storage.
 	case source.Provider == providers.ProviderOutlook && target.Outlook != nil:
 		return "provider", forwardOutlookInvitation(ctx, target, recipients, comment)
 	case source.Provider == storage.CalendarSourceProviderCalDAV && target.CalDAV != nil:
-		account, err := h.calendarReplyAccount(ctx, source)
-		if err != nil || account.Email == "" {
-			return "", calendarForwardFailure{http.StatusConflict, "This account's sending address could not be found."}
-		}
-		body, err := calendarForwardICS(target.CalDAV.Calendar, recipients)
+		return "email", h.emailCalendarForward(ctx, source, target.CalDAV.Calendar, storage.OutgoingTransportSMTP, target.Event.Summary, recipients, comment, queue)
+	case source.Provider == providers.ProviderGmail && target.Google != nil:
+		cal, err := googleCalendarForwardCalendar(target.Google.googleCalendarEvent)
 		if err != nil {
 			return "", err
 		}
-		msg := calendarForwardMessage(account.Name, account.Email, target.Event.Summary, comment, body, recipients)
-		raw, err := buildOutgoingMIME(storage.OutgoingTransportSMTP, msg)
-		if err != nil {
-			return "", err
-		}
-		snapshot, err := json.Marshal(snapshotOutgoingMessage(msg))
-		if err != nil {
-			return "", err
-		}
-		var to []string
-		for _, recipient := range recipients {
-			to = append(to, recipient.Address)
-		}
-		return "email", queue(storage.QueueOutgoingSendInput{ID: uuid.NewString(), AccountID: source.AccountID, Transport: storage.OutgoingTransportSMTP, EnvelopeFrom: account.Email, EnvelopeRecipients: to, MIMEData: raw, MessageJSON: snapshot})
+		// Sent through the Google account's own mail, as Gmail sends any message.
+		return "email", h.emailCalendarForward(ctx, source, cal, storage.OutgoingTransportGmail, target.Event.Summary, recipients, comment, queue)
 	}
 	return "", calendarForwardFailure{http.StatusBadRequest, "This calendar can't forward invitations."}
+}
+
+// emailCalendarForward queues the invitation in cal, sent on to the
+// recipients from the calendar's account.
+func (h *Handler) emailCalendarForward(ctx context.Context, source storage.CalendarSource, cal *ical.Calendar, transport, summary string, recipients []*mail.Address, comment string, queue func(storage.QueueOutgoingSendInput) error) error {
+	account, err := h.calendarReplyAccount(ctx, source)
+	if err != nil || account.Email == "" {
+		return calendarForwardFailure{http.StatusConflict, "This account's sending address could not be found."}
+	}
+	body, err := calendarForwardICS(cal, recipients)
+	if err != nil {
+		return err
+	}
+	msg := calendarForwardMessage(account.Name, account.Email, summary, comment, body, recipients)
+	raw, err := buildOutgoingMIME(transport, msg)
+	if err != nil {
+		return err
+	}
+	snapshot, err := json.Marshal(snapshotOutgoingMessage(msg))
+	if err != nil {
+		return err
+	}
+	var to []string
+	for _, recipient := range recipients {
+		to = append(to, recipient.Address)
+	}
+	return queue(storage.QueueOutgoingSendInput{ID: uuid.NewString(), AccountID: source.AccountID, Transport: transport, EnvelopeFrom: account.Email, EnvelopeRecipients: to, MIMEData: raw, MessageJSON: snapshot})
 }
 
 // Graph acknowledges a forward with 202 and no body.
@@ -260,6 +274,12 @@ func (h *Handler) handleCalendarForward(w http.ResponseWriter, r *http.Request) 
 	if source.Provider == storage.CalendarSourceProviderCalDAV {
 		if cfg, err := h.accountStore.GetConfig(ctx, source.AccountID); err != nil || cfg.SMTPHost == "" || cfg.SMTPPort <= 0 {
 			calendarUpdateFailure(w, http.StatusBadRequest, "Forwarding sends the invitation by email. Configure SMTP for this account first.", false, false)
+			return
+		}
+	}
+	if source.Provider == providers.ProviderGmail {
+		if cfg, err := h.accountStore.GetConfig(ctx, source.AccountID); err != nil || outgoingTransportForConfig(cfg) != storage.OutgoingTransportGmail {
+			calendarUpdateFailure(w, http.StatusBadRequest, "Forwarding sends the invitation by email, and this account can't send mail.", false, false)
 			return
 		}
 	}

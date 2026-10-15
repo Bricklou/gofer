@@ -266,7 +266,7 @@ templ CalendarEventForward(details CalendarEventDetails) {
 					<textarea id="calendar-forward-comment" name="comment" rows="2" class="w-full resize-none rounded-md border border-input bg-background px-2.5 py-1.5 text-sm shadow-xs focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"></textarea>
 				</div>
 				<p class="text-xs leading-relaxed text-muted-foreground">
-					if details.Forward == "caldav" {
+					if details.Forward != "outlook" {
 						Gofer emails the invitation from this account. The organizer isn't told until the new guests answer.
 					} else {
 						Microsoft sends the invitation. With a work or school account, it also tells the organizer.

@@ -191,6 +191,14 @@ func outgoingMIMEBody(msg *OutgoingMessage) mimeEntity {
 		invite.contentTypeParams["method"] = "REQUEST"
 		invite.disposition = "inline"
 		body = multipartMIMEEntity("multipart/alternative", body, invite)
+		// Also attached as invite.ics, as Google sends invitations; Gmail
+		// drops the inline part of an invitation sent through its API.
+		file := textMIMEEntity("application/ics", msg.CalendarForward)
+		file.contentTypeParams = map[string]string{"name": "invite.ics"}
+		file.transferEncoding = "base64"
+		file.disposition = "attachment"
+		file.dispositionParams = map[string]string{"filename": "invite.ics"}
+		body = multipartMIMEEntity("multipart/mixed", body, file)
 	}
 	inlineAttachments, fileAttachments := splitOutgoingAttachments(msg.Attachments)
 	if len(inlineAttachments) > 0 {

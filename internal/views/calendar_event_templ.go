@@ -1200,7 +1200,7 @@ func CalendarEventForward(details CalendarEventDetails) templ.Component {
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
-				if details.Forward == "caldav" {
+				if details.Forward != "outlook" {
 					templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 71, "Gofer emails the invitation from this account. The organizer isn't told until the new guests answer.")
 					if templ_7745c5c3_Err != nil {
 						return templ_7745c5c3_Err

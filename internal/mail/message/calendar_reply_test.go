@@ -2,6 +2,7 @@ package message
 
 import (
 	"bytes"
+	"encoding/base64"
 	"io"
 	"mime"
 	"mime/multipart"
@@ -103,21 +104,41 @@ func TestCalendarForwardMIME(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	_, params, err := mime.ParseMediaType(msg.Header.Get("Content-Type"))
+	// The invitation inline and as invite.ics: Gmail drops the inline
+	// part of a message that has no attachment.
+	ct, params, err := mime.ParseMediaType(msg.Header.Get("Content-Type"))
+	if err != nil || ct != "multipart/mixed" {
+		t.Fatalf("top: %s %v", ct, err)
+	}
+	mixed := multipart.NewReader(msg.Body, params["boundary"])
+	body, err := mixed.NextPart()
 	if err != nil {
 		t.Fatal(err)
 	}
-	parts := multipart.NewReader(msg.Body, params["boundary"])
-	if _, err := parts.NextPart(); err != nil {
+	ct, params, _ = mime.ParseMediaType(body.Header.Get("Content-Type"))
+	if ct != "multipart/alternative" {
+		t.Fatalf("body: %s", ct)
+	}
+	alternative := multipart.NewReader(body, params["boundary"])
+	if _, err := alternative.NextPart(); err != nil {
 		t.Fatal(err)
 	}
-	part, err := parts.NextPart()
+	part, err := alternative.NextPart()
 	if err != nil {
 		t.Fatal(err)
 	}
-	ct, params, _ := mime.ParseMediaType(part.Header.Get("Content-Type"))
+	ct, params, _ = mime.ParseMediaType(part.Header.Get("Content-Type"))
 	data, _ := io.ReadAll(part)
 	if ct != "text/calendar" || params["method"] != "REQUEST" || string(data) != ics {
 		t.Fatalf("wrong forward MIME: %s %v", data, part.Header)
+	}
+	file, err := mixed.NextPart()
+	if err != nil {
+		t.Fatal(err)
+	}
+	ct, _, _ = mime.ParseMediaType(file.Header.Get("Content-Type"))
+	data, _ = io.ReadAll(base64.NewDecoder(base64.StdEncoding, file))
+	if ct != "application/ics" || file.FileName() != "invite.ics" || string(data) != ics {
+		t.Fatalf("wrong invite.ics: %s %v", data, file.Header)
 	}
 }

@@ -84,3 +84,43 @@ func TestCalendarForwardOutlook(t *testing.T) {
 		t.Fatal("a refused forward succeeded")
 	}
 }
+
+// A Google invitation becomes one other calendars read, in its own zone,
+// with its repeat rules, organizer and guests.
+func TestGoogleCalendarForwardCalendar(t *testing.T) {
+	var remote googleCalendarEvent
+	if err := json.Unmarshal([]byte(`{"iCalUID":"weekly@google.com","summary":"Weekly review","description":"Agenda","location":"Room 2","hangoutLink":"https://meet.google.com/abc-defg-hij",
+		"organizer":{"email":"host@example.com","displayName":"Host Person"},
+		"attendees":[{"email":"host@example.com","organizer":true,"responseStatus":"accepted"},{"email":"guest@example.com","displayName":"Guest","responseStatus":"needsAction","optional":true}],
+		"start":{"dateTime":"2026-11-03T09:00:00+01:00","timeZone":"Europe/Prague"},"end":{"dateTime":"2026-11-03T10:00:00+01:00","timeZone":"Europe/Prague"},
+		"recurrence":["RRULE:FREQ=WEEKLY;BYDAY=TU","EXDATE;TZID=Europe/Prague:20261110T090000"]}`), &remote); err != nil {
+		t.Fatal(err)
+	}
+	cal, err := googleCalendarForwardCalendar(remote)
+	if err != nil {
+		t.Fatal(err)
+	}
+	body, err := calendarForwardICS(cal, []*mail.Address{{Address: "new@example.com"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	unfolded := strings.ReplaceAll(body, "\r\n ", "")
+	for _, want := range []string{"METHOD:REQUEST", "UID:weekly@google.com", "BEGIN:VTIMEZONE", "TZID:Europe/Prague", "DTSTART;TZID=Europe/Prague:20261103T090000", "DTEND;TZID=Europe/Prague:20261103T100000", "RRULE:FREQ=WEEKLY;BYDAY=TU", "EXDATE;TZID=Europe/Prague:20261110T090000", "ORGANIZER;CN=Host Person:mailto:host@example.com", "mailto:guest@example.com", "ROLE=OPT-PARTICIPANT", "mailto:new@example.com", "SUMMARY:Weekly review", "LOCATION:Room 2", "https://meet.google.com/abc-defg-hij"} {
+		if !strings.Contains(unfolded, want) {
+			t.Errorf("missing %q in\n%s", want, body)
+		}
+	}
+	// A rule that isn't one stays out.
+	remote.Recurrence = []string{"SUMMARY:Injected"}
+	if _, err := googleCalendarForwardCalendar(remote); err == nil {
+		t.Fatal("accepted a line that is not a repeat rule")
+	}
+	// An all-day event keeps its dates.
+	remote.Recurrence = nil
+	remote.Start, remote.End = googleCalendarEventDateTime{Date: "2026-11-03"}, googleCalendarEventDateTime{Date: "2026-11-04"}
+	cal, _ = googleCalendarForwardCalendar(remote)
+	body, _ = calendarForwardICS(cal, nil)
+	if !strings.Contains(body, "DTSTART;VALUE=DATE:20261103") || !strings.Contains(body, "DTEND;VALUE=DATE:20261104") {
+		t.Fatalf("all-day dates:\n%s", body)
+	}
+}
