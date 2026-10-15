@@ -17390,6 +17390,7 @@ document.addEventListener("pointermove", function (event) {
   }
   event.preventDefault()
   updateCalendarDrag(drag, event)
+  calendarAutoScroll(event.clientX, event.clientY)
 })
 
 document.addEventListener("pointerup", function (event) {
@@ -17424,6 +17425,51 @@ document.addEventListener("click", function (event) {
   event.preventDefault()
   event.stopPropagation()
 }, true)
+
+// Dragging near an edge of the calendar scrolls it, faster closer to the
+// edge, so an event can be dropped on time that is out of view.
+var _calendarAutoScroll = null
+var CALENDAR_SCROLL_EDGE = 48
+var CALENDAR_SCROLL_SPEED = 18
+
+function calendarAutoScroll(x, y) {
+  var state = _calendarAutoScroll || (_calendarAutoScroll = {frame: 0})
+  state.x = x
+  state.y = y
+  if (!state.frame) state.frame = requestAnimationFrame(stepCalendarAutoScroll)
+}
+
+// How far to scroll this frame along one side: the deeper into the edge, or
+// past it, the faster.
+function calendarScrollStep(at, low, high) {
+  if (at < low + CALENDAR_SCROLL_EDGE) return -Math.ceil(Math.min(1, (low + CALENDAR_SCROLL_EDGE - at) / CALENDAR_SCROLL_EDGE) * CALENDAR_SCROLL_SPEED)
+  if (at > high - CALENDAR_SCROLL_EDGE) return Math.ceil(Math.min(1, (at - high + CALENDAR_SCROLL_EDGE) / CALENDAR_SCROLL_EDGE) * CALENDAR_SCROLL_SPEED)
+  return 0
+}
+
+function stepCalendarAutoScroll() {
+  var state = _calendarAutoScroll
+  if (!state) return
+  state.frame = 0
+  var drag = _calendarDrag && _calendarDrag.started ? _calendarDrag : null
+  var pick = _calendarPick && _calendarPick.started ? _calendarPick : null
+  var surface = document.querySelector("#calendar-main [data-calendar-surface]")
+  if ((!drag && !pick) || !surface) { _calendarAutoScroll = null; return }
+  var box = surface.getBoundingClientRect()
+  // The week's day and all-day header stays at the top; time scrolls below it.
+  var header = surface.querySelector("[data-calendar-week-header]")
+  var top = header ? header.getBoundingClientRect().bottom : box.top
+  var dy = state.x >= box.left && state.x <= box.right ? calendarScrollStep(state.y, top, box.bottom) : 0
+  // A picked range stays in its day, so it only scrolls up and down.
+  var dx = !pick && state.y >= box.top && state.y <= box.bottom ? calendarScrollStep(state.x, box.left, box.right) : 0
+  var scrollTop = surface.scrollTop, scrollLeft = surface.scrollLeft
+  if (dx || dy) surface.scrollBy(dx, dy)
+  if (surface.scrollTop === scrollTop && surface.scrollLeft === scrollLeft) return
+  // The calendar moved under the pointer, so what it points at changed.
+  if (drag) updateCalendarDrag(drag, {clientX: state.x, clientY: state.y})
+  else updateCalendarPick(pick, state.y)
+  state.frame = requestAnimationFrame(stepCalendarAutoScroll)
+}
 
 // The local midnight a day starts at, from its header or month cell.
 function calendarDayStartMs(iso) {
@@ -17470,7 +17516,6 @@ function startCalendarDrag(drag, event) {
     drag.grab = calendarTimedPointer(column, event.clientY) - drag.start
     if (drag.resize) {
       drag.height = el.offsetHeight
-      drag.top = el.getBoundingClientRect().top
       drag.label = el.querySelector("[data-calendar-week-event-time]")
       drag.labelText = drag.label && drag.label.textContent
       drag.labelHidden = drag.label && drag.label.hidden
@@ -17555,7 +17600,7 @@ function updateCalendarDrag(drag, event) {
     var pointer = calendarTimedPointer(drag.column, event.clientY)
     drag.newStart = drag.start
     drag.newEnd = Math.max(drag.start + CALENDAR_DRAG_SNAP, dayStart + Math.round((pointer - dayStart) / CALENDAR_DRAG_SNAP) * CALENDAR_DRAG_SNAP)
-    drag.el.style.height = Math.max(22, event.clientY - drag.top) + "px"
+    drag.el.style.height = Math.max(22, event.clientY - drag.el.getBoundingClientRect().top) + "px"
     if (drag.label) {
       drag.label.hidden = false
       drag.label.textContent = calendarMinuteLabel((drag.start - dayStart) / 60000) + "–" + calendarMinuteLabel((drag.newEnd - dayStart) / 60000)
@@ -17982,6 +18027,7 @@ document.addEventListener("pointermove", function (event) {
   }
   event.preventDefault()
   updateCalendarPick(pick, event.clientY)
+  calendarAutoScroll(event.clientX, event.clientY)
 })
 
 function updateCalendarPick(pick, clientY) {
