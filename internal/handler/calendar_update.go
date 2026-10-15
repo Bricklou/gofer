@@ -198,6 +198,7 @@ func calendarEditData(event storage.CalendarEvent, source storage.CalendarSource
 	data.Guests = calendarMeetingGuestText(event)
 	data.Reminder = "none"
 	data.ShowAs = event.ShowAs
+	data.Private = event.Private
 	if event.ReminderMinutes != nil {
 		data.Reminder = strconv.Itoa(*event.ReminderMinutes)
 	}

@@ -346,6 +346,9 @@ func normalizeCalDAVEvent(component ical.Event, href, etag string, location *tim
 	if transparency, _ := component.Props.Text("TRANSP"); strings.EqualFold(strings.TrimSpace(transparency), "TRANSPARENT") {
 		event.ShowAs = "free"
 	}
+	class, _ := component.Props.Text("CLASS")
+	class = strings.ToUpper(strings.TrimSpace(class))
+	event.Private = class == "PRIVATE" || class == "CONFIDENTIAL"
 	return event, nil
 }
 
@@ -479,4 +482,14 @@ func calendarSameShowAs(chosen, saved string) bool {
 		saved = "busy"
 	}
 	return chosen == saved
+}
+
+// calDAVSetPrivate marks the event private, or removes the mark, which makes
+// it public as CalDAV's default.
+func calDAVSetPrivate(component *ical.Component, private bool) {
+	if private {
+		component.Props.SetText("CLASS", "PRIVATE")
+		return
+	}
+	delete(component.Props, "CLASS")
 }

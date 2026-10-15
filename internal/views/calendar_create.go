@@ -55,6 +55,7 @@ type CalendarCreateData struct {
 	Reminder string
 	// ShowAs is how the event marks its time; empty means busy.
 	ShowAs    string
+	Private   bool
 	Sources   []CalendarCreateSource
 	Date      string
 	StartTime string
@@ -153,4 +154,11 @@ func CalendarShowAsLabel(showAs string) string {
 		return "Working elsewhere"
 	}
 	return "Busy"
+}
+
+func calendarPrivateValue(data CalendarCreateData) string {
+	if data.Private {
+		return "true"
+	}
+	return "false"
 }

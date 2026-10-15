@@ -50,3 +50,39 @@ func CalendarShowAsValue(value string) string {
 	}
 	return ""
 }
+
+// migrateV110ToV111 adds whether each cached event is private. Events cached
+// before count as not private until they sync again.
+func migrateV110ToV111(db *sql.DB) error {
+	tx, err := db.Begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	var version int
+	if err := tx.QueryRow(`SELECT COALESCE(MAX(version),0) FROM schema_version`).Scan(&version); err != nil {
+		return err
+	}
+	if version >= 111 {
+		return nil
+	}
+	exists, err := tableExistsTx(tx, "calendar_events")
+	if err != nil {
+		return err
+	}
+	if exists {
+		present, err := columnExistsTx(tx, "calendar_events", "is_private")
+		if err != nil {
+			return err
+		}
+		if !present {
+			if _, err := tx.Exec(`ALTER TABLE calendar_events ADD COLUMN is_private INTEGER NOT NULL DEFAULT 0 CHECK (is_private IN (0, 1))`); err != nil {
+				return err
+			}
+		}
+	}
+	if err := markSchemaVersion(tx, 111); err != nil {
+		return err
+	}
+	return tx.Commit()
+}

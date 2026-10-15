@@ -127,6 +127,9 @@ func createGoogleCalendarEvent(ctx context.Context, token, remoteCalendarID stri
 	if draft.ShowAs != "" {
 		payload["transparency"] = googleCalendarTransparency(draft.ShowAs)
 	}
+	if draft.PrivateSet {
+		payload["visibility"] = googleCalendarVisibility(draft.Private)
+	}
 	endpoint := googleCalendarAPIBaseURL + "/calendars/" + url.PathEscape(remoteCalendarID) + "/events"
 	var remote struct {
 		googleCalendarEvent
@@ -233,6 +236,9 @@ func createOutlookCalendarEvent(ctx context.Context, token, remoteCalendarID str
 	}
 	if draft.ShowAs != "" {
 		payload["showAs"] = outlookCalendarShowAsValue(draft.ShowAs)
+	}
+	if draft.PrivateSet {
+		payload["sensitivity"] = outlookCalendarSensitivity(draft.Private)
 	}
 	var remote outlookCalendarEvent
 	endpoint := outlookGraphBaseURL + "/me/calendars/" + url.PathEscape(remoteCalendarID) + "/events"
@@ -362,6 +368,9 @@ func calendarCreateICS(draft calendar.EventDraft) (string, error) {
 	}
 	if draft.ShowAs != "" {
 		calDAVSetShowAs(event.Component, draft.ShowAs)
+	}
+	if draft.PrivateSet {
+		calDAVSetPrivate(event.Component, draft.Private)
 	}
 	cal.Children = append(cal.Children, event.Component)
 	var output bytes.Buffer

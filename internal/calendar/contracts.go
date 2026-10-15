@@ -74,6 +74,8 @@ type RemoteEvent struct {
 	// ShowAs is how the event marks its time: busy, free, tentative, oof or
 	// working_elsewhere; empty when the provider doesn't say.
 	ShowAs string
+	// Private hides the event's details from people who share the calendar.
+	Private bool
 
 	ProviderCreatedAt *time.Time
 	ProviderUpdatedAt *time.Time
@@ -125,7 +127,11 @@ type EventDraft struct {
 	ReminderSet     bool `json:",omitempty"`
 	ReminderMinutes *int `json:",omitempty"`
 	// ShowAs is the chosen busy or free state; empty leaves it as it is.
-	ShowAs               string          `json:",omitempty"`
+	ShowAs string `json:",omitempty"`
+	// PrivateSet says whether the event was marked private (Private) or not;
+	// otherwise an edit leaves it as it is.
+	PrivateSet           bool            `json:",omitempty"`
+	Private              bool            `json:",omitempty"`
 	GoogleMeetDraftID    string          `json:",omitempty"`
 	GoogleMeetConference json.RawMessage `json:"-"`
 	Location             string

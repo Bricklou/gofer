@@ -314,6 +314,10 @@ func finalizeCalendarTeamsDraft(ctx context.Context, source storage.CalendarSour
 		if draft.ShowAs != "" {
 			payload["showAs"] = outlookCalendarShowAsValue(draft.ShowAs)
 		}
+		// The placeholder was private; the meeting is only if chosen.
+		if draft.PrivateSet {
+			payload["sensitivity"] = outlookCalendarSensitivity(draft.Private)
+		}
 		var updated outlookCalendarUpdateEvent
 		if err := calendarUpdateJSON(ctx, endpoint, token, current.ODataETag, payload, &updated); err != nil {
 			return calendar.RemoteEvent{}, err

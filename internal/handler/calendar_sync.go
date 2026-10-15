@@ -157,6 +157,6 @@ func calendarStorageEvent(userID, sourceID string, remote calendar.RemoteEvent) 
 		StartAt: remote.StartAt, EndAt: remote.EndAt, StartTimeZone: remote.StartTimeZone, EndTimeZone: remote.EndTimeZone,
 		RecurrenceJSON: string(remote.Recurrence), AttendeesJSON: string(remote.Attendees), OnlineMeetingJSON: string(remote.OnlineMeeting),
 		HTMLLink: remote.HTMLLink, ProviderCreatedAt: remote.ProviderCreatedAt, ProviderUpdatedAt: remote.ProviderUpdatedAt,
-		IsDeleted: remote.Deleted, ReminderMinutes: remote.ReminderMinutes, ShowAs: remote.ShowAs,
+		IsDeleted: remote.Deleted, ReminderMinutes: remote.ReminderMinutes, ShowAs: remote.ShowAs, Private: remote.Private,
 	}
 }

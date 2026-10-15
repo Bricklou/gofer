@@ -78,7 +78,9 @@ type CalendarEvent struct {
 	ReminderMinutes *int
 	// ShowAs is how the event marks its time: busy, free, tentative, oof or
 	// working_elsewhere (the last three only on Outlook); empty when unknown.
-	ShowAs            string
+	ShowAs string
+	// Private hides the event's details from people who share the calendar.
+	Private           bool
 	HTMLLink          string
 	ProviderCreatedAt *time.Time
 	ProviderUpdatedAt *time.Time
@@ -606,8 +608,8 @@ func replaceCalendarEventsTx(ctx context.Context, tx *sql.Tx, userID, sourceID s
 				status, summary, description, location, organizer_name, organizer_email,
 				all_day, start_date, end_date, start_at, end_at, start_timezone,
 				end_timezone, recurrence_json, attendees_json, online_meeting_json,
-				html_link, provider_created_at, provider_updated_at, is_deleted, response_status, reminder_minutes, show_as
-			) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+				html_link, provider_created_at, provider_updated_at, is_deleted, response_status, reminder_minutes, show_as, is_private
+			) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 			ON CONFLICT(source_id, remote_id) DO UPDATE SET
 				user_id = excluded.user_id,
 				ical_uid = excluded.ical_uid,
@@ -636,6 +638,7 @@ func replaceCalendarEventsTx(ctx context.Context, tx *sql.Tx, userID, sourceID s
 				response_status = excluded.response_status,
 				reminder_minutes = excluded.reminder_minutes,
 				show_as = excluded.show_as,
+				is_private = excluded.is_private,
 				updated_at = CURRENT_TIMESTAMP`,
 			eventID, userID, sourceID, remoteID,
 			strings.TrimSpace(event.ICalUID), strings.TrimSpace(event.SeriesRemoteID), strings.TrimSpace(event.ETag),
@@ -645,7 +648,7 @@ func replaceCalendarEventsTx(ctx context.Context, tx *sql.Tx, userID, sourceID s
 			strings.TrimSpace(event.StartTimeZone), strings.TrimSpace(event.EndTimeZone),
 			calendarJSON(event.RecurrenceJSON, "[]"), calendarJSON(event.AttendeesJSON, "[]"),
 			calendarJSON(event.OnlineMeetingJSON, "{}"), strings.TrimSpace(event.HTMLLink),
-			calendarEventTimeValue(event.ProviderCreatedAt), calendarEventTimeValue(event.ProviderUpdatedAt), calendarBoolInt(event.IsDeleted), event.ResponseStatus, calendarReminderValue(event.ReminderMinutes), CalendarShowAsValue(event.ShowAs))
+			calendarEventTimeValue(event.ProviderCreatedAt), calendarEventTimeValue(event.ProviderUpdatedAt), calendarBoolInt(event.IsDeleted), event.ResponseStatus, calendarReminderValue(event.ReminderMinutes), CalendarShowAsValue(event.ShowAs), calendarBoolInt(event.Private))
 		if err := calendarSyncOneRow(result, err); err != nil {
 			return fmt.Errorf("upsert calendar event %q: %w", remoteID, err)
 		}
@@ -708,7 +711,7 @@ const calendarEventColumns = `
 		       event.recurrence_json, event.attendees_json, event.online_meeting_json,
 		       event.html_link, event.provider_created_at, event.provider_updated_at,
 		       event.is_deleted, source.name, source.color, source.is_hidden, event.response_status,
-		       source.provider, account.email_address, event.reminder_minutes, event.show_as`
+		       source.provider, account.email_address, event.reminder_minutes, event.show_as, event.is_private`
 
 const calendarEventFrom = `
 		FROM calendar_events event
@@ -778,7 +781,7 @@ func scanCalendarEvent(row interface{ Scan(...any) error }) (CalendarEvent, erro
 	var startDate, endDate sql.NullString
 	var startAt, endAt sqliteNullTime
 	var providerCreatedAt, providerUpdatedAt sqliteNullTime
-	var reminder int
+	var reminder, private int
 	if err := row.Scan(
 		&event.ID, &event.UserID, &event.SourceID, &event.RemoteID,
 		&event.ICalUID, &event.SeriesRemoteID, &event.ETag, &event.Status,
@@ -788,13 +791,14 @@ func scanCalendarEvent(row interface{ Scan(...any) error }) (CalendarEvent, erro
 		&event.OnlineMeetingJSON, &event.HTMLLink, &providerCreatedAt, &providerUpdatedAt,
 		&isDeleted, &event.SourceName, &event.SourceColor, &sourceHidden,
 		&event.ResponseStatus,
-		&event.SourceProvider, &event.AccountEmail, &reminder, &event.ShowAs,
+		&event.SourceProvider, &event.AccountEmail, &reminder, &event.ShowAs, &private,
 	); err != nil {
 		return CalendarEvent{}, err
 	}
 	if reminder >= 0 {
 		event.ReminderMinutes = &reminder
 	}
+	event.Private = private == 1
 	event.AllDay = allDay == 1
 	event.IsDeleted = isDeleted == 1
 	event.SourceHidden = sourceHidden == 1

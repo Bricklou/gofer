@@ -373,6 +373,9 @@ func (h *Handler) updateCalDAVMeetingOccurrence(ctx context.Context, source stor
 		if draft.ShowAs != "" && !calendarSameShowAs(draft.ShowAs, existing.ShowAs) {
 			calDAVSetShowAs(override, draft.ShowAs)
 		}
+		if draft.PrivateSet && draft.Private != existing.Private {
+			calDAVSetPrivate(override, draft.Private)
+		}
 		// Keep each remaining guest's reply; add new guests as Gofer invites them.
 		var people []ical.Prop
 		for _, person := range override.Props["ATTENDEE"] {

@@ -174,6 +174,27 @@ templ CalendarCreateDialog(data CalendarCreateData) {
 								}
 							}
 						}
+						@calendarDialogRow(icon.Lock(icon.Props{Class: "size-4"}), "pt-2.5") {
+							{{ private := calendarPrivateValue(data) }}
+							@label.Label(label.Props{For: "calendar-create-private", Class: "sr-only"}) {
+								Visibility
+							}
+							@selectbox.SelectBox() {
+								@selectbox.Trigger(selectbox.TriggerProps{ID: "calendar-create-private", Name: "private", DisableClear: true, Attributes: templ.Attributes{"value": private}}) {
+									@selectbox.Value(selectbox.ValueProps{Placeholder: "Visibility"})
+								}
+								@selectbox.Content(selectbox.ContentProps{NoSearch: true, Class: "mobile-sheet"}) {
+									@selectbox.Group() {
+										@selectbox.Item(selectbox.ItemProps{Value: "false", Selected: private == "false"}) {
+											Default visibility
+										}
+										@selectbox.Item(selectbox.ItemProps{Value: "true", Selected: private == "true"}) {
+											Private
+										}
+									}
+								}
+							}
+						}
 						@calendarDialogRow(icon.MapPin(icon.Props{Class: "size-4"}), "pt-2.5") {
 							@label.Label(label.Props{For: "calendar-create-location", Class: "sr-only"}) {
 								Location

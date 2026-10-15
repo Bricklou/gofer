@@ -352,6 +352,9 @@ func updateGoogleCalendarEventScope(ctx context.Context, token, remoteCalendarID
 	if draft.ShowAs != "" && !calendarSameShowAs(draft.ShowAs, existing.ShowAs) {
 		payload["transparency"] = googleCalendarTransparency(draft.ShowAs)
 	}
+	if draft.PrivateSet && draft.Private != existing.Private {
+		payload["visibility"] = googleCalendarVisibility(draft.Private)
+	}
 	if addingMeet {
 		if len(draft.GoogleMeetConference) > 0 {
 			payload["conferenceData"] = draft.GoogleMeetConference
@@ -509,7 +512,7 @@ func updateOutlookCalendarEventScope(ctx context.Context, token, remoteCalendarI
 		return calendar.RemoteEvent{}, calendarUpdateUnsupported("Microsoft did not supply a safe event version.")
 	}
 	version := strings.TrimSpace(existing.ETag)
-	if version != current.ChangeKey && version != current.ODataETag {
+	if version != current.ChangeKey && version != current.ODataETag && (series || occurrence || !calendarOutlookUnchangedSince(current, existing)) {
 		return calendar.RemoteEvent{}, errCalendarUpdateConflict
 	}
 	if err := calendarMeetingScopeRestriction(calendarOutlookOrganizerStatus(current.outlookCalendarEvent), draft); err != nil {
@@ -577,6 +580,9 @@ func updateOutlookCalendarEventScope(ctx context.Context, token, remoteCalendarI
 	}
 	if draft.ShowAs != "" && !calendarSameShowAs(draft.ShowAs, existing.ShowAs) {
 		payload["showAs"] = outlookCalendarShowAsValue(draft.ShowAs)
+	}
+	if draft.PrivateSet && draft.Private != existing.Private {
+		payload["sensitivity"] = outlookCalendarSensitivity(draft.Private)
 	}
 	var updated outlookCalendarUpdateEvent
 	if err := calendarUpdateJSON(ctx, endpoint, token, current.ODataETag, payload, &updated); err != nil {
@@ -814,6 +820,9 @@ func updateCalDAVCalendarEventScope(ctx context.Context, source storage.Calendar
 	if draft.ShowAs != "" && !calendarSameShowAs(draft.ShowAs, existing.ShowAs) {
 		calDAVSetShowAs(master, draft.ShowAs)
 	}
+	if draft.PrivateSet && draft.Private != existing.Private {
+		calDAVSetPrivate(master, draft.Private)
+	}
 	if draft.Recurrence != nil {
 		props.Set(edited.Events()[0].Props.Get("RRULE"))
 		// Retain reminders/metadata and any other timezone definitions. Replace
@@ -899,4 +908,33 @@ func updateCalDAVCalendarEventScope(ctx context.Context, source storage.Calendar
 		updated.StartTimeZone, updated.EndTimeZone = zone, zone
 	}
 	return updated, nil
+}
+
+// calendarOutlookUnchangedSince reports whether a single Outlook event still
+// has every detail Gofer shows and saves as cached. Microsoft changes a new
+// event's version a few seconds after creating it without changing it; such
+// an edit goes ahead rather than being refused as a conflict.
+func calendarOutlookUnchangedSince(current outlookCalendarUpdateEvent, cached storage.CalendarEvent) bool {
+	event, err := normalizeOutlookCalendarEvent(current.outlookCalendarEvent)
+	if err != nil || event.SeriesRemoteID != "" || cached.SeriesRemoteID != "" {
+		return false
+	}
+	sameTime := func(a, b *time.Time) bool { return (a == nil) == (b == nil) && (a == nil || a.Equal(*b)) }
+	sameJSON := func(raw []byte, stored, empty string) bool {
+		return calendarCompactJSON(string(raw), empty) == calendarCompactJSON(stored, empty)
+	}
+	return event.Summary == cached.Summary && event.Description == cached.Description && event.Location == cached.Location &&
+		event.AllDay == cached.AllDay && event.StartDate == cached.StartDate && event.EndDate == cached.EndDate &&
+		sameTime(event.StartAt, cached.StartAt) && sameTime(event.EndAt, cached.EndAt) &&
+		event.ShowAs == cached.ShowAs && event.Private == cached.Private && calendarSameReminder(event.ReminderMinutes, cached.ReminderMinutes) &&
+		event.Deleted == cached.IsDeleted && sameJSON(event.Recurrence, cached.RecurrenceJSON, "[]") &&
+		sameJSON(event.Attendees, cached.AttendeesJSON, "[]") && sameJSON(event.OnlineMeeting, cached.OnlineMeetingJSON, "{}")
+}
+
+func calendarCompactJSON(raw, empty string) string {
+	var buffer bytes.Buffer
+	if strings.TrimSpace(raw) == "" || json.Compact(&buffer, []byte(raw)) != nil || buffer.String() == "null" {
+		return empty
+	}
+	return buffer.String()
 }

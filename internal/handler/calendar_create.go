@@ -112,7 +112,7 @@ func parseCalendarEventDraft(r *http.Request) (calendar.EventDraft, error) {
 		return calendar.EventDraft{}, fmt.Errorf("invalid event form")
 	}
 	allowed := map[string]bool{"request_id": true, "source_id": true, "summary": true, "description": true, "location": true, "timezone": true, "all_day": true, "start_date": true, "end_date": true, "start_time": true, "end_time": true,
-		"repeat_frequency": true, "repeat_interval": true, "repeat_end": true, "repeat_until": true, "repeat_count": true, "guests": true, "description_html": true, "teams_meeting": true, "teams_draft_id": true, "google_meet_meeting": true, "google_meet_draft_id": true, "reset_series_dates": true, "remove_teams_details": true, "reminder": true, "show_as": true}
+		"repeat_frequency": true, "repeat_interval": true, "repeat_end": true, "repeat_until": true, "repeat_count": true, "guests": true, "description_html": true, "teams_meeting": true, "teams_draft_id": true, "google_meet_meeting": true, "google_meet_draft_id": true, "reset_series_dates": true, "remove_teams_details": true, "reminder": true, "show_as": true, "private": true}
 	for name, values := range r.PostForm {
 		if !allowed[name] || len(values) != 1 {
 			return calendar.EventDraft{}, fmt.Errorf("this form contains unsupported or duplicate event fields")
@@ -153,6 +153,16 @@ func parseCalendarEventDraft(r *http.Request) (calendar.EventDraft, error) {
 			return draft, fmt.Errorf("choose whether the event shows you as busy or free")
 		}
 		draft.ShowAs = value
+	}
+	if r.PostForm.Has("private") {
+		switch r.PostForm.Get("private") {
+		case "true":
+			draft.PrivateSet, draft.Private = true, true
+		case "false":
+			draft.PrivateSet = true
+		default:
+			return draft, fmt.Errorf("choose whether the event is private")
+		}
 	}
 	if value := r.PostForm.Get("reset_series_dates"); value != "" && value != "true" {
 		return draft, fmt.Errorf("invalid series confirmation")

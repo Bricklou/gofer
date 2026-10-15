@@ -58,6 +58,7 @@ CREATE TABLE IF NOT EXISTS calendar_events (
     online_meeting_json TEXT NOT NULL DEFAULT '{}' CHECK (json_valid(online_meeting_json)),
     reminder_minutes INTEGER NOT NULL DEFAULT -1 CHECK (reminder_minutes >= -1),
     show_as TEXT NOT NULL DEFAULT '' CHECK (show_as IN ('', 'busy', 'free', 'tentative', 'oof', 'working_elsewhere')),
+    is_private INTEGER NOT NULL DEFAULT 0 CHECK (is_private IN (0, 1)),
     html_link TEXT NOT NULL DEFAULT '',
     provider_created_at DATETIME,
     provider_updated_at DATETIME,

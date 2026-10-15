@@ -74,6 +74,7 @@ func calendarEventDetails(event storage.CalendarEvent) views.CalendarEventDetail
 	return views.CalendarEventDetails{
 		Reminder:        reminder,
 		ShowAs:          calendarShowAsDetail(event.ShowAs),
+		Private:         event.Private,
 		Event:           calendarViewEvent(event),
 		Description:     calendarDescriptionText(event.Description),
 		DescriptionHTML: calendar.DescriptionHTML(event.Description),

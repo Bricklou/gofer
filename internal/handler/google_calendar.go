@@ -72,7 +72,10 @@ type googleCalendarEvent struct {
 	HangoutLink string `json:"hangoutLink"`
 	// Transparency is "transparent" for an event that leaves the time free.
 	Transparency string `json:"transparency"`
-	Reminders    struct {
+	// Visibility is "private" or "confidential" for an event whose details
+	// people who share the calendar can't see.
+	Visibility string `json:"visibility"`
+	Reminders  struct {
 		UseDefault bool                     `json:"useDefault"`
 		Overrides  []googleCalendarReminder `json:"overrides"`
 	} `json:"reminders"`
@@ -296,6 +299,7 @@ func normalizeGoogleCalendarEvent(remote googleCalendarEvent) (calendar.RemoteEv
 	if remote.Transparency == "transparent" {
 		event.ShowAs = "free"
 	}
+	event.Private = remote.Visibility == "private" || remote.Visibility == "confidential"
 
 	var err error
 	event.ProviderCreatedAt, err = parseGoogleCalendarTimestamp(remote.Created)
@@ -624,4 +628,11 @@ func googleCalendarTransparency(showAs string) string {
 		return "transparent"
 	}
 	return "opaque"
+}
+
+func googleCalendarVisibility(private bool) string {
+	if private {
+		return "private"
+	}
+	return "default"
 }

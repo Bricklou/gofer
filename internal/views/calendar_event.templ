@@ -120,6 +120,11 @@ templ CalendarEventDialog(details CalendarEventDetails, location *time.Location)
 						<p><span class="sr-only">Show as: </span>{ details.ShowAs }</p>
 					}
 				}
+				if details.Private {
+					@calendarDialogRow(icon.Lock(icon.Props{Class: "size-4"}), "pt-0.5") {
+						<p>Private</p>
+					}
+				}
 				if details.Reminder != "" {
 					@calendarDialogRow(icon.Bell(icon.Props{Class: "size-4"}), "pt-0.5") {
 						<p><span class="sr-only">Reminder: </span>{ details.Reminder }</p>

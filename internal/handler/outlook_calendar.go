@@ -310,6 +310,7 @@ func normalizeOutlookCalendarEvent(remote outlookCalendarEvent) (calendar.Remote
 		event.ReminderMinutes = &minutes
 	}
 	event.ShowAs = outlookCalendarShowAs(remote.ShowAs)
+	event.Private = remote.Sensitivity == "private" || remote.Sensitivity == "confidential"
 	if event.Description == "" && remote.Body.ContentType == "" {
 		event.Description = strings.TrimSpace(remote.BodyPreview)
 	}
@@ -495,4 +496,11 @@ func outlookCalendarShowAsValue(showAs string) string {
 		return "workingElsewhere"
 	}
 	return showAs
+}
+
+func outlookCalendarSensitivity(private bool) string {
+	if private {
+		return "private"
+	}
+	return "normal"
 }

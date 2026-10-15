@@ -333,6 +333,9 @@ func updateCalDAVCalendarOccurrence(ctx context.Context, source storage.Calendar
 		if draft.ShowAs != "" && !calendarSameShowAs(draft.ShowAs, existing.ShowAs) {
 			calDAVSetShowAs(override, draft.ShowAs)
 		}
+		if draft.PrivateSet && draft.Private != existing.Private {
+			calDAVSetPrivate(override, draft.Private)
+		}
 		override.Props.SetDateTime("DTSTAMP", time.Now().UTC())
 		override.Props.SetDateTime("LAST-MODIFIED", time.Now().UTC())
 	}
