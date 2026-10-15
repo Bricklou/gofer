@@ -2476,6 +2476,16 @@ body.mail-list-column-resizing {
   border-bottom-right-radius: 0;
 }
 
+/* Events take the theme's corners: as rounded as before, and square in a
+   theme without them, such as Minimal. */
+:is([data-calendar-month-event], [data-calendar-week-all-day], [data-calendar-week-event], [data-calendar-day-overflow]) {
+  border-radius: min(0.25rem, var(--radius));
+}
+
+[data-calendar-agenda-event] {
+  border-radius: calc(var(--radius) + min(var(--radius), 4px));
+}
+
 /* Give calendar events a distinct surface in both light themes. */
 :root:not(.dark) :is([data-calendar-month-event], [data-calendar-week-all-day], [data-calendar-week-event]) {
   background-color: color-mix(in srgb, var(--color-foreground) 14%, var(--color-background));
@@ -6297,7 +6307,7 @@ html:not([data-theme="express"]) [data-mode-dark-tip] {
   max-width: 16rem;
   padding: 0.375rem 0.625rem;
   border: 1px solid var(--border);
-  border-radius: 0.5rem;
+  border-radius: min(0.5rem, var(--radius));
   background: var(--card);
   color: var(--card-foreground);
   box-shadow: 0 6px 16px rgb(0 0 0 / 0.18);
@@ -6337,7 +6347,7 @@ html:not([data-theme="express"]) [data-mode-dark-tip] {
   right: 2px;
   z-index: 30;
   border: 2px dashed var(--primary);
-  border-radius: 0.25rem;
+  border-radius: min(0.25rem, var(--radius));
   background: color-mix(in srgb, var(--primary) 10%, transparent);
   pointer-events: none;
   transition: top 90ms ease-out, height 90ms ease-out;
