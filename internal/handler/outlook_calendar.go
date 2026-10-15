@@ -43,6 +43,7 @@ type outlookCalendarEvent struct {
 	Sensitivity           string                    `json:"sensitivity"`
 	ShowAs                string                    `json:"showAs"`
 	IsReminderOn          *bool                     `json:"isReminderOn"`
+	ReminderMinutes       *int                      `json:"reminderMinutesBeforeStart"`
 	ID                    string                    `json:"id"`
 	ICalUID               string                    `json:"iCalUId"`
 	ChangeKey             string                    `json:"changeKey"`
@@ -226,7 +227,7 @@ func listOutlookCalendarEventsWithFetch(ctx context.Context, remoteCalendarID st
 		"id", "iCalUId", "changeKey", "subject", "bodyPreview", "body", "start", "end",
 		"isAllDay", "isCancelled", "webLink", "createdDateTime", "lastModifiedDateTime",
 		"organizer", "attendees", "location", "onlineMeetingUrl", "onlineMeetingProvider",
-		"onlineMeeting", "isOnlineMeeting", "seriesMasterId", "recurrence", "isOrganizer", "responseStatus", "sensitivity", "showAs", "isReminderOn",
+		"onlineMeeting", "isOnlineMeeting", "seriesMasterId", "recurrence", "isOrganizer", "responseStatus", "sensitivity", "showAs", "isReminderOn", "reminderMinutesBeforeStart",
 	}, ","))
 
 	collection := outlookGraphBaseURL + "/me/calendars/" + url.PathEscape(remoteCalendarID) + "/calendarView"
@@ -303,6 +304,10 @@ func normalizeOutlookCalendarEvent(remote outlookCalendarEvent) (calendar.Remote
 		EndTimeZone:    strings.TrimSpace(remote.End.TimeZone),
 		HTMLLink:       strings.TrimSpace(remote.WebLink),
 		Deleted:        remote.IsCancelled,
+	}
+	if remote.IsReminderOn != nil && *remote.IsReminderOn && remote.ReminderMinutes != nil && *remote.ReminderMinutes >= 0 {
+		minutes := *remote.ReminderMinutes
+		event.ReminderMinutes = &minutes
 	}
 	if event.Description == "" && remote.Body.ContentType == "" {
 		event.Description = strings.TrimSpace(remote.BodyPreview)
@@ -462,4 +467,12 @@ func (h *Handler) discoverOutlookCalendarSources(ctx context.Context, userID, ac
 		return 0, fmt.Errorf("store discovered Microsoft calendars: %w", err)
 	}
 	return len(sources), nil
+}
+
+// outlookCalendarReminderPayload sets the event's one reminder, or turns it off.
+func outlookCalendarReminderPayload(payload map[string]any, minutes *int) {
+	payload["isReminderOn"] = minutes != nil
+	if minutes != nil {
+		payload["reminderMinutesBeforeStart"] = *minutes
+	}
 }

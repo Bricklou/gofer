@@ -104,6 +104,7 @@ type Handler struct {
 	contactSyncQueue           chan struct{}
 	userContactWorkers         *userContactWorkers
 	calendarWorkerOnce         sync.Once
+	calendarReminders          calendarReminderState
 	calendarSyncMu             sync.Mutex
 	calendarSyncRunning        map[string]*calendarSyncRun
 	calendarUserSyncRunning    map[string]*calendarSyncRun

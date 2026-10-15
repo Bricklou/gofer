@@ -121,6 +121,9 @@ func createGoogleCalendarEvent(ctx context.Context, token, remoteCalendarID stri
 	if len(draft.Guests) > 0 {
 		payload["attendees"] = calendarMeetingGoogleGuests(draft, nil)
 	}
+	if draft.ReminderSet {
+		payload["reminders"] = googleCalendarReminderPayload(draft.ReminderMinutes, nil)
+	}
 	endpoint := googleCalendarAPIBaseURL + "/calendars/" + url.PathEscape(remoteCalendarID) + "/events"
 	var remote struct {
 		googleCalendarEvent
@@ -178,7 +181,11 @@ func createGoogleCalendarEvent(ctx context.Context, token, remoteCalendarID stri
 	if len(draft.GoogleMeetConference) > 0 && !calendarGoogleMeetIdentityMatches(draft.GoogleMeetConference, calendarGoogleMeetingJSON(remote.googleCalendarEvent)) {
 		return calendar.RemoteEvent{}, fmt.Errorf("Google did not retain the prepared Meet link")
 	}
-	return normalizeGoogleCalendarEvent(remote.googleCalendarEvent)
+	event, err := normalizeGoogleCalendarEvent(remote.googleCalendarEvent)
+	if err == nil && remote.Reminders.UseDefault {
+		event.ReminderMinutes = googleCalendarDefaultReminder(ctx, token, remoteCalendarID)
+	}
+	return event, err
 }
 
 func createOutlookCalendarEvent(ctx context.Context, token, remoteCalendarID string, draft calendar.EventDraft) (calendar.RemoteEvent, error) {
@@ -217,6 +224,9 @@ func createOutlookCalendarEvent(ctx context.Context, token, remoteCalendarID str
 	if len(draft.Guests) > 0 {
 		payload["attendees"] = calendarMeetingOutlookGuests(draft, nil)
 		payload["responseRequested"] = true
+	}
+	if draft.ReminderSet {
+		outlookCalendarReminderPayload(payload, draft.ReminderMinutes)
 	}
 	var remote outlookCalendarEvent
 	endpoint := outlookGraphBaseURL + "/me/calendars/" + url.PathEscape(remoteCalendarID) + "/events"
@@ -340,6 +350,9 @@ func calendarCreateICS(draft calendar.EventDraft) (string, error) {
 	}
 	if draft.Recurrence != nil {
 		event.Props.Set(&ical.Prop{Name: "RRULE", Value: calendarRecurrenceRule(draft)})
+	}
+	if draft.ReminderSet {
+		calDAVSetReminder(event.Component, draft.ReminderMinutes)
 	}
 	cal.Children = append(cal.Children, event.Component)
 	var output bytes.Buffer

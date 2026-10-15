@@ -4483,6 +4483,12 @@ document.addEventListener("DOMContentLoaded", function () {
       scheduleCalendarCacheRefresh()
     })
 
+    source.addEventListener("calendar-reminder", function (e) {
+      var data
+      try { data = JSON.parse(e.data) } catch (_) { return }
+      if (data && data.title) showCalendarReminder(data)
+    })
+
     source.addEventListener("new-mail", function (e) {
       var data
       try { data = JSON.parse(e.data) } catch (_) { return }
@@ -5075,6 +5081,27 @@ document.addEventListener("DOMContentLoaded", function () {
         }).catch(function () {})
       })
     })
+  }
+
+  // An event reminder shows in the open page, and as a browser notification
+  // when that's the chosen method (push notifications come from the server).
+  function showCalendarReminder(data) {
+    showGoferToast({title: String(data.title), description: String(data.body || ""), variant: "info", icon: "info", duration: 15000})
+    if (!notificationsEnabled() || _notificationActiveMethod !== "browser_tab") return
+    if (!browserNotificationsSupported() || Notification.permission !== "granted") return
+    var notification = new Notification(String(data.title), {
+      body: String(data.body || ""),
+      tag: String(data.tag || "gofer-calendar-reminder"),
+      icon: "/assets/logo.png",
+      badge: "/assets/logo.png",
+      requireInteraction: true,
+      data: { url: String(data.url || "/calendar") },
+    })
+    notification.onclick = function () {
+      window.focus()
+      if (notification.data && notification.data.url && notification.data.url.charAt(0) === "/") window.location.href = notification.data.url
+      notification.close()
+    }
   }
 
   function showBrowserTabNewMailNotification(data) {

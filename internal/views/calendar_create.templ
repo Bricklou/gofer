@@ -134,6 +134,26 @@ templ CalendarCreateDialog(data CalendarCreateData) {
 								@CalendarRecurrenceFields(data)
 							}
 						}
+						@calendarDialogRow(icon.Bell(icon.Props{Class: "size-4"}), "pt-2.5") {
+							{{ reminder, choices := calendarReminderChoices(data) }}
+							@label.Label(label.Props{For: "calendar-create-reminder", Class: "sr-only"}) {
+								Reminder
+							}
+							@selectbox.SelectBox() {
+								@selectbox.Trigger(selectbox.TriggerProps{ID: "calendar-create-reminder", Name: "reminder", DisableClear: true, Attributes: templ.Attributes{"value": reminder}}) {
+									@selectbox.Value(selectbox.ValueProps{Placeholder: "Reminder"})
+								}
+								@selectbox.Content(selectbox.ContentProps{NoSearch: true, Class: "mobile-sheet"}) {
+									@selectbox.Group() {
+										for _, choice := range choices {
+											@selectbox.Item(selectbox.ItemProps{Value: choice[0], Selected: choice[0] == reminder}) {
+												{ choice[1] }
+											}
+										}
+									}
+								}
+							}
+						}
 						@calendarDialogRow(icon.MapPin(icon.Props{Class: "size-4"}), "pt-2.5") {
 							@label.Label(label.Props{For: "calendar-create-location", Class: "sr-only"}) {
 								Location

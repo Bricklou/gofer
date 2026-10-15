@@ -303,6 +303,9 @@ func (h *Handler) updateCalDAVMeeting(ctx context.Context, source storage.Calend
 	}
 	calendarUpdateDescriptionProps(props, edited.Events()[0].Props, existing.Description, draft)
 	delete(props, "DURATION")
+	if draft.ReminderSet && !calendarSameReminder(draft.ReminderMinutes, existing.ReminderMinutes) {
+		calDAVSetReminder(master, draft.ReminderMinutes)
+	}
 	if draft.Recurrence != nil {
 		props.Set(edited.Events()[0].Props.Get("RRULE"))
 		// Replace only the time zone the repeating meeting now uses.

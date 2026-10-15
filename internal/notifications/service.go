@@ -59,8 +59,9 @@ func (s *Service) Start(ctx context.Context) {
 	}
 
 	s.workers.Add(1)
-	// Only new mail, so other events cannot fill the queue ahead of it.
-	events := s.events.SubscribeFor(mail.SubscribeOptions{All: true, Types: []mail.EventType{mail.EventNewMail}})
+	// Only new mail and event reminders, so other events cannot fill the queue
+	// ahead of them.
+	events := s.events.SubscribeFor(mail.SubscribeOptions{All: true, Types: []mail.EventType{mail.EventNewMail, mail.EventCalendarReminder}})
 	go func() {
 		defer s.workers.Done()
 		defer events.Close()
@@ -70,7 +71,11 @@ func (s *Service) Start(ctx context.Context) {
 				return
 			case <-events.Ready():
 				for _, event := range events.Take() {
-					s.handleNewMail(ctx, event)
+					if event.Type == mail.EventCalendarReminder {
+						s.handleCalendarReminder(ctx, event)
+					} else {
+						s.handleNewMail(ctx, event)
+					}
 				}
 			}
 		}
@@ -126,8 +131,53 @@ func (s *Service) handleNewMail(ctx context.Context, event mail.Event) {
 	}
 	mode := notificationMode(settings["notification_mode"])
 	if mode == "web_push" || mode == "auto" {
-		s.sendWebPush(ctx, userID, event, title, message)
+		payload := map[string]any{
+			"title":     title,
+			"body":      message,
+			"tag":       "gofer-new-mail-" + event.AccountID + "-" + event.FolderID,
+			"folder_id": event.FolderID,
+			"url":       "/folder/" + event.FolderID,
+		}
+		if icon := newMailNotificationIcon(event.Payload); icon != "" {
+			payload["icon"] = icon
+		}
+		s.sendWebPush(ctx, userID, event.AccountID, payload, "gofer-new-mail", webpush.UrgencyNormal)
 	}
+}
+
+// handleCalendarReminder pushes a due event reminder, with the owner's
+// notification settings for new mail.
+func (s *Service) handleCalendarReminder(ctx context.Context, event mail.Event) {
+	if event.UserID == "" || event.AccountID == "" {
+		return
+	}
+	var settings map[string]string
+	var err error
+	if s.userStorage != nil {
+		err = s.userStorage.WithAccount(ctx, event.AccountID, func(db *storage.DB, owner string) error {
+			if owner != event.UserID {
+				return storage.ErrAccountRoute
+			}
+			settings = db.GetUISettings(ctx, owner)
+			return nil
+		})
+	} else {
+		var owner string
+		if owner, err = s.db.GetAccountUserID(ctx, event.AccountID); err == nil && owner != event.UserID {
+			err = storage.ErrAccountRoute
+		}
+		if err == nil {
+			settings = s.db.GetUISettings(ctx, event.UserID)
+		}
+	}
+	if err != nil || settings["desktop_notifications"] != "true" {
+		return
+	}
+	if mode := notificationMode(settings["notification_mode"]); mode != "web_push" && mode != "auto" {
+		return
+	}
+	payload := map[string]any{"title": stringPayload(event.Payload, "title"), "body": stringPayload(event.Payload, "body"), "tag": stringPayload(event.Payload, "tag"), "url": stringPayload(event.Payload, "url")}
+	s.sendWebPush(ctx, event.UserID, event.AccountID, payload, "gofer-calendar-reminder", webpush.UrgencyHigh)
 }
 
 func notificationMode(mode string) string {
@@ -139,7 +189,7 @@ func notificationMode(mode string) string {
 	}
 }
 
-func (s *Service) sendWebPush(ctx context.Context, userID string, event mail.Event, title, message string) {
+func (s *Service) sendWebPush(ctx context.Context, userID, accountID string, payloadData map[string]any, topic string, urgency webpush.Urgency) {
 	if s.vapidPublicKey == "" || s.vapidPrivateKey == "" {
 		return
 	}
@@ -152,17 +202,6 @@ func (s *Service) sendWebPush(ctx context.Context, userID string, event mail.Eve
 		return
 	}
 
-	payloadData := map[string]any{
-		"title":     title,
-		"body":      message,
-		"tag":       "gofer-new-mail-" + event.AccountID + "-" + event.FolderID,
-		"folder_id": event.FolderID,
-		"url":       "/folder/" + event.FolderID,
-	}
-	if icon := newMailNotificationIcon(event.Payload); icon != "" {
-		payloadData["icon"] = icon
-	}
-
 	payload, err := json.Marshal(payloadData)
 	if err != nil {
 		return
@@ -170,7 +209,7 @@ func (s *Service) sendWebPush(ctx context.Context, userID string, event mail.Eve
 
 	for _, sub := range subs {
 		if s.userStorage != nil {
-			if err := s.userStorage.WithAccountForUser(ctx, userID, event.AccountID, func(*storage.DB) error { return nil }); err != nil {
+			if err := s.userStorage.WithAccountForUser(ctx, userID, accountID, func(*storage.DB) error { return nil }); err != nil {
 				return
 			}
 		}
@@ -188,8 +227,8 @@ func (s *Service) sendWebPush(ctx context.Context, userID string, event mail.Eve
 			VAPIDPublicKey:  s.vapidPublicKey,
 			VAPIDPrivateKey: s.vapidPrivateKey,
 			TTL:             60,
-			Topic:           "gofer-new-mail",
-			Urgency:         webpush.UrgencyNormal,
+			Topic:           topic,
+			Urgency:         urgency,
 		})
 		cancel()
 		if resp != nil {
@@ -197,13 +236,13 @@ func (s *Service) sendWebPush(ctx context.Context, userID string, event mail.Eve
 		}
 		if err != nil {
 			log.Printf("notifications: web push failed: %v", err)
-			_ = s.recordDelivery(ctx, userID, event.AccountID, sub, false, err.Error())
+			_ = s.recordDelivery(ctx, userID, accountID, sub, false, err.Error())
 			continue
 		}
 		if resp != nil && (resp.StatusCode == http.StatusGone || resp.StatusCode == http.StatusNotFound) {
-			_ = s.recordDelivery(ctx, userID, event.AccountID, sub, true, "")
+			_ = s.recordDelivery(ctx, userID, accountID, sub, true, "")
 		} else if resp != nil && resp.StatusCode >= 400 {
-			_ = s.recordDelivery(ctx, userID, event.AccountID, sub, false, resp.Status)
+			_ = s.recordDelivery(ctx, userID, accountID, sub, false, resp.Status)
 		}
 	}
 }

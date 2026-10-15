@@ -67,7 +67,12 @@ func (h *Handler) handleCalendarEvent(w http.ResponseWriter, r *http.Request) {
 }
 
 func calendarEventDetails(event storage.CalendarEvent) views.CalendarEventDetails {
+	reminder := ""
+	if event.ReminderMinutes != nil {
+		reminder = views.CalendarReminderLabel(*event.ReminderMinutes)
+	}
 	return views.CalendarEventDetails{
+		Reminder:        reminder,
 		Event:           calendarViewEvent(event),
 		Description:     calendarDescriptionText(event.Description),
 		DescriptionHTML: calendar.DescriptionHTML(event.Description),

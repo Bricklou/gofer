@@ -10,6 +10,7 @@ import (
 
 type CalendarEventDetails struct {
 	Event                 CalendarEvent
+	Reminder              string // e.g. "15 minutes before"; empty when it has none
 	Description           string
 	DescriptionHTML       string
 	JoinURL               string

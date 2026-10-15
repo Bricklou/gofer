@@ -206,6 +206,10 @@ func (db *DB) publishUserCalendarEvent(ctx context.Context, snapshot *UserCalend
 		}
 		row := expected[existing.ID]
 		row.event = calendarPublicationEditable(row.event, event, recurrence, conversion)
+		row.event.ReminderMinutes = nil
+		if minutes := calendarReminderValue(event.ReminderMinutes); minutes >= 0 {
+			row.event.ReminderMinutes = &minutes
+		}
 		if online {
 			row.event.ICalUID, row.event.OrganizerName, row.event.OrganizerEmail = event.ICalUID, event.OrganizerName, event.OrganizerEmail
 			row.event.ResponseStatus, row.event.AttendeesJSON, row.event.OnlineMeetingJSON = event.ResponseStatus, event.AttendeesJSON, event.OnlineMeetingJSON

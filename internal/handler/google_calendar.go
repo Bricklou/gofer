@@ -39,6 +39,13 @@ type googleCalendarEventsResponse struct {
 	Items         []googleCalendarEvent `json:"items"`
 	NextPageToken string                `json:"nextPageToken"`
 	NextSyncToken string                `json:"nextSyncToken"`
+	// The calendar's own reminders, for events that use them.
+	DefaultReminders []googleCalendarReminder `json:"defaultReminders"`
+}
+
+type googleCalendarReminder struct {
+	Method  string `json:"method"`
+	Minutes int    `json:"minutes"`
 }
 
 type googleCalendarEvent struct {
@@ -63,6 +70,10 @@ type googleCalendarEvent struct {
 		Private map[string]string `json:"private"`
 	} `json:"extendedProperties"`
 	HangoutLink string `json:"hangoutLink"`
+	Reminders   struct {
+		UseDefault bool                     `json:"useDefault"`
+		Overrides  []googleCalendarReminder `json:"overrides"`
+	} `json:"reminders"`
 }
 
 type googleCalendarPerson struct {
@@ -207,6 +218,9 @@ func listGoogleCalendarEventsWithFetch(ctx context.Context, remoteCalendarID str
 			if err != nil {
 				return calendar.EventPage{}, err
 			}
+			if remote.Reminders.UseDefault {
+				normalized.ReminderMinutes = googleCalendarEarliestReminder(page.DefaultReminders)
+			}
 			if strings.TrimSpace(normalized.RemoteID) != "" {
 				events = append(events, normalized)
 				if len(events) > calendarSyncMaxEvents {
@@ -273,6 +287,9 @@ func normalizeGoogleCalendarEvent(remote googleCalendarEvent) (calendar.RemoteEv
 		event.ResponseStatus = "organizer"
 	}
 	event.OnlineMeeting = calendarGoogleMeetingJSON(remote)
+	if !remote.Reminders.UseDefault {
+		event.ReminderMinutes = googleCalendarEarliestReminder(remote.Reminders.Overrides)
+	}
 
 	var err error
 	event.ProviderCreatedAt, err = parseGoogleCalendarTimestamp(remote.Created)
@@ -549,4 +566,47 @@ func (h *Handler) handleDiscoverAccountCalendars(w http.ResponseWriter, r *http.
 	if err := views.CalendarSyncSettingsResult(*data, statusMessage, statusError).Render(ctx, w); err != nil {
 		http.Error(w, "failed to render calendar discovery result", http.StatusInternalServerError)
 	}
+}
+
+// googleCalendarEarliestReminder returns the earliest pop-up reminder; email
+// reminders are left to Google.
+func googleCalendarEarliestReminder(reminders []googleCalendarReminder) *int {
+	var earliest *int
+	for _, reminder := range reminders {
+		if reminder.Method != "popup" || reminder.Minutes < 0 {
+			continue
+		}
+		if earliest == nil || reminder.Minutes > *earliest {
+			minutes := reminder.Minutes
+			earliest = &minutes
+		}
+	}
+	return earliest
+}
+
+// googleCalendarDefaultReminder reads a calendar's own reminders, for an
+// event read on its own that uses them.
+func googleCalendarDefaultReminder(ctx context.Context, token, calendarID string) *int {
+	var entry struct {
+		DefaultReminders []googleCalendarReminder `json:"defaultReminders"`
+	}
+	if err := calendarCreateJSON(ctx, http.MethodGet, googleCalendarAPIBaseURL+"/users/me/calendarList/"+url.PathEscape(calendarID), token, nil, &entry); err != nil {
+		return nil
+	}
+	return googleCalendarEarliestReminder(entry.DefaultReminders)
+}
+
+// googleCalendarReminderPayload sets one pop-up reminder, or none, keeping the
+// event's email reminders.
+func googleCalendarReminderPayload(minutes *int, current []googleCalendarReminder) map[string]any {
+	overrides := []googleCalendarReminder{}
+	for _, reminder := range current {
+		if reminder.Method == "email" {
+			overrides = append(overrides, reminder)
+		}
+	}
+	if minutes != nil {
+		overrides = append(overrides, googleCalendarReminder{Method: "popup", Minutes: *minutes})
+	}
+	return map[string]any{"useDefault": false, "overrides": overrides}
 }

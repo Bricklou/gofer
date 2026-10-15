@@ -68,6 +68,9 @@ type RemoteEvent struct {
 	OnlineMeeting json.RawMessage
 	HTMLLink      string
 	Deleted       bool
+	// ReminderMinutes is the event's earliest pop-up reminder, in minutes
+	// before it starts; nil when it has none.
+	ReminderMinutes *int
 
 	ProviderCreatedAt *time.Time
 	ProviderUpdatedAt *time.Time
@@ -112,7 +115,12 @@ type EventDraft struct {
 	GoogleMeetMeetingSet bool            `json:"-"`
 	// ResetSeriesDates confirms that changing a series' time or repeat rule
 	// resets the dates changed one by one (CalDAV meetings).
-	ResetSeriesDates     bool            `json:"-"`
+	ResetSeriesDates bool `json:"-"`
+	// ReminderSet says the reminder was chosen; otherwise a new event gets the
+	// calendar's default and an edit leaves it as it is. ReminderMinutes is
+	// minutes before the start, or nil for no reminder.
+	ReminderSet          bool            `json:",omitempty"`
+	ReminderMinutes      *int            `json:",omitempty"`
 	GoogleMeetDraftID    string          `json:",omitempty"`
 	GoogleMeetConference json.RawMessage `json:"-"`
 	Location             string

@@ -115,6 +115,11 @@ templ CalendarEventDialog(details CalendarEventDetails, location *time.Location)
 						</div>
 					}
 				}
+				if details.Reminder != "" {
+					@calendarDialogRow(icon.Bell(icon.Props{Class: "size-4"}), "pt-0.5") {
+						<p><span class="sr-only">Reminder: </span>{ details.Reminder }</p>
+					}
+				}
 				if event.Location != "" {
 					@calendarDialogRow(icon.MapPin(icon.Props{Class: "size-4"}), "pt-0.5") {
 						<p class="sr-only">Location</p>

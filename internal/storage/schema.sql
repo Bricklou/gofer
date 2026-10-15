@@ -1370,6 +1370,7 @@ CREATE TABLE IF NOT EXISTS calendar_events (
     attendees_json TEXT NOT NULL DEFAULT '[]' CHECK (json_valid(attendees_json)),
     response_status TEXT NOT NULL DEFAULT '',
     online_meeting_json TEXT NOT NULL DEFAULT '{}' CHECK (json_valid(online_meeting_json)),
+    reminder_minutes INTEGER NOT NULL DEFAULT -1 CHECK (reminder_minutes >= -1),
     html_link TEXT NOT NULL DEFAULT '',
     provider_created_at DATETIME,
     provider_updated_at DATETIME,
@@ -1639,4 +1640,4 @@ CREATE TABLE IF NOT EXISTS calendar_teams_drafts (
 );
 
 -- Schema version marker for fresh installs
-INSERT OR REPLACE INTO schema_version (version) VALUES (108);
+INSERT OR REPLACE INTO schema_version (version) VALUES (109);

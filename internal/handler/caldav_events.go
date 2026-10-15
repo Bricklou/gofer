@@ -339,7 +339,47 @@ func normalizeCalDAVEvent(component ical.Event, href, etag string, location *tim
 		at = at.UTC()
 		*field.value = &at
 	}
+	if event.StartAt != nil {
+		event.ReminderMinutes = calDAVEarliestReminder(component.Component, *event.StartAt)
+	}
 	return event, nil
+}
+
+// calDAVEarliestReminder returns the earliest display or sound alarm set
+// before the event starts. Email alarms are left to the server.
+func calDAVEarliestReminder(component *ical.Component, start time.Time) *int {
+	var earliest *int
+	for _, child := range component.Children {
+		if child.Name != ical.CompAlarm {
+			continue
+		}
+		action, _ := child.Props.Text("ACTION")
+		if action = strings.ToUpper(strings.TrimSpace(action)); action != "DISPLAY" && action != "AUDIO" {
+			continue
+		}
+		trigger := child.Props.Get("TRIGGER")
+		if trigger == nil {
+			continue
+		}
+		minutes := -1
+		if trigger.ValueType() == ical.ValueDateTime {
+			at, err := trigger.DateTime(time.UTC)
+			if err != nil {
+				continue
+			}
+			minutes = int(start.Sub(at).Minutes())
+		} else if !strings.EqualFold(trigger.Params.Get("RELATED"), "END") {
+			before, err := trigger.Duration()
+			if err != nil || before > 0 {
+				continue
+			}
+			minutes = int((-before).Minutes())
+		}
+		if minutes >= 0 && (earliest == nil || minutes > *earliest) {
+			earliest = &minutes
+		}
+	}
+	return earliest
 }
 
 func calDAVPersonEmail(value string) string {
@@ -372,4 +412,48 @@ func calDAVCalendarTimeZone(data string) string {
 		}
 	}
 	return ""
+}
+
+// calDAVSetReminder replaces the event's display and sound alarms, the ones
+// read as its reminder, with one display alarm, or removes them (minutes nil).
+// Email alarms and alarms relative to the event's end are kept.
+func calDAVSetReminder(component *ical.Component, minutes *int) {
+	children := component.Children[:0]
+	for _, child := range component.Children {
+		if child.Name == ical.CompAlarm {
+			action, _ := child.Props.Text("ACTION")
+			action = strings.ToUpper(strings.TrimSpace(action))
+			trigger := child.Props.Get("TRIGGER")
+			if (action == "DISPLAY" || action == "AUDIO") && trigger != nil && !strings.EqualFold(trigger.Params.Get("RELATED"), "END") {
+				continue
+			}
+		}
+		children = append(children, child)
+	}
+	component.Children = children
+	if minutes == nil {
+		return
+	}
+	alarm := ical.NewComponent(ical.CompAlarm)
+	alarm.Props.SetText("ACTION", "DISPLAY")
+	alarm.Props.SetText("DESCRIPTION", "Reminder")
+	trigger := ical.NewProp("TRIGGER")
+	trigger.Value = calDAVReminderTrigger(*minutes)
+	alarm.Props.Set(trigger)
+	component.Children = append(component.Children, alarm)
+}
+
+func calDAVReminderTrigger(minutes int) string {
+	if minutes == 0 {
+		return "PT0S"
+	}
+	if minutes%1440 == 0 {
+		return fmt.Sprintf("-P%dD", minutes/1440)
+	}
+	return fmt.Sprintf("-PT%dM", minutes)
+}
+
+// calendarSameReminder reports whether a chosen reminder is the one saved.
+func calendarSameReminder(a, b *int) bool {
+	return (a == nil) == (b == nil) && (a == nil || *a == *b)
 }

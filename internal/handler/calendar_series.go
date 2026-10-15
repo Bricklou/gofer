@@ -254,6 +254,9 @@ func readCalendarProviderSeriesWithCredentials(ctx context.Context, source stora
 		if err == nil {
 			event, err = calendarGoogleSeriesEvent(remote)
 		}
+		if err == nil && remote.Reminders.UseDefault {
+			event.ReminderMinutes = googleCalendarDefaultReminder(ctx, credentials.token, source.RemoteID)
+		}
 	case providers.ProviderOutlook:
 		var remote outlookCalendarUpdateEvent
 		err = calendarCreateJSON(ctx, http.MethodGet, outlookGraphBaseURL+"/me/calendars/"+url.PathEscape(source.RemoteID)+"/events/"+url.PathEscape(id), credentials.token, nil, &remote)

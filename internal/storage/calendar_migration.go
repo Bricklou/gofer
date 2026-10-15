@@ -56,6 +56,7 @@ CREATE TABLE IF NOT EXISTS calendar_events (
     recurrence_json TEXT NOT NULL DEFAULT '[]' CHECK (json_valid(recurrence_json)),
     attendees_json TEXT NOT NULL DEFAULT '[]' CHECK (json_valid(attendees_json)),
     online_meeting_json TEXT NOT NULL DEFAULT '{}' CHECK (json_valid(online_meeting_json)),
+    reminder_minutes INTEGER NOT NULL DEFAULT -1 CHECK (reminder_minutes >= -1),
     html_link TEXT NOT NULL DEFAULT '',
     provider_created_at DATETIME,
     provider_updated_at DATETIME,

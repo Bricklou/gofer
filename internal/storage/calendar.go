@@ -73,6 +73,9 @@ type CalendarEvent struct {
 	RecurrenceJSON    string
 	AttendeesJSON     string
 	OnlineMeetingJSON string
+	// ReminderMinutes is the event's reminder, in minutes before it starts;
+	// nil when it has none.
+	ReminderMinutes   *int
 	HTMLLink          string
 	ProviderCreatedAt *time.Time
 	ProviderUpdatedAt *time.Time
@@ -600,8 +603,8 @@ func replaceCalendarEventsTx(ctx context.Context, tx *sql.Tx, userID, sourceID s
 				status, summary, description, location, organizer_name, organizer_email,
 				all_day, start_date, end_date, start_at, end_at, start_timezone,
 				end_timezone, recurrence_json, attendees_json, online_meeting_json,
-				html_link, provider_created_at, provider_updated_at, is_deleted, response_status
-			) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+				html_link, provider_created_at, provider_updated_at, is_deleted, response_status, reminder_minutes
+			) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 			ON CONFLICT(source_id, remote_id) DO UPDATE SET
 				user_id = excluded.user_id,
 				ical_uid = excluded.ical_uid,
@@ -628,6 +631,7 @@ func replaceCalendarEventsTx(ctx context.Context, tx *sql.Tx, userID, sourceID s
 				provider_updated_at = excluded.provider_updated_at,
 				is_deleted = excluded.is_deleted,
 				response_status = excluded.response_status,
+				reminder_minutes = excluded.reminder_minutes,
 				updated_at = CURRENT_TIMESTAMP`,
 			eventID, userID, sourceID, remoteID,
 			strings.TrimSpace(event.ICalUID), strings.TrimSpace(event.SeriesRemoteID), strings.TrimSpace(event.ETag),
@@ -637,7 +641,7 @@ func replaceCalendarEventsTx(ctx context.Context, tx *sql.Tx, userID, sourceID s
 			strings.TrimSpace(event.StartTimeZone), strings.TrimSpace(event.EndTimeZone),
 			calendarJSON(event.RecurrenceJSON, "[]"), calendarJSON(event.AttendeesJSON, "[]"),
 			calendarJSON(event.OnlineMeetingJSON, "{}"), strings.TrimSpace(event.HTMLLink),
-			calendarEventTimeValue(event.ProviderCreatedAt), calendarEventTimeValue(event.ProviderUpdatedAt), calendarBoolInt(event.IsDeleted), event.ResponseStatus)
+			calendarEventTimeValue(event.ProviderCreatedAt), calendarEventTimeValue(event.ProviderUpdatedAt), calendarBoolInt(event.IsDeleted), event.ResponseStatus, calendarReminderValue(event.ReminderMinutes))
 		if err := calendarSyncOneRow(result, err); err != nil {
 			return fmt.Errorf("upsert calendar event %q: %w", remoteID, err)
 		}
@@ -700,7 +704,7 @@ const calendarEventColumns = `
 		       event.recurrence_json, event.attendees_json, event.online_meeting_json,
 		       event.html_link, event.provider_created_at, event.provider_updated_at,
 		       event.is_deleted, source.name, source.color, source.is_hidden, event.response_status,
-		       source.provider, account.email_address`
+		       source.provider, account.email_address, event.reminder_minutes`
 
 const calendarEventFrom = `
 		FROM calendar_events event
@@ -770,6 +774,7 @@ func scanCalendarEvent(row interface{ Scan(...any) error }) (CalendarEvent, erro
 	var startDate, endDate sql.NullString
 	var startAt, endAt sqliteNullTime
 	var providerCreatedAt, providerUpdatedAt sqliteNullTime
+	var reminder int
 	if err := row.Scan(
 		&event.ID, &event.UserID, &event.SourceID, &event.RemoteID,
 		&event.ICalUID, &event.SeriesRemoteID, &event.ETag, &event.Status,
@@ -779,9 +784,12 @@ func scanCalendarEvent(row interface{ Scan(...any) error }) (CalendarEvent, erro
 		&event.OnlineMeetingJSON, &event.HTMLLink, &providerCreatedAt, &providerUpdatedAt,
 		&isDeleted, &event.SourceName, &event.SourceColor, &sourceHidden,
 		&event.ResponseStatus,
-		&event.SourceProvider, &event.AccountEmail,
+		&event.SourceProvider, &event.AccountEmail, &reminder,
 	); err != nil {
 		return CalendarEvent{}, err
+	}
+	if reminder >= 0 {
+		event.ReminderMinutes = &reminder
 	}
 	event.AllDay = allDay == 1
 	event.IsDeleted = isDeleted == 1
@@ -841,4 +849,12 @@ func calendarBoolInt(value bool) int {
 		return 1
 	}
 	return 0
+}
+
+// calendarReminderValue stores a reminder, or -1 for none.
+func calendarReminderValue(minutes *int) int {
+	if minutes == nil || *minutes < 0 {
+		return -1
+	}
+	return *minutes
 }

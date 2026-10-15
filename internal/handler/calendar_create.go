@@ -8,6 +8,7 @@ import (
 	"net/http"
 	stdmail "net/mail"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 	"unicode/utf8"
@@ -111,7 +112,7 @@ func parseCalendarEventDraft(r *http.Request) (calendar.EventDraft, error) {
 		return calendar.EventDraft{}, fmt.Errorf("invalid event form")
 	}
 	allowed := map[string]bool{"request_id": true, "source_id": true, "summary": true, "description": true, "location": true, "timezone": true, "all_day": true, "start_date": true, "end_date": true, "start_time": true, "end_time": true,
-		"repeat_frequency": true, "repeat_interval": true, "repeat_end": true, "repeat_until": true, "repeat_count": true, "guests": true, "description_html": true, "teams_meeting": true, "teams_draft_id": true, "google_meet_meeting": true, "google_meet_draft_id": true, "reset_series_dates": true, "remove_teams_details": true}
+		"repeat_frequency": true, "repeat_interval": true, "repeat_end": true, "repeat_until": true, "repeat_count": true, "guests": true, "description_html": true, "teams_meeting": true, "teams_draft_id": true, "google_meet_meeting": true, "google_meet_draft_id": true, "reset_series_dates": true, "remove_teams_details": true, "reminder": true}
 	for name, values := range r.PostForm {
 		if !allowed[name] || len(values) != 1 {
 			return calendar.EventDraft{}, fmt.Errorf("this form contains unsupported or duplicate event fields")
@@ -131,6 +132,20 @@ func parseCalendarEventDraft(r *http.Request) (calendar.EventDraft, error) {
 			return draft, fmt.Errorf("invalid Teams draft")
 		}
 		draft.TeamsDraftID = id.String()
+	}
+	if r.PostForm.Has("reminder") {
+		// "default" leaves the calendar's own reminder; "none" removes it.
+		switch value := r.PostForm.Get("reminder"); value {
+		case "default":
+		case "none":
+			draft.ReminderSet = true
+		default:
+			minutes, err := strconv.Atoi(value)
+			if err != nil || minutes < 0 || minutes > calendarReminderMaxMinutes {
+				return draft, fmt.Errorf("choose a valid reminder")
+			}
+			draft.ReminderSet, draft.ReminderMinutes = true, &minutes
+		}
 	}
 	if value := r.PostForm.Get("reset_series_dates"); value != "" && value != "true" {
 		return draft, fmt.Errorf("invalid series confirmation")
@@ -523,3 +538,6 @@ func (h *Handler) handleCreateCalendarEvent(w http.ResponseWriter, r *http.Reque
 	w.WriteHeader(http.StatusCreated)
 	_ = json.NewEncoder(w).Encode(response)
 }
+
+// calendarReminderMaxMinutes is four weeks, the longest reminder providers offer.
+const calendarReminderMaxMinutes = 40320

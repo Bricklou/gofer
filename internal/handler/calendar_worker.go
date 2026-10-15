@@ -39,6 +39,7 @@ func (h *Handler) StartCalendarSync(ctx context.Context) {
 				case <-ctx.Done():
 					return
 				case now := <-ticker.C:
+					h.runCalendarReminderTick(ctx, now)
 					h.runCalendarSyncTick(ctx, now)
 					h.runCalendarIncomingTick(ctx)
 					h.runCalendarMeetDraftCleanupTick(ctx)

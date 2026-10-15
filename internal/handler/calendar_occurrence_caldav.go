@@ -327,6 +327,9 @@ func updateCalDAVCalendarOccurrence(ctx context.Context, source storage.Calendar
 		}
 		calendarUpdateDescriptionProps(override.Props, edited.Events()[0].Props, existing.Description, *draft)
 		delete(override.Props, "DURATION")
+		if draft.ReminderSet && !calendarSameReminder(draft.ReminderMinutes, existing.ReminderMinutes) {
+			calDAVSetReminder(override, draft.ReminderMinutes)
+		}
 		override.Props.SetDateTime("DTSTAMP", time.Now().UTC())
 		override.Props.SetDateTime("LAST-MODIFIED", time.Now().UTC())
 	}

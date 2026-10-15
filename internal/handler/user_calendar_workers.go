@@ -55,6 +55,7 @@ func (h *Handler) StartUserCalendarSync(ctx context.Context, options UserCalenda
 		return err
 	}
 	h.userCalendarWorkers = w
+	go h.runUserCalendarReminders(ctx)
 	return nil
 }
 

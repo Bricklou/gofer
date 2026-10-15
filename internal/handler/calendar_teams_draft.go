@@ -306,6 +306,10 @@ func finalizeCalendarTeamsDraft(ctx context.Context, source storage.CalendarSour
 		if draft.Recurrence != nil {
 			payload["recurrence"] = calendarOutlookRecurrence(draft)
 		}
+		// The placeholder had its reminder off; the meeting gets the chosen one.
+		if draft.ReminderSet {
+			outlookCalendarReminderPayload(payload, draft.ReminderMinutes)
+		}
 		var updated outlookCalendarUpdateEvent
 		if err := calendarUpdateJSON(ctx, endpoint, token, current.ODataETag, payload, &updated); err != nil {
 			return calendar.RemoteEvent{}, err

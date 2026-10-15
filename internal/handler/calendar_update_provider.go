@@ -344,6 +344,11 @@ func updateGoogleCalendarEventScope(ctx context.Context, token, remoteCalendarID
 	if removingMeet {
 		payload["conferenceData"] = nil
 	}
+	// Only a changed reminder is written: an unchanged one may be the
+	// calendar's default, which Google keeps following.
+	if draft.ReminderSet && !calendarSameReminder(draft.ReminderMinutes, existing.ReminderMinutes) {
+		payload["reminders"] = googleCalendarReminderPayload(draft.ReminderMinutes, current.Reminders.Overrides)
+	}
 	if addingMeet {
 		if len(draft.GoogleMeetConference) > 0 {
 			payload["conferenceData"] = draft.GoogleMeetConference
@@ -415,6 +420,9 @@ func updateGoogleCalendarEventScope(ctx context.Context, token, remoteCalendarID
 	}
 	if (needsConfirmation || draft.Recurrence != nil || occurrence) && !calendarUpdateMatchesDraft(event, draft) {
 		return calendar.RemoteEvent{}, fmt.Errorf("Google did not confirm the submitted event changes")
+	}
+	if updated.Reminders.UseDefault {
+		event.ReminderMinutes = googleCalendarDefaultReminder(ctx, token, remoteCalendarID)
 	}
 	event.StartTimeZone, event.EndTimeZone = draft.TimeZone, draft.TimeZone
 	return event, nil
@@ -560,6 +568,9 @@ func updateOutlookCalendarEventScope(ctx context.Context, token, remoteCalendarI
 	}
 	if draft.Location != existing.Location {
 		payload["location"] = map[string]string{"displayName": draft.Location}
+	}
+	if draft.ReminderSet && !calendarSameReminder(draft.ReminderMinutes, existing.ReminderMinutes) {
+		outlookCalendarReminderPayload(payload, draft.ReminderMinutes)
 	}
 	var updated outlookCalendarUpdateEvent
 	if err := calendarUpdateJSON(ctx, endpoint, token, current.ODataETag, payload, &updated); err != nil {
@@ -791,6 +802,9 @@ func updateCalDAVCalendarEventScope(ctx context.Context, source storage.Calendar
 	}
 	calendarUpdateDescriptionProps(props, edited.Events()[0].Props, existing.Description, draft)
 	delete(props, "DURATION") // DTEND and DURATION are mutually exclusive.
+	if draft.ReminderSet && !calendarSameReminder(draft.ReminderMinutes, existing.ReminderMinutes) {
+		calDAVSetReminder(master, draft.ReminderMinutes)
+	}
 	if draft.Recurrence != nil {
 		props.Set(edited.Events()[0].Props.Get("RRULE"))
 		// Retain reminders/metadata and any other timezone definitions. Replace

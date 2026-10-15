@@ -455,3 +455,49 @@ func TestUserStorageTestPushReachesOnlyTheAskingBrowser(t *testing.T) {
 		t.Fatalf("test push route: %d %s", rec.Code, rec.Body.String())
 	}
 }
+
+// A due event reminder is pushed to its owner, with their notification
+// settings, and never to someone else through another owner's account.
+func TestUserStorageNotificationWorkerPushesCalendarReminders(t *testing.T) {
+	f := newUserStorageFixture(t)
+	f.subscribe(t, "alice", "https://push.example/alice")
+	f.subscribe(t, "bob", "https://push.example/bob")
+	if rec := f.request("bob", http.MethodPatch, "/api/settings/ui", `{"desktop_notifications":"false"}`); rec.Code != http.StatusOK {
+		t.Fatal(rec.Body.String())
+	}
+	type push struct {
+		endpoint string
+		payload  map[string]any
+	}
+	delivered := make(chan push, 4)
+	f.service.sendNotification = func(_ context.Context, payload []byte, sub *webpush.Subscription, _ *webpush.Options) (*http.Response, error) {
+		var data map[string]any
+		_ = json.Unmarshal(payload, &data)
+		delivered <- push{sub.Endpoint, data}
+		return pushResponse(http.StatusCreated), nil
+	}
+	ctx, cancel := context.WithCancel(t.Context())
+	defer cancel()
+	f.service.Start(ctx)
+	reminder := func(owner string) mail.Event {
+		return mail.Event{Type: mail.EventCalendarReminder, UserID: owner, AccountID: f.event(owner).AccountID, Payload: map[string]any{"title": "Planning", "body": "In 10 minutes · 10:00", "tag": "gofer-calendar-reminder-event", "url": "/calendar"}}
+	}
+	f.events.Publish(reminder("alice"))
+	select {
+	case got := <-delivered:
+		if got.endpoint != "https://push.example/alice" || got.payload["title"] != "Planning" || got.payload["url"] != "/calendar" {
+			t.Fatalf("reminder push %+v", got)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("reminder never pushed")
+	}
+	f.service.handleCalendarReminder(t.Context(), reminder("bob"))
+	forged := reminder("alice")
+	forged.UserID = "bob"
+	f.service.handleCalendarReminder(t.Context(), forged)
+	select {
+	case got := <-delivered:
+		t.Fatalf("unexpected reminder push: %+v", got)
+	default:
+	}
+}

@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
+	"strconv"
 	"strings"
 	"time"
 
@@ -195,6 +196,10 @@ func calendarEditData(event storage.CalendarEvent, source storage.CalendarSource
 		AllDay: event.AllDay, TimeZone: location.String(), StartTime: "09:00", EndTime: "10:00",
 	}
 	data.Guests = calendarMeetingGuestText(event)
+	data.Reminder = "none"
+	if event.ReminderMinutes != nil {
+		data.Reminder = strconv.Itoa(*event.ReminderMinutes)
+	}
 	if calendarStoredOutlookOnline(event) {
 		data.TeamsState = "other-online"
 		if calendarOutlookTeamsJSON(calendarOutlookCachedMeetingJSON(event)) {

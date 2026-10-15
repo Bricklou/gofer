@@ -112,7 +112,7 @@ func completeCalendarUpdateTx(ctx context.Context, tx *sql.Tx, userID, eventID, 
 	result, err := tx.ExecContext(ctx, `UPDATE calendar_events
 		SET etag = ?, status = ?, summary = ?, description = ?, location = ?,
 		    all_day = ?, start_date = ?, end_date = ?, start_at = ?, end_at = ?,
-		    start_timezone = ?, end_timezone = ?, provider_updated_at = ?, recurrence_json = ?, is_deleted = ?, updated_at = CURRENT_TIMESTAMP
+		    start_timezone = ?, end_timezone = ?, provider_updated_at = ?, recurrence_json = ?, is_deleted = ?, reminder_minutes = ?, updated_at = CURRENT_TIMESTAMP
 		WHERE user_id = ? AND id = ? AND source_id = ? AND remote_id = ? AND etag = ? AND is_deleted = 0 AND series_remote_id = ?
 		AND EXISTS (
 		    SELECT 1 FROM calendar_sources source
@@ -121,7 +121,7 @@ func completeCalendarUpdateTx(ctx context.Context, tx *sql.Tx, userID, eventID, 
 		      AND source.is_selected = 1 AND source.is_deleted = 0 AND COALESCE(account.is_deleting, 0) = 0
 		)`, event.ETag, normalizeCalendarEventStatus(event.Status, false), event.Summary, event.Description, event.Location,
 		calendarBoolInt(event.AllDay), values.startDate, values.endDate, values.startAt, values.endAt, event.StartTimeZone, event.EndTimeZone,
-		calendarEventTimeValue(event.ProviderUpdatedAt), values.recurrence, calendarBoolInt(series), userID, eventID, sourceID, event.RemoteID, expectedETag, event.SeriesRemoteID)
+		calendarEventTimeValue(event.ProviderUpdatedAt), values.recurrence, calendarBoolInt(series), calendarReminderValue(event.ReminderMinutes), userID, eventID, sourceID, event.RemoteID, expectedETag, event.SeriesRemoteID)
 	if err != nil {
 		return err
 	}

@@ -3,6 +3,7 @@ package views
 import (
 	"encoding/json"
 	"github.com/cristianadrielbraun/gofer/internal/calendar"
+	"strconv"
 	"time"
 )
 
@@ -49,9 +50,12 @@ type CalendarCreateData struct {
 	// TeamsReplaceDelete is the delete request that removes this Teams meeting
 	// once a copy without Teams is created. Empty when it can't be replaced.
 	TeamsReplaceDelete string
-	Sources            []CalendarCreateSource
-	Date               string
-	StartTime          string
+	// Reminder is the event's reminder in minutes, "none", or empty for a new
+	// event, which keeps the calendar's default.
+	Reminder  string
+	Sources   []CalendarCreateSource
+	Date      string
+	StartTime string
 	// EndDate is inclusive for all-day form values, including edit prefill.
 	EndDate  string
 	EndTime  string
@@ -74,4 +78,49 @@ func calendarDialogClass(width string) string {
 	return "calendar-dialog w-[calc(100vw_-_2rem)] max-w-[calc(100vw_-_2rem)] " + width +
 		" max-h-[calc(100dvh-2rem)] [&_[data-tui-dialog-panel]]:flex [&_[data-tui-dialog-panel]]:max-h-[calc(100dvh-2rem)]" +
 		" [&_[data-tui-dialog-panel]]:min-h-0 [&_[data-tui-dialog-panel]]:flex-col [&_[data-tui-dialog-panel]]:gap-0 [&_[data-tui-dialog-panel]]:p-0"
+}
+
+// calendarReminderChoices lists the editor's reminder options, keeping an
+// event's own reminder when it isn't one of them.
+func calendarReminderChoices(data CalendarCreateData) (string, [][2]string) {
+	choices := [][2]string{{"none", "No reminder"}, {"0", "At the start"}, {"5", "5 minutes before"}, {"10", "10 minutes before"}, {"15", "15 minutes before"}, {"30", "30 minutes before"}, {"60", "1 hour before"}, {"1440", "1 day before"}}
+	current := data.Reminder
+	if current == "" {
+		return "default", append([][2]string{{"default", "Calendar's default reminder"}}, choices...)
+	}
+	for _, choice := range choices {
+		if choice[0] == current {
+			return current, choices
+		}
+	}
+	if minutes, err := strconv.Atoi(current); err == nil {
+		return current, append(choices, [2]string{current, CalendarReminderLabel(minutes)})
+	}
+	return "none", choices
+}
+
+// CalendarReminderLabel describes a reminder, in minutes before the start.
+func CalendarReminderLabel(minutes int) string {
+	if minutes == 0 {
+		return "At the start"
+	}
+	return CalendarReminderSpan(minutes) + " before"
+}
+
+// CalendarReminderSpan says how long a reminder is, such as "15 minutes".
+func CalendarReminderSpan(minutes int) string {
+	switch {
+	case minutes > 0 && minutes%1440 == 0:
+		return plural(minutes/1440, "day")
+	case minutes > 0 && minutes%60 == 0:
+		return plural(minutes/60, "hour")
+	}
+	return plural(minutes, "minute")
+}
+
+func plural(n int, unit string) string {
+	if n == 1 {
+		return "1 " + unit
+	}
+	return strconv.Itoa(n) + " " + unit + "s"
 }

@@ -367,6 +367,9 @@ func (h *Handler) updateCalDAVMeetingOccurrence(ctx context.Context, source stor
 		}
 		calendarUpdateDescriptionProps(override.Props, edited.Events()[0].Props, existing.Description, *draft)
 		delete(override.Props, "DURATION")
+		if draft.ReminderSet && !calendarSameReminder(draft.ReminderMinutes, existing.ReminderMinutes) {
+			calDAVSetReminder(override, draft.ReminderMinutes)
+		}
 		// Keep each remaining guest's reply; add new guests as Gofer invites them.
 		var people []ical.Prop
 		for _, person := range override.Props["ATTENDEE"] {
