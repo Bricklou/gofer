@@ -436,9 +436,8 @@ func updateGoogleCalendarEventScope(ctx context.Context, token, remoteCalendarID
 
 type outlookCalendarUpdateEvent struct {
 	outlookCalendarEvent
-	ODataETag             string `json:"@odata.etag"`
-	Type                  string `json:"type"`
-	OriginalStartTimeZone string `json:"originalStartTimeZone"`
+	ODataETag string `json:"@odata.etag"`
+	Type      string `json:"type"`
 }
 
 func (remote outlookCalendarUpdateEvent) restriction() string {

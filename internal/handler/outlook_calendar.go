@@ -40,8 +40,11 @@ type outlookCalendarEvent struct {
 		ID    string `json:"id"`
 		Value string `json:"value"`
 	} `json:"singleValueExtendedProperties"`
-	Sensitivity           string                    `json:"sensitivity"`
-	ShowAs                string                    `json:"showAs"`
+	Sensitivity string `json:"sensitivity"`
+	ShowAs      string `json:"showAs"`
+	// The zone the event was made in; start and end are read in UTC.
+	OriginalStartTimeZone string                    `json:"originalStartTimeZone"`
+	OriginalEndTimeZone   string                    `json:"originalEndTimeZone"`
 	IsReminderOn          *bool                     `json:"isReminderOn"`
 	ReminderMinutes       *int                      `json:"reminderMinutesBeforeStart"`
 	ID                    string                    `json:"id"`
@@ -227,7 +230,7 @@ func listOutlookCalendarEventsWithFetch(ctx context.Context, remoteCalendarID st
 		"id", "iCalUId", "changeKey", "subject", "bodyPreview", "body", "start", "end",
 		"isAllDay", "isCancelled", "webLink", "createdDateTime", "lastModifiedDateTime",
 		"organizer", "attendees", "location", "onlineMeetingUrl", "onlineMeetingProvider",
-		"onlineMeeting", "isOnlineMeeting", "seriesMasterId", "recurrence", "isOrganizer", "responseStatus", "sensitivity", "showAs", "isReminderOn", "reminderMinutesBeforeStart",
+		"onlineMeeting", "isOnlineMeeting", "seriesMasterId", "recurrence", "isOrganizer", "responseStatus", "sensitivity", "showAs", "isReminderOn", "reminderMinutesBeforeStart", "originalStartTimeZone", "originalEndTimeZone",
 	}, ","))
 
 	collection := outlookGraphBaseURL + "/me/calendars/" + url.PathEscape(remoteCalendarID) + "/calendarView"
@@ -300,8 +303,8 @@ func normalizeOutlookCalendarEvent(remote outlookCalendarEvent) (calendar.Remote
 		Location:       strings.TrimSpace(remote.Location.DisplayName),
 		OrganizerName:  strings.TrimSpace(remote.Organizer.EmailAddress.Name),
 		OrganizerEmail: strings.TrimSpace(remote.Organizer.EmailAddress.Address),
-		StartTimeZone:  strings.TrimSpace(remote.Start.TimeZone),
-		EndTimeZone:    strings.TrimSpace(remote.End.TimeZone),
+		StartTimeZone:  outlookCalendarEventZone(remote.Start.TimeZone, remote.OriginalStartTimeZone),
+		EndTimeZone:    outlookCalendarEventZone(remote.End.TimeZone, remote.OriginalEndTimeZone),
 		HTMLLink:       strings.TrimSpace(remote.WebLink),
 		Deleted:        remote.IsCancelled,
 	}
@@ -403,29 +406,29 @@ func parseOutlookCalendarDateTime(value outlookCalendarDateTime) (*time.Time, er
 
 func outlookCalendarTimeLocation(timeZone string) *time.Location {
 	timeZone = strings.TrimSpace(timeZone)
-	if timeZone == "" || strings.EqualFold(timeZone, "UTC") || strings.EqualFold(timeZone, "GMT Standard Time") {
+	if timeZone == "" || strings.EqualFold(timeZone, "UTC") {
 		return time.UTC
 	}
 	if location, err := time.LoadLocation(timeZone); err == nil {
 		return location
 	}
-	locations := map[string]string{
-		"W. Europe Standard Time":      "Europe/Berlin",
-		"Central Europe Standard Time": "Europe/Budapest",
-		"Romance Standard Time":        "Europe/Paris",
-		"Eastern Standard Time":        "America/New_York",
-		"Central Standard Time":        "America/Chicago",
-		"Mountain Standard Time":       "America/Denver",
-		"Pacific Standard Time":        "America/Los_Angeles",
-		"China Standard Time":          "Asia/Shanghai",
-		"Tokyo Standard Time":          "Asia/Tokyo",
-	}
-	if locationName := locations[timeZone]; locationName != "" {
-		if location, err := time.LoadLocation(locationName); err == nil {
+	if name := outlookWindowsZones[timeZone]; name != "" {
+		if location, err := time.LoadLocation(name); err == nil {
 			return location
 		}
 	}
 	return time.UTC
+}
+
+// outlookCalendarEventZone is the zone an event was made in, as an IANA name.
+// Microsoft reads times out in UTC; the original zone, when it is one Gofer
+// knows, says how the event is meant to be shown and edited.
+func outlookCalendarEventZone(zone, original string) string {
+	zone, original = strings.TrimSpace(zone), strings.TrimSpace(original)
+	if location := outlookCalendarTimeLocation(original); original != "" && (location != time.UTC || strings.EqualFold(original, "UTC")) {
+		return location.String()
+	}
+	return zone
 }
 
 func (h *Handler) syncOutlookCalendarWindow(ctx context.Context, userID string, windowStart, windowEnd time.Time) (int, error) {

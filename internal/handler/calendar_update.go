@@ -182,7 +182,10 @@ func (h *Handler) handleEditCalendarEvent(w http.ResponseWriter, r *http.Request
 }
 
 func calendarEditData(event storage.CalendarEvent, source storage.CalendarSource, accountName string, location *time.Location, series, occurrence bool, repeat *calendar.RecurrenceDraft) (views.CalendarCreateData, error) {
-	if zone, err := time.LoadLocation(event.StartTimeZone); err == nil && event.StartTimeZone != "" && event.StartTimeZone != "Local" {
+	// A single event in UTC opens in the user's own zone: its times stay the
+	// same, and saving keeps the zone it is shown in. A series keeps its zone,
+	// which decides its times across daylight-saving changes.
+	if zone, err := time.LoadLocation(event.StartTimeZone); err == nil && event.StartTimeZone != "" && event.StartTimeZone != "Local" && (series || occurrence || !calendarZoneIsUTC(zone)) {
 		location = zone
 	}
 	if location.String() == "Local" {
@@ -511,4 +514,12 @@ func (h *Handler) handleUpdateCalendarEvent(w http.ResponseWriter, r *http.Reque
 	w.Header().Set("Content-Type", "application/json")
 	w.Header().Set("Cache-Control", "private, no-store")
 	_ = json.NewEncoder(w).Encode(response)
+}
+
+func calendarZoneIsUTC(location *time.Location) bool {
+	switch location.String() {
+	case "UTC", "Etc/UTC", "Etc/GMT", "GMT", "Etc/Zulu", "Zulu":
+		return true
+	}
+	return false
 }

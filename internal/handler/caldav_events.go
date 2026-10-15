@@ -302,6 +302,13 @@ func normalizeCalDAVEvent(component ical.Event, href, etag string, location *tim
 		}
 	} else {
 		event.StartTimeZone, event.EndTimeZone = start.Location().String(), end.Location().String()
+		// Gofer writes its own events' times in UTC, with the zone they were
+		// made in beside them.
+		if zone, _ := props.Text("X-GOFER-TIMEZONE"); start.Location() == time.UTC && zone != "" {
+			if location, err := time.LoadLocation(zone); err == nil && location.String() != "Local" {
+				event.StartTimeZone, event.EndTimeZone = location.String(), location.String()
+			}
+		}
 		start, end = start.UTC(), end.UTC()
 		event.StartAt, event.EndAt = &start, &end
 	}
