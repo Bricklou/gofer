@@ -15,7 +15,7 @@ Gofer is a self-hosted email, contacts, and calendar app I'm building. It starte
 
 You can run it on your own machine or a server and access it through a browser. Mail and related data are cached in SQLite wherever you host it. Gofer talks directly to your providers: IMAP/SMTP for generic mail accounts, Google APIs for Gmail, contacts, and calendars, Microsoft Graph for Outlook, and CardDAV/CalDAV for compatible contact and calendar services.
 
-I'm still working on it, and it's pre-1.0, so expect things to keep changing as the app settles. Provider compatibility, setup, and upgrades still need care. Please read the limitations below and keep backups before upgrading.
+I'm still working on it, and it's pre-1.0, so expect things to keep changing as the app settles. Provider compatibility, setup, and upgrades still need care. Please keep backups before upgrading.
 
 For reference, I'm actively using it with six configured accounts and around 100k emails in total. So far, I haven't run into performance issues or increased memory consumption.
 
@@ -26,12 +26,12 @@ What you can do with it today:
 - **Users and access:** multiple users with separate administrators, invitations, and security policies; personal mode for one protected profile; and a no-login mode for local use.
 - **Accounts and sync:** multiple IMAP/SMTP, Gmail, and Outlook accounts, with mail cached in the instance's SQLite database.
 - **Reading and sending:** threads, attachments, drafts with autosave, signatures, scheduled send, and translation.
-- **Organization and search:** folders, stars, archive, spam controls, and advanced search filters.
+- **Organization and search:** folders, labels, stars, archive, spam controls, and advanced search filters. Drag emails onto a folder to move them.
 - **Contacts:** local address books, vCard import/export, Google, Outlook, and CardDAV sync, plus Gofer Sync for automatic contact syncing between accounts.
-- **Calendar:** Google Calendar, Outlook, and CalDAV sync, month and week views, upcoming events, and event creation, editing, and deletion, including recurring series and individual occurrences.
-- **Meetings:** guest invitations, RSVP from Calendar or Mail, rich event descriptions, and Google Meet or Microsoft Teams links where the provider supports them.
+- **Calendar:** Google Calendar, Outlook, and CalDAV sync, month and week views, and an agenda. Create, edit, and delete events, including recurring series and single dates. Drag events to move or resize them, or drag over empty time to create one. Events can have reminders, show you as busy or free, and be private. Calendars you have open update within a minute.
+- **Meetings:** guest invitations, including for recurring meetings, RSVP from Calendar or Mail, forwarding invitations, rich event descriptions, and Google Meet or Microsoft Teams links where the provider supports them. Invitations a CalDAV server doesn't add to the calendar are added from the email.
 - **Security:** encrypted stored credentials, remote content blocked by default, password and external sign-in, and MFA with TOTP or passkeys.
-- **Customization:** three visual styles (Classic, Minimal, and the retro Express), layouts, account colors, regional settings, and browser/Web Push notifications.
+- **Customization:** three visual styles (Classic, Minimal, and the retro Express), side-by-side or stacked panes with their own sizes for Mail, Contacts, and Calendar, account colors, regional settings, and browser/Web Push notifications.
 
 ## still moving
 
@@ -41,14 +41,15 @@ Things I'm still improving, in no particular order:
 - shared OAuth applications so users do not need to register their own provider clients
 - clearer diagnostics and reconnect flows
 - broader test coverage around provider sync behavior
-- deeper labels/tags workflows beyond filtering
-- broader calendar provider compatibility and recurring meeting support
+- moving mail between accounts
+- deeper labels/tags workflows
+- broader calendar provider compatibility
 - richer regional and language settings
 - more keyboard shortcuts, bulk actions, and cleanup flows
 
 ## running and building
 
-Downloaded release binaries include the web assets. Development from source requires Go, `templ`, `tailwindcss`, and `task`.
+Downloaded release binaries include the web assets. Development from source requires Go 1.27.1 or later, `templ`, `tailwindcss`, and `task`.
 
 ```sh
 task dev      # development server with hot reload
@@ -97,14 +98,6 @@ To sign in over plain HTTP on a home or office network, set `GOFER_BASE_URL` to 
 Gofer doesn't connect to servers on private network addresses unless they are approved. If your mail, calendar, or contacts server is on your local network, approve it under Mail security: in Settings, Security for personal and open installations, or in the admin panel in managed mode.
 
 Runtime data is stored in `data/` by default. Protect the data directory, configuration, and secrets, and back them up together before upgrades. Shared databases apply schema migrations at startup, and managed mode converts them to per-user storage as described above. Going back to an older version may require restoring its matching backup, and the retained shared database does not include changes made after conversion. I recommend testing your providers and access setup before relying on Gofer for anything critical.
-
-## current limitations
-
-Calendar actions depend on provider permissions and capabilities:
-
-- Creating or editing recurring meetings with guests or online meeting links is not supported yet.
-- Existing Google Meet conferences cannot be removed in Gofer, Teams meetings cannot be disabled, and conference providers cannot be changed.
-- CalDAV invitation delivery depends on the server's scheduling support or the account's mail-sending configuration.
 
 ## admin panel
 
