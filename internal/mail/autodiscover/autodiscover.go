@@ -21,6 +21,7 @@ import (
 
 	mailtransport "github.com/cristianadrielbraun/gofer/internal/mail/transport"
 	"github.com/cristianadrielbraun/gofer/internal/netguard"
+	"github.com/cristianadrielbraun/gofer/internal/providers"
 	"golang.org/x/net/publicsuffix"
 )
 
@@ -676,6 +677,7 @@ var knownMXConfigDomains = []struct {
 	{suffix: "yahoodns.net", domains: []string{"yahoo.com"}},
 	{suffix: "zoho.com", domains: []string{"zoho.com"}},
 	{suffix: "zohomail.com", domains: []string{"zoho.com"}},
+	{suffix: "mail.icloud.com", domains: []string{"icloud.com"}},
 }
 
 func lastLabelsDomain(host string, count int) string {
@@ -807,6 +809,10 @@ func candidateFromXMLServers(imapServer, smtpServer mailServer, parts emailParts
 	}
 	username := expandPlaceholders(firstNonEmpty(imapServer.Username, "%EMAILADDRESS%"), parts)
 	smtpUsername := expandPlaceholders(smtpServer.Username, parts)
+	if auth == "plain" && providers.IsICloudMailHost(imapHost) && providers.IsICloudMailHost(smtpHost) {
+		provider = providers.MailServiceICloud
+		username, smtpUsername, notes = iCloudLogin(parts, notes)
+	}
 	if smtpUsername == username {
 		smtpUsername = ""
 	}
@@ -825,6 +831,18 @@ func candidateFromXMLServers(imapServer, smtpServer mailServer, parts emailParts
 		Provider:     provider,
 		Notes:        compactStrings(notes),
 	}, true
+}
+
+// iCloudLogin returns the login for iCloud Mail. Provider records give the
+// address's local part for IMAP, but Gofer uses one login, the full Apple
+// Account address, for mail, contacts and calendar. A custom domain on
+// iCloud+ is not that address, so the person is told to replace it.
+func iCloudLogin(parts emailParts, notes []string) (string, string, []string) {
+	notes = append(notes, "iCloud needs an app-specific password, created at "+providers.ICloudAppPasswordURL+".")
+	if !providers.IsICloudAddressDomain(parts.Address) {
+		notes = append(notes, "For a custom domain, sign in with your Apple Account's @icloud.com address.")
+	}
+	return parts.Address, "", notes
 }
 
 func chooseManualAuth(authLists ...[]string) (string, []string, bool) {

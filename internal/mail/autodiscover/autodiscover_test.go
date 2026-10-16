@@ -164,6 +164,67 @@ func TestParseConfigXMLReturnsKnownOAuthProviderCandidate(t *testing.T) {
 	}
 }
 
+const iCloudConfigXML = `<?xml version="1.0"?>
+<clientConfig version="1.1">
+  <emailProvider id="icloud.com">
+    <incomingServer type="imap">
+      <hostname>imap.mail.me.com</hostname>
+      <port>993</port>
+      <socketType>SSL</socketType>
+      <username>%EMAILLOCALPART%</username>
+      <authentication>password-cleartext</authentication>
+    </incomingServer>
+    <outgoingServer type="smtp">
+      <hostname>smtp.mail.me.com</hostname>
+      <port>587</port>
+      <socketType>STARTTLS</socketType>
+      <username>%EMAILADDRESS%</username>
+      <authentication>password-cleartext</authentication>
+    </outgoingServer>
+  </emailProvider>
+</clientConfig>`
+
+func TestParseConfigXMLMarksICloudAndUsesFullAddress(t *testing.T) {
+	candidates, err := ParseConfigXML([]byte(iCloudConfigXML), "robin@icloud.com", SourceThunderbirdXML)
+	if err != nil || len(candidates) != 1 {
+		t.Fatalf("ParseConfigXML() = %#v, %v", candidates, err)
+	}
+	got := candidates[0]
+	if got.Provider != "icloud" || got.AuthMethod != "plain" || got.Username != "robin@icloud.com" || got.SMTPUsername != "" {
+		t.Fatalf("iCloud candidate = %#v", got)
+	}
+	if len(got.Notes) != 1 || !strings.Contains(got.Notes[0], "app-specific password") {
+		t.Fatalf("iCloud notes = %#v, want only the app-specific password note", got.Notes)
+	}
+}
+
+func TestParseConfigXMLWarnsICloudCustomDomainLogin(t *testing.T) {
+	candidates, err := ParseConfigXML([]byte(iCloudConfigXML), "robin@example.org", SourceMXProviderXML)
+	if err != nil || len(candidates) != 1 {
+		t.Fatalf("ParseConfigXML() = %#v, %v", candidates, err)
+	}
+	got := candidates[0]
+	if got.Username != "robin@example.org" {
+		t.Fatalf("Username = %q, want the full address", got.Username)
+	}
+	if !strings.Contains(strings.Join(got.Notes, " "), "@icloud.com address") {
+		t.Fatalf("notes = %#v, want custom-domain login note", got.Notes)
+	}
+}
+
+func TestMXProviderDomainsMapICloudCustomDomains(t *testing.T) {
+	resolver := fakeMXResolver{
+		"example.org": {
+			{Host: "mx01.mail.icloud.com.", Pref: 10},
+			{Host: "mx02.mail.icloud.com.", Pref: 10},
+		},
+	}
+	domains := mxProviderDomains(context.Background(), resolver, "example.org")
+	if len(domains) == 0 || domains[0] != "icloud.com" {
+		t.Fatalf("MX provider domains = %#v, want icloud.com first", domains)
+	}
+}
+
 func TestMXProviderDomainsPreferKnownHostedProvider(t *testing.T) {
 	resolver := fakeMXResolver{
 		"example.com": {

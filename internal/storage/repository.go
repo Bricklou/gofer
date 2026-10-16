@@ -21,6 +21,7 @@ import (
 	avatarresolver "github.com/cristianadrielbraun/gofer/internal/avatar"
 	mailmessage "github.com/cristianadrielbraun/gofer/internal/mail/message"
 	"github.com/cristianadrielbraun/gofer/internal/models"
+	"github.com/cristianadrielbraun/gofer/internal/providers"
 	"github.com/cristianadrielbraun/gofer/internal/store"
 	"github.com/google/uuid"
 )
@@ -4522,7 +4523,8 @@ func (db *DB) GetAccounts(ctx context.Context, userID string) ([]models.Account,
 		            SELECT 1 FROM calendar_sources cs
 		            WHERE cs.account_id = a.id AND cs.user_id = a.user_id
 		              AND cs.is_deleted = 0 AND cs.is_selected = 1
-		        ) THEN 1 ELSE 0 END AS calendar_sync_enabled
+		        ) THEN 1 ELSE 0 END AS calendar_sync_enabled,
+		        COALESCE(a.imap_host, ''), COALESCE(a.auth_method, '')
 		 FROM accounts a
 		 LEFT JOIN account_contact_sync_configs acc ON acc.account_id = a.id AND acc.user_id = a.user_id
 		 WHERE a.user_id = ? AND COALESCE(a.is_deleting, 0) = 0
@@ -4536,8 +4538,12 @@ func (db *DB) GetAccounts(ctx context.Context, userID string) ([]models.Account,
 	for rows.Next() {
 		var a models.Account
 		var isDeleting, emailSyncEnabled, contactSyncEnabled, calendarSyncEnabled int
-		if err := rows.Scan(&a.ID, &a.Provider, &a.Email, &a.Name, &a.Color, &a.Initials, &isDeleting, &emailSyncEnabled, &a.EmailSyncError, &a.EmailSyncErrorAt, &contactSyncEnabled, &a.ContactSyncProvider, &calendarSyncEnabled); err != nil {
+		var imapHost, authMethod string
+		if err := rows.Scan(&a.ID, &a.Provider, &a.Email, &a.Name, &a.Color, &a.Initials, &isDeleting, &emailSyncEnabled, &a.EmailSyncError, &a.EmailSyncErrorAt, &contactSyncEnabled, &a.ContactSyncProvider, &calendarSyncEnabled, &imapHost, &authMethod); err != nil {
 			return nil, fmt.Errorf("scan account: %w", err)
+		}
+		if providers.IsICloudAccount(a.Provider, authMethod, imapHost) {
+			a.MailService = providers.MailServiceICloud
 		}
 		a.IsDeleting = isDeleting == 1
 		a.EmailSyncEnabled = emailSyncEnabled == 1
@@ -4574,7 +4580,8 @@ func (db *DB) GetAccountsIncludingDeleting(ctx context.Context, userID string) (
 		            SELECT 1 FROM calendar_sources cs
 		            WHERE cs.account_id = a.id AND cs.user_id = a.user_id
 		              AND cs.is_deleted = 0 AND cs.is_selected = 1
-		        ) THEN 1 ELSE 0 END AS calendar_sync_enabled
+		        ) THEN 1 ELSE 0 END AS calendar_sync_enabled,
+		        COALESCE(a.imap_host, ''), COALESCE(a.auth_method, '')
 		 FROM accounts a
 		 LEFT JOIN account_contact_sync_configs acc ON acc.account_id = a.id AND acc.user_id = a.user_id
 		 WHERE a.user_id = ?
@@ -4588,8 +4595,12 @@ func (db *DB) GetAccountsIncludingDeleting(ctx context.Context, userID string) (
 	for rows.Next() {
 		var a models.Account
 		var isDeleting, emailSyncEnabled, contactSyncEnabled, calendarSyncEnabled int
-		if err := rows.Scan(&a.ID, &a.Provider, &a.Email, &a.Name, &a.Color, &a.Initials, &isDeleting, &emailSyncEnabled, &a.EmailSyncError, &a.EmailSyncErrorAt, &contactSyncEnabled, &a.ContactSyncProvider, &calendarSyncEnabled); err != nil {
+		var imapHost, authMethod string
+		if err := rows.Scan(&a.ID, &a.Provider, &a.Email, &a.Name, &a.Color, &a.Initials, &isDeleting, &emailSyncEnabled, &a.EmailSyncError, &a.EmailSyncErrorAt, &contactSyncEnabled, &a.ContactSyncProvider, &calendarSyncEnabled, &imapHost, &authMethod); err != nil {
 			return nil, fmt.Errorf("scan account: %w", err)
+		}
+		if providers.IsICloudAccount(a.Provider, authMethod, imapHost) {
+			a.MailService = providers.MailServiceICloud
 		}
 		a.IsDeleting = isDeleting == 1
 		a.EmailSyncEnabled = emailSyncEnabled == 1

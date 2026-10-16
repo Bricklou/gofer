@@ -5,6 +5,7 @@ import "html/template"
 type Account struct {
 	ID                  string
 	Provider            string
+	MailService         string // "icloud" for an IMAP account on iCloud Mail
 	Name                string
 	Email               string
 	Color               string

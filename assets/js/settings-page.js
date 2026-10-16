@@ -627,12 +627,20 @@ function setWizardFooter(root, step, immediate) {
   }
   _wizardFooterTimers[key] = window.setTimeout(applyFooterStep, 180);
 }
+// Accounts that send with their mail sync connection (Gmail, Outlook and
+// iCloud) have no sending step (2): moving onto it goes on past it, in the
+// direction the wizard was moving.
+function wizardSkipSending(step, from, skip) {
+  if (step !== 2 || !skip) return step;
+  return from > 2 ? 1 : 3;
+}
 function wizardGo(step, immediate) {
   var track = document.getElementById('wizard-track');
   var root = document.getElementById('add-account-dialog');
   if (!track || !root) return;
   if (step < 0) step = 0;
   if (step > 5) step = 5;
+  step = wizardSkipSending(step, _wizStep, root.dataset.mailService === 'icloud');
   syncAddContactStep();
   // The Email steps end by creating the account. Going back to them would
   // create it again, so after that its settings belong to Edit account.
@@ -1170,6 +1178,49 @@ function renderMailDiscoveryCandidates(candidates) {
   html += '</div>';
   status.innerHTML = html;
 }
+// The add wizard also adds iCloud accounts. They are IMAP accounts on Apple's
+// servers, so the wizard fills those in and hides them, leaving the login.
+// The server fills them in again from mail_service, whatever is sent.
+var addAccountICloudServers = {
+  imap_host: 'imap.mail.me.com', imap_port: '993', imap_tls_mode: 'tls',
+  smtp_host: 'smtp.mail.me.com', smtp_port: '587', smtp_tls_mode: 'starttls',
+  auth_method: 'plain'
+};
+var addAccountDefaultServers = {
+  imap_host: '', imap_port: '993', imap_tls_mode: 'tls',
+  smtp_host: '', smtp_port: '465', smtp_tls_mode: 'tls',
+  auth_method: 'plain'
+};
+function setAddAccountMailService(service) {
+  var root = document.getElementById('add-account-dialog');
+  var form = document.getElementById('account-form');
+  if (!root || !form) return;
+  var icloud = service === 'icloud';
+  var wasICloud = root.dataset.mailService === 'icloud';
+  if (icloud) root.dataset.mailService = 'icloud'; else delete root.dataset.mailService;
+  var marker = form.querySelector('input[name="mail_service"]');
+  if (marker) marker.value = icloud ? 'icloud' : '';
+  var username = form.querySelector('input[name="username"]');
+  if (username) {
+    username.required = !icloud;
+    username.placeholder = icloud ? 'Same as the email address' : 'you@example.com';
+  }
+  if (icloud || wasICloud) {
+    var servers = icloud ? addAccountICloudServers : addAccountDefaultServers;
+    Object.keys(servers).forEach(function(name) { mailDiscoverySetField(form, name, servers[name]); });
+    mailDiscoverySetOAuthMode(form, null);
+    var sameAuth = document.getElementById('smtp-same-auth');
+    if (sameAuth && icloud) {
+      sameAuth.checked = true;
+      toggleSmtpAuth(true);
+    }
+  }
+  syncAddAccountSubmitButtons();
+}
+function openAddAccountWizard(service) {
+  setAddAccountMailService(service);
+  goferSwitchDialog('choose-account-type-dialog', 'add-account-dialog');
+}
 function discoverMailSettings(button) {
   var form = document.getElementById('account-form');
   var status = mailDiscoveryStatus();
@@ -1592,6 +1643,7 @@ function editWizardGo(step, immediate) {
   var track = document.getElementById('edit-wizard-track');
   var root = document.getElementById('edit-account-dialog');
   if (!track || !root) return;
+  step = wizardSkipSending(step, _editWizStep, !!root.querySelector('[data-wizard-skip-sending]'));
   // Moving on to contacts or calendar with unsaved mail changes would lose
   // them, so they go through the test step to be saved first.
   var unsaved = root.querySelector('[data-edit-account-unsaved]');

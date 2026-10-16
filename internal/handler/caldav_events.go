@@ -44,7 +44,7 @@ func calDAVRequest(ctx context.Context, method, endpoint, username, password, de
 			if len(via) >= 5 {
 				return fmt.Errorf("too many CalDAV redirects")
 			}
-			if len(via) > 0 && (!strings.EqualFold(via[0].URL.Scheme, req.URL.Scheme) || !strings.EqualFold(via[0].URL.Host, req.URL.Host) || req.URL.User != nil) {
+			if len(via) > 0 && (!sameCalDAVOrigin(via[0].URL, req.URL) || req.URL.User != nil) {
 				return http.ErrUseLastResponse
 			}
 			return nil

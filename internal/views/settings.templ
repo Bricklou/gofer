@@ -3,6 +3,7 @@ package views
 import (
 	"fmt"
 	"github.com/cristianadrielbraun/gofer/internal/models"
+	"github.com/cristianadrielbraun/gofer/internal/providers"
 	"strconv"
 	"strings"
 	"time"
@@ -1395,8 +1396,8 @@ templ SettingsAccountCard(account models.Account) {
 						@AccountServiceIndicator(account, "calendar", "Calendar", accountCalendarSyncStatusDescription(account), account.CalendarSyncEnabled)
 					</div>
 					<span class="inline-flex shrink-0 items-center gap-1 rounded-md border border-border/70 bg-muted/35 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
-						@AccountProviderIcon(account.Provider, "size-3.5 shrink-0")
-						{ accountProviderName(account.Provider) }
+						@AccountProviderIcon(accountDisplayProvider(account), "size-3.5 shrink-0")
+						{ accountProviderName(accountDisplayProvider(account)) }
 					</span>
 				</div>
 			</div>
@@ -1758,12 +1759,35 @@ func accountCalendarSyncStatusDescription(account models.Account) string {
 	return "Calendar not configured."
 }
 
+// accountDisplayProvider names the service an account is shown as: iCloud
+// accounts are IMAP accounts underneath.
+func accountDisplayProvider(account models.Account) string {
+	if account.MailService == providers.MailServiceICloud {
+		return providers.MailServiceICloud
+	}
+	return account.Provider
+}
+
+// editAccountSkipsSending reports whether an account sends with the same
+// connection its mail sync uses, so its edit wizard has no sending step.
+func editAccountSkipsSending(data models.EditAccountData) bool {
+	return accountEditUsesProviderAPI(data.Provider) || editAccountIsICloud(data)
+}
+
+// editAccountIsICloud reports whether the account being edited is on iCloud
+// Mail. Its forms leave out server settings, which are always Apple's.
+func editAccountIsICloud(data models.EditAccountData) bool {
+	return providers.IsICloudAccount(data.Provider, data.AuthMethod, data.IMAPHost)
+}
+
 func accountProviderName(provider string) string {
 	switch strings.TrimSpace(provider) {
 	case "gmail":
 		return "Gmail"
 	case "outlook":
 		return "Outlook"
+	case providers.MailServiceICloud:
+		return "iCloud"
 	default:
 		return "IMAP"
 	}
@@ -1778,6 +1802,11 @@ templ AccountProviderIcon(provider string, class string) {
 	} else if strings.TrimSpace(provider) == "outlook" {
 		<svg class={ class } viewBox="0 0 14 14" fill="currentColor" aria-hidden="true">
 			<path d="m13 4.69375 0 5.239c0 .115-.04.212-.119.288-.079.077-.176.115-.29.115h-4.2735v-3.4795l.8.6145c.051.0425.1145.063.1895.063.074 0 .1385-.0205.1945-.0635L13 4.69375Zm-4.6825-1.0105h4.2735c.1055 0 .1965.0315.2715.096.075.064.117.15.124.255l-3.6845 2.938-.9845-.7745v-2.5145Zm-.6155-2.251v11.1355L1 11.40975v-8.7875l6.703-1.19-.001 0Zm-2.0245 5.59c-.01-.5665-.1565-1.036-.4395-1.407-.2775-.37-.6375-.5655-1.0655-.582-.412.0165-.7645.2115-1.05.582-.285.371-.4275.841-.435 1.407.0075.5585.1575 1.0235.4425 1.3955.2855.37.637.5665 1.0505.588.4275-.0175.787-.212 1.0725-.585.285-.374.435-.84.4425-1.3985h-.018Zm-1.56-1.241c.2155.01.397.128.5415.3585.1425.2305.2175.5225.2175.876 0 .3605-.0745.6535-.2175.8855-.1505.232-.33.352-.548.352-.218 0-.3975-.113-.5475-.345-.15-.232-.2175-.525-.2175-.877 0-.3525.0675-.6455.2175-.87.142-.225.323-.345.5405-.3605l.0135-.0195Z"/>
+		</svg>
+	} else if strings.TrimSpace(provider) == providers.MailServiceICloud {
+		<svg class={ class } role="img" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg" fill="currentColor">
+			<title>iCloud</title>
+			<path d="M13.762 4.29a6.51 6.51 0 0 0-5.669 3.332 3.571 3.571 0 0 0-1.558-.36 3.571 3.571 0 0 0-3.516 3A4.918 4.918 0 0 0 0 14.796a4.918 4.918 0 0 0 4.92 4.914 4.93 4.93 0 0 0 .617-.045h14.42c2.305-.272 4.041-2.258 4.043-4.589v-.009a4.594 4.594 0 0 0-3.727-4.508 6.51 6.51 0 0 0-6.511-6.27z"/>
 		</svg>
 	} else {
 		@icon.Mail(icon.Props{Class: class})
@@ -2152,7 +2181,7 @@ templ ChooseAccountTypeDialog() {
 				}
 			}
 		<div class="space-y-3 px-1 pt-2 pb-4">
-				<button type="button" data-on-click='["goferSwitchDialog","choose-account-type-dialog","add-account-dialog"]' class="w-full group flex items-center gap-4 p-4 rounded-lg border border-border hover:border-primary/50 hover:bg-accent/50 transition-all duration-200 text-left">
+				<button type="button" data-on-click='["openAddAccountWizard",""]' class="w-full group flex items-center gap-4 p-4 rounded-lg border border-border hover:border-primary/50 hover:bg-accent/50 transition-all duration-200 text-left">
 					<div class="flex items-center justify-center w-10 h-10 rounded-lg bg-accent text-muted-foreground group-hover:text-foreground transition-colors">
 						@AccountProviderIcon("imap", "size-5")
 					</div>
@@ -2179,6 +2208,16 @@ templ ChooseAccountTypeDialog() {
 					<div class="flex-1 min-w-0">
 						<div class="text-sm font-medium text-foreground">Outlook</div>
 						<div class="text-xs text-muted-foreground mt-0.5">Sign in with Microsoft for instant setup</div>
+					</div>
+					<svg class="size-4 text-muted-foreground group-hover:text-foreground transition-colors" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+				</button>
+				<button type="button" data-on-click='["openAddAccountWizard","icloud"]' class="w-full group flex items-center gap-4 p-4 rounded-lg border border-border hover:border-primary/50 hover:bg-accent/50 transition-all duration-200 text-left">
+					<div class="flex items-center justify-center w-10 h-10 rounded-lg bg-accent text-muted-foreground group-hover:text-foreground transition-colors">
+						@AccountProviderIcon(providers.MailServiceICloud, "size-5")
+					</div>
+					<div class="flex-1 min-w-0">
+						<div class="text-sm font-medium text-foreground">iCloud</div>
+						<div class="text-xs text-muted-foreground mt-0.5">Sign in with an app-specific password</div>
 					</div>
 					<svg class="size-4 text-muted-foreground group-hover:text-foreground transition-colors" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
 				</button>
@@ -2298,7 +2337,8 @@ templ AddAccountDialog() {
 		@dialog.Content(dialog.ContentProps{Class: "account-wizard-dialog mobile-page-dialog sm:max-w-4xl"}) {
 			@dialog.Header() {
 				@dialog.Title() {
-					Add Account
+					<span data-add-mode="generic">Add Account</span>
+					<span data-add-mode="icloud">Add iCloud Account</span>
 				}
 				@dialog.Description() {
 					Connect mail first, then optionally configure contacts and calendar.
@@ -2341,12 +2381,15 @@ templ AddAccountDialog() {
 				.account-wizard-card-footer[data-switching="true"] { opacity:0; pointer-events:none; }
 				.account-wizard-card-footer > [data-wizard-footer-step] { display:none !important; }
 				.account-wizard-card-footer > [data-wizard-footer-step][data-active="true"] { display:flex !important; }
+				#add-account-dialog:not([data-mail-service="icloud"]) [data-add-mode="icloud"],
+				#add-account-dialog[data-mail-service="icloud"] [data-add-mode="generic"] { display:none !important; }
 			</style>
 			<div class="account-wizard-shell grid gap-4 pt-2 md:grid-cols-[14.5rem_minmax(0,1fr)]">
 		@AccountWizardAddSidebar()
 				<div id="wizard-viewport" class="account-wizard-viewport">
 					<div id="wizard-track" class="flex items-start transition-transform duration-300 ease-in-out" style="width: 600%">
 						<form id="account-form" hx-post="/api/accounts" hx-target="#add-contacts-content" hx-swap="innerHTML" class="contents">
+						<input type="hidden" name="mail_service" value=""/>
 						<div class="w-1/6 shrink-0 px-1" data-wizard-step="0">
 							<div class="account-wizard-panel">
 							<div class="account-wizard-scroll" data-wizard-service-content="email">
@@ -2372,7 +2415,7 @@ templ AddAccountDialog() {
 										Placeholder: "Your Name",
 									})
 								</div>
-								<div class="rounded-lg border border-border bg-background/45 p-3">
+								<div data-add-mode="generic" class="rounded-lg border border-border bg-background/45 p-3">
 									<div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
 										<div class="min-w-0">
 											<div class="text-xs font-semibold text-foreground">Automatic settings</div>
@@ -2399,6 +2442,17 @@ templ AddAccountDialog() {
 						<div class="w-1/6 shrink-0 px-1" data-wizard-step="1">
 							<div class="account-wizard-panel">
 							<div class="account-wizard-scroll" data-wizard-service-content="email">
+							<div data-add-mode="icloud">
+								<h4 class="account-wizard-sticky-header text-sm font-semibold text-foreground flex items-center gap-2">
+									@icon.MailCheck(icon.Props{Class: "size-4 text-muted-foreground"})
+									Mail sync
+									<span class="text-xs font-normal text-muted-foreground">(iCloud Mail)</span>
+								</h4>
+								<div class="mb-4">
+									@ICloudAppPasswordNotice("iCloud Mail syncs and sends with an app-specific password, not your Apple Account password. Create one at account.apple.com under Sign-In and Security, then paste it here.")
+								</div>
+							</div>
+							<div data-add-mode="generic">
 							<h4 class="account-wizard-sticky-header text-sm font-semibold text-foreground flex items-center gap-2">
 								@icon.Inbox(icon.Props{Class: "size-4 text-muted-foreground"})
 								Incoming Mail
@@ -2446,18 +2500,20 @@ templ AddAccountDialog() {
 								@icon.Key(icon.Props{Class: "size-4 text-muted-foreground"})
 								Login
 							</h4>
+							</div>
 							<div class="grid grid-cols-2 gap-3">
 								<div class="col-span-2">
-									<label class="text-xs font-medium text-muted-foreground mb-1.5 block">Username</label>
+									<label class="text-xs font-medium text-muted-foreground mb-1.5 block"><span data-add-mode="generic">Username</span><span data-add-mode="icloud">Apple Account email</span></label>
 									@input.Input(input.Props{
 										Name:        "username",
 										Type:        input.TypeText,
 										Placeholder: "you@example.com",
 										Required:    true,
 									})
+									<p data-add-mode="icloud" class="mt-1.5 text-[11px] leading-relaxed text-muted-foreground">Leave blank to use the email address. For a custom domain, enter your Apple Account's @icloud.com address.</p>
 								</div>
 								<div class="col-span-2">
-									<label class="text-xs font-medium text-muted-foreground mb-1.5 block">Password</label>
+									<label class="text-xs font-medium text-muted-foreground mb-1.5 block"><span data-add-mode="generic">Password</span><span data-add-mode="icloud">App-specific password</span></label>
 									@input.Input(input.Props{
 										Name:        "password",
 										Type:        input.TypePassword,
@@ -2465,7 +2521,7 @@ templ AddAccountDialog() {
 										Required:    true,
 									})
 								</div>
-								<div class="col-span-2">
+								<div data-add-mode="generic" class="col-span-2">
 									<label class="text-xs font-medium text-muted-foreground mb-1.5 block">Method</label>
 									@selectbox.SelectBox() {
 										@selectbox.Trigger(selectbox.TriggerProps{Name: "auth_method"}) {
@@ -2495,6 +2551,7 @@ templ AddAccountDialog() {
 						<div class="w-1/6 shrink-0 px-1" data-wizard-step="2">
 							<div class="account-wizard-panel">
 							<div class="account-wizard-scroll" data-wizard-service-content="email">
+							<div data-add-mode="generic">
 							<h4 class="account-wizard-sticky-header text-sm font-semibold text-foreground flex items-center gap-2">
 								@icon.Send(icon.Props{Class: "size-4 text-muted-foreground"})
 								Sending Mail
@@ -2569,6 +2626,7 @@ templ AddAccountDialog() {
 								</div>
 							</div>
 							</div>
+							</div>
 							<div class="account-wizard-controls flex justify-between">
 								<button type="button" data-on-click='["wizardGo",1]' class="inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors px-3 py-2 rounded-md border border-border hover:bg-accent">
 									@icon.ArrowLeft(icon.Props{Class: "size-4"})
@@ -2623,9 +2681,9 @@ templ AccountWizardAddSidebar() {
 			<div class="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Setup sections</div>
 			<p class="mt-0.5 text-[11px] leading-snug text-muted-foreground/80">Enable/disable the services you need</p>
 		</div>
-		@AccountWizardEmailSection("wizardGo", "", true, true, false, "Test and create")
-		@AccountWizardTopStep("wizardGo", 4, "2", "Contacts", "Optional sync", true, true, "", "contacts", false, false, templ.Attributes{"data-add-contact-sync-switch": ""})
-		@AccountWizardTopStep("wizardGo", 5, "3", "Calendar", "Provider access", true, true, "", "calendar", false, false, nil)
+		@AccountWizardAddEmailSection()
+		@AccountWizardTopStep("wizardGo", 4, "2", "Contacts", "Sync contacts", true, true, "", "contacts", false, false, templ.Attributes{"data-add-contact-sync-switch": ""})
+		@AccountWizardTopStep("wizardGo", 5, "3", "Calendar", "Sync calendars", true, true, "", "calendar", false, false, nil)
 	</aside>
 }
 
@@ -2637,11 +2695,13 @@ templ AccountWizardEditSidebar(data models.EditAccountData) {
 		</div>
 		if accountEditUsesProviderAPI(data.Provider) {
 			@AccountWizardProviderAPIEmailSection("editWizardGo", data.AccountID, data.Provider, data.EmailSyncEnabled, true)
+		} else if editAccountIsICloud(data) {
+			@AccountWizardICloudEmailSection("editWizardGo", data.AccountID, data.EmailSyncEnabled, false, true, "Test and save")
 		} else {
 			@AccountWizardEmailSection("editWizardGo", data.AccountID, data.EmailSyncEnabled, false, true, "Test and save")
 		}
-		@AccountWizardTopStep("editWizardGo", 4, "2", "Contacts", "Optional sync", false, true, data.AccountID, "contacts", data.ContactSync.Enabled, false, nil)
-		@AccountWizardTopStep("editWizardGo", 5, "3", "Calendar", "Provider access", false, true, data.AccountID, "calendar", data.CalendarSync.Enabled, false, nil)
+		@AccountWizardTopStep("editWizardGo", 4, "2", "Contacts", "Sync contacts", false, true, data.AccountID, "contacts", data.ContactSync.Enabled, false, nil)
+		@AccountWizardTopStep("editWizardGo", 5, "3", "Calendar", "Sync calendars", false, true, data.AccountID, "calendar", data.CalendarSync.Enabled, false, nil)
 	</aside>
 }
 
@@ -2652,7 +2712,7 @@ templ AccountWizardEmailSection(goFn string, accountID string, enabled bool, dis
 		<div class="account-wizard-section-heading">
 			<button type="button" data-account-wizard-action={ goFn } data-account-wizard-target-step="0" class="account-wizard-section-title">
 				<span class="account-wizard-index">1</span>
-				<span class="min-w-0"><span class="block text-sm font-semibold">Email</span><span class="block text-xs text-muted-foreground">Mail account setup</span></span>
+				<span class="min-w-0"><span class="block text-sm font-semibold">Email</span><span class="block text-xs text-muted-foreground">Send and receive</span></span>
 			</button>
 			@AccountWizardSectionSwitch(goFn, accountID, "email", enabled, disabled, persist, false, nil)
 		</div>
@@ -2670,15 +2730,69 @@ templ AccountWizardProviderAPIEmailSection(goFn string, accountID string, provid
 		<div class="account-wizard-section-heading">
 			<button type="button" data-account-wizard-action={ goFn } data-account-wizard-target-step="0" class="account-wizard-section-title">
 				<span class="account-wizard-index">1</span>
-				<span class="min-w-0"><span class="block text-sm font-semibold">Email</span><span class="block text-xs text-muted-foreground">{ providerAPIMailTransportLabel(provider) }</span></span>
+				<span class="min-w-0"><span class="block text-sm font-semibold">Email</span><span class="block text-xs text-muted-foreground">Send and receive</span></span>
 			</button>
 			@AccountWizardSectionSwitch(goFn, accountID, "email", enabled, false, persist, false, nil)
 		</div>
 		<div class="account-wizard-substeps">
 			@AccountWizardSubStep(goFn, 0, "1.a", "Account details", "Name and email", false, true)
 			@AccountWizardSubStep(goFn, 1, "1.b", "Mail sync", providerAPIMailTransportLabel(provider), false, false)
-			@AccountWizardSubStep(goFn, 2, "1.c", "Sending", providerAPIMailTransportLabel(provider), false, false)
-			@AccountWizardSubStep(goFn, 3, "1.d", "Test and save", "Check the connection", false, false)
+			@AccountWizardSubStep(goFn, 3, "1.c", "Test and save", "Check the connection", false, false)
+		</div>
+	</div>
+}
+
+// AccountWizardAddEmailSection lists the add wizard's mail steps, whose
+// descriptions follow whether it is adding an iCloud account.
+templ AccountWizardAddEmailSection() {
+	<div class="account-wizard-section" data-wizard-section-steps="0,1,2,3" data-active="true">
+		<div class="account-wizard-section-heading">
+			<button type="button" data-account-wizard-action="wizardGo" data-account-wizard-target-step="0" class="account-wizard-section-title">
+				<span class="account-wizard-index">1</span>
+				<span class="min-w-0"><span class="block text-sm font-semibold">Email</span><span class="block text-xs text-muted-foreground">Send and receive</span></span>
+			</button>
+			@AccountWizardSectionSwitch("wizardGo", "", "email", true, true, false, false, nil)
+		</div>
+		<div class="account-wizard-substeps">
+			@AccountWizardAddSubStep(0, "1.a", "1.a", "Account details", "Name and email", "Account details", "Name and email", true)
+			@AccountWizardAddSubStep(1, "1.b", "1.b", "Incoming", "IMAP settings", "Mail sync", "App-specific password", false)
+			@AccountWizardAddSubStep(2, "1.c", "", "Outgoing", "SMTP settings", "", "", false)
+			@AccountWizardAddSubStep(3, "1.d", "1.c", "Test and create", "Check the connection", "Test and create", "Check the connection", false)
+		</div>
+	</div>
+}
+
+// AccountWizardAddSubStep is one of the add wizard's mail steps. One with no
+// iCloud index is left out for iCloud, which sends with its mail sync login.
+templ AccountWizardAddSubStep(step int, index string, iCloudIndex string, title string, description string, iCloudTitle string, iCloudDescription string, active bool) {
+	<button type="button" data-on-click={ onAction("wizardGo", step) } data-account-wizard-action="wizardGo" data-account-wizard-target-step={ strconv.Itoa(step) } class="account-wizard-step" data-account-wizard-step={ strconv.Itoa(step) } data-active={ strconv.FormatBool(active) }
+		if iCloudIndex == "" {
+			data-add-mode="generic"
+		}
+	>
+		<span class="account-wizard-index"><span data-add-mode="generic">{ index }</span><span data-add-mode="icloud">{ iCloudIndex }</span></span>
+		<span class="min-w-0">
+			<span class="block text-xs font-semibold"><span data-add-mode="generic">{ title }</span><span data-add-mode="icloud">{ iCloudTitle }</span></span>
+			<span class="block text-[11px] text-muted-foreground"><span data-add-mode="generic">{ description }</span><span data-add-mode="icloud">{ iCloudDescription }</span></span>
+		</span>
+	</button>
+}
+
+// AccountWizardICloudEmailSection lists the mail steps of an iCloud account,
+// which has a login but no server settings.
+templ AccountWizardICloudEmailSection(goFn string, accountID string, enabled bool, disabled bool, persist bool, finalStep string) {
+	<div class="account-wizard-section" data-wizard-section-steps="0,1,2,3" data-active="true">
+		<div class="account-wizard-section-heading">
+			<button type="button" data-account-wizard-action={ goFn } data-account-wizard-target-step="0" class="account-wizard-section-title">
+				<span class="account-wizard-index">1</span>
+				<span class="min-w-0"><span class="block text-sm font-semibold">Email</span><span class="block text-xs text-muted-foreground">Send and receive</span></span>
+			</button>
+			@AccountWizardSectionSwitch(goFn, accountID, "email", enabled, disabled, persist, false, nil)
+		</div>
+		<div class="account-wizard-substeps">
+			@AccountWizardSubStep(goFn, 0, "1.a", "Account details", "Name and email", false, true)
+			@AccountWizardSubStep(goFn, 1, "1.b", "Mail sync", "App-specific password", false, false)
+			@AccountWizardSubStep(goFn, 3, "1.c", finalStep, "Check the connection", false, false)
 		</div>
 	</div>
 }
@@ -2799,28 +2913,71 @@ templ AddAccountWizardFooter() {
 	</div>
 }
 
-templ ProviderAPIMailPanel(provider string, mode string) {
+// ProviderAPIMailPanel describes mail sync for Gmail and Outlook, whose API
+// also sends, so these accounts have no sending step.
+templ ProviderAPIMailPanel(provider string) {
 	<h4 class="account-wizard-sticky-header text-sm font-semibold text-foreground flex items-center gap-2">
-		if mode == "send" {
-			@icon.Send(icon.Props{Class: "size-4 text-muted-foreground"})
-		} else {
-			@icon.MailCheck(icon.Props{Class: "size-4 text-muted-foreground"})
-		}
-		{ providerAPIMailPanelTitle(provider, mode) }
+		@icon.MailCheck(icon.Props{Class: "size-4 text-muted-foreground"})
+		Mail sync
 		<span class="text-xs font-normal text-muted-foreground">({ providerAPIMailTransportLabel(provider) })</span>
 	</h4>
 	<div class="rounded-lg border border-border bg-background/45 p-4">
 		<div class="flex items-start gap-3">
 			<div class="mt-0.5 flex size-8 shrink-0 items-center justify-center rounded-md border border-border/70 bg-card text-muted-foreground">
-				if mode == "send" {
-					@icon.Send(icon.Props{Class: "size-4"})
-				} else {
-					@icon.MailCheck(icon.Props{Class: "size-4"})
-				}
+				@icon.MailCheck(icon.Props{Class: "size-4"})
 			</div>
 			<div class="min-w-0">
 				<div class="text-xs font-semibold uppercase tracking-wider text-muted-foreground">{ providerAPIMailTransportLabel(provider) }</div>
-				<p class="mt-1 text-xs leading-relaxed text-muted-foreground">{ providerAPIMailPanelDescription(provider, mode) }</p>
+				<p class="mt-1 text-xs leading-relaxed text-muted-foreground">{ providerAPIMailPanelDescription(provider) }</p>
+			</div>
+		</div>
+	</div>
+}
+
+// ICloudSignInPanel asks for an iCloud account's login. Apple lets other mail
+// apps sign in only with an app-specific password, and the servers are
+// always Apple's, so there are no server settings.
+templ ICloudSignInPanel(username string, passwordPlaceholder string, passwordRequired bool) {
+	<h4 class="account-wizard-sticky-header text-sm font-semibold text-foreground flex items-center gap-2">
+		@icon.MailCheck(icon.Props{Class: "size-4 text-muted-foreground"})
+		Mail sync
+		<span class="text-xs font-normal text-muted-foreground">(iCloud Mail)</span>
+	</h4>
+	<div class="space-y-4">
+		@ICloudAppPasswordNotice("iCloud Mail syncs and sends with an app-specific password, not your Apple Account password. Create one at account.apple.com under Sign-In and Security, then paste it here. If Apple revokes it, create a new one and enter it again.")
+		<div>
+			<label class="text-xs font-medium text-muted-foreground mb-1.5 block">Apple Account email</label>
+			@input.Input(input.Props{
+				Name:        "username",
+				Type:        input.TypeText,
+				Value:       username,
+				Placeholder: "Same as the email address",
+				Attributes:  templ.Attributes{"autocomplete": "username"},
+			})
+			<p class="mt-1.5 text-[11px] leading-relaxed text-muted-foreground">Usually the address itself. For a custom domain, enter your Apple Account's @icloud.com address.</p>
+		</div>
+		<div>
+			<label class="text-xs font-medium text-muted-foreground mb-1.5 block">App-specific password</label>
+			@input.Input(input.Props{
+				Name:        "password",
+				Type:        input.TypePassword,
+				Placeholder: passwordPlaceholder,
+				Required:    passwordRequired,
+				Attributes:  templ.Attributes{"autocomplete": "new-password"},
+			})
+		</div>
+	</div>
+}
+
+templ ICloudAppPasswordNotice(message string) {
+	<div class="rounded-lg border border-border bg-background/45 p-4">
+		<div class="flex items-start gap-3">
+			<div class="mt-0.5 flex size-8 shrink-0 items-center justify-center rounded-md border border-border/70 bg-card text-muted-foreground">
+				@AccountProviderIcon(providers.MailServiceICloud, "size-4")
+			</div>
+			<div class="min-w-0">
+				<div class="text-xs font-semibold uppercase tracking-wider text-muted-foreground">iCloud Mail</div>
+				<p class="mt-1 text-xs leading-relaxed text-muted-foreground">{ message }</p>
 			</div>
 		</div>
 	</div>
@@ -2860,30 +3017,11 @@ func providerAPIMailTransportLabel(provider string) string {
 	return "Gmail API"
 }
 
-func providerAPIMailPanelTitle(provider string, mode string) string {
-	if mode == "send" {
-		if strings.EqualFold(strings.TrimSpace(provider), "outlook") {
-			return "Outlook Sending"
-		}
-		return "Gmail Sending"
-	}
+func providerAPIMailPanelDescription(provider string) string {
 	if strings.EqualFold(strings.TrimSpace(provider), "outlook") {
-		return "Outlook Mail"
+		return "Outlook mail is read through Microsoft Graph delta sync, and messages and drafts are sent through Microsoft Graph. IMAP and SMTP server settings are not used for this account."
 	}
-	return "Gmail Mail"
-}
-
-func providerAPIMailPanelDescription(provider string, mode string) string {
-	if strings.EqualFold(strings.TrimSpace(provider), "outlook") {
-		if mode == "send" {
-			return "Outlook messages and drafts are sent through Microsoft Graph. SMTP server settings are not used for this account."
-		}
-		return "Outlook mail is read through Microsoft Graph delta sync. IMAP server settings are not used for this account."
-	}
-	if mode == "send" {
-		return "Gmail messages and drafts are sent through the Gmail API. SMTP server settings are not used for this account."
-	}
-	return "Gmail mail is read through Gmail API history changes. IMAP server settings are not used for this account."
+	return "Gmail mail is read through Gmail API history changes, and messages and drafts are sent through the Gmail API. IMAP and SMTP server settings are not used for this account."
 }
 
 templ EditAccountDialog(data models.EditAccountData) {
@@ -2898,11 +3036,17 @@ templ EditAccountDialog(data models.EditAccountData) {
 				}
 			}
 			<div class="account-wizard-shell grid gap-4 pt-2 md:grid-cols-[14.5rem_minmax(0,1fr)]">
+		if editAccountSkipsSending(data) {
+			<div data-wizard-skip-sending hidden></div>
+		}
 		@AccountWizardEditSidebar(data)
 				<div id="edit-wizard-viewport" class="account-wizard-viewport">
 					<div id="edit-wizard-track" class="flex items-start transition-transform duration-300 ease-in-out" style="width: 600%">
 						<form id="edit-account-form" hx-post={ fmt.Sprintf("/api/accounts/%s/edit", data.AccountID) } hx-target="#edit-account-save-status" hx-swap="innerHTML" data-on-htmx-before-request='["handleEditAccountSaveStart","$event"]' data-on-htmx-after-request='["handleEditAccountSaveResult","$event"]' class="contents">
 						<input type="hidden" name="provider" value={ data.Provider }/>
+						if editAccountIsICloud(data) {
+							<input type="hidden" name="mail_service" value={ providers.MailServiceICloud }/>
+						}
 						<div class="w-1/6 shrink-0 px-1" data-wizard-step="0">
 							<div class="account-wizard-panel">
 							<div class="account-wizard-scroll" data-wizard-service-content="email">
@@ -2942,7 +3086,9 @@ templ EditAccountDialog(data models.EditAccountData) {
 							<div class="account-wizard-panel">
 							<div class="account-wizard-scroll" data-wizard-service-content="email">
 							if accountEditUsesProviderAPI(data.Provider) {
-								@ProviderAPIMailPanel(data.Provider, "receive")
+								@ProviderAPIMailPanel(data.Provider)
+							} else if editAccountIsICloud(data) {
+								@ICloudSignInPanel(data.Username, "Leave blank to keep current", false)
 							} else {
 								<h4 class="account-wizard-sticky-header text-sm font-semibold text-foreground flex items-center gap-2">
 									@icon.Inbox(icon.Props{Class: "size-4 text-muted-foreground"})
@@ -3037,9 +3183,7 @@ templ EditAccountDialog(data models.EditAccountData) {
 						<div class="w-1/6 shrink-0 px-1" data-wizard-step="2">
 							<div class="account-wizard-panel">
 							<div class="account-wizard-scroll" data-wizard-service-content="email">
-							if accountEditUsesProviderAPI(data.Provider) {
-								@ProviderAPIMailPanel(data.Provider, "send")
-							} else {
+							if !editAccountSkipsSending(data) {
 							<h4 class="account-wizard-sticky-header text-sm font-semibold text-foreground flex items-center gap-2">
 								@icon.Send(icon.Props{Class: "size-4 text-muted-foreground"})
 								Sending Mail
@@ -3290,6 +3434,7 @@ func editAccountTestDescription(data models.EditAccountData) string {
 templ ContactSyncSettings(data models.EditAccountData) {
 	{{ sameCardDAVAuth := strings.TrimSpace(data.ContactSync.Username) == "" || strings.TrimSpace(data.ContactSync.Username) == strings.TrimSpace(data.Username) }}
 	{{ isBuiltinOAuthContactSync := data.Provider == "gmail" || data.Provider == "outlook" }}
+	{{ isICloud := editAccountIsICloud(data) }}
 	{{ providerName := accountProviderName(data.Provider) }}
 	<div class="space-y-3">
 		<div class="account-wizard-sticky-header flex items-start justify-between gap-4">
@@ -3312,6 +3457,12 @@ templ ContactSyncSettings(data models.EditAccountData) {
 		} else {
 			<form id={ fmt.Sprintf("account-contact-sync-form-%s", data.AccountID) } data-contact-sync-form data-wizard-contact-form data-wizard-next-step="5" data-account-id={ data.AccountID } hx-post={ fmt.Sprintf("/api/accounts/%s/contacts/sync", data.AccountID) } hx-target={ fmt.Sprintf("#account-contact-sync-status-%s", data.AccountID) } hx-swap="innerHTML" class="space-y-3">
 				<div id={ fmt.Sprintf("account-contact-sync-fields-%s", data.AccountID) } class="grid gap-3 sm:grid-cols-2">
+					if isICloud {
+						<div class="sm:col-span-2">
+							@ICloudContactsNotice()
+						</div>
+						@ICloudContactFields()
+					} else {
 					<div class="sm:col-span-2">
 						<div class="mb-1.5 flex flex-col gap-1.5 sm:flex-row sm:items-center sm:justify-between">
 							<label class="text-xs font-medium text-muted-foreground">Base URL</label>
@@ -3339,6 +3490,7 @@ templ ContactSyncSettings(data models.EditAccountData) {
 							@input.Input(input.Props{Name: "password", Type: input.TypePassword, Placeholder: contactSyncPasswordPlaceholder(data.ContactSync), Disabled: sameCardDAVAuth})
 						</div>
 					</div>
+					}
 					if len(data.ContactSync.AddressBooks) > 1 {
 						<div class="sm:col-span-2 rounded-lg border border-border bg-background/45 p-3" data-carddav-addressbook-section>
 							<div class="text-xs font-semibold text-foreground">Selected address books</div>
@@ -3383,12 +3535,27 @@ templ ContactSyncSettings(data models.EditAccountData) {
 				</div>
 				<div id={ fmt.Sprintf("account-contact-sync-status-%s", data.AccountID) } class="min-h-0"></div>
 				<div class="flex flex-wrap justify-end gap-2">
-					@CardDAVDiscoverAddressBooksButton(data.AccountID, fmt.Sprintf("account-contact-sync-fields-%s", data.AccountID), fmt.Sprintf("account-contact-sync-status-%s", data.AccountID), data.ContactSync.BaseURL)
-					@CardDAVManualAddressBookButton(fmt.Sprintf("account-contact-sync-fields-%s", data.AccountID), data.ContactSync.BaseURL)
+					if isICloud {
+						@CardDAVDiscoverAddressBooksButton(data.AccountID, fmt.Sprintf("account-contact-sync-fields-%s", data.AccountID), fmt.Sprintf("account-contact-sync-status-%s", data.AccountID), providers.ICloudCardDAVURL)
+					} else {
+						@CardDAVDiscoverAddressBooksButton(data.AccountID, fmt.Sprintf("account-contact-sync-fields-%s", data.AccountID), fmt.Sprintf("account-contact-sync-status-%s", data.AccountID), data.ContactSync.BaseURL)
+						@CardDAVManualAddressBookButton(fmt.Sprintf("account-contact-sync-fields-%s", data.AccountID), data.ContactSync.BaseURL)
+					}
 				</div>
 			</form>
 		}
 	</div>
+}
+
+// ICloudContactFields points contact sync at iCloud with the mail login, in
+// place of the CardDAV server and login fields.
+templ ICloudContactFields() {
+	<input type="hidden" name="base_url" value={ providers.ICloudCardDAVURL }/>
+	<input type="hidden" name="use_account_credentials" value="1"/>
+}
+
+templ ICloudContactsNotice() {
+	<div class="rounded-lg border border-border bg-background/50 p-3 text-xs text-muted-foreground leading-relaxed">iCloud contacts use this account's Apple Account email and app-specific password. If contact sync reports a sign-in problem, create a new app-specific password and enter it under Email, in Sign in.</div>
 }
 
 templ CalendarSyncSettings(data models.EditAccountData) {
@@ -3442,6 +3609,22 @@ templ CalendarSyncSettingsPanel(data models.EditAccountData, message string, isE
 		} else if data.Provider == "outlook" {
 			@CalendarProviderAccessNotice("Microsoft Calendar access", "Discovery uses this account's Microsoft authorization. If Calendar access is missing, reconnect the account from its actions menu, then try again.")
 			<form method="POST" action={ fmt.Sprintf("/api/accounts/%s/calendar/discover", data.AccountID) } data-calendar-discovery-form hx-post={ fmt.Sprintf("/api/accounts/%s/calendar/discover", data.AccountID) } hx-target={ fmt.Sprintf("#account-calendar-sync-panel-%s", data.AccountID) } hx-swap="outerHTML" data-on-htmx-before-request='["handleCalendarDiscoveryStart","$event"]' data-on-htmx-after-request='["handleCalendarDiscoveryResult","$event"]' class="flex justify-end">
+				<button type="submit" data-calendar-discovery-submit class="inline-flex h-8 items-center gap-1.5 rounded-md bg-primary px-3 text-xs font-semibold text-primary-foreground transition-colors hover:bg-primary/90 disabled:pointer-events-none disabled:opacity-70">
+					@icon.RefreshCw(icon.Props{Class: "size-3.5"})
+					<span data-calendar-discovery-label>
+						if data.CalendarSync.SourceCount > 0 {
+							Refresh calendars
+						} else {
+							Discover calendars
+						}
+					</span>
+				</button>
+			</form>
+		} else if editAccountIsICloud(data) {
+			@CalendarProviderAccessNotice("iCloud Calendar access", "Discovery uses this account's Apple Account email and app-specific password. If it reports a sign-in problem, create a new app-specific password and enter it under Email, in Sign in, then try again.")
+			<form method="POST" action={ fmt.Sprintf("/api/accounts/%s/calendar/discover", data.AccountID) } data-calendar-discovery-form hx-post={ fmt.Sprintf("/api/accounts/%s/calendar/discover", data.AccountID) } hx-target={ fmt.Sprintf("#account-calendar-sync-panel-%s", data.AccountID) } hx-swap="outerHTML" data-on-htmx-before-request='["handleCalendarDiscoveryStart","$event"]' data-on-htmx-after-request='["handleCalendarDiscoveryResult","$event"]' class="flex justify-end">
+				<input type="hidden" name="caldav_url" value={ providers.ICloudCalDAVURL }/>
+				<input type="hidden" name="use_account_credentials" value="1"/>
 				<button type="submit" data-calendar-discovery-submit class="inline-flex h-8 items-center gap-1.5 rounded-md bg-primary px-3 text-xs font-semibold text-primary-foreground transition-colors hover:bg-primary/90 disabled:pointer-events-none disabled:opacity-70">
 					@icon.RefreshCw(icon.Props{Class: "size-3.5"})
 					<span data-calendar-discovery-label>
@@ -3735,6 +3918,12 @@ templ AddAccountPostCreateStep(data models.EditAccountData) {
 			</div>
 			<div id={ fmt.Sprintf("add-contact-sync-fields-%s", accountID) } class="space-y-3">
 				<div class="grid gap-3 sm:grid-cols-2">
+					if editAccountIsICloud(data) {
+						<div class="sm:col-span-2">
+							@ICloudContactsNotice()
+						</div>
+						@ICloudContactFields()
+					} else {
 					<div class="sm:col-span-2">
 						<div class="mb-1.5 flex flex-col gap-1.5 sm:flex-row sm:items-center sm:justify-between">
 							<label class="text-xs font-medium text-muted-foreground">Base URL</label>
@@ -3762,6 +3951,7 @@ templ AddAccountPostCreateStep(data models.EditAccountData) {
 							@input.Input(input.Props{Name: "password", Type: input.TypePassword, Placeholder: "Same as incoming mail", Disabled: true})
 						</div>
 					</div>
+					}
 					<div class="hidden sm:col-span-2 rounded-md border border-border bg-background/35 px-3 py-2" data-carddav-addressbook-section data-carddav-manual-addressbook>
 						<label class="mb-1.5 block text-xs font-medium text-muted-foreground">Exact address book URL</label>
 						@input.Input(input.Props{Name: "addressbook_url", Type: input.TypeURL, Placeholder: "https://dav.example.com/addressbooks/user/default/"})
@@ -3771,8 +3961,12 @@ templ AddAccountPostCreateStep(data models.EditAccountData) {
 			</div>
 			<div id={ fmt.Sprintf("add-contact-sync-status-%s", accountID) } class="mt-3 min-h-0"></div>
 			<div class="mt-4 flex flex-wrap justify-end gap-2">
-				@CardDAVDiscoverAddressBooksButton(accountID, fmt.Sprintf("add-contact-sync-fields-%s", accountID), fmt.Sprintf("add-contact-sync-status-%s", accountID), "")
-				@CardDAVManualAddressBookButton(fmt.Sprintf("add-contact-sync-fields-%s", accountID), "")
+				if editAccountIsICloud(data) {
+					@CardDAVDiscoverAddressBooksButton(accountID, fmt.Sprintf("add-contact-sync-fields-%s", accountID), fmt.Sprintf("add-contact-sync-status-%s", accountID), providers.ICloudCardDAVURL)
+				} else {
+					@CardDAVDiscoverAddressBooksButton(accountID, fmt.Sprintf("add-contact-sync-fields-%s", accountID), fmt.Sprintf("add-contact-sync-status-%s", accountID), "")
+					@CardDAVManualAddressBookButton(fmt.Sprintf("add-contact-sync-fields-%s", accountID), "")
+				}
 			</div>
 		</form>
 		</div>

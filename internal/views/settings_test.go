@@ -519,8 +519,8 @@ func TestEditAccountDialogRendersOutlookGraphMailPanels(t *testing.T) {
 	for _, want := range []string{
 		`name="provider" value="outlook"`,
 		"Microsoft Graph",
-		"Outlook mail is read through Microsoft Graph delta sync.",
-		"Outlook messages and drafts are sent through Microsoft Graph.",
+		"Outlook mail is read through Microsoft Graph delta sync, and messages and drafts are sent through Microsoft Graph.",
+		"data-wizard-skip-sending",
 	} {
 		if !strings.Contains(html, want) {
 			t.Fatalf("rendered Outlook edit dialog missing %q: %s", want, html)
@@ -533,6 +533,8 @@ func TestEditAccountDialogRendersOutlookGraphMailPanels(t *testing.T) {
 		"SMTP Host",
 		"(IMAP)",
 		"(SMTP)",
+		"Outlook Sending",
+		`data-account-wizard-step="2"`,
 	} {
 		if strings.Contains(html, notWant) {
 			t.Fatalf("Outlook edit dialog should not render mail transport field %q: %s", notWant, html)
@@ -592,7 +594,7 @@ func TestAccountDialogsIncludeCalendarServiceSection(t *testing.T) {
 	}
 	for _, want := range []string{
 		"Calendar",
-		"Provider access",
+		"Sync calendars",
 		`data-wizard-service-switch="calendar"`,
 		`data-wizard-step="4"`,
 		`data-wizard-step="5"`,

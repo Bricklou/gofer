@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/cristianadrielbraun/gofer/internal/storage"
+	"golang.org/x/net/publicsuffix"
 )
 
 func normalizeCalDAVBaseURL(raw string) (string, error) {
@@ -346,10 +347,62 @@ func resolveCalDAVHref(baseURL, href string) (string, error) {
 	if baseErr != nil || remoteErr != nil || remote.Host == "" || remote.Scheme == "" {
 		return "", fmt.Errorf("CalDAV server returned an invalid resource URL")
 	}
-	if !strings.EqualFold(base.Scheme, remote.Scheme) || !strings.EqualFold(base.Host, remote.Host) {
+	if !sameCalDAVOrigin(base, remote) {
 		return "", fmt.Errorf("CalDAV server returned a resource on a different origin")
 	}
 	return remote.String(), nil
+}
+
+// sameCalDAVOrigin reports whether remote is on the same CalDAV service as
+// base, so it may be sent the same login. That is the same scheme, host and
+// port, or, over HTTPS, another host of the same registered domain: some
+// providers keep each person's calendars on a server of their own, as iCloud
+// does with caldav.icloud.com and p63-caldav.icloud.com. The public suffix
+// list keeps shared domains such as github.io from counting as one site.
+func sameCalDAVOrigin(base, remote *url.URL) bool {
+	if base == nil || remote == nil || !strings.EqualFold(base.Scheme, remote.Scheme) || davURLPort(base) != davURLPort(remote) {
+		return false
+	}
+	baseHost := strings.TrimSuffix(strings.ToLower(base.Hostname()), ".")
+	remoteHost := strings.TrimSuffix(strings.ToLower(remote.Hostname()), ".")
+	if baseHost == remoteHost {
+		return true
+	}
+	if !strings.EqualFold(base.Scheme, "https") {
+		return false
+	}
+	baseSite, baseOK := davRegisteredDomain(baseHost)
+	remoteSite, remoteOK := davRegisteredDomain(remoteHost)
+	return baseOK && remoteOK && baseSite == remoteSite
+}
+
+// davRegisteredDomain is the domain a host is registered under, such as
+// icloud.com for p63-caldav.icloud.com. IP addresses and names without a
+// registered domain have none, so they only match themselves.
+func davRegisteredDomain(host string) (string, bool) {
+	if host == "" || net.ParseIP(host) != nil {
+		return "", false
+	}
+	site, err := publicsuffix.EffectiveTLDPlusOne(host)
+	if err != nil || site == "" {
+		return "", false
+	}
+	return site, true
+}
+
+// davURLPort is a URL's port, with the scheme's default written out: iCloud
+// writes :443 into the URLs it returns.
+func davURLPort(u *url.URL) string {
+	if port := u.Port(); port != "" {
+		return port
+	}
+	switch strings.ToLower(u.Scheme) {
+	case "https":
+		return "443"
+	case "http":
+		return "80"
+	}
+	return ""
 }
 
 func calDAVPropfind(ctx context.Context, endpoint, username, password, depth, body string) (davMultiStatus, error) {
@@ -372,7 +425,7 @@ func calDAVPropfind(ctx context.Context, endpoint, username, password, depth, bo
 			if len(via) >= 5 {
 				return fmt.Errorf("too many CalDAV redirects")
 			}
-			if len(via) > 0 && (!strings.EqualFold(via[0].URL.Scheme, req.URL.Scheme) || !strings.EqualFold(via[0].URL.Host, req.URL.Host)) {
+			if len(via) > 0 && !sameCalDAVOrigin(via[0].URL, req.URL) {
 				return http.ErrUseLastResponse
 			}
 			return nil

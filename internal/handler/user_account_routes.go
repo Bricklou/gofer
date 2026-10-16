@@ -14,18 +14,23 @@ import (
 	"github.com/cristianadrielbraun/gofer/internal/config"
 	"github.com/cristianadrielbraun/gofer/internal/mail"
 	"github.com/cristianadrielbraun/gofer/internal/models"
+	"github.com/cristianadrielbraun/gofer/internal/providers"
 	"github.com/cristianadrielbraun/gofer/internal/storage"
 	"github.com/cristianadrielbraun/gofer/internal/views"
 )
 
 func accountRequestFromForm(r *http.Request) models.CreateAccountRequest {
-	return models.CreateAccountRequest{
+	req := models.CreateAccountRequest{
 		Provider: r.FormValue("provider"), EmailAddress: r.FormValue("email_address"), DisplayName: r.FormValue("display_name"),
 		IMAPHost: r.FormValue("imap_host"), IMAPPort: atoiDefault(r.FormValue("imap_port"), 993), IMAPTLSMode: r.FormValue("imap_tls_mode"),
 		SMTPHost: r.FormValue("smtp_host"), SMTPPort: atoiDefault(r.FormValue("smtp_port"), 465), SMTPTLSMode: r.FormValue("smtp_tls_mode"),
 		Username: r.FormValue("username"), Password: r.FormValue("password"), AuthMethod: r.FormValue("auth_method"),
 		SmtpUsername: r.FormValue("smtp_username"), SmtpPassword: r.FormValue("smtp_password"),
 	}
+	if r.FormValue("mail_service") == providers.MailServiceICloud {
+		providers.ApplyICloud(&req)
+	}
+	return req
 }
 
 func (h *Handler) handleUserAccounts(w http.ResponseWriter, r *http.Request) {

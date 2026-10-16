@@ -87,6 +87,7 @@
     "markThreadNotSpam",
     "markThreadSpam",
     "moveMessage",
+    "openAddAccountWizard",
     "openMessageLabels",
     "openMoveDialog",
     "openNewCompose",
