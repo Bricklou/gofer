@@ -779,7 +779,7 @@ html:root[data-theme="express"] :is(.account-wizard-card-footer, .account-wizard
 
 /* Menus: a silver raised panel; the item under the pointer turns navy with
    white text, and groups are split by an etched line. */
-[data-theme="express"] [data-tui-popover-content]:is(:has([data-tui-dropdown-item]), :has([data-mail-account-sync-button]), :has([data-contact-account-sync-button])) {
+[data-theme="express"] [data-tui-popover-content]:is(:has([data-tui-dropdown-item]), :has([data-mail-account-sync-button]), :has([data-contact-account-sync-button]), :has([data-calendar-account-sync-button])) {
   padding: 3px;
   border: none;
   border-radius: 0;
@@ -790,12 +790,13 @@ html:root[data-theme="express"] :is(.account-wizard-card-footer, .account-wizard
 
 [data-theme="express"] [data-tui-popover-content]:has([data-tui-dropdown-item]) [data-tui-popover-arrow],
 [data-theme="express"] [data-tui-popover-content]:has([data-mail-account-sync-button]) [data-tui-popover-arrow],
-[data-theme="express"] [data-tui-popover-content]:has([data-contact-account-sync-button]) [data-tui-popover-arrow] {
+[data-theme="express"] [data-tui-popover-content]:has([data-contact-account-sync-button]) [data-tui-popover-arrow],
+[data-theme="express"] [data-tui-popover-content]:has([data-calendar-account-sync-button]) [data-tui-popover-arrow] {
   display: none;
 }
 
 [data-theme="express"] [data-tui-dropdown-item],
-[data-theme="express"] :is([data-mail-account-sync-button], [data-contact-account-sync-button]) {
+[data-theme="express"] :is([data-mail-account-sync-button], [data-contact-account-sync-button], [data-calendar-account-sync-button]) {
   border: none;
   border-radius: 0;
   background: transparent;
@@ -804,13 +805,13 @@ html:root[data-theme="express"] :is(.account-wizard-card-footer, .account-wizard
   transition: none;
 }
 
-[data-theme="express"] :is([data-mail-account-sync-button], [data-contact-account-sync-button]):is(:hover, :focus-visible) {
+[data-theme="express"] :is([data-mail-account-sync-button], [data-contact-account-sync-button], [data-calendar-account-sync-button]):is(:hover, :focus-visible) {
   background: var(--xp-select);
   color: var(--xp-select-foreground);
 }
 
 /* Inside a highlighted item, dimmed and coloured text turns white too. */
-[data-theme="express"] :is([data-tui-dropdown-item], [data-mail-account-sync-button], [data-contact-account-sync-button]):is(:hover, :focus-visible) * {
+[data-theme="express"] :is([data-tui-dropdown-item], [data-mail-account-sync-button], [data-contact-account-sync-button], [data-calendar-account-sync-button]):is(:hover, :focus-visible) * {
   color: inherit;
 }
 
@@ -1579,7 +1580,7 @@ html:root[data-theme="express"] :is([data-calendar-month-event], [data-calendar-
 
 /* Sync and its account arrow are a flat toolbar split button, like Send/Recv:
    raised under the pointer, pushed in while syncing or while the menu is open. */
-[data-theme="express"] div.border:has([data-mail-sidebar-sync-button], [data-contact-sidebar-sync-button], [data-calendar-sync-button], button[aria-label="No calendars selected"]) {
+[data-theme="express"] div.border:has([data-mail-sidebar-sync-button], [data-contact-sidebar-sync-button], [data-calendar-sync-button]:not([data-calendar-account-sync-button]), button[aria-label="No calendars selected"]) {
   gap: 1px;
   overflow: visible;
   border: none;
@@ -1587,7 +1588,7 @@ html:root[data-theme="express"] :is([data-calendar-month-event], [data-calendar-
   background: transparent;
 }
 
-[data-theme="express"] :is([data-mail-sidebar-sync-button], [data-contact-sidebar-sync-button], [data-calendar-sync-button], button[aria-label="No calendars selected"], button[aria-label="Choose account to sync"]) {
+[data-theme="express"] :is([data-mail-sidebar-sync-button], [data-contact-sidebar-sync-button], [data-calendar-sync-button]:not([data-calendar-account-sync-button]), button[aria-label="No calendars selected"], button[aria-label="Choose account to sync"]) {
   border: none;
   border-radius: 0;
   background: transparent;
@@ -1595,27 +1596,27 @@ html:root[data-theme="express"] :is([data-calendar-month-event], [data-calendar-
   transition: none;
 }
 
-[data-theme="express"] :is([data-mail-sidebar-sync-button], [data-contact-sidebar-sync-button], [data-calendar-sync-button], button[aria-label="No calendars selected"], button[aria-label="Choose account to sync"]):hover:not(:disabled) {
+[data-theme="express"] :is([data-mail-sidebar-sync-button], [data-contact-sidebar-sync-button], [data-calendar-sync-button]:not([data-calendar-account-sync-button]), button[aria-label="No calendars selected"], button[aria-label="Choose account to sync"]):hover:not(:disabled) {
   background: transparent;
   color: var(--sidebar-foreground);
   box-shadow: inset -1px -1px 0 var(--xp-mid), inset 1px 1px 0 var(--xp-light);
 }
 
-[data-theme="express"] :is([data-mail-sidebar-sync-button], [data-contact-sidebar-sync-button], [data-calendar-sync-button], button[aria-label="No calendars selected"], button[aria-label="Choose account to sync"]):active,
-[data-theme="express"] :is([data-mail-sidebar-sync-button], [data-contact-sidebar-sync-button], [data-calendar-sync-button], button[aria-label="No calendars selected"], button[aria-label="Choose account to sync"])[data-syncing="true"],
-[data-theme="express"] :is([data-mail-sidebar-sync-button], [data-contact-sidebar-sync-button], [data-calendar-sync-button], button[aria-label="No calendars selected"], button[aria-label="Choose account to sync"])[aria-busy="true"],
-[data-theme="express"] [data-tui-popover-open="true"]:not([data-tui-popover-type="hover"]) > :is([data-mail-sidebar-sync-button], [data-contact-sidebar-sync-button], [data-calendar-sync-button], button[aria-label="No calendars selected"], button[aria-label="Choose account to sync"]),
-[data-theme="express"] :is([data-mail-sidebar-sync-button], [data-contact-sidebar-sync-button], [data-calendar-sync-button], button[aria-label="No calendars selected"], button[aria-label="Choose account to sync"])[data-tui-popover-open="true"] {
+[data-theme="express"] :is([data-mail-sidebar-sync-button], [data-contact-sidebar-sync-button], [data-calendar-sync-button]:not([data-calendar-account-sync-button]), button[aria-label="No calendars selected"], button[aria-label="Choose account to sync"]):active,
+[data-theme="express"] :is([data-mail-sidebar-sync-button], [data-contact-sidebar-sync-button], [data-calendar-sync-button]:not([data-calendar-account-sync-button]), button[aria-label="No calendars selected"], button[aria-label="Choose account to sync"])[data-syncing="true"],
+[data-theme="express"] :is([data-mail-sidebar-sync-button], [data-contact-sidebar-sync-button], [data-calendar-sync-button]:not([data-calendar-account-sync-button]), button[aria-label="No calendars selected"], button[aria-label="Choose account to sync"])[aria-busy="true"],
+[data-theme="express"] [data-tui-popover-open="true"]:not([data-tui-popover-type="hover"]) > :is([data-mail-sidebar-sync-button], [data-contact-sidebar-sync-button], [data-calendar-sync-button]:not([data-calendar-account-sync-button]), button[aria-label="No calendars selected"], button[aria-label="Choose account to sync"]),
+[data-theme="express"] :is([data-mail-sidebar-sync-button], [data-contact-sidebar-sync-button], [data-calendar-sync-button]:not([data-calendar-account-sync-button]), button[aria-label="No calendars selected"], button[aria-label="Choose account to sync"])[data-tui-popover-open="true"] {
   background: color-mix(in srgb, var(--xp-face), var(--xp-light));
   color: var(--sidebar-foreground);
   box-shadow: inset 1px 1px 0 var(--xp-mid), inset -1px -1px 0 var(--xp-light);
 }
 
-[data-theme="express"] :is([data-mail-sidebar-sync-button], [data-contact-sidebar-sync-button], [data-calendar-sync-button], button[aria-label="No calendars selected"], button[aria-label="Choose account to sync"]):is(:active, [data-syncing="true"], [aria-busy="true"]) > svg {
+[data-theme="express"] :is([data-mail-sidebar-sync-button], [data-contact-sidebar-sync-button], [data-calendar-sync-button]:not([data-calendar-account-sync-button]), button[aria-label="No calendars selected"], button[aria-label="Choose account to sync"]):is(:active, [data-syncing="true"], [aria-busy="true"]) > svg {
   translate: 1px 1px;
 }
 
-[data-theme="express"] :is([data-mail-sidebar-sync-button], [data-contact-sidebar-sync-button], [data-calendar-sync-button], button[aria-label="No calendars selected"], button[aria-label="Choose account to sync"]):focus-visible {
+[data-theme="express"] :is([data-mail-sidebar-sync-button], [data-contact-sidebar-sync-button], [data-calendar-sync-button]:not([data-calendar-account-sync-button]), button[aria-label="No calendars selected"], button[aria-label="Choose account to sync"]):focus-visible {
   --tw-ring-shadow: 0 0 #0000;
   --tw-ring-offset-shadow: 0 0 #0000;
   outline: 1px dotted var(--foreground);
