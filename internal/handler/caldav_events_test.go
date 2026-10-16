@@ -119,14 +119,21 @@ func TestCalDAVReportRejectsCrossOriginRedirect(t *testing.T) {
 func TestCalDAVCalendarRefreshPreservesCacheAndAccountScope(t *testing.T) {
 	for _, reuseMailbox := range []bool{false, true} {
 		t.Run(fmt.Sprintf("reuseMailbox=%t", reuseMailbox), func(t *testing.T) {
-			var requests, responseMode atomic.Int32
+			var requests, tags, responseMode atomic.Int32
 			wantUsername := "calendar-login"
 			if reuseMailbox {
 				wantUsername = "mailbox-login"
 			}
 			server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-				requests.Add(1)
 				username, password, ok := r.BasicAuth()
+				if r.Method == "PROPFIND" && r.URL.Path == "/calendars/main/" && ok && username == wantUsername && password == "test-password" && r.Header.Get("Depth") == "0" {
+					// The calendar's change tag, read before each download.
+					tags.Add(1)
+					w.WriteHeader(http.StatusMultiStatus)
+					_, _ = fmt.Fprint(w, `<d:multistatus xmlns:d="DAV:" xmlns:cs="http://calendarserver.org/ns/"><d:response><d:href>/calendars/main/</d:href><d:propstat><d:prop><cs:getctag>1</cs:getctag></d:prop><d:status>HTTP/1.1 200 OK</d:status></d:propstat></d:response></d:multistatus>`)
+					return
+				}
+				requests.Add(1)
 				if r.Method != "REPORT" || r.URL.Path != "/calendars/main/" || !ok || username != wantUsername || password != "test-password" {
 					t.Errorf("wrong CalDAV request or credentials: method=%s path=%s username=%s", r.Method, r.URL.Path, username)
 					http.Error(w, "wrong request", http.StatusBadRequest)
@@ -213,8 +220,11 @@ func TestCalDAVCalendarRefreshPreservesCacheAndAccountScope(t *testing.T) {
 			}
 			start := time.Date(2026, time.September, 1, 0, 0, 0, 0, time.UTC)
 			cached, err := db.ListCalendarEvents(t.Context(), "calendar-user", start, start.AddDate(0, 1, 0))
-			if err != nil || len(cached) != 3 || requests.Load() != 2 {
-				t.Fatalf("cached events=%d requests=%d error=%v", len(cached), requests.Load(), err)
+			if err != nil || len(cached) != 3 || requests.Load() != 2 || tags.Load() != 1 {
+				t.Fatalf("cached events=%d requests=%d tags=%d error=%v", len(cached), requests.Load(), tags.Load(), err)
+			}
+			if mark, ok := h.calendarChanges.get(storage.CalendarSource{ID: "main-source", UserID: "calendar-user"}); !ok || mark.tag != "ctag:1" {
+				t.Fatalf("download not marked: %+v %v", mark, ok)
 			}
 			ids := map[string]bool{}
 			for _, event := range cached {

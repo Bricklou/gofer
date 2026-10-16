@@ -111,6 +111,7 @@ type Handler struct {
 	userCalendarWorkers        *userCalendarWorkers
 	calendarChanges            calendarChangeMarks
 	calendarFetchEvents        func(context.Context, storage.CalendarSource, calendar.EventQuery) (calendar.EventPage, error)
+	calendarCheckChanges       func(context.Context, storage.CalendarSource, calendarChangeMark) (bool, error)
 	calendarIncomingLookupTXT  func(context.Context, string) ([]string, error)
 	calendarCreateEvent        func(context.Context, storage.CalendarSource, calendar.EventDraft) (calendar.RemoteEvent, error)
 	calendarMeetSupported      func(context.Context, storage.CalendarSource) (bool, error)

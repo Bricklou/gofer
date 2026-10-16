@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net/http"
 	"strings"
 	"time"
 
@@ -69,12 +70,7 @@ func (h *Handler) fetchCalendarSource(ctx context.Context, source storage.Calend
 	if h.calendarFetchEvents != nil {
 		return h.calendarFetchEvents(ctx, source, query)
 	}
-	key := source.Provider + ":" + source.AccountID
-	credential, ok := credentials[key]
-	if !ok {
-		credential = h.calendarCredentialsForSource(ctx, source.UserID, source)
-		credentials[key] = credential
-	}
+	credential := h.calendarCredentialsCached(ctx, source, credentials)
 	if credential.err != nil {
 		return calendar.EventPage{}, credential.err
 	}
@@ -91,6 +87,58 @@ func (h *Handler) fetchCalendarSource(ctx context.Context, source storage.Calend
 	default:
 		return calendar.EventPage{}, fmt.Errorf("this calendar provider is not supported")
 	}
+}
+
+// calendarCredentialsCached are the credentials of the source's account,
+// read once for all its calendars.
+func (h *Handler) calendarCredentialsCached(ctx context.Context, source storage.CalendarSource, credentials map[string]calendarCredentials) calendarCredentials {
+	key := source.Provider + ":" + source.AccountID
+	credential, ok := credentials[key]
+	if !ok {
+		credential = h.calendarCredentialsForSource(ctx, source.UserID, source)
+		credentials[key] = credential
+	}
+	return credential
+}
+
+// calendarSourceChangeTag is a CalDAV calendar's change tag, empty for other
+// calendars or when it can't be read.
+func (h *Handler) calendarSourceChangeTag(ctx context.Context, source storage.CalendarSource, credentials map[string]calendarCredentials) string {
+	if source.Provider != storage.CalendarSourceProviderCalDAV || h.calendarFetchEvents != nil {
+		return ""
+	}
+	credential := h.calendarCredentialsCached(ctx, source, credentials)
+	if credential.err != nil {
+		return ""
+	}
+	if _, err := resolveCalDAVHref(credential.baseURL, source.RemoteID); err != nil {
+		return ""
+	}
+	tag, _ := calDAVCalendarChangeTag(ctx, source.RemoteID, credential.username, credential.password)
+	return tag
+}
+
+// calendarSourceChanged asks the provider whether anything in the calendar
+// changed since mark.
+func (h *Handler) calendarSourceChanged(ctx context.Context, source storage.CalendarSource, mark calendarChangeMark, credentials map[string]calendarCredentials) (bool, error) {
+	if h.calendarCheckChanges != nil {
+		return h.calendarCheckChanges(ctx, source, mark)
+	}
+	credential := h.calendarCredentialsCached(ctx, source, credentials)
+	if credential.err != nil {
+		return false, credential.err
+	}
+	if source.Provider == storage.CalendarSourceProviderCalDAV {
+		if _, err := resolveCalDAVHref(credential.baseURL, source.RemoteID); err != nil {
+			return false, err
+		}
+	}
+	changed, _, err := calendarChanged(source, mark, func(endpoint string, out any) error {
+		return calendarCreateJSON(ctx, http.MethodGet, endpoint, credential.token, nil, out)
+	}, func() (string, error) {
+		return calDAVCalendarChangeTag(ctx, source.RemoteID, credential.username, credential.password)
+	})
+	return changed, err
 }
 
 func (h *Handler) calendarCredentialsForSource(ctx context.Context, userID string, source storage.CalendarSource) calendarCredentials {

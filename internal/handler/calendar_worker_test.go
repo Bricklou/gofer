@@ -172,6 +172,45 @@ func TestCalendarWorkerRefreshesHiddenSourcesIndependentlyOfMailAndRespectsDueTi
 	}
 }
 
+// Between refreshes, the calendars of someone with Gofer open are asked
+// every minute whether they changed, and downloaded only if they did.
+func TestCalendarWorkerChecksOpenCalendarsForChanges(t *testing.T) {
+	h := calendarWorkerFixture(t)
+	ctx := t.Context()
+	var downloads, checks atomic.Int32
+	var changed atomic.Bool
+	h.calendarFetchEvents = func(_ context.Context, source storage.CalendarSource, query calendar.EventQuery) (calendar.EventPage, error) {
+		downloads.Add(1)
+		return calendar.EventPage{}, nil
+	}
+	h.calendarCheckChanges = func(_ context.Context, source storage.CalendarSource, mark calendarChangeMark) (bool, error) {
+		if source.UserID != "one" || mark.since.IsZero() {
+			t.Errorf("checked %s, marked %v", source.UserID, mark.since)
+		}
+		checks.Add(1)
+		return changed.Load(), nil
+	}
+	h.runCalendarSyncTick(ctx, time.Now())
+	if downloads.Load() != 2 {
+		t.Fatalf("first downloads = %d", downloads.Load())
+	}
+	leave := h.syncer.BeginActiveUserSession("one")
+	defer leave()
+	h.runCalendarSyncTick(ctx, time.Now().Add(20*time.Second))
+	if checks.Load() != 0 {
+		t.Fatal("checked within a minute of the download")
+	}
+	h.runCalendarSyncTick(ctx, time.Now().Add(65*time.Second))
+	if checks.Load() != 1 || downloads.Load() != 2 {
+		t.Fatalf("unchanged: checks = %d, downloads = %d", checks.Load(), downloads.Load())
+	}
+	changed.Store(true)
+	h.runCalendarSyncTick(ctx, time.Now().Add(130*time.Second))
+	if checks.Load() != 2 || downloads.Load() != 3 {
+		t.Fatalf("changed: checks = %d, downloads = %d", checks.Load(), downloads.Load())
+	}
+}
+
 func TestCalendarSyncFailuresAndIncompleteReadsPreserveCacheAndRetry(t *testing.T) {
 	h := calendarWorkerFixture(t)
 	ctx := t.Context()

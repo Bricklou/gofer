@@ -91,6 +91,19 @@ func (o *SyncOrchestrator) BeginActiveUserSession(userID string) func() {
 	}
 }
 
+// UserActive reports whether the user has Gofer open.
+func (o *SyncOrchestrator) UserActive(userID string) bool {
+	if o == nil {
+		return false
+	}
+	if userID = strings.TrimSpace(userID); userID == "" {
+		userID = "default"
+	}
+	o.gmailPollMu.Lock()
+	defer o.gmailPollMu.Unlock()
+	return o.activeUsers[userID] > 0
+}
+
 func (o *SyncOrchestrator) activeUserIDs() []string {
 	if o == nil {
 		return nil

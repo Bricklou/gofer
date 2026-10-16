@@ -85,15 +85,20 @@ func (m *calendarChangeMarks) forget(owner string, selected []storage.CalendarSo
 	}
 }
 
-// calDAVChangeTag is a CalDAV calendar's change tag: its ctag, or its sync
-// token. Empty when the server offers neither.
+// calDAVChangeTag is the change tag of the request's CalDAV calendar.
 func (p *userCalendarRequest) calDAVChangeTag(ctx context.Context, source storage.CalendarSource) (string, error) {
 	username, password, err := p.calDAVCredentials(source)
 	if err != nil {
 		return "", err
 	}
 	ctx = context.WithValue(ctx, calendarDiscoveryDAVGuardKey{}, calendarDiscoveryDAVCallbacks{ready: p.ready, failure: p.recordRetry})
-	multi, err := calDAVRequest(ctx, "PROPFIND", source.RemoteID, username, password, "0",
+	return calDAVCalendarChangeTag(ctx, source.RemoteID, username, password)
+}
+
+// calDAVCalendarChangeTag is a CalDAV calendar's change tag: its ctag, or
+// its sync token. Empty when the server offers neither.
+func calDAVCalendarChangeTag(ctx context.Context, calendarURL, username, password string) (string, error) {
+	multi, err := calDAVRequest(ctx, "PROPFIND", calendarURL, username, password, "0",
 		`<?xml version="1.0" encoding="utf-8"?><d:propfind xmlns:d="DAV:" xmlns:cs="http://calendarserver.org/ns/"><d:prop><cs:getctag/><d:sync-token/></d:prop></d:propfind>`, 15*time.Second)
 	if err != nil {
 		return "", err
@@ -115,28 +120,34 @@ func (p *userCalendarRequest) calDAVChangeTag(ctx context.Context, source storag
 }
 
 // calendarChanged asks the provider whether anything in the calendar changed
-// since mark.
-func (p *userCalendarRequest) calendarChanged(ctx context.Context, source storage.CalendarSource, mark calendarChangeMark) (changed bool, tag string, err error) {
+// since mark. getJSON reads from Google or Outlook, davTag reads a CalDAV
+// calendar's change tag.
+func calendarChanged(source storage.CalendarSource, mark calendarChangeMark, getJSON func(endpoint string, out any) error, davTag func() (string, error)) (changed bool, tag string, err error) {
 	since := mark.since.Add(-calendarChangeSkew).UTC().Format(time.RFC3339)
 	switch source.Provider {
 	case "gmail":
-		p.credentials = p.h.userCredentials.CalendarAccount(source.UserID, source.AccountID, false)
 		values := url.Values{"updatedMin": {since}, "showDeleted": {"true"}, "maxResults": {"1"}, "fields": {"items(id)"}}
 		var page struct{ Items []struct{ ID string } }
-		err := p.getJSON(ctx, googleCalendarAPIBaseURL+"/calendars/"+url.PathEscape(source.RemoteID)+"/events?"+values.Encode(), &page)
+		err := getJSON(googleCalendarAPIBaseURL+"/calendars/"+url.PathEscape(source.RemoteID)+"/events?"+values.Encode(), &page)
 		return len(page.Items) > 0, "", err
 	case "outlook":
-		p.credentials = p.h.userCredentials.CalendarAccount(source.UserID, source.AccountID, false)
 		values := url.Values{"$filter": {"lastModifiedDateTime ge " + since}, "$top": {"1"}, "$select": {"id"}}
 		var page struct{ Value []struct{ ID string } }
-		err := p.getJSON(ctx, outlookGraphBaseURL+"/me/calendars/"+url.PathEscape(source.RemoteID)+"/events?"+values.Encode(), &page)
+		err := getJSON(outlookGraphBaseURL+"/me/calendars/"+url.PathEscape(source.RemoteID)+"/events?"+values.Encode(), &page)
 		return len(page.Value) > 0, "", err
 	case storage.CalendarSourceProviderCalDAV:
-		tag, err := p.calDAVChangeTag(ctx, source)
+		tag, err := davTag()
 		// A server without change tags is only refreshed on its schedule.
 		return err == nil && tag != "" && tag != mark.tag, tag, err
 	}
 	return false, "", nil
+}
+
+// calendarChangeDue reports whether a calendar is to be asked for changes
+// now: downloaded before, not being downloaded, not due for its regular
+// refresh, and not asked within the last minute.
+func calendarChangeDue(source storage.CalendarSource, mark calendarChangeMark, known bool, now time.Time) bool {
+	return known && source.SyncState != "syncing" && source.NextAttemptAt != nil && source.NextAttemptAt.After(now) && now.Sub(mark.checked) >= calendarQuickCheckInterval-calendarChangeSkew
 }
 
 // checkUserCalendarChanges downloads again those of an account's calendars
@@ -160,7 +171,7 @@ func (h *Handler) checkUserCalendarChanges(ctx context.Context, owner, account s
 			}
 			mark, ok := h.calendarChanges.get(source)
 			now := time.Now()
-			if source.AccountID != account || !ok || source.SyncState == "syncing" || source.NextAttemptAt == nil || !source.NextAttemptAt.After(now) || now.Sub(mark.checked) < calendarQuickCheckInterval-calendarChangeSkew {
+			if source.AccountID != account || !calendarChangeDue(source, mark, ok, now) {
 				continue
 			}
 			changed, err := h.userCalendarSourceChanged(ctx, source, mark)
@@ -193,7 +204,10 @@ func (h *Handler) userCalendarSourceChanged(ctx context.Context, source storage.
 		if source.Provider != storage.CalendarSourceProviderCalDAV && h.userCredentials == nil {
 			return errors.New("mailbox OAuth is not configured")
 		}
-		changed, _, err = p.calendarChanged(ctx, current, mark)
+		if source.Provider != storage.CalendarSourceProviderCalDAV {
+			p.credentials = h.userCredentials.CalendarAccount(source.UserID, source.AccountID, false)
+		}
+		changed, _, err = calendarChanged(current, mark, func(endpoint string, out any) error { return p.getJSON(ctx, endpoint, out) }, func() (string, error) { return p.calDAVChangeTag(ctx, current) })
 		return err
 	})
 	return changed, err

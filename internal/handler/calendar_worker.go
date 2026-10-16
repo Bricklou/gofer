@@ -76,30 +76,62 @@ func (h *Handler) runCalendarSyncTick(ctx context.Context, now time.Time) {
 		}
 		return
 	}
-	jobs := make(chan storage.CalendarSource)
+	// A calendar due for its refresh is downloaded; one of someone who has
+	// Gofer open is asked every minute whether it changed in between, and
+	// downloaded if it did.
+	type job struct {
+		source storage.CalendarSource
+		check  bool
+		mark   calendarChangeMark
+	}
+	jobs := make(chan job)
 	var workers sync.WaitGroup
 	for range 2 {
 		workers.Add(1)
 		go func() {
 			defer workers.Done()
-			for source := range jobs {
+			for job := range jobs {
+				source := job.source
 				settings := h.db.GetUISettings(ctx, source.UserID)
 				start, end := calendarBackgroundWindow(now, viewsCalendarLocation(settings))
-				if _, err := h.syncCalendarSource(ctx, source, start, end, true, make(map[string]calendarCredentials)); err != nil && ctx.Err() == nil {
+				credentials := make(map[string]calendarCredentials)
+				if job.check {
+					changed, err := h.calendarSourceChanged(ctx, source, job.mark, credentials)
+					h.calendarChanges.checked(source, time.Now())
+					if err != nil || !changed {
+						if err != nil && ctx.Err() == nil {
+							log.Printf("calendar check %s: %v", source.ID, err)
+						}
+						continue
+					}
+				}
+				if _, err := h.syncCalendarSource(ctx, source, start, end, !job.check, credentials); err != nil && ctx.Err() == nil {
 					log.Printf("calendar sync %s: %v", source.ID, err)
 				}
 			}
 		}()
 	}
+	owners := map[string][]storage.CalendarSource{}
+	for _, source := range sources {
+		owners[source.UserID] = append(owners[source.UserID], source)
+	}
+	for owner, selected := range owners {
+		h.calendarChanges.forget(owner, selected)
+	}
 send:
 	for _, source := range sources {
+		next := job{source: source}
 		if source.NextAttemptAt != nil && source.NextAttemptAt.After(now) {
-			continue
+			mark, known := h.calendarChanges.get(source)
+			if !h.syncer.UserActive(source.UserID) || !calendarChangeDue(source, mark, known, now) {
+				continue
+			}
+			next.check, next.mark = true, mark
 		}
 		select {
 		case <-ctx.Done():
 			break send
-		case jobs <- source:
+		case jobs <- next:
 		}
 	}
 	close(jobs)
@@ -173,6 +205,9 @@ func (h *Handler) performCalendarSourceSync(parent context.Context, source stora
 		return 0, err
 	}
 	h.publishCalendarSync(ctx, source, false)
+	// What the calendar was like as the download began, for the quick
+	// checks that follow; a change during the download is seen by them.
+	began, tag := time.Now(), h.calendarSourceChangeTag(ctx, source, credentials)
 	page, err := h.fetchCalendarSource(ctx, source, calendar.EventQuery{WindowStart: start, WindowEnd: end, IncludeDeleted: true}, credentials)
 	if err == nil && (page.NextPageToken != "" || page.FullSyncRequired) {
 		err = fmt.Errorf("incomplete calendar snapshot; keeping cached events")
@@ -187,6 +222,9 @@ func (h *Handler) performCalendarSourceSync(parent context.Context, source stora
 			}
 		}
 		err = h.db.ReplaceCalendarEvents(ctx, source.UserID, source.ID, events, start, end)
+		if err == nil {
+			h.calendarChanges.downloaded(source, tag, began)
+		}
 	}
 	// Cancellation must not leave a durable "syncing" state after work stops.
 	stateCtx, finish := context.WithTimeout(context.WithoutCancel(parent), 5*time.Second)
