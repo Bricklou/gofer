@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/cristianadrielbraun/gofer/internal/config"
+	"github.com/cristianadrielbraun/gofer/internal/mail"
 	"github.com/cristianadrielbraun/gofer/internal/storage"
 )
 
@@ -56,7 +57,69 @@ func (h *Handler) StartUserCalendarSync(ctx context.Context, options UserCalenda
 	}
 	h.userCalendarWorkers = w
 	go h.runUserCalendarReminders(ctx)
+	if h.syncer != nil {
+		go h.wakeUserCalendarOnNewMail(ctx, h.syncer.Events())
+	}
 	return nil
+}
+
+// New mail may hold an invitation for a CalDAV calendar: its account's
+// calendar work runs now rather than at its next turn. Only the mail is read
+// early; the calendar itself is still refreshed on its own schedule.
+func (h *Handler) wakeUserCalendarOnNewMail(ctx context.Context, events *mail.EventBus) {
+	subscription := events.SubscribeFor(mail.SubscribeOptions{All: true, Types: []mail.EventType{mail.EventNewMail}})
+	defer subscription.Close()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-subscription.Ready():
+			woken := false
+			seen := map[userCalendarJob]bool{}
+			for _, event := range subscription.Take() {
+				job := userCalendarJob{owner: event.UserID, account: event.AccountID}
+				if job.owner == "" || job.account == "" || seen[job] || !calendarInvitationFolderRole(event.FolderRole) {
+					continue
+				}
+				seen[job] = true
+				if !h.userAccountHasCalDAVCalendar(ctx, job.owner, job.account) {
+					continue
+				}
+				if err := h.userStorage.NudgeServiceAccount(ctx, job.owner, job.account, storage.ScheduledCalendar, time.Now()); err != nil {
+					if ctx.Err() == nil && !errors.Is(err, storage.ErrAccountRoute) {
+						log.Printf("owned calendar: wake for new mail: %v", err)
+					}
+					continue
+				}
+				woken = true
+			}
+			if woken {
+				h.signalUserCalendar()
+			}
+		}
+	}
+}
+
+// calendarInvitationFolderRole reports whether invitations are read from
+// mail in a folder of this role, as ListCalendarInvitationMessages does.
+func calendarInvitationFolderRole(role string) bool {
+	switch role {
+	case "sent", "trash", "junk", "spam", "drafts":
+		return false
+	}
+	return true
+}
+
+func (h *Handler) userAccountHasCalDAVCalendar(ctx context.Context, owner, account string) bool {
+	found := false
+	_ = h.userAccounts.WithAccountForUser(ctx, owner, account, func(_ *config.AccountStore, db *storage.DB) error {
+		sources, err := db.ListSelectedCalendarSources(ctx, owner)
+		for _, source := range sources {
+			found = found || (source.AccountID == account && source.Provider == storage.CalendarSourceProviderCalDAV)
+		}
+		return err
+	})
+	return found
 }
 
 func (h *Handler) signalUserCalendar() {

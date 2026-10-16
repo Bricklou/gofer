@@ -1,6 +1,7 @@
 package storage
 
 import (
+	"errors"
 	"testing"
 	"time"
 )
@@ -29,6 +30,47 @@ func TestAccountServiceCalendarWakeReservationAndStartupFence(t *testing.T) {
 	_, reserved, forced, err = r.ReserveServiceAccountWithWake(t.Context(), "alice", account.AccountID, ScheduledCalendar, now, now.Add(time.Minute), false)
 	if err != nil || !reserved || !forced {
 		t.Fatal("startup wake not captured", reserved, forced, err)
+	}
+}
+
+// New mail moves the calendar's turn up without forcing a refresh, and a
+// pending forced wake stays forced.
+func TestAccountServiceNudgeIsDueButNotForced(t *testing.T) {
+	_, _, r := newAccountRoutingTest(t, 1)
+	account := createRoutingTestAccount(t, r, "alice")
+	now := time.Now()
+	revision, _, _, err := r.ReserveServiceAccountWithWake(t.Context(), "alice", account.AccountID, ScheduledCalendar, now, now.Add(time.Minute), false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if ok, err := r.CompleteServiceAccount(t.Context(), "alice", account.AccountID, ScheduledCalendar, revision, now.Add(time.Hour)); err != nil || !ok {
+		t.Fatal(ok, err)
+	}
+	if err := r.NudgeServiceAccount(t.Context(), "alice", account.AccountID, ScheduledCalendar, now); err != nil {
+		t.Fatal(err)
+	}
+	revision, reserved, forced, err := r.ReserveServiceAccountWithWake(t.Context(), "alice", account.AccountID, ScheduledCalendar, now, now.Add(time.Minute), false)
+	if err != nil || !reserved || forced {
+		t.Fatal("nudge", reserved, forced, err)
+	}
+	// Mail during the work: the work's own deadline doesn't undo it.
+	if err := r.NudgeServiceAccount(t.Context(), "alice", account.AccountID, ScheduledCalendar, now); err != nil {
+		t.Fatal(err)
+	}
+	if ok, err := r.CompleteServiceAccount(t.Context(), "alice", account.AccountID, ScheduledCalendar, revision, now.Add(time.Hour)); err != nil || ok {
+		t.Fatal("nudge overwritten", ok, err)
+	}
+	if err := r.ResetServiceAccounts(t.Context(), "alice", account.AccountID, ScheduledCalendar); err != nil {
+		t.Fatal(err)
+	}
+	if err := r.NudgeServiceAccount(t.Context(), "alice", account.AccountID, ScheduledCalendar, now); err != nil {
+		t.Fatal(err)
+	}
+	if _, reserved, forced, err := r.ReserveServiceAccountWithWake(t.Context(), "alice", account.AccountID, ScheduledCalendar, now, now.Add(time.Minute), false); err != nil || !reserved || !forced {
+		t.Fatal("forced wake lost", reserved, forced, err)
+	}
+	if err := r.NudgeServiceAccount(t.Context(), "bob", account.AccountID, ScheduledCalendar, now); !errors.Is(err, ErrAccountRoute) {
+		t.Fatal("another owner's account nudged", err)
 	}
 }
 

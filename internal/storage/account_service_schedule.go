@@ -126,6 +126,28 @@ func (r *AccountRouting) ResetServiceAccounts(ctx context.Context, owner, id str
 	return err
 }
 
+// NudgeServiceAccount makes an account's service due now without forcing it:
+// work that waits for its own schedule, such as a provider refresh, still
+// waits. A wake already pending stays one.
+func (r *AccountRouting) NudgeServiceAccount(ctx context.Context, owner, id string, service ScheduledAccountService, now time.Time) error {
+	if !validScheduledService(service) {
+		return errors.New("unknown scheduled service")
+	}
+	due := max(now.UnixMilli(), 1)
+	result, err := r.System().Write().ExecContext(ctx, `INSERT INTO gofer_account_service_schedule(account_id,service,next_due_ms,revision)
+ SELECT d.account_id,?,?,1 FROM gofer_account_directory d JOIN users u ON u.id=d.user_id
+ WHERE d.user_id=? AND d.account_id=? AND d.state='active' AND u.status='active' AND u.deletion_pending=0 AND u.user_type='webmail' AND u.is_admin=0
+ ON CONFLICT(account_id,service) DO UPDATE SET next_due_ms=CASE WHEN next_due_ms=0 THEN 0 ELSE MIN(next_due_ms,excluded.next_due_ms) END,revision=revision+1`, service, due, owner, id)
+	if err != nil {
+		return err
+	}
+	count, err := result.RowsAffected()
+	if err == nil && count == 0 {
+		return ErrAccountRoute
+	}
+	return err
+}
+
 // An owner with no account and no queued-work hint needs no database probe.
 // A migrator must seed hints for copied pending queues without active accounts.
 func (r *AccountRouting) ListDueContactQueueOwners(ctx context.Context, after string, now time.Time, limit int, startup bool) ([]string, error) {
