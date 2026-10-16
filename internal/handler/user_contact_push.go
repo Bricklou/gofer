@@ -213,7 +213,9 @@ func (p *userContactPull) pushGoogleAttempt(ctx context.Context, contact models.
 	if source != nil {
 		remoteID, etag = source.RemoteID, source.Etag
 	}
-	if remoteID == "" {
+	// An existing copy is found by its email address; without one, a new
+	// copy is created.
+	if remoteID == "" && strings.TrimSpace(contact.Email) != "" {
 		query := url.Values{"query": {contact.Email}, "readMask": {googleContactPersonFields()}, "pageSize": {"10"}}
 		var page googleSearchContactsResponse
 		if err := p.getJSON(ctx, googlePeopleAPIBaseURL+"/people:searchContacts?"+query.Encode(), &page); err != nil {
@@ -317,7 +319,7 @@ func (p *userContactPull) pushOutlookAttempt(ctx context.Context, contact models
 	if source != nil {
 		remoteID = source.RemoteID
 	}
-	if remoteID == "" {
+	if remoteID == "" && strings.TrimSpace(contact.Email) != "" {
 		query := outlookContactListQuery()
 		query.Set("$top", "25")
 		query.Set("$filter", "emailAddresses/any(a:a/address eq '"+escapeODataString(contact.Email)+"')")

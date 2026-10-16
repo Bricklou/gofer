@@ -22,7 +22,7 @@ func userContactEditError(w http.ResponseWriter, r *http.Request, err error) {
 	switch {
 	case errors.Is(err, sql.ErrNoRows):
 		http.NotFound(w, r)
-	case errors.Is(err, storage.ErrContactEditInvalid), errors.Is(err, storage.ErrContactSetupInvalid):
+	case errors.Is(err, storage.ErrContactEditInvalid), errors.Is(err, storage.ErrContactEmailInvalid), errors.Is(err, storage.ErrContactSetupInvalid):
 		http.Error(w, err.Error(), http.StatusBadRequest)
 	case errors.Is(err, storage.ErrContactEditChanged), errors.Is(err, config.ErrAccountServicesChanged):
 		http.Error(w, "Contact or sync locations changed; reload the contact and retry.", http.StatusConflict)

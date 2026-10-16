@@ -1159,6 +1159,14 @@ func contactFromForm(r *http.Request, targets []string) (models.Contact, error) 
 		AvatarURL:             avatarURL,
 		RemoveAvatar:          removeAvatar,
 	}
+	// The email address is optional. If only an additional one is filled in,
+	// it becomes the main one.
+	if contact.Email == "" && len(contact.AdditionalEmails) > 0 {
+		contact.Email, contact.AdditionalEmails = contact.AdditionalEmails[0], contact.AdditionalEmails[1:]
+		if len(contact.AdditionalEmailLabels) > 0 {
+			contact.EmailLabel, contact.AdditionalEmailLabels = contact.AdditionalEmailLabels[0], contact.AdditionalEmailLabels[1:]
+		}
+	}
 	return contact, nil
 }
 

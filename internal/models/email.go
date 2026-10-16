@@ -1,6 +1,9 @@
 package models
 
-import "html/template"
+import (
+	"html/template"
+	"strings"
+)
 
 type Account struct {
 	ID                  string
@@ -117,6 +120,24 @@ type Contact struct {
 	SyncUpdatedAt         string
 }
 
+// FallbackName is what a contact is called when it has no name: its email
+// address, or failing that its organization or phone number. Contacts don't
+// need an email address.
+func (c Contact) FallbackName() string {
+	for _, value := range []string{c.Name, c.Email, c.Organization, c.Phone} {
+		if value = strings.TrimSpace(value); value != "" {
+			return value
+		}
+	}
+	return ""
+}
+
+// HasDetails reports whether a contact has something to identify it by: a
+// name, email address, phone number or organization.
+func (c Contact) HasDetails() bool {
+	return c.FallbackName() != ""
+}
+
 type ContactSyncConfig struct {
 	AccountID      string
 	UserID         string
@@ -176,6 +197,7 @@ type ContactAddressBook struct {
 
 type ContactFilters struct {
 	Query      string
+	WithEmail  bool // only contacts that can be written to, for address suggestions
 	Source     string
 	SaveTarget string
 	Activity   string

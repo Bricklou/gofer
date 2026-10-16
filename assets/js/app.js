@@ -730,12 +730,21 @@ document.addEventListener("DOMContentLoaded", function () {
         }
       }
       if (!row) return
-      var nameInput = form.querySelector('[name="name"]')
-      var emailInput = form.querySelector('[name="email"]')
+      function fieldValue(name) {
+        var input = form.querySelector('[name="' + name + '"]')
+        return input ? input.value.trim() : ""
+      }
+      // Contacts don't need an email address. Like the server, fall back to
+      // the email, organization or phone for the name, and show the phone
+      // under it when there is no email.
+      var email = fieldValue("email")
+      var phone = fieldValue("phone")
+      var name = fieldValue("name") || email || fieldValue("organization") || phone
+      var detail = email || (phone !== name ? phone : "")
       var names = row.querySelectorAll("[data-contact-name]")
       var emails = row.querySelectorAll("[data-contact-email]")
-      for (var i = 0; i < names.length; i++) names[i].textContent = nameInput ? nameInput.value : ""
-      for (var j = 0; j < emails.length; j++) emails[j].textContent = emailInput ? emailInput.value : ""
+      for (var i = 0; i < names.length; i++) names[i].textContent = name
+      for (var j = 0; j < emails.length; j++) emails[j].textContent = detail
     }
 
     function saveContactEditor(form, submitter) {

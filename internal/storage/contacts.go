@@ -4,10 +4,12 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"sort"
 	"strings"
 	"time"
+	"unicode"
 
 	avatarresolver "github.com/cristianadrielbraun/gofer/internal/avatar"
 	"github.com/cristianadrielbraun/gofer/internal/models"
@@ -63,12 +65,29 @@ func normalizeContactEmail(email string) string {
 	return email
 }
 
+// A contact needs something to be found by, but not an email address: an
+// address book can hold people you only call.
+var (
+	ErrContactEmpty        = errors.New("add a name, email address or phone number")
+	ErrContactEmailInvalid = errors.New("enter a valid email address")
+)
+
 func contactDisplayName(name, email string) string {
 	name = strings.TrimSpace(name)
 	if name != "" {
 		return name
 	}
 	return strings.TrimSpace(email)
+}
+
+// contactInitials are shown when a contact has no picture. A contact named
+// only by its phone number gets "#" instead of two of its digits.
+func contactInitials(contact models.Contact) string {
+	name := contactDisplayName(contact.Name, contact.Email)
+	if strings.IndexFunc(name, unicode.IsLetter) < 0 && strings.TrimSpace(name) != "" {
+		return "#"
+	}
+	return initials(name)
 }
 
 func boolSetting(value string, fallback bool) bool {
@@ -435,6 +454,14 @@ func (db *DB) listProfileContacts(ctx context.Context, userID string, filters mo
 		                    AND email.is_primary = 1
 		                  ORDER BY email.ordinal, email.id
 		                  LIMIT 1), p.primary_email),
+		       COALESCE((SELECT phone.value
+		                   FROM contact_fields phone
+		                  WHERE phone.profile_id = p.id
+		                    AND phone.user_id = p.user_id
+		                    AND phone.kind = 'phone'
+		                  ORDER BY CASE WHEN p.sync_enabled = 1 AND phone.source = 'canonical' THEN 0 ELSE 1 END,
+		                           phone.is_primary DESC, phone.ordinal, phone.id
+		                  LIMIT 1), ''),
 		       p.avatar_url, p.is_deleted,
 		       p.origin AS source,
 		       CASE WHEN p.origin = 'manual' THEN 1 ELSE 0 END AS is_manual,
@@ -503,11 +530,17 @@ func contactProfileFilterSQL(userID string, filters models.ContactFilters) (stri
 			FROM contact_fields email
 			WHERE email.profile_id = p.id
 			  AND email.user_id = p.user_id
-			  AND email.kind = 'email'
+			  AND email.kind IN ('email', 'phone')
 			  AND (email.value LIKE ? OR email.normalized_value LIKE ?)
 		))`
 		like := "%" + query + "%"
 		args = append(args, like, like, like, strings.ToLower(like))
+	}
+	if filters.WithEmail {
+		where += ` AND (p.primary_email != '' OR EXISTS (
+			SELECT 1 FROM contact_fields email
+			WHERE email.profile_id = p.id AND email.user_id = p.user_id AND email.kind = 'email'
+		))`
 	}
 	switch filters.Source {
 	case "manual":
@@ -546,14 +579,14 @@ func scanProfileContactRow(scanner interface{ Scan(dest ...any) error }, loc *ti
 	var messageCount int
 	var source string
 	var lastSeen, createdAt, updatedAt sql.NullString
-	if err := scanner.Scan(&c.ID, &c.Name, &c.Email, &c.AvatarURL, &isDeleted, &source, &isManual, &messageCount, &lastSeen, &createdAt, &updatedAt); err != nil {
+	if err := scanner.Scan(&c.ID, &c.Name, &c.Email, &c.Phone, &c.AvatarURL, &isDeleted, &source, &isManual, &messageCount, &lastSeen, &createdAt, &updatedAt); err != nil {
 		return c, err
 	}
 	c.Source = source
 	c.IsManual = isManual == 1
 	c.IsDeleted = isDeleted == 1
 	c.MessageCount = messageCount
-	c.Initials = initials(contactDisplayName(c.Name, c.Email))
+	c.Initials = contactInitials(c)
 	c.AvatarHash = avatarresolver.GravatarHash(c.Email)
 	if strings.TrimSpace(c.AvatarURL) != "" {
 		c.AvatarSource = "provider_contact"
@@ -631,7 +664,7 @@ func (db *DB) SearchContacts(ctx context.Context, userID, query string, limit in
 	if query == "" {
 		return nil, nil
 	}
-	contacts, err := db.listProfileContacts(ctx, userID, models.ContactFilters{Query: query}, limit)
+	contacts, err := db.listProfileContacts(ctx, userID, models.ContactFilters{Query: query, WithEmail: true}, limit)
 	if err != nil {
 		return nil, err
 	}
@@ -821,7 +854,7 @@ func (db *DB) contactFromProfile(ctx context.Context, userID string, profile mod
 	if lastSeen.Valid {
 		contact.LastSeenAt = formatContactTime(lastSeen.String, timezoneLocationFromContext(ctx))
 	}
-	contact.Initials = initials(contactDisplayName(contact.Name, contact.Email))
+	contact.Initials = contactInitials(contact)
 	contact.AvatarHash = avatarresolver.GravatarHash(contact.Email)
 	if strings.TrimSpace(contact.AvatarURL) != "" {
 		contact.AvatarSource = "provider_contact"
@@ -1397,7 +1430,7 @@ type contactSyncWriter interface {
 }
 
 func enqueueContactSyncOperation(ctx context.Context, writer contactSyncWriter, userID string, contact models.Contact, previous *models.Contact, excludedAccountID string) (string, error) {
-	if userID == "" || strings.TrimSpace(contact.ID) == "" || normalizeContactEmail(contact.Email) == "" {
+	if userID == "" || strings.TrimSpace(contact.ID) == "" || !contact.HasDetails() {
 		return "", nil
 	}
 	payload, err := json.Marshal(ContactSyncOperationPayload{Contact: contact, Previous: previous, ExcludedAccountID: strings.TrimSpace(excludedAccountID)})
@@ -1620,7 +1653,7 @@ func scanContactRow(scanner interface{ Scan(dest ...any) error }, loc *time.Loca
 	}
 	c.IsManual = isManual == 1
 	c.IsDeleted = isDeleted == 1
-	c.Initials = initials(contactDisplayName(c.Name, c.Email))
+	c.Initials = contactInitials(c)
 	c.AvatarHash = avatarresolver.GravatarHash(c.Email)
 	if lastSeen.Valid {
 		c.LastSeenSort = lastSeen.String
@@ -1649,12 +1682,15 @@ func formatContactTime(raw string, loc *time.Location) string {
 func (db *DB) SaveContact(ctx context.Context, userID string, contact models.Contact) (models.Contact, error) {
 	email := strings.TrimSpace(contact.Email)
 	normalized := normalizeContactEmail(email)
-	if normalized == "" {
-		return models.Contact{}, fmt.Errorf("email is required")
+	if email != "" && normalized == "" {
+		return models.Contact{}, ErrContactEmailInvalid
 	}
-	name := contactDisplayName(contact.Name, email)
+	if !contact.HasDetails() {
+		return models.Contact{}, ErrContactEmpty
+	}
+	name := contact.FallbackName()
 	contactID := strings.TrimSpace(contact.ID)
-	if contactID == "" {
+	if contactID == "" && normalized != "" {
 		if existing, err := db.FindContactProfileByIdentity(ctx, userID, "email", normalized); err != nil {
 			return models.Contact{}, err
 		} else if existing != nil {
@@ -1706,7 +1742,7 @@ func (db *DB) SaveContact(ctx context.Context, userID string, contact models.Con
 // identical. The copied old cards are never mutated in a retained snapshot.
 func contactProfileForSave(userID string, contact models.Contact, existingProfile *models.ContactProfile) (models.ContactProfile, []string) {
 	email := strings.TrimSpace(contact.Email)
-	name := contactDisplayName(contact.Name, email)
+	name := contact.FallbackName()
 	contactID := strings.TrimSpace(contact.ID)
 	profile := models.ContactProfile{
 		ID:           contactID,
@@ -1717,13 +1753,15 @@ func contactProfileForSave(userID string, contact models.Contact, existingProfil
 		Notes:        strings.TrimSpace(contact.Notes),
 		SyncEnabled:  contact.GoferSyncEnabled,
 		Cards:        nil,
-		Fields: []models.ContactField{{
+	}
+	if email != "" {
+		profile.Fields = append(profile.Fields, models.ContactField{
 			Kind:      "email",
 			Label:     contactStoredFieldLabel(contact.EmailLabel, "primary"),
 			Value:     email,
 			IsPrimary: true,
 			Source:    "manual",
-		}},
+		})
 	}
 	profile.Fields = append(profile.Fields, models.ContactField{Kind: "name", Value: name, IsPrimary: true, Source: "manual"})
 	targets := normalizeContactSaveTargets(contact.SaveTargets)
@@ -1819,7 +1857,7 @@ func (db *DB) UpsertSyncedContactForProfileWithChange(ctx context.Context, userI
 }
 
 func (db *DB) upsertSyncedContactFromContactWithChange(ctx context.Context, userID, accountID, preferredProfileID string, contact models.Contact) (string, bool, bool, error) {
-	if userID == "" || strings.TrimSpace(accountID) == "" || normalizeContactEmail(strings.TrimSpace(contact.Email)) == "" {
+	if userID == "" || strings.TrimSpace(accountID) == "" || !contact.HasDetails() {
 		return "", false, false, nil
 	}
 	tx, err := db.Write().BeginTx(ctx, nil)
@@ -1838,15 +1876,18 @@ func (db *DB) upsertSyncedContactFromContactWithChange(ctx context.Context, user
 }
 
 func upsertSyncedContactTx(ctx context.Context, tx *sql.Tx, userID, accountID, preferredProfileID string, contact models.Contact) (string, bool, bool, error) {
-	name := strings.TrimSpace(contact.Name)
 	email := strings.TrimSpace(contact.Email)
-	email = strings.TrimSpace(email)
 	normalized := normalizeContactEmail(email)
+	if normalized == "" {
+		// Phone-only contacts are kept; an address that isn't one is not.
+		email = ""
+		contact.Email = ""
+	}
 	accountID = strings.TrimSpace(accountID)
-	if userID == "" || accountID == "" || normalized == "" {
+	if userID == "" || accountID == "" || !contact.HasDetails() {
 		return "", false, false, nil
 	}
-	display := contactDisplayName(name, email)
+	display := contact.FallbackName()
 	avatarURL := strings.TrimSpace(contact.AvatarURL)
 	source := "synced:" + accountID
 
@@ -1867,7 +1908,10 @@ func upsertSyncedContactTx(ctx context.Context, tx *sql.Tx, userID, accountID, p
 			return "", false, false, err
 		}
 	}
-	if contactID == "" {
+	// Without an email address there is nothing safe to match on: a phone
+	// number or name can be shared. Such a provider card becomes its own
+	// contact, and later pulls find it again by its remote ID.
+	if contactID == "" && normalized != "" {
 		err = tx.QueryRowContext(ctx, `
 			SELECT ci.profile_id, cp.display_name
 			FROM contact_identities ci
@@ -1920,14 +1964,16 @@ func upsertSyncedContactTx(ctx context.Context, tx *sql.Tx, userID, accountID, p
 	if err := replaceSyncedContactFieldsTx(ctx, tx, userID, contactID, source, contact); err != nil {
 		return "", false, false, err
 	}
-	if _, err := tx.ExecContext(ctx, `
-		INSERT INTO contact_identities (user_id, profile_id, kind, normalized_value, confidence)
-		VALUES (?, ?, 'email', ?, 0.9)
-		ON CONFLICT(user_id, kind, normalized_value) DO UPDATE SET
-			profile_id = excluded.profile_id,
-			confidence = MAX(contact_identities.confidence, excluded.confidence),
-			updated_at = CURRENT_TIMESTAMP`, userID, contactID, normalized); err != nil {
-		return "", false, false, err
+	if normalized != "" {
+		if _, err := tx.ExecContext(ctx, `
+			INSERT INTO contact_identities (user_id, profile_id, kind, normalized_value, confidence)
+			VALUES (?, ?, 'email', ?, 0.9)
+			ON CONFLICT(user_id, kind, normalized_value) DO UPDATE SET
+				profile_id = excluded.profile_id,
+				confidence = MAX(contact_identities.confidence, excluded.confidence),
+				updated_at = CURRENT_TIMESTAMP`, userID, contactID, normalized); err != nil {
+			return "", false, false, err
+		}
 	}
 	canonicalChanged := false
 	if sourceChanged {
@@ -2248,8 +2294,8 @@ func contactSetupCanonicalValues(profile models.ContactProfile, selectedFieldIDs
 			}
 		}
 	}
-	if strings.TrimSpace(canonical.Email) == "" {
-		return models.Contact{}, fmt.Errorf("contact email is required")
+	if !canonical.HasDetails() {
+		return models.Contact{}, ErrContactEmpty
 	}
 	return canonical, nil
 }

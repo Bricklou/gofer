@@ -145,6 +145,18 @@ func contactFormEmail(contact *models.Contact) string {
 	return contact.Email
 }
 
+// contactListDetail is the line under a contact's name in the list: its email
+// address, or its phone number for a contact without one.
+func contactListDetail(contact models.Contact) string {
+	if email := strings.TrimSpace(contact.Email); email != "" {
+		return email
+	}
+	if phone := strings.TrimSpace(contact.Phone); phone != "" && phone != strings.TrimSpace(contact.Name) {
+		return phone
+	}
+	return ""
+}
+
 func contactFormEmailLabel(contact *models.Contact) string {
 	if contact == nil || strings.TrimSpace(contact.EmailLabel) == "" {
 		return "primary"
@@ -1204,7 +1216,7 @@ func ContactsPage(contacts []models.Contact, selected *models.Contact, selectedP
 		var templ_7745c5c3_Var4 string
 		templ_7745c5c3_Var4, templ_7745c5c3_Err = templ.JoinStringErrs(PaneLayout(uiSettings, "contacts"))
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/contacts.templ`, Line: 1152, Col: 167}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/contacts.templ`, Line: 1164, Col: 167}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var4))
 		if templ_7745c5c3_Err != nil {
@@ -1262,7 +1274,7 @@ func ContactsListPane(contacts []models.Contact, selected *models.Contact, filte
 		var templ_7745c5c3_Var6 string
 		templ_7745c5c3_Var6, templ_7745c5c3_Err = templruntime.SanitizeStyleAttributeValues("width:" + mailListWidthCSS(width))
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/contacts.templ`, Line: 1160, Col: 153}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/contacts.templ`, Line: 1172, Col: 153}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var6))
 		if templ_7745c5c3_Err != nil {
@@ -1275,7 +1287,7 @@ func ContactsListPane(contacts []models.Contact, selected *models.Contact, filte
 		var templ_7745c5c3_Var7 string
 		templ_7745c5c3_Var7, templ_7745c5c3_Err = templ.JoinStringErrs(contactViewMode(filters.View))
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/contacts.templ`, Line: 1160, Col: 202}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/contacts.templ`, Line: 1172, Col: 202}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var7))
 		if templ_7745c5c3_Err != nil {
@@ -1288,7 +1300,7 @@ func ContactsListPane(contacts []models.Contact, selected *models.Contact, filte
 		var templ_7745c5c3_Var8 string
 		templ_7745c5c3_Var8, templ_7745c5c3_Err = templ.JoinStringErrs(fmt.Sprintf("%d", totalCount))
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/contacts.templ`, Line: 1165, Col: 226}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/contacts.templ`, Line: 1177, Col: 226}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var8))
 		if templ_7745c5c3_Err != nil {
@@ -1309,7 +1321,7 @@ func ContactsListPane(contacts []models.Contact, selected *models.Contact, filte
 		var templ_7745c5c3_Var9 string
 		templ_7745c5c3_Var9, templ_7745c5c3_Err = templ.JoinStringErrs(filters.Source)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/contacts.templ`, Line: 1173, Col: 62}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/contacts.templ`, Line: 1185, Col: 62}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var9))
 		if templ_7745c5c3_Err != nil {
@@ -1322,7 +1334,7 @@ func ContactsListPane(contacts []models.Contact, selected *models.Contact, filte
 		var templ_7745c5c3_Var10 string
 		templ_7745c5c3_Var10, templ_7745c5c3_Err = templ.JoinStringErrs(filters.SaveTarget)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/contacts.templ`, Line: 1174, Col: 71}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/contacts.templ`, Line: 1186, Col: 71}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var10))
 		if templ_7745c5c3_Err != nil {
@@ -1335,7 +1347,7 @@ func ContactsListPane(contacts []models.Contact, selected *models.Contact, filte
 		var templ_7745c5c3_Var11 string
 		templ_7745c5c3_Var11, templ_7745c5c3_Err = templ.JoinStringErrs(filters.Activity)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/contacts.templ`, Line: 1175, Col: 66}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/contacts.templ`, Line: 1187, Col: 66}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var11))
 		if templ_7745c5c3_Err != nil {
@@ -1348,7 +1360,7 @@ func ContactsListPane(contacts []models.Contact, selected *models.Contact, filte
 		var templ_7745c5c3_Var12 string
 		templ_7745c5c3_Var12, templ_7745c5c3_Err = templ.JoinStringErrs(contactViewMode(filters.View))
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/contacts.templ`, Line: 1176, Col: 75}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/contacts.templ`, Line: 1188, Col: 75}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var12))
 		if templ_7745c5c3_Err != nil {
@@ -1361,7 +1373,7 @@ func ContactsListPane(contacts []models.Contact, selected *models.Contact, filte
 		var templ_7745c5c3_Var13 string
 		templ_7745c5c3_Var13, templ_7745c5c3_Err = templ.JoinStringErrs(filters.SortBy)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/contacts.templ`, Line: 1177, Col: 63}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/contacts.templ`, Line: 1189, Col: 63}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var13))
 		if templ_7745c5c3_Err != nil {
@@ -1374,7 +1386,7 @@ func ContactsListPane(contacts []models.Contact, selected *models.Contact, filte
 		var templ_7745c5c3_Var14 string
 		templ_7745c5c3_Var14, templ_7745c5c3_Err = templ.JoinStringErrs(filters.SortOrder)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/contacts.templ`, Line: 1178, Col: 69}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/contacts.templ`, Line: 1190, Col: 69}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var14))
 		if templ_7745c5c3_Err != nil {
@@ -1395,7 +1407,7 @@ func ContactsListPane(contacts []models.Contact, selected *models.Contact, filte
 		var templ_7745c5c3_Var15 string
 		templ_7745c5c3_Var15, templ_7745c5c3_Err = templ.JoinStringErrs(filters.Query)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/contacts.templ`, Line: 1183, Col: 27}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/contacts.templ`, Line: 1195, Col: 27}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var15))
 		if templ_7745c5c3_Err != nil {
@@ -1436,7 +1448,7 @@ func ContactsListPane(contacts []models.Contact, selected *models.Contact, filte
 				var templ_7745c5c3_Var18 string
 				templ_7745c5c3_Var18, templ_7745c5c3_Err = templ.JoinStringErrs(fmt.Sprintf("%t", contactFiltersActive(filters)))
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/contacts.templ`, Line: 1194, Col: 117}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/contacts.templ`, Line: 1206, Col: 117}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var18))
 				if templ_7745c5c3_Err != nil {
@@ -1458,7 +1470,7 @@ func ContactsListPane(contacts []models.Contact, selected *models.Contact, filte
 					var templ_7745c5c3_Var19 string
 					templ_7745c5c3_Var19, templ_7745c5c3_Err = templ.JoinStringErrs(fmt.Sprintf("%d", contactFilterCount(filters)))
 					if templ_7745c5c3_Err != nil {
-						return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/contacts.templ`, Line: 1197, Col: 221}
+						return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/contacts.templ`, Line: 1209, Col: 221}
 					}
 					_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var19))
 					if templ_7745c5c3_Err != nil {
@@ -1502,7 +1514,7 @@ func ContactsListPane(contacts []models.Contact, selected *models.Contact, filte
 				var templ_7745c5c3_Var21 string
 				templ_7745c5c3_Var21, templ_7745c5c3_Err = templ.JoinStringErrs(filters.Query)
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/contacts.templ`, Line: 1203, Col: 57}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/contacts.templ`, Line: 1215, Col: 57}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var21))
 				if templ_7745c5c3_Err != nil {
@@ -1515,7 +1527,7 @@ func ContactsListPane(contacts []models.Contact, selected *models.Contact, filte
 				var templ_7745c5c3_Var22 string
 				templ_7745c5c3_Var22, templ_7745c5c3_Err = templ.JoinStringErrs(contactViewMode(filters.View))
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/contacts.templ`, Line: 1204, Col: 76}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/contacts.templ`, Line: 1216, Col: 76}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var22))
 				if templ_7745c5c3_Err != nil {
@@ -1528,7 +1540,7 @@ func ContactsListPane(contacts []models.Contact, selected *models.Contact, filte
 				var templ_7745c5c3_Var23 string
 				templ_7745c5c3_Var23, templ_7745c5c3_Err = templ.JoinStringErrs(filters.SortBy)
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/contacts.templ`, Line: 1205, Col: 64}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/contacts.templ`, Line: 1217, Col: 64}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var23))
 				if templ_7745c5c3_Err != nil {
@@ -1541,7 +1553,7 @@ func ContactsListPane(contacts []models.Contact, selected *models.Contact, filte
 				var templ_7745c5c3_Var24 string
 				templ_7745c5c3_Var24, templ_7745c5c3_Err = templ.JoinStringErrs(filters.SortOrder)
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/contacts.templ`, Line: 1206, Col: 70}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/contacts.templ`, Line: 1218, Col: 70}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var24))
 				if templ_7745c5c3_Err != nil {
@@ -1554,7 +1566,7 @@ func ContactsListPane(contacts []models.Contact, selected *models.Contact, filte
 				var templ_7745c5c3_Var25 templ.SafeURL
 				templ_7745c5c3_Var25, templ_7745c5c3_Err = templ.JoinURLErrs(contactsURL(models.ContactFilters{Query: filters.Query, View: filters.View, SortBy: filters.SortBy, SortOrder: filters.SortOrder}, ""))
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/contacts.templ`, Line: 1209, Col: 151}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/contacts.templ`, Line: 1221, Col: 151}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var25))
 				if templ_7745c5c3_Err != nil {
@@ -1735,7 +1747,7 @@ func ContactsListPane(contacts []models.Contact, selected *models.Contact, filte
 									var templ_7745c5c3_Var34 string
 									templ_7745c5c3_Var34, templ_7745c5c3_Err = templ.JoinStringErrs(accountContactSaveLabel(account))
 									if templ_7745c5c3_Err != nil {
-										return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/contacts.templ`, Line: 1233, Col: 60}
+										return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/contacts.templ`, Line: 1245, Col: 60}
 									}
 									_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var34))
 									if templ_7745c5c3_Err != nil {
@@ -1880,7 +1892,7 @@ func ContactsListPane(contacts []models.Contact, selected *models.Contact, filte
 									var templ_7745c5c3_Var41 string
 									templ_7745c5c3_Var41, templ_7745c5c3_Err = templ.JoinStringErrs(accountContactSaveLabel(account))
 									if templ_7745c5c3_Err != nil {
-										return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/contacts.templ`, Line: 1256, Col: 46}
+										return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/contacts.templ`, Line: 1268, Col: 46}
 									}
 									_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var41))
 									if templ_7745c5c3_Err != nil {
@@ -1908,7 +1920,7 @@ func ContactsListPane(contacts []models.Contact, selected *models.Contact, filte
 										var templ_7745c5c3_Var43 string
 										templ_7745c5c3_Var43, templ_7745c5c3_Err = templ.JoinStringErrs(accountContactOriginLabel(account))
 										if templ_7745c5c3_Err != nil {
-											return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/contacts.templ`, Line: 1260, Col: 49}
+											return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/contacts.templ`, Line: 1272, Col: 49}
 										}
 										_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var43))
 										if templ_7745c5c3_Err != nil {
@@ -1921,7 +1933,7 @@ func ContactsListPane(contacts []models.Contact, selected *models.Contact, filte
 										var templ_7745c5c3_Var44 string
 										templ_7745c5c3_Var44, templ_7745c5c3_Err = templ.JoinStringErrs(contactAddressBookDisplayName(book))
 										if templ_7745c5c3_Err != nil {
-											return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/contacts.templ`, Line: 1260, Col: 91}
+											return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/contacts.templ`, Line: 1272, Col: 91}
 										}
 										_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var44))
 										if templ_7745c5c3_Err != nil {
@@ -2117,7 +2129,7 @@ func ContactsListPane(contacts []models.Contact, selected *models.Contact, filte
 				var templ_7745c5c3_Var51 string
 				templ_7745c5c3_Var51, templ_7745c5c3_Err = templ.JoinStringErrs(contactOriginFilterLabel(filters.Source, accounts))
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/contacts.templ`, Line: 1294, Col: 141}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/contacts.templ`, Line: 1306, Col: 141}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var51))
 				if templ_7745c5c3_Err != nil {
@@ -2136,7 +2148,7 @@ func ContactsListPane(contacts []models.Contact, selected *models.Contact, filte
 				var templ_7745c5c3_Var52 string
 				templ_7745c5c3_Var52, templ_7745c5c3_Err = templ.JoinStringErrs(contactSaveTargetLabel(filters.SaveTarget, accounts))
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/contacts.templ`, Line: 1297, Col: 143}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/contacts.templ`, Line: 1309, Col: 143}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var52))
 				if templ_7745c5c3_Err != nil {
@@ -2216,7 +2228,7 @@ func ContactsListPane(contacts []models.Contact, selected *models.Contact, filte
 				var templ_7745c5c3_Var55 string
 				templ_7745c5c3_Var55, templ_7745c5c3_Err = templ.JoinStringErrs(contactSortLabel(filters))
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/contacts.templ`, Line: 1315, Col: 64}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/contacts.templ`, Line: 1327, Col: 64}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var55))
 				if templ_7745c5c3_Err != nil {
@@ -2525,7 +2537,7 @@ func ContactsListPane(contacts []models.Contact, selected *models.Contact, filte
 		var templ_7745c5c3_Var68 string
 		templ_7745c5c3_Var68, templ_7745c5c3_Err = templruntime.SanitizeStyleAttributeValues(contactViewIndicatorStyle(filters.View))
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/contacts.templ`, Line: 1346, Col: 212}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/contacts.templ`, Line: 1358, Col: 212}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var68))
 		if templ_7745c5c3_Err != nil {
@@ -2550,7 +2562,7 @@ func ContactsListPane(contacts []models.Contact, selected *models.Contact, filte
 		var templ_7745c5c3_Var70 string
 		templ_7745c5c3_Var70, templ_7745c5c3_Err = templ.JoinStringErrs(fmt.Sprintf("%t", contactViewMode(filters.View) == "cards"))
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/contacts.templ`, Line: 1350, Col: 79}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/contacts.templ`, Line: 1362, Col: 79}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var70))
 		if templ_7745c5c3_Err != nil {
@@ -2596,7 +2608,7 @@ func ContactsListPane(contacts []models.Contact, selected *models.Contact, filte
 		var templ_7745c5c3_Var73 string
 		templ_7745c5c3_Var73, templ_7745c5c3_Err = templ.JoinStringErrs(fmt.Sprintf("%t", contactViewMode(filters.View) == "table"))
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/contacts.templ`, Line: 1364, Col: 79}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/contacts.templ`, Line: 1376, Col: 79}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var73))
 		if templ_7745c5c3_Err != nil {
@@ -2630,7 +2642,7 @@ func ContactsListPane(contacts []models.Contact, selected *models.Contact, filte
 		var templ_7745c5c3_Var75 string
 		templ_7745c5c3_Var75, templ_7745c5c3_Err = templ.JoinStringErrs(contactViewMode(filters.View))
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/contacts.templ`, Line: 1382, Col: 49}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/contacts.templ`, Line: 1394, Col: 49}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var75))
 		if templ_7745c5c3_Err != nil {
@@ -2643,7 +2655,7 @@ func ContactsListPane(contacts []models.Contact, selected *models.Contact, filte
 		var templ_7745c5c3_Var76 string
 		templ_7745c5c3_Var76, templ_7745c5c3_Err = templ.JoinStringErrs(fmt.Sprintf("%d", totalCount))
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/contacts.templ`, Line: 1383, Col: 51}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/contacts.templ`, Line: 1395, Col: 51}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var76))
 		if templ_7745c5c3_Err != nil {
@@ -2656,7 +2668,7 @@ func ContactsListPane(contacts []models.Contact, selected *models.Contact, filte
 		var templ_7745c5c3_Var77 string
 		templ_7745c5c3_Var77, templ_7745c5c3_Err = templ.JoinStringErrs(fmt.Sprintf("%d", contactWindowEnd(0, len(contacts))))
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/contacts.templ`, Line: 1385, Col: 74}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/contacts.templ`, Line: 1397, Col: 74}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var77))
 		if templ_7745c5c3_Err != nil {
@@ -2669,7 +2681,7 @@ func ContactsListPane(contacts []models.Contact, selected *models.Contact, filte
 		var templ_7745c5c3_Var78 string
 		templ_7745c5c3_Var78, templ_7745c5c3_Err = templ.JoinStringErrs(fmt.Sprintf("%t", len(contacts) < totalCount))
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/contacts.templ`, Line: 1386, Col: 64}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/contacts.templ`, Line: 1398, Col: 64}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var78))
 		if templ_7745c5c3_Err != nil {
@@ -2682,7 +2694,7 @@ func ContactsListPane(contacts []models.Contact, selected *models.Contact, filte
 		var templ_7745c5c3_Var79 string
 		templ_7745c5c3_Var79, templ_7745c5c3_Err = templ.JoinStringErrs(filters.Query)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/contacts.templ`, Line: 1387, Col: 29}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/contacts.templ`, Line: 1399, Col: 29}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var79))
 		if templ_7745c5c3_Err != nil {
@@ -2695,7 +2707,7 @@ func ContactsListPane(contacts []models.Contact, selected *models.Contact, filte
 		var templ_7745c5c3_Var80 string
 		templ_7745c5c3_Var80, templ_7745c5c3_Err = templ.JoinStringErrs(filters.SortBy)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/contacts.templ`, Line: 1388, Col: 32}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/contacts.templ`, Line: 1400, Col: 32}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var80))
 		if templ_7745c5c3_Err != nil {
@@ -2708,7 +2720,7 @@ func ContactsListPane(contacts []models.Contact, selected *models.Contact, filte
 		var templ_7745c5c3_Var81 string
 		templ_7745c5c3_Var81, templ_7745c5c3_Err = templ.JoinStringErrs(filters.SortOrder)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/contacts.templ`, Line: 1389, Col: 38}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/contacts.templ`, Line: 1401, Col: 38}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var81))
 		if templ_7745c5c3_Err != nil {
@@ -2721,7 +2733,7 @@ func ContactsListPane(contacts []models.Contact, selected *models.Contact, filte
 		var templ_7745c5c3_Var82 string
 		templ_7745c5c3_Var82, templ_7745c5c3_Err = templ.JoinStringErrs(filters.Source)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/contacts.templ`, Line: 1390, Col: 31}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/contacts.templ`, Line: 1402, Col: 31}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var82))
 		if templ_7745c5c3_Err != nil {
@@ -2734,7 +2746,7 @@ func ContactsListPane(contacts []models.Contact, selected *models.Contact, filte
 		var templ_7745c5c3_Var83 string
 		templ_7745c5c3_Var83, templ_7745c5c3_Err = templ.JoinStringErrs(filters.SaveTarget)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/contacts.templ`, Line: 1391, Col: 40}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/contacts.templ`, Line: 1403, Col: 40}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var83))
 		if templ_7745c5c3_Err != nil {
@@ -2747,7 +2759,7 @@ func ContactsListPane(contacts []models.Contact, selected *models.Contact, filte
 		var templ_7745c5c3_Var84 string
 		templ_7745c5c3_Var84, templ_7745c5c3_Err = templ.JoinStringErrs(filters.Activity)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/contacts.templ`, Line: 1392, Col: 35}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/contacts.templ`, Line: 1404, Col: 35}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var84))
 		if templ_7745c5c3_Err != nil {
@@ -2872,7 +2884,7 @@ func ContactListCard(contact models.Contact, filters models.ContactFilters, sele
 		var templ_7745c5c3_Var87 string
 		templ_7745c5c3_Var87, templ_7745c5c3_Err = templ.JoinStringErrs(contact.ID)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/contacts.templ`, Line: 1428, Col: 57}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/contacts.templ`, Line: 1440, Col: 57}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var87))
 		if templ_7745c5c3_Err != nil {
@@ -2885,7 +2897,7 @@ func ContactListCard(contact models.Contact, filters models.ContactFilters, sele
 		var templ_7745c5c3_Var88 string
 		templ_7745c5c3_Var88, templ_7745c5c3_Err = templ.JoinStringErrs(fmt.Sprintf("%d", position))
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/contacts.templ`, Line: 1428, Col: 103}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/contacts.templ`, Line: 1440, Col: 103}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var88))
 		if templ_7745c5c3_Err != nil {
@@ -2910,7 +2922,7 @@ func ContactListCard(contact models.Contact, filters models.ContactFilters, sele
 		var templ_7745c5c3_Var90 templ.SafeURL
 		templ_7745c5c3_Var90, templ_7745c5c3_Err = templ.JoinURLErrs(contactHref)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/contacts.templ`, Line: 1430, Col: 21}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/contacts.templ`, Line: 1442, Col: 21}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var90))
 		if templ_7745c5c3_Err != nil {
@@ -2923,7 +2935,7 @@ func ContactListCard(contact models.Contact, filters models.ContactFilters, sele
 		var templ_7745c5c3_Var91 string
 		templ_7745c5c3_Var91, templ_7745c5c3_Err = templ.JoinStringErrs(templ.URL(contactDetailHref))
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/contacts.templ`, Line: 1431, Col: 40}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/contacts.templ`, Line: 1443, Col: 40}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var91))
 		if templ_7745c5c3_Err != nil {
@@ -2936,7 +2948,7 @@ func ContactListCard(contact models.Contact, filters models.ContactFilters, sele
 		var templ_7745c5c3_Var92 string
 		templ_7745c5c3_Var92, templ_7745c5c3_Err = templ.JoinStringErrs(contactHref)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/contacts.templ`, Line: 1434, Col: 28}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/contacts.templ`, Line: 1446, Col: 28}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var92))
 		if templ_7745c5c3_Err != nil {
@@ -2949,7 +2961,7 @@ func ContactListCard(contact models.Contact, filters models.ContactFilters, sele
 		var templ_7745c5c3_Var93 string
 		templ_7745c5c3_Var93, templ_7745c5c3_Err = templ.JoinStringErrs(contact.ID)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/contacts.templ`, Line: 1435, Col: 38}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/contacts.templ`, Line: 1447, Col: 38}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var93))
 		if templ_7745c5c3_Err != nil {
@@ -2962,7 +2974,7 @@ func ContactListCard(contact models.Contact, filters models.ContactFilters, sele
 		var templ_7745c5c3_Var94 string
 		templ_7745c5c3_Var94, templ_7745c5c3_Err = templ.JoinStringErrs(fmt.Sprintf("%t", selected != nil && selected.ID == contact.ID))
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/contacts.templ`, Line: 1436, Col: 80}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/contacts.templ`, Line: 1448, Col: 80}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var94))
 		if templ_7745c5c3_Err != nil {
@@ -2996,7 +3008,7 @@ func ContactListCard(contact models.Contact, filters models.ContactFilters, sele
 		var templ_7745c5c3_Var96 string
 		templ_7745c5c3_Var96, templ_7745c5c3_Err = templ.JoinStringErrs(contact.Name)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/contacts.templ`, Line: 1449, Col: 125}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/contacts.templ`, Line: 1461, Col: 125}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var96))
 		if templ_7745c5c3_Err != nil {
@@ -3014,7 +3026,7 @@ func ContactListCard(contact models.Contact, filters models.ContactFilters, sele
 			var templ_7745c5c3_Var97 string
 			templ_7745c5c3_Var97, templ_7745c5c3_Err = templ.JoinStringErrs(contact.CreatedAt)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/contacts.templ`, Line: 1451, Col: 130}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/contacts.templ`, Line: 1463, Col: 130}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var97))
 			if templ_7745c5c3_Err != nil {
@@ -3030,9 +3042,9 @@ func ContactListCard(contact models.Contact, filters models.ContactFilters, sele
 			return templ_7745c5c3_Err
 		}
 		var templ_7745c5c3_Var98 string
-		templ_7745c5c3_Var98, templ_7745c5c3_Err = templ.JoinStringErrs(contact.Email)
+		templ_7745c5c3_Var98, templ_7745c5c3_Err = templ.JoinStringErrs(contactListDetail(contact))
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/contacts.templ`, Line: 1455, Col: 132}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/contacts.templ`, Line: 1467, Col: 145}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var98))
 		if templ_7745c5c3_Err != nil {
@@ -3088,7 +3100,7 @@ func ContactSourceChips(contact models.Contact, accounts []models.Account) templ
 				var templ_7745c5c3_Var100 string
 				templ_7745c5c3_Var100, templ_7745c5c3_Err = templ.JoinStringErrs(book.AccountName)
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/contacts.templ`, Line: 1469, Col: 23}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/contacts.templ`, Line: 1481, Col: 23}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var100))
 				if templ_7745c5c3_Err != nil {
@@ -3101,7 +3113,7 @@ func ContactSourceChips(contact models.Contact, accounts []models.Account) templ
 				var templ_7745c5c3_Var101 string
 				templ_7745c5c3_Var101, templ_7745c5c3_Err = templ.JoinStringErrs(contactAddressBookDisplayName(book))
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/contacts.templ`, Line: 1469, Col: 65}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/contacts.templ`, Line: 1481, Col: 65}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var101))
 				if templ_7745c5c3_Err != nil {
@@ -3120,7 +3132,7 @@ func ContactSourceChips(contact models.Contact, accounts []models.Account) templ
 			var templ_7745c5c3_Var102 string
 			templ_7745c5c3_Var102, templ_7745c5c3_Err = templ.JoinStringErrs(contactSourceLabel(contact.Source, contact.IsManual, accounts))
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/contacts.templ`, Line: 1473, Col: 140}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/contacts.templ`, Line: 1485, Col: 140}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var102))
 			if templ_7745c5c3_Err != nil {
@@ -3167,7 +3179,7 @@ func ContactListTableHeader() templ.Component {
 		var templ_7745c5c3_Var104 string
 		templ_7745c5c3_Var104, templ_7745c5c3_Err = templruntime.SanitizeStyleAttributeValues(contactListTableGridStyle())
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/contacts.templ`, Line: 1479, Col: 274}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/contacts.templ`, Line: 1491, Col: 274}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var104))
 		if templ_7745c5c3_Err != nil {
@@ -3211,7 +3223,7 @@ func ContactListTableRow(contact models.Contact, filters models.ContactFilters, 
 		var templ_7745c5c3_Var106 string
 		templ_7745c5c3_Var106, templ_7745c5c3_Err = templ.JoinStringErrs(contact.ID)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/contacts.templ`, Line: 1489, Col: 77}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/contacts.templ`, Line: 1501, Col: 77}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var106))
 		if templ_7745c5c3_Err != nil {
@@ -3224,7 +3236,7 @@ func ContactListTableRow(contact models.Contact, filters models.ContactFilters, 
 		var templ_7745c5c3_Var107 string
 		templ_7745c5c3_Var107, templ_7745c5c3_Err = templ.JoinStringErrs(fmt.Sprintf("%d", position))
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/contacts.templ`, Line: 1489, Col: 123}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/contacts.templ`, Line: 1501, Col: 123}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var107))
 		if templ_7745c5c3_Err != nil {
@@ -3249,7 +3261,7 @@ func ContactListTableRow(contact models.Contact, filters models.ContactFilters, 
 		var templ_7745c5c3_Var109 templ.SafeURL
 		templ_7745c5c3_Var109, templ_7745c5c3_Err = templ.JoinURLErrs(contactHref)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/contacts.templ`, Line: 1491, Col: 21}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/contacts.templ`, Line: 1503, Col: 21}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var109))
 		if templ_7745c5c3_Err != nil {
@@ -3262,7 +3274,7 @@ func ContactListTableRow(contact models.Contact, filters models.ContactFilters, 
 		var templ_7745c5c3_Var110 string
 		templ_7745c5c3_Var110, templ_7745c5c3_Err = templ.JoinStringErrs(templ.URL(contactDetailHref))
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/contacts.templ`, Line: 1492, Col: 40}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/contacts.templ`, Line: 1504, Col: 40}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var110))
 		if templ_7745c5c3_Err != nil {
@@ -3275,7 +3287,7 @@ func ContactListTableRow(contact models.Contact, filters models.ContactFilters, 
 		var templ_7745c5c3_Var111 string
 		templ_7745c5c3_Var111, templ_7745c5c3_Err = templ.JoinStringErrs(contactHref)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/contacts.templ`, Line: 1495, Col: 28}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/contacts.templ`, Line: 1507, Col: 28}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var111))
 		if templ_7745c5c3_Err != nil {
@@ -3288,7 +3300,7 @@ func ContactListTableRow(contact models.Contact, filters models.ContactFilters, 
 		var templ_7745c5c3_Var112 string
 		templ_7745c5c3_Var112, templ_7745c5c3_Err = templ.JoinStringErrs(contact.ID)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/contacts.templ`, Line: 1496, Col: 38}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/contacts.templ`, Line: 1508, Col: 38}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var112))
 		if templ_7745c5c3_Err != nil {
@@ -3301,7 +3313,7 @@ func ContactListTableRow(contact models.Contact, filters models.ContactFilters, 
 		var templ_7745c5c3_Var113 string
 		templ_7745c5c3_Var113, templ_7745c5c3_Err = templ.JoinStringErrs(fmt.Sprintf("%t", selected != nil && selected.ID == contact.ID))
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/contacts.templ`, Line: 1497, Col: 80}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/contacts.templ`, Line: 1509, Col: 80}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var113))
 		if templ_7745c5c3_Err != nil {
@@ -3327,7 +3339,7 @@ func ContactListTableRow(contact models.Contact, filters models.ContactFilters, 
 		var templ_7745c5c3_Var115 string
 		templ_7745c5c3_Var115, templ_7745c5c3_Err = templruntime.SanitizeStyleAttributeValues(contactListTableGridStyle())
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/contacts.templ`, Line: 1503, Col: 38}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/contacts.templ`, Line: 1515, Col: 38}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var115))
 		if templ_7745c5c3_Err != nil {
@@ -3348,7 +3360,7 @@ func ContactListTableRow(contact models.Contact, filters models.ContactFilters, 
 		var templ_7745c5c3_Var116 string
 		templ_7745c5c3_Var116, templ_7745c5c3_Err = templ.JoinStringErrs(contact.Name)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/contacts.templ`, Line: 1510, Col: 89}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/contacts.templ`, Line: 1522, Col: 89}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var116))
 		if templ_7745c5c3_Err != nil {
@@ -3359,9 +3371,9 @@ func ContactListTableRow(contact models.Contact, filters models.ContactFilters, 
 			return templ_7745c5c3_Err
 		}
 		var templ_7745c5c3_Var117 string
-		templ_7745c5c3_Var117, templ_7745c5c3_Err = templ.JoinStringErrs(contact.Email)
+		templ_7745c5c3_Var117, templ_7745c5c3_Err = templ.JoinStringErrs(contactListDetail(contact))
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/contacts.templ`, Line: 1511, Col: 91}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/contacts.templ`, Line: 1523, Col: 104}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var117))
 		if templ_7745c5c3_Err != nil {
@@ -3375,7 +3387,7 @@ func ContactListTableRow(contact models.Contact, filters models.ContactFilters, 
 			var templ_7745c5c3_Var118 string
 			templ_7745c5c3_Var118, templ_7745c5c3_Err = templ.JoinStringErrs(fmt.Sprintf("%d book(s)", len(contact.SourceBooks)))
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/contacts.templ`, Line: 1516, Col: 58}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/contacts.templ`, Line: 1528, Col: 58}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var118))
 			if templ_7745c5c3_Err != nil {
@@ -3385,7 +3397,7 @@ func ContactListTableRow(contact models.Contact, filters models.ContactFilters, 
 			var templ_7745c5c3_Var119 string
 			templ_7745c5c3_Var119, templ_7745c5c3_Err = templ.JoinStringErrs(contactSourceLabel(contact.Source, contact.IsManual, accounts))
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/contacts.templ`, Line: 1518, Col: 69}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/contacts.templ`, Line: 1530, Col: 69}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var119))
 			if templ_7745c5c3_Err != nil {
@@ -3399,7 +3411,7 @@ func ContactListTableRow(contact models.Contact, filters models.ContactFilters, 
 		var templ_7745c5c3_Var120 string
 		templ_7745c5c3_Var120, templ_7745c5c3_Err = templ.JoinStringErrs(fmt.Sprintf("%d", contact.MessageCount))
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/contacts.templ`, Line: 1521, Col: 111}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/contacts.templ`, Line: 1533, Col: 111}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var120))
 		if templ_7745c5c3_Err != nil {
@@ -3441,7 +3453,7 @@ func ContactsItemsFragment(contacts []models.Contact, selected *models.Contact, 
 		var templ_7745c5c3_Var122 string
 		templ_7745c5c3_Var122, templ_7745c5c3_Err = templ.JoinStringErrs(fmt.Sprintf("%d", totalCount))
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/contacts.templ`, Line: 1528, Col: 50}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/contacts.templ`, Line: 1540, Col: 50}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var122))
 		if templ_7745c5c3_Err != nil {
@@ -3454,7 +3466,7 @@ func ContactsItemsFragment(contacts []models.Contact, selected *models.Contact, 
 		var templ_7745c5c3_Var123 string
 		templ_7745c5c3_Var123, templ_7745c5c3_Err = templ.JoinStringErrs(fmt.Sprintf("%d", windowStart))
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/contacts.templ`, Line: 1529, Col: 52}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/contacts.templ`, Line: 1541, Col: 52}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var123))
 		if templ_7745c5c3_Err != nil {
@@ -3467,7 +3479,7 @@ func ContactsItemsFragment(contacts []models.Contact, selected *models.Contact, 
 		var templ_7745c5c3_Var124 string
 		templ_7745c5c3_Var124, templ_7745c5c3_Err = templ.JoinStringErrs(fmt.Sprintf("%d", contactWindowEnd(windowStart, len(contacts))))
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/contacts.templ`, Line: 1530, Col: 83}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/contacts.templ`, Line: 1542, Col: 83}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var124))
 		if templ_7745c5c3_Err != nil {
@@ -3480,7 +3492,7 @@ func ContactsItemsFragment(contacts []models.Contact, selected *models.Contact, 
 		var templ_7745c5c3_Var125 string
 		templ_7745c5c3_Var125, templ_7745c5c3_Err = templ.JoinStringErrs(fmt.Sprintf("%t", windowStart+len(contacts) < totalCount))
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/contacts.templ`, Line: 1531, Col: 75}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/contacts.templ`, Line: 1543, Col: 75}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var125))
 		if templ_7745c5c3_Err != nil {
@@ -3493,7 +3505,7 @@ func ContactsItemsFragment(contacts []models.Contact, selected *models.Contact, 
 		var templ_7745c5c3_Var126 string
 		templ_7745c5c3_Var126, templ_7745c5c3_Err = templ.JoinStringErrs(contactViewMode(filters.View))
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/contacts.templ`, Line: 1532, Col: 48}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/contacts.templ`, Line: 1544, Col: 48}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var126))
 		if templ_7745c5c3_Err != nil {
@@ -3729,7 +3741,7 @@ func ContactsImportDialog(accounts []models.Account) templ.Component {
 										var templ_7745c5c3_Var138 string
 										templ_7745c5c3_Var138, templ_7745c5c3_Err = templ.JoinStringErrs(accountContactSaveLabel(account))
 										if templ_7745c5c3_Err != nil {
-											return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/contacts.templ`, Line: 1575, Col: 45}
+											return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/contacts.templ`, Line: 1587, Col: 45}
 										}
 										_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var138))
 										if templ_7745c5c3_Err != nil {
@@ -3758,7 +3770,7 @@ func ContactsImportDialog(accounts []models.Account) templ.Component {
 										var templ_7745c5c3_Var140 string
 										templ_7745c5c3_Var140, templ_7745c5c3_Err = templ.JoinStringErrs(accountContactOriginLabel(account))
 										if templ_7745c5c3_Err != nil {
-											return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/contacts.templ`, Line: 1580, Col: 47}
+											return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/contacts.templ`, Line: 1592, Col: 47}
 										}
 										_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var140))
 										if templ_7745c5c3_Err != nil {
@@ -3771,7 +3783,7 @@ func ContactsImportDialog(accounts []models.Account) templ.Component {
 										var templ_7745c5c3_Var141 string
 										templ_7745c5c3_Var141, templ_7745c5c3_Err = templ.JoinStringErrs(contactAddressBookDisplayName(book))
 										if templ_7745c5c3_Err != nil {
-											return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/contacts.templ`, Line: 1580, Col: 89}
+											return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/contacts.templ`, Line: 1592, Col: 89}
 										}
 										_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var141))
 										if templ_7745c5c3_Err != nil {
@@ -3907,7 +3919,7 @@ func ContactsDetail(contact *models.Contact, profile *models.ContactProfile, sho
 			var templ_7745c5c3_Var145 string
 			templ_7745c5c3_Var145, templ_7745c5c3_Err = templ.JoinStringErrs(contact.ID)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/contacts.templ`, Line: 1607, Col: 38}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/contacts.templ`, Line: 1619, Col: 38}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var145))
 			if templ_7745c5c3_Err != nil {
@@ -4054,7 +4066,7 @@ func ContactEditor(contact *models.Contact, profile *models.ContactProfile, sync
 			var templ_7745c5c3_Var148 templ.SafeURL
 			templ_7745c5c3_Var148, templ_7745c5c3_Err = templ.JoinURLErrs(contactFormAction(contact))
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/contacts.templ`, Line: 1651, Col: 70}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/contacts.templ`, Line: 1663, Col: 70}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var148))
 			if templ_7745c5c3_Err != nil {
@@ -4093,7 +4105,7 @@ func ContactEditor(contact *models.Contact, profile *models.ContactProfile, sync
 			var templ_7745c5c3_Var149 string
 			templ_7745c5c3_Var149, templ_7745c5c3_Err = templ.JoinStringErrs("delete-contact-" + contact.ID)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/contacts.templ`, Line: 1661, Col: 44}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/contacts.templ`, Line: 1673, Col: 44}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var149))
 			if templ_7745c5c3_Err != nil {
@@ -4106,7 +4118,7 @@ func ContactEditor(contact *models.Contact, profile *models.ContactProfile, sync
 			var templ_7745c5c3_Var150 templ.SafeURL
 			templ_7745c5c3_Var150, templ_7745c5c3_Err = templ.JoinURLErrs(fmt.Sprintf("/api/contacts/%s/delete", contact.ID))
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/contacts.templ`, Line: 1661, Col: 106}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/contacts.templ`, Line: 1673, Col: 106}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var150))
 			if templ_7745c5c3_Err != nil {
@@ -4307,7 +4319,7 @@ func ContactReadOnlySyncInfo(contact models.Contact, profile *models.ContactProf
 		var templ_7745c5c3_Var156 string
 		templ_7745c5c3_Var156, templ_7745c5c3_Err = templ.JoinStringErrs(contactProfileSyncLabel(profile))
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/contacts.templ`, Line: 1702, Col: 152}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/contacts.templ`, Line: 1714, Col: 152}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var156))
 		if templ_7745c5c3_Err != nil {
@@ -4476,7 +4488,7 @@ func ContactReadOnlyTextField(label string, value string) templ.Component {
 		var templ_7745c5c3_Var160 string
 		templ_7745c5c3_Var160, templ_7745c5c3_Err = templ.JoinStringErrs(label)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/contacts.templ`, Line: 1742, Col: 85}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/contacts.templ`, Line: 1754, Col: 85}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var160))
 		if templ_7745c5c3_Err != nil {
@@ -4511,7 +4523,7 @@ func ContactReadOnlyTextField(label string, value string) templ.Component {
 		var templ_7745c5c3_Var163 string
 		templ_7745c5c3_Var163, templ_7745c5c3_Err = templ.JoinStringErrs(contactReadOnlyValue(value))
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/contacts.templ`, Line: 1743, Col: 126}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/contacts.templ`, Line: 1755, Col: 126}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var163))
 		if templ_7745c5c3_Err != nil {
@@ -4563,7 +4575,7 @@ func ContactReadOnlyLongField(label string, value string) templ.Component {
 		var templ_7745c5c3_Var165 string
 		templ_7745c5c3_Var165, templ_7745c5c3_Err = templ.JoinStringErrs(label)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/contacts.templ`, Line: 1749, Col: 85}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/contacts.templ`, Line: 1761, Col: 85}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var165))
 		if templ_7745c5c3_Err != nil {
@@ -4598,7 +4610,7 @@ func ContactReadOnlyLongField(label string, value string) templ.Component {
 		var templ_7745c5c3_Var168 string
 		templ_7745c5c3_Var168, templ_7745c5c3_Err = templ.JoinStringErrs(contactReadOnlyValue(value))
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/contacts.templ`, Line: 1750, Col: 141}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/contacts.templ`, Line: 1762, Col: 141}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var168))
 		if templ_7745c5c3_Err != nil {
@@ -4650,7 +4662,7 @@ func ContactReadOnlyLinkedField(label string, value string, valueLabel string, h
 		var templ_7745c5c3_Var170 string
 		templ_7745c5c3_Var170, templ_7745c5c3_Err = templ.JoinStringErrs(label)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/contacts.templ`, Line: 1756, Col: 85}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/contacts.templ`, Line: 1768, Col: 85}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var170))
 		if templ_7745c5c3_Err != nil {
@@ -4668,7 +4680,7 @@ func ContactReadOnlyLinkedField(label string, value string, valueLabel string, h
 			var templ_7745c5c3_Var171 templ.SafeURL
 			templ_7745c5c3_Var171, templ_7745c5c3_Err = templ.JoinURLErrs(hrefPrefix + value)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/contacts.templ`, Line: 1759, Col: 32}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/contacts.templ`, Line: 1771, Col: 32}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var171))
 			if templ_7745c5c3_Err != nil {
@@ -4681,7 +4693,7 @@ func ContactReadOnlyLinkedField(label string, value string, valueLabel string, h
 			var templ_7745c5c3_Var172 string
 			templ_7745c5c3_Var172, templ_7745c5c3_Err = templ.JoinStringErrs(value)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/contacts.templ`, Line: 1759, Col: 114}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/contacts.templ`, Line: 1771, Col: 114}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var172))
 			if templ_7745c5c3_Err != nil {
@@ -4699,7 +4711,7 @@ func ContactReadOnlyLinkedField(label string, value string, valueLabel string, h
 				var templ_7745c5c3_Var173 string
 				templ_7745c5c3_Var173, templ_7745c5c3_Err = templ.JoinStringErrs(contactReadOnlyLabelDisplay(valueLabel))
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/contacts.templ`, Line: 1761, Col: 180}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/contacts.templ`, Line: 1773, Col: 180}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var173))
 				if templ_7745c5c3_Err != nil {
@@ -4766,7 +4778,7 @@ func ContactReadOnlyListField(label string, values []string, labels []string, fa
 		var templ_7745c5c3_Var175 string
 		templ_7745c5c3_Var175, templ_7745c5c3_Err = templ.JoinStringErrs(label)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/contacts.templ`, Line: 1772, Col: 85}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/contacts.templ`, Line: 1784, Col: 85}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var175))
 		if templ_7745c5c3_Err != nil {
@@ -4790,7 +4802,7 @@ func ContactReadOnlyListField(label string, values []string, labels []string, fa
 					var templ_7745c5c3_Var176 templ.SafeURL
 					templ_7745c5c3_Var176, templ_7745c5c3_Err = templ.JoinURLErrs(hrefPrefix + value)
 					if templ_7745c5c3_Err != nil {
-						return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/contacts.templ`, Line: 1778, Col: 35}
+						return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/contacts.templ`, Line: 1790, Col: 35}
 					}
 					_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var176))
 					if templ_7745c5c3_Err != nil {
@@ -4803,7 +4815,7 @@ func ContactReadOnlyListField(label string, values []string, labels []string, fa
 					var templ_7745c5c3_Var177 string
 					templ_7745c5c3_Var177, templ_7745c5c3_Err = templ.JoinStringErrs(value)
 					if templ_7745c5c3_Err != nil {
-						return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/contacts.templ`, Line: 1778, Col: 117}
+						return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/contacts.templ`, Line: 1790, Col: 117}
 					}
 					_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var177))
 					if templ_7745c5c3_Err != nil {
@@ -4821,7 +4833,7 @@ func ContactReadOnlyListField(label string, values []string, labels []string, fa
 						var templ_7745c5c3_Var178 string
 						templ_7745c5c3_Var178, templ_7745c5c3_Err = templ.JoinStringErrs(contactReadOnlyLabelDisplay(contactReadOnlyLabelAt(labels, i, fallbackLabel)))
 						if templ_7745c5c3_Err != nil {
-							return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/contacts.templ`, Line: 1780, Col: 221}
+							return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/contacts.templ`, Line: 1792, Col: 221}
 						}
 						_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var178))
 						if templ_7745c5c3_Err != nil {
@@ -4894,7 +4906,7 @@ func ContactReadOnlyPillListField(label string, values []string) templ.Component
 		var templ_7745c5c3_Var180 string
 		templ_7745c5c3_Var180, templ_7745c5c3_Err = templ.JoinStringErrs(label)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/contacts.templ`, Line: 1794, Col: 85}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/contacts.templ`, Line: 1806, Col: 85}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var180))
 		if templ_7745c5c3_Err != nil {
@@ -4917,7 +4929,7 @@ func ContactReadOnlyPillListField(label string, values []string) templ.Component
 				var templ_7745c5c3_Var181 string
 				templ_7745c5c3_Var181, templ_7745c5c3_Err = templ.JoinStringErrs(value)
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/contacts.templ`, Line: 1798, Col: 146}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/contacts.templ`, Line: 1810, Col: 146}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var181))
 				if templ_7745c5c3_Err != nil {
@@ -4996,7 +5008,7 @@ func ContactReadOnlySyncStatusField(value string) templ.Component {
 		var templ_7745c5c3_Var185 string
 		templ_7745c5c3_Var185, templ_7745c5c3_Err = templ.JoinStringErrs(contactReadOnlyValue(value))
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/contacts.templ`, Line: 1810, Col: 161}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/contacts.templ`, Line: 1822, Col: 161}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var185))
 		if templ_7745c5c3_Err != nil {
@@ -5062,7 +5074,7 @@ func ContactEditorCoreFields(contact *models.Contact) templ.Component {
 			var templ_7745c5c3_Var189 string
 			templ_7745c5c3_Var189, templ_7745c5c3_Err = templ.JoinStringErrs(contact.Initials)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/contacts.templ`, Line: 1826, Col: 26}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/contacts.templ`, Line: 1838, Col: 26}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var189))
 			if templ_7745c5c3_Err != nil {
@@ -5086,7 +5098,7 @@ func ContactEditorCoreFields(contact *models.Contact) templ.Component {
 			var templ_7745c5c3_Var190 string
 			templ_7745c5c3_Var190, templ_7745c5c3_Err = templ.JoinStringErrs(contactAvatarRenderURL(contact.AvatarURL))
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/contacts.templ`, Line: 1832, Col: 59}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/contacts.templ`, Line: 1844, Col: 59}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var190))
 			if templ_7745c5c3_Err != nil {
@@ -5134,7 +5146,7 @@ func ContactEditorCoreFields(contact *models.Contact) templ.Component {
 		var templ_7745c5c3_Var193 string
 		templ_7745c5c3_Var193, templ_7745c5c3_Err = templ.JoinStringErrs(contactFormName(contact))
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/contacts.templ`, Line: 1853, Col: 68}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/contacts.templ`, Line: 1865, Col: 68}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var193))
 		if templ_7745c5c3_Err != nil {
@@ -5159,7 +5171,7 @@ func ContactEditorCoreFields(contact *models.Contact) templ.Component {
 		var templ_7745c5c3_Var194 string
 		templ_7745c5c3_Var194, templ_7745c5c3_Err = templ.JoinStringErrs(contactFormTitle(contact))
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/contacts.templ`, Line: 1862, Col: 71}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/contacts.templ`, Line: 1874, Col: 71}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var194))
 		if templ_7745c5c3_Err != nil {
@@ -5172,7 +5184,7 @@ func ContactEditorCoreFields(contact *models.Contact) templ.Component {
 		var templ_7745c5c3_Var195 string
 		templ_7745c5c3_Var195, templ_7745c5c3_Err = templ.JoinStringErrs(contactFormOrganization(contact))
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/contacts.templ`, Line: 1866, Col: 85}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/contacts.templ`, Line: 1878, Col: 85}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var195))
 		if templ_7745c5c3_Err != nil {
@@ -5185,7 +5197,7 @@ func ContactEditorCoreFields(contact *models.Contact) templ.Component {
 		var templ_7745c5c3_Var196 string
 		templ_7745c5c3_Var196, templ_7745c5c3_Err = templ.JoinStringErrs(contactFormNotes(contact))
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/contacts.templ`, Line: 1871, Col: 299}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/contacts.templ`, Line: 1883, Col: 299}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var196))
 		if templ_7745c5c3_Err != nil {
@@ -5251,13 +5263,13 @@ func ContactEmailFields(contact *models.Contact) templ.Component {
 		var templ_7745c5c3_Var198 string
 		templ_7745c5c3_Var198, templ_7745c5c3_Err = templ.JoinStringErrs(contactFormEmail(contact))
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/contacts.templ`, Line: 1898, Col: 70}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/contacts.templ`, Line: 1910, Col: 70}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var198))
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 279, "\" placeholder=\"jane@example.com\" required class=\"h-10 min-w-0 flex-1 rounded-lg border border-ink/10 bg-ink/[0.04] px-3 text-sm text-ink placeholder:text-ink/35 focus:outline-none focus:ring-2 focus:ring-ink/10\">")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 279, "\" placeholder=\"jane@example.com\" class=\"h-10 min-w-0 flex-1 rounded-lg border border-ink/10 bg-ink/[0.04] px-3 text-sm text-ink placeholder:text-ink/35 focus:outline-none focus:ring-2 focus:ring-ink/10\">")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -5277,7 +5289,7 @@ func ContactEmailFields(contact *models.Contact) templ.Component {
 			var templ_7745c5c3_Var199 string
 			templ_7745c5c3_Var199, templ_7745c5c3_Err = templ.JoinStringErrs(email)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/contacts.templ`, Line: 1903, Col: 63}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/contacts.templ`, Line: 1915, Col: 63}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var199))
 			if templ_7745c5c3_Err != nil {
@@ -5364,7 +5376,7 @@ func ContactPhoneFields(contact *models.Contact) templ.Component {
 		var templ_7745c5c3_Var201 string
 		templ_7745c5c3_Var201, templ_7745c5c3_Err = templ.JoinStringErrs(contactFormPhone(contact))
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/contacts.templ`, Line: 1934, Col: 68}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/contacts.templ`, Line: 1946, Col: 68}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var201))
 		if templ_7745c5c3_Err != nil {
@@ -5390,7 +5402,7 @@ func ContactPhoneFields(contact *models.Contact) templ.Component {
 			var templ_7745c5c3_Var202 string
 			templ_7745c5c3_Var202, templ_7745c5c3_Err = templ.JoinStringErrs(phone)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/contacts.templ`, Line: 1939, Col: 61}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/contacts.templ`, Line: 1951, Col: 61}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var202))
 			if templ_7745c5c3_Err != nil {
@@ -5477,7 +5489,7 @@ func ContactEditorHeader(contact *models.Contact, profile *models.ContactProfile
 			var templ_7745c5c3_Var204 string
 			templ_7745c5c3_Var204, templ_7745c5c3_Err = templ.JoinStringErrs(contact.Name)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/contacts.templ`, Line: 1965, Col: 22}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/contacts.templ`, Line: 1977, Col: 22}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var204))
 			if templ_7745c5c3_Err != nil {
@@ -5537,7 +5549,7 @@ func ContactEditorHeader(contact *models.Contact, profile *models.ContactProfile
 				var templ_7745c5c3_Var206 string
 				templ_7745c5c3_Var206, templ_7745c5c3_Err = templ.JoinStringErrs(editDialogID)
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/contacts.templ`, Line: 1988, Col: 303}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/contacts.templ`, Line: 2000, Col: 303}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var206))
 				if templ_7745c5c3_Err != nil {
@@ -5561,41 +5573,51 @@ func ContactEditorHeader(contact *models.Contact, profile *models.ContactProfile
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 310, " <a href=\"")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 310, " ")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			var templ_7745c5c3_Var207 templ.SafeURL
-			templ_7745c5c3_Var207, templ_7745c5c3_Err = templ.JoinURLErrs("mailto:" + contact.Email)
-			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/contacts.templ`, Line: 1993, Col: 40}
+			if strings.TrimSpace(contact.Email) != "" {
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 311, "<a href=\"")
+				if templ_7745c5c3_Err != nil {
+					return templ_7745c5c3_Err
+				}
+				var templ_7745c5c3_Var207 templ.SafeURL
+				templ_7745c5c3_Var207, templ_7745c5c3_Err = templ.JoinURLErrs("mailto:" + contact.Email)
+				if templ_7745c5c3_Err != nil {
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/contacts.templ`, Line: 2006, Col: 41}
+				}
+				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var207))
+				if templ_7745c5c3_Err != nil {
+					return templ_7745c5c3_Err
+				}
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 312, "\" class=\"size-9 rounded-md flex items-center justify-center text-ink/45 hover:text-ink/75 hover:bg-ink/5 transition-colors\" aria-label=\"Email contact\">")
+				if templ_7745c5c3_Err != nil {
+					return templ_7745c5c3_Err
+				}
+				templ_7745c5c3_Err = icon.Mail(icon.Props{Class: "size-4"}).Render(ctx, templ_7745c5c3_Buffer)
+				if templ_7745c5c3_Err != nil {
+					return templ_7745c5c3_Err
+				}
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 313, "</a>")
+				if templ_7745c5c3_Err != nil {
+					return templ_7745c5c3_Err
+				}
 			}
-			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var207))
-			if templ_7745c5c3_Err != nil {
-				return templ_7745c5c3_Err
-			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 311, "\" class=\"size-9 rounded-md flex items-center justify-center text-ink/45 hover:text-ink/75 hover:bg-ink/5 transition-colors\" aria-label=\"Email contact\">")
-			if templ_7745c5c3_Err != nil {
-				return templ_7745c5c3_Err
-			}
-			templ_7745c5c3_Err = icon.Mail(icon.Props{Class: "size-4"}).Render(ctx, templ_7745c5c3_Buffer)
-			if templ_7745c5c3_Err != nil {
-				return templ_7745c5c3_Err
-			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 312, "</a> <a href=\"")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 314, " <a href=\"")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
 			var templ_7745c5c3_Var208 templ.SafeURL
 			templ_7745c5c3_Var208, templ_7745c5c3_Err = templ.JoinURLErrs(fmt.Sprintf("/api/contacts/%s/export", contact.ID))
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/contacts.templ`, Line: 1996, Col: 65}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/contacts.templ`, Line: 2010, Col: 65}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var208))
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 313, "\" class=\"size-9 rounded-md flex items-center justify-center text-ink/45 hover:text-ink/75 hover:bg-ink/5 transition-colors\" aria-label=\"Export vCard\">")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 315, "\" class=\"size-9 rounded-md flex items-center justify-center text-ink/45 hover:text-ink/75 hover:bg-ink/5 transition-colors\" aria-label=\"Export vCard\">")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
@@ -5603,20 +5625,20 @@ func ContactEditorHeader(contact *models.Contact, profile *models.ContactProfile
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 314, "</a> <button type=\"submit\" form=\"")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 316, "</a> <button type=\"submit\" form=\"")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
 			var templ_7745c5c3_Var209 string
 			templ_7745c5c3_Var209, templ_7745c5c3_Err = templ.JoinStringErrs("delete-contact-" + contact.ID)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/contacts.templ`, Line: 1999, Col: 64}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/contacts.templ`, Line: 2013, Col: 64}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var209))
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 315, "\" class=\"size-9 rounded-md flex items-center justify-center text-ink/35 hover:text-destructive hover:bg-destructive/10 transition-colors\" aria-label=\"Delete contact\">")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 317, "\" class=\"size-9 rounded-md flex items-center justify-center text-ink/35 hover:text-destructive hover:bg-destructive/10 transition-colors\" aria-label=\"Delete contact\">")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
@@ -5624,12 +5646,12 @@ func ContactEditorHeader(contact *models.Contact, profile *models.ContactProfile
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 316, "</button>")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 318, "</button>")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 317, "</div></div></div>")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 319, "</div></div></div>")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -5683,59 +5705,59 @@ func ContactEditDialog(contact models.Contact, profile *models.ContactProfile, a
 					}()
 				}
 				ctx = templ.InitializeContext(ctx)
-				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 318, "<form id=\"")
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 320, "<form id=\"")
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
 				var templ_7745c5c3_Var213 string
 				templ_7745c5c3_Var213, templ_7745c5c3_Err = templ.JoinStringErrs("contact-edit-form-" + contact.ID)
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/contacts.templ`, Line: 2013, Col: 42}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/contacts.templ`, Line: 2027, Col: 42}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var213))
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
-				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 319, "\" action=\"")
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 321, "\" action=\"")
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
 				var templ_7745c5c3_Var214 templ.SafeURL
 				templ_7745c5c3_Var214, templ_7745c5c3_Err = templ.JoinURLErrs(contactFormAction(&contact))
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/contacts.templ`, Line: 2014, Col: 40}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/contacts.templ`, Line: 2028, Col: 40}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var214))
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
-				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 320, "\" method=\"post\" class=\"grid max-h-[calc(100vh-2rem)] min-h-0 grid-rows-[auto_minmax(0,1fr)_auto]\" data-contact-editor-form data-contact-edit-form data-contact-id=\"")
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 322, "\" method=\"post\" class=\"grid max-h-[calc(100vh-2rem)] min-h-0 grid-rows-[auto_minmax(0,1fr)_auto]\" data-contact-editor-form data-contact-edit-form data-contact-id=\"")
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
 				var templ_7745c5c3_Var215 string
 				templ_7745c5c3_Var215, templ_7745c5c3_Err = templ.JoinStringErrs(contact.ID)
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/contacts.templ`, Line: 2019, Col: 32}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/contacts.templ`, Line: 2033, Col: 32}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var215))
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
-				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 321, "\" data-contact-edit-dialog=\"")
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 323, "\" data-contact-edit-dialog=\"")
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
 				var templ_7745c5c3_Var216 string
 				templ_7745c5c3_Var216, templ_7745c5c3_Err = templ.JoinStringErrs(dialogID)
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/contacts.templ`, Line: 2020, Col: 39}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/contacts.templ`, Line: 2034, Col: 39}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var216))
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
-				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 322, "\"><div class=\"flex items-start justify-between gap-4 border-b border-ink/10 px-5 py-4 sm:px-6\">")
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 324, "\"><div class=\"flex items-start justify-between gap-4 border-b border-ink/10 px-5 py-4 sm:px-6\">")
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
@@ -5763,14 +5785,14 @@ func ContactEditDialog(contact models.Contact, profile *models.ContactProfile, a
 							}()
 						}
 						ctx = templ.InitializeContext(ctx)
-						templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 323, "Edit ")
+						templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 325, "Edit ")
 						if templ_7745c5c3_Err != nil {
 							return templ_7745c5c3_Err
 						}
 						var templ_7745c5c3_Var219 string
 						templ_7745c5c3_Var219, templ_7745c5c3_Err = templ.JoinStringErrs(contactDisplay(contact))
 						if templ_7745c5c3_Err != nil {
-							return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/contacts.templ`, Line: 2025, Col: 37}
+							return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/contacts.templ`, Line: 2039, Col: 37}
 						}
 						_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var219))
 						if templ_7745c5c3_Err != nil {
@@ -5782,7 +5804,7 @@ func ContactEditDialog(contact models.Contact, profile *models.ContactProfile, a
 					if templ_7745c5c3_Err != nil {
 						return templ_7745c5c3_Err
 					}
-					templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 324, " ")
+					templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 326, " ")
 					if templ_7745c5c3_Err != nil {
 						return templ_7745c5c3_Err
 					}
@@ -5798,7 +5820,7 @@ func ContactEditDialog(contact models.Contact, profile *models.ContactProfile, a
 							}()
 						}
 						ctx = templ.InitializeContext(ctx)
-						templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 325, "Update contact details and choose where saved changes are synchronized.")
+						templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 327, "Update contact details and choose where saved changes are synchronized.")
 						if templ_7745c5c3_Err != nil {
 							return templ_7745c5c3_Err
 						}
@@ -5814,7 +5836,7 @@ func ContactEditDialog(contact models.Contact, profile *models.ContactProfile, a
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
-				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 326, "<button type=\"button\" class=\"flex size-8 shrink-0 items-center justify-center rounded-md text-ink/40 transition-colors hover:bg-ink/[0.06] hover:text-ink\" aria-label=\"Close contact editor\" data-contact-editor-cancel>")
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 328, "<button type=\"button\" class=\"flex size-8 shrink-0 items-center justify-center rounded-md text-ink/40 transition-colors hover:bg-ink/[0.06] hover:text-ink\" aria-label=\"Close contact editor\" data-contact-editor-cancel>")
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
@@ -5822,7 +5844,7 @@ func ContactEditDialog(contact models.Contact, profile *models.ContactProfile, a
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
-				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 327, "</button></div><div class=\"min-h-0 space-y-5 overflow-y-auto px-5 py-5 sm:px-6\">")
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 329, "</button></div><div class=\"min-h-0 space-y-5 overflow-y-auto px-5 py-5 sm:px-6\">")
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
@@ -5834,7 +5856,7 @@ func ContactEditDialog(contact models.Contact, profile *models.ContactProfile, a
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
-				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 328, "</div><div class=\"flex flex-col-reverse gap-2 border-t border-ink/10 bg-paper/90 px-5 py-3 backdrop-blur sm:flex-row sm:items-center sm:justify-end sm:px-6\"><button type=\"button\" class=\"inline-flex h-9 items-center justify-center rounded-lg border border-ink/10 bg-paper px-4 text-sm font-semibold text-ink/55 transition-colors hover:bg-ink/[0.04] hover:text-ink\" data-contact-editor-cancel>Cancel</button> <button type=\"submit\" class=\"btn-skeuo inline-flex h-9 items-center justify-center gap-1.5 rounded-lg px-4 text-sm font-semibold\">")
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 330, "</div><div class=\"flex flex-col-reverse gap-2 border-t border-ink/10 bg-paper/90 px-5 py-3 backdrop-blur sm:flex-row sm:items-center sm:justify-end sm:px-6\"><button type=\"button\" class=\"inline-flex h-9 items-center justify-center rounded-lg border border-ink/10 bg-paper px-4 text-sm font-semibold text-ink/55 transition-colors hover:bg-ink/[0.04] hover:text-ink\" data-contact-editor-cancel>Cancel</button> <button type=\"submit\" class=\"btn-skeuo inline-flex h-9 items-center justify-center gap-1.5 rounded-lg px-4 text-sm font-semibold\">")
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
@@ -5842,7 +5864,7 @@ func ContactEditDialog(contact models.Contact, profile *models.ContactProfile, a
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
-				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 329, "Save changes</button></div></form>")
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 331, "Save changes</button></div></form>")
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
@@ -5883,7 +5905,7 @@ func ContactEditSyncPanel(contact *models.Contact, profile *models.ContactProfil
 			templ_7745c5c3_Var221 = templ.NopComponent
 		}
 		ctx = templ.ClearChildren(ctx)
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 330, "<section class=\"rounded-lg border border-ink/10 bg-ink/[0.02]\"><div class=\"flex flex-wrap items-center justify-between gap-3 border-b border-ink/10 px-4 py-3\"><div class=\"inline-flex items-center gap-2\">")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 332, "<section class=\"rounded-lg border border-ink/10 bg-ink/[0.02]\"><div class=\"flex flex-wrap items-center justify-between gap-3 border-b border-ink/10 px-4 py-3\"><div class=\"inline-flex items-center gap-2\">")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -5891,7 +5913,7 @@ func ContactEditSyncPanel(contact *models.Contact, profile *models.ContactProfil
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 331, "<h2 class=\"text-xs font-semibold uppercase tracking-wider text-ink/55\">Gofer Sync</h2></div><div class=\"flex items-center gap-2\">")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 333, "<h2 class=\"text-xs font-semibold uppercase tracking-wider text-ink/55\">Gofer Sync</h2></div><div class=\"flex items-center gap-2\">")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -5900,7 +5922,7 @@ func ContactEditSyncPanel(contact *models.Contact, profile *models.ContactProfil
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 332, "<span class=\"")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 334, "<span class=\"")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -5913,20 +5935,20 @@ func ContactEditSyncPanel(contact *models.Contact, profile *models.ContactProfil
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 333, "\" data-contact-sync-state-label>")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 335, "\" data-contact-sync-state-label>")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
 		var templ_7745c5c3_Var224 string
 		templ_7745c5c3_Var224, templ_7745c5c3_Err = templ.JoinStringErrs(contactProfileSyncLabel(profile))
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/contacts.templ`, Line: 2060, Col: 39}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/contacts.templ`, Line: 2074, Col: 39}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var224))
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 334, "</span>")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 336, "</span>")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -5939,35 +5961,35 @@ func ContactEditSyncPanel(contact *models.Contact, profile *models.ContactProfil
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 335, "</div></div><div class=\"space-y-4 p-4\"><div class=\"rounded-md border border-ink/10 bg-paper/35 px-3 py-2.5\"><div class=\"text-xs font-semibold uppercase tracking-wider text-ink/40\">Origin</div>")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 337, "</div></div><div class=\"space-y-4 p-4\"><div class=\"rounded-md border border-ink/10 bg-paper/35 px-3 py-2.5\"><div class=\"text-xs font-semibold uppercase tracking-wider text-ink/40\">Origin</div>")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
 		if profile != nil {
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 336, "<div class=\"mt-1 text-sm font-semibold text-ink\">")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 338, "<div class=\"mt-1 text-sm font-semibold text-ink\">")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
 			var templ_7745c5c3_Var225 string
 			templ_7745c5c3_Var225, templ_7745c5c3_Err = templ.JoinStringErrs(contactSourceLabel(profile.Origin, profile.Origin == "manual", accounts))
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/contacts.templ`, Line: 2074, Col: 128}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/contacts.templ`, Line: 2088, Col: 128}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var225))
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 337, "</div>")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 339, "</div>")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
 		} else {
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 338, "<div class=\"mt-1 text-sm font-semibold text-ink\">Manual</div>")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 340, "<div class=\"mt-1 text-sm font-semibold text-ink\">Manual</div>")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 339, "<p class=\"mt-2 text-xs leading-relaxed text-ink/50\">How this contact was first created. Editing or syncing it does not change its origin.</p></div><div class=\"w-full\">")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 341, "<p class=\"mt-2 text-xs leading-relaxed text-ink/50\">How this contact was first created. Editing or syncing it does not change its origin.</p></div><div class=\"w-full\">")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -5975,7 +5997,7 @@ func ContactEditSyncPanel(contact *models.Contact, profile *models.ContactProfil
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 340, "</div></div></section>")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 342, "</div></div></section>")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -6018,72 +6040,72 @@ func ContactHeaderAvatar(contact models.Contact) templ.Component {
 					}()
 				}
 				ctx = templ.InitializeContext(ctx)
-				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 341, "<button type=\"button\" class=\"group relative inline-flex size-14 shrink-0 rounded-full focus:outline-none focus-visible:ring-2 focus-visible:ring-ink/25 focus-visible:ring-offset-2 focus-visible:ring-offset-paper\" aria-label=\"View profile picture\" data-contact-avatar-preview-trigger data-contact-avatar-preview-dialog=\"")
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 343, "<button type=\"button\" class=\"group relative inline-flex size-14 shrink-0 rounded-full focus:outline-none focus-visible:ring-2 focus-visible:ring-ink/25 focus-visible:ring-offset-2 focus-visible:ring-offset-paper\" aria-label=\"View profile picture\" data-contact-avatar-preview-trigger data-contact-avatar-preview-dialog=\"")
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
 				var templ_7745c5c3_Var228 string
 				templ_7745c5c3_Var228, templ_7745c5c3_Err = templ.JoinStringErrs(dialogID)
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/contacts.templ`, Line: 2094, Col: 49}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/contacts.templ`, Line: 2108, Col: 49}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var228))
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
-				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 342, "\" data-contact-avatar-preview-alt=\"")
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 344, "\" data-contact-avatar-preview-alt=\"")
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
 				var templ_7745c5c3_Var229 string
 				templ_7745c5c3_Var229, templ_7745c5c3_Err = templ.JoinStringErrs(contactDisplay(contact) + " profile picture")
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/contacts.templ`, Line: 2095, Col: 82}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/contacts.templ`, Line: 2109, Col: 82}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var229))
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
-				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 343, "\" data-contact-avatar-preview-src=\"")
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 345, "\" data-contact-avatar-preview-src=\"")
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
 				var templ_7745c5c3_Var230 string
 				templ_7745c5c3_Var230, templ_7745c5c3_Err = templ.JoinStringErrs(contactAvatarRenderURL(contactAvatarPreviewURL(contact.AvatarURL)))
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/contacts.templ`, Line: 2096, Col: 104}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/contacts.templ`, Line: 2110, Col: 104}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var230))
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
-				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 344, "\"><span class=\"relative block size-14 overflow-hidden rounded-full text-base font-bold shadow-[0_8px_22px_rgba(0,0,0,0.16)] ring-1 ring-ink/0 transition group-hover:ring-ink/20 group-focus-visible:ring-ink/25\" data-contact-avatar data-avatar-hash=\"")
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 346, "\"><span class=\"relative block size-14 overflow-hidden rounded-full text-base font-bold shadow-[0_8px_22px_rgba(0,0,0,0.16)] ring-1 ring-ink/0 transition group-hover:ring-ink/20 group-focus-visible:ring-ink/25\" data-contact-avatar data-avatar-hash=\"")
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
 				var templ_7745c5c3_Var231 string
 				templ_7745c5c3_Var231, templ_7745c5c3_Err = templ.JoinStringErrs(contact.AvatarHash)
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/contacts.templ`, Line: 2098, Col: 269}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/contacts.templ`, Line: 2112, Col: 269}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var231))
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
-				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 345, "\" data-avatar-email=\"")
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 347, "\" data-avatar-email=\"")
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
 				var templ_7745c5c3_Var232 string
 				templ_7745c5c3_Var232, templ_7745c5c3_Err = templ.JoinStringErrs(contact.Email)
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/contacts.templ`, Line: 2098, Col: 305}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/contacts.templ`, Line: 2112, Col: 305}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var232))
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
-				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 346, "\">")
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 348, "\">")
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
@@ -6092,7 +6114,7 @@ func ContactHeaderAvatar(contact models.Contact) templ.Component {
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
-				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 347, "<span class=\"")
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 349, "<span class=\"")
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
@@ -6105,20 +6127,20 @@ func ContactHeaderAvatar(contact models.Contact) templ.Component {
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
-				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 348, "\" data-avatar-fallback>")
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 350, "\" data-avatar-fallback>")
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
 				var templ_7745c5c3_Var235 string
 				templ_7745c5c3_Var235, templ_7745c5c3_Err = templ.JoinStringErrs(contact.Initials)
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/contacts.templ`, Line: 2099, Col: 165}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/contacts.templ`, Line: 2113, Col: 165}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var235))
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
-				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 349, "</span> ")
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 351, "</span> ")
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
@@ -6127,46 +6149,46 @@ func ContactHeaderAvatar(contact models.Contact) templ.Component {
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
-				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 350, "<img src=\"")
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 352, "<img src=\"")
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
 				var templ_7745c5c3_Var237 string
 				templ_7745c5c3_Var237, templ_7745c5c3_Err = templ.JoinStringErrs(contactAvatarRenderURL(contact.AvatarURL))
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/contacts.templ`, Line: 2101, Col: 53}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/contacts.templ`, Line: 2115, Col: 53}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var237))
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
-				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 351, "\" alt=\"")
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 353, "\" alt=\"")
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
 				var templ_7745c5c3_Var238 string
 				templ_7745c5c3_Var238, templ_7745c5c3_Err = templ.JoinStringErrs(contactDisplay(contact))
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/contacts.templ`, Line: 2102, Col: 35}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/contacts.templ`, Line: 2116, Col: 35}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var238))
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
-				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 352, "\" decoding=\"async\" data-avatar-image data-avatar-source=\"")
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 354, "\" decoding=\"async\" data-avatar-image data-avatar-source=\"")
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
 				var templ_7745c5c3_Var239 string
 				templ_7745c5c3_Var239, templ_7745c5c3_Err = templ.JoinStringErrs(contact.AvatarSource)
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/contacts.templ`, Line: 2105, Col: 47}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/contacts.templ`, Line: 2119, Col: 47}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var239))
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
-				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 353, "\" class=\"")
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 355, "\" class=\"")
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
@@ -6179,7 +6201,7 @@ func ContactHeaderAvatar(contact models.Contact) templ.Component {
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
-				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 354, "\"> <span class=\"pointer-events-none absolute inset-0 flex items-center justify-center rounded-full bg-ink/0 text-white opacity-0 transition group-hover:bg-ink/25 group-hover:opacity-100 group-focus-visible:bg-ink/25 group-focus-visible:opacity-100\">")
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 356, "\"> <span class=\"pointer-events-none absolute inset-0 flex items-center justify-center rounded-full bg-ink/0 text-white opacity-0 transition group-hover:bg-ink/25 group-hover:opacity-100 group-focus-visible:bg-ink/25 group-focus-visible:opacity-100\">")
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
@@ -6187,7 +6209,7 @@ func ContactHeaderAvatar(contact models.Contact) templ.Component {
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
-				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 355, "</span></span></button>")
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 357, "</span></span></button>")
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
@@ -6197,7 +6219,7 @@ func ContactHeaderAvatar(contact models.Contact) templ.Component {
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 356, " ")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 358, " ")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
@@ -6272,7 +6294,7 @@ func ContactAvatarPreviewDialog(contact models.Contact, dialogID string) templ.C
 						}()
 					}
 					ctx = templ.InitializeContext(ctx)
-					templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 357, "Profile picture")
+					templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 359, "Profile picture")
 					if templ_7745c5c3_Err != nil {
 						return templ_7745c5c3_Err
 					}
@@ -6282,20 +6304,20 @@ func ContactAvatarPreviewDialog(contact models.Contact, dialogID string) templ.C
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
-				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 358, " <div class=\"relative size-full\"><div class=\"size-full overflow-hidden rounded-full bg-ink/5 shadow-[0_18px_45px_rgba(0,0,0,0.22)] ring-1 ring-ink/10\"><img alt=\"")
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 360, " <div class=\"relative size-full\"><div class=\"size-full overflow-hidden rounded-full bg-ink/5 shadow-[0_18px_45px_rgba(0,0,0,0.22)] ring-1 ring-ink/10\"><img alt=\"")
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
 				var templ_7745c5c3_Var245 string
 				templ_7745c5c3_Var245, templ_7745c5c3_Err = templ.JoinStringErrs(contactDisplay(contact) + " profile picture")
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/contacts.templ`, Line: 2129, Col: 56}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/contacts.templ`, Line: 2143, Col: 56}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var245))
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
-				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 359, "\" decoding=\"async\" data-contact-avatar-preview-image class=\"block size-full object-cover\"></div>")
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 361, "\" decoding=\"async\" data-contact-avatar-preview-image class=\"block size-full object-cover\"></div>")
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
@@ -6311,7 +6333,7 @@ func ContactAvatarPreviewDialog(contact models.Contact, dialogID string) templ.C
 						}()
 					}
 					ctx = templ.InitializeContext(ctx)
-					templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 360, "<button type=\"button\" class=\"absolute right-4 top-4 z-10 flex size-9 shrink-0 items-center justify-center rounded-full bg-paper/90 text-ink/55 shadow-sm ring-1 ring-ink/10 backdrop-blur transition-colors hover:bg-paper hover:text-ink focus:outline-none focus-visible:ring-2 focus-visible:ring-ink/20\" aria-label=\"Close profile picture preview\">")
+					templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 362, "<button type=\"button\" class=\"absolute right-4 top-4 z-10 flex size-9 shrink-0 items-center justify-center rounded-full bg-paper/90 text-ink/55 shadow-sm ring-1 ring-ink/10 backdrop-blur transition-colors hover:bg-paper hover:text-ink focus:outline-none focus-visible:ring-2 focus-visible:ring-ink/20\" aria-label=\"Close profile picture preview\">")
 					if templ_7745c5c3_Err != nil {
 						return templ_7745c5c3_Err
 					}
@@ -6319,7 +6341,7 @@ func ContactAvatarPreviewDialog(contact models.Contact, dialogID string) templ.C
 					if templ_7745c5c3_Err != nil {
 						return templ_7745c5c3_Err
 					}
-					templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 361, "</button>")
+					templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 363, "</button>")
 					if templ_7745c5c3_Err != nil {
 						return templ_7745c5c3_Err
 					}
@@ -6329,7 +6351,7 @@ func ContactAvatarPreviewDialog(contact models.Contact, dialogID string) templ.C
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
-				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 362, "</div>")
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 364, "</div>")
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
@@ -6370,7 +6392,7 @@ func ContactEditorSaveActions() templ.Component {
 			templ_7745c5c3_Var247 = templ.NopComponent
 		}
 		ctx = templ.ClearChildren(ctx)
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 363, "<div class=\"sticky bottom-0 z-10 flex items-center justify-end gap-3 border-t border-ink/10 bg-paper/90 px-5 py-3 backdrop-blur sm:px-7\"><button type=\"submit\" class=\"btn-skeuo inline-flex items-center gap-1.5 rounded-lg px-4 py-2 text-sm font-semibold\">")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 365, "<div class=\"sticky bottom-0 z-10 flex items-center justify-end gap-3 border-t border-ink/10 bg-paper/90 px-5 py-3 backdrop-blur sm:px-7\"><button type=\"submit\" class=\"btn-skeuo inline-flex items-center gap-1.5 rounded-lg px-4 py-2 text-sm font-semibold\">")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -6378,7 +6400,7 @@ func ContactEditorSaveActions() templ.Component {
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 364, "Save contact</button></div>")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 366, "Save contact</button></div>")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -6407,7 +6429,7 @@ func ContactLegacySourcePanel(contact *models.Contact, accounts []models.Account
 			templ_7745c5c3_Var248 = templ.NopComponent
 		}
 		ctx = templ.ClearChildren(ctx)
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 365, "<section class=\"rounded-lg border border-ink/10 bg-ink/[0.02]\"><div class=\"flex flex-wrap items-center justify-between gap-3 border-b border-ink/10 px-4 py-3\"><div class=\"inline-flex items-center gap-2\">")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 367, "<section class=\"rounded-lg border border-ink/10 bg-ink/[0.02]\"><div class=\"flex flex-wrap items-center justify-between gap-3 border-b border-ink/10 px-4 py-3\"><div class=\"inline-flex items-center gap-2\">")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -6415,7 +6437,7 @@ func ContactLegacySourcePanel(contact *models.Contact, accounts []models.Account
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 366, "<h2 class=\"text-xs font-semibold uppercase tracking-wider text-ink/55\">Gofer Sync</h2></div><div class=\"flex items-center gap-2\">")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 368, "<h2 class=\"text-xs font-semibold uppercase tracking-wider text-ink/55\">Gofer Sync</h2></div><div class=\"flex items-center gap-2\">")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -6424,7 +6446,7 @@ func ContactLegacySourcePanel(contact *models.Contact, accounts []models.Account
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 367, "<span class=\"")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 369, "<span class=\"")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -6437,20 +6459,20 @@ func ContactLegacySourcePanel(contact *models.Contact, accounts []models.Account
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 368, "\" data-contact-sync-state-label>")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 370, "\" data-contact-sync-state-label>")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
 		var templ_7745c5c3_Var251 string
 		templ_7745c5c3_Var251, templ_7745c5c3_Err = templ.JoinStringErrs(contactSyncLabel(contact))
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/contacts.templ`, Line: 2163, Col: 32}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/contacts.templ`, Line: 2177, Col: 32}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var251))
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 369, "</span>")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 371, "</span>")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -6463,58 +6485,58 @@ func ContactLegacySourcePanel(contact *models.Contact, accounts []models.Account
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 370, "</div></div><div class=\"space-y-4 p-4\"><div class=\"rounded-md border border-ink/10 bg-paper/35 px-3 py-2.5\"><div class=\"text-xs font-semibold uppercase tracking-wider text-ink/40\">Source</div>")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 372, "</div></div><div class=\"space-y-4 p-4\"><div class=\"rounded-md border border-ink/10 bg-paper/35 px-3 py-2.5\"><div class=\"text-xs font-semibold uppercase tracking-wider text-ink/40\">Source</div>")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
 		if contact != nil && len(contact.SourceBooks) > 0 {
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 371, "<div class=\"mt-2 flex flex-wrap gap-1.5\">")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 373, "<div class=\"mt-2 flex flex-wrap gap-1.5\">")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
 			for _, book := range contact.SourceBooks {
-				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 372, "<span class=\"rounded border border-ink/10 bg-ink/[0.04] px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-ink/45\">")
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 374, "<span class=\"rounded border border-ink/10 bg-ink/[0.04] px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-ink/45\">")
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
 				var templ_7745c5c3_Var252 string
 				templ_7745c5c3_Var252, templ_7745c5c3_Err = templ.JoinStringErrs(book.AccountName)
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/contacts.templ`, Line: 2179, Col: 159}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/contacts.templ`, Line: 2193, Col: 159}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var252))
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
-				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 373, " / ")
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 375, " / ")
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
 				var templ_7745c5c3_Var253 string
 				templ_7745c5c3_Var253, templ_7745c5c3_Err = templ.JoinStringErrs(contactAddressBookDisplayName(book))
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/contacts.templ`, Line: 2179, Col: 201}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/contacts.templ`, Line: 2193, Col: 201}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var253))
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
-				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 374, "</span>")
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 376, "</span>")
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 375, "</div>")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 377, "</div>")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
 		} else {
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 376, "<div class=\"mt-1 text-sm font-medium text-ink\">Gofer</div><div class=\"mt-0.5 text-xs text-ink/40\">Local editable contact</div>")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 378, "<div class=\"mt-1 text-sm font-medium text-ink\">Gofer</div><div class=\"mt-0.5 text-xs text-ink/40\">Local editable contact</div>")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 377, "</div><div class=\"w-full\">")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 379, "</div><div class=\"w-full\">")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -6522,7 +6544,7 @@ func ContactLegacySourcePanel(contact *models.Contact, accounts []models.Account
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 378, "</div></div></section>")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 380, "</div></div></section>")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -6551,7 +6573,7 @@ func ContactProfileInsight(profile models.ContactProfile, contact *models.Contac
 			templ_7745c5c3_Var254 = templ.NopComponent
 		}
 		ctx = templ.ClearChildren(ctx)
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 379, "<section class=\"w-full rounded-lg border border-ink/10 bg-ink/[0.02]\"><div class=\"flex flex-wrap items-center justify-between gap-3 border-b border-ink/10 px-4 py-3\"><div class=\"inline-flex items-center gap-2\">")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 381, "<section class=\"w-full rounded-lg border border-ink/10 bg-ink/[0.02]\"><div class=\"flex flex-wrap items-center justify-between gap-3 border-b border-ink/10 px-4 py-3\"><div class=\"inline-flex items-center gap-2\">")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -6559,7 +6581,7 @@ func ContactProfileInsight(profile models.ContactProfile, contact *models.Contac
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 380, "<h2 class=\"text-xs font-semibold uppercase tracking-wider text-ink/55\">Gofer Sync</h2></div>")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 382, "<h2 class=\"text-xs font-semibold uppercase tracking-wider text-ink/55\">Gofer Sync</h2></div>")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -6568,7 +6590,7 @@ func ContactProfileInsight(profile models.ContactProfile, contact *models.Contac
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 381, "<span class=\"")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 383, "<span class=\"")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -6581,33 +6603,33 @@ func ContactProfileInsight(profile models.ContactProfile, contact *models.Contac
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 382, "\">")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 384, "\">")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
 		var templ_7745c5c3_Var257 string
 		templ_7745c5c3_Var257, templ_7745c5c3_Err = templ.JoinStringErrs(contactUnifiedStatusLabel(profile))
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/contacts.templ`, Line: 2201, Col: 105}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/contacts.templ`, Line: 2215, Col: 105}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var257))
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 383, "</span></div><div class=\"space-y-4 p-4\"><div class=\"rounded-md border border-ink/10 bg-paper/35 px-3 py-2.5\"><div class=\"text-xs font-semibold uppercase tracking-wider text-ink/40\">Origin</div><div class=\"mt-1 text-sm font-semibold text-ink\">")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 385, "</span></div><div class=\"space-y-4 p-4\"><div class=\"rounded-md border border-ink/10 bg-paper/35 px-3 py-2.5\"><div class=\"text-xs font-semibold uppercase tracking-wider text-ink/40\">Origin</div><div class=\"mt-1 text-sm font-semibold text-ink\">")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
 		var templ_7745c5c3_Var258 string
 		templ_7745c5c3_Var258, templ_7745c5c3_Err = templ.JoinStringErrs(contactSourceLabel(profile.Origin, profile.Origin == "manual", accounts))
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/contacts.templ`, Line: 2206, Col: 127}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/contacts.templ`, Line: 2220, Col: 127}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var258))
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 384, "</div><p class=\"mt-2 text-xs leading-relaxed text-ink/45\">How this contact was first created. This value does not change when the contact is edited or synchronized.</p></div><div class=\"w-full\">")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 386, "</div><p class=\"mt-2 text-xs leading-relaxed text-ink/45\">How this contact was first created. This value does not change when the contact is edited or synchronized.</p></div><div class=\"w-full\">")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -6615,7 +6637,7 @@ func ContactProfileInsight(profile models.ContactProfile, contact *models.Contac
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 385, "</div></div></section>")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 387, "</div></div></section>")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -6649,7 +6671,7 @@ func ContactSyncStatusNotice(contact models.Contact) templ.Component {
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 386, "<div class=\"")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 388, "<div class=\"")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -6662,66 +6684,66 @@ func ContactSyncStatusNotice(contact models.Contact) templ.Component {
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 387, "\"><div class=\"flex items-center justify-between gap-3\"><span class=\"font-semibold\">")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 389, "\"><div class=\"flex items-center justify-between gap-3\"><span class=\"font-semibold\">")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
 		var templ_7745c5c3_Var262 string
 		templ_7745c5c3_Var262, templ_7745c5c3_Err = templ.JoinStringErrs(contactSyncStatusLabel(contact.SyncStatus))
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/contacts.templ`, Line: 2217, Col: 75}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/contacts.templ`, Line: 2231, Col: 75}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var262))
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 388, "</span> ")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 390, "</span> ")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
 		if contact.SyncUpdatedAt != "" {
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 389, "<span class=\"text-[11px] opacity-70\">")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 391, "<span class=\"text-[11px] opacity-70\">")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
 			var templ_7745c5c3_Var263 string
 			templ_7745c5c3_Var263, templ_7745c5c3_Err = templ.JoinStringErrs(contact.SyncUpdatedAt)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/contacts.templ`, Line: 2219, Col: 64}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/contacts.templ`, Line: 2233, Col: 64}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var263))
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 390, "</span>")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 392, "</span>")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 391, "</div>")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 393, "</div>")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
 		if contact.SyncStatus == "error" && contact.SyncError != "" {
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 392, "<p class=\"leading-relaxed opacity-80\">")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 394, "<p class=\"leading-relaxed opacity-80\">")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
 			var templ_7745c5c3_Var264 string
 			templ_7745c5c3_Var264, templ_7745c5c3_Err = templ.JoinStringErrs(contact.SyncError)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/contacts.templ`, Line: 2223, Col: 60}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/contacts.templ`, Line: 2237, Col: 60}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var264))
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 393, "</p>")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 395, "</p>")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 394, "</div>")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 396, "</div>")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -6755,7 +6777,7 @@ func ContactSyncTargetsSelect(contact *models.Contact, accounts []models.Account
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 395, "<div class=\"")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 397, "<div class=\"")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -6768,20 +6790,20 @@ func ContactSyncTargetsSelect(contact *models.Contact, accounts []models.Account
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 396, "\" data-contact-sync-targets aria-disabled=\"")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 398, "\" data-contact-sync-targets aria-disabled=\"")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
 		var templ_7745c5c3_Var268 string
 		templ_7745c5c3_Var268, templ_7745c5c3_Err = templ.JoinStringErrs(fmt.Sprintf("%t", !syncEnabled))
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/contacts.templ`, Line: 2229, Col: 126}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/contacts.templ`, Line: 2243, Col: 126}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var268))
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 397, "\"><label class=\"mb-1.5 block text-xs font-semibold uppercase tracking-wider text-ink/40\">Sync locations</label>")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 399, "\"><label class=\"mb-1.5 block text-xs font-semibold uppercase tracking-wider text-ink/40\">Sync locations</label>")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -6819,7 +6841,7 @@ func ContactSyncTargetsSelect(contact *models.Contact, accounts []models.Account
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 398, " ")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 400, " ")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
@@ -6847,7 +6869,7 @@ func ContactSyncTargetsSelect(contact *models.Contact, accounts []models.Account
 						}()
 					}
 					ctx = templ.InitializeContext(ctx)
-					templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 399, "Local")
+					templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 401, "Local")
 					if templ_7745c5c3_Err != nil {
 						return templ_7745c5c3_Err
 					}
@@ -6875,7 +6897,7 @@ func ContactSyncTargetsSelect(contact *models.Contact, accounts []models.Account
 								var templ_7745c5c3_Var274 string
 								templ_7745c5c3_Var274, templ_7745c5c3_Err = templ.JoinStringErrs(accountContactSaveLabel(account))
 								if templ_7745c5c3_Err != nil {
-									return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/contacts.templ`, Line: 2243, Col: 42}
+									return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/contacts.templ`, Line: 2257, Col: 42}
 								}
 								_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var274))
 								if templ_7745c5c3_Err != nil {
@@ -6904,20 +6926,20 @@ func ContactSyncTargetsSelect(contact *models.Contact, accounts []models.Account
 								var templ_7745c5c3_Var276 string
 								templ_7745c5c3_Var276, templ_7745c5c3_Err = templ.JoinStringErrs(accountContactOriginLabel(account))
 								if templ_7745c5c3_Err != nil {
-									return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/contacts.templ`, Line: 2248, Col: 44}
+									return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/contacts.templ`, Line: 2262, Col: 44}
 								}
 								_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var276))
 								if templ_7745c5c3_Err != nil {
 									return templ_7745c5c3_Err
 								}
-								templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 400, " / ")
+								templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 402, " / ")
 								if templ_7745c5c3_Err != nil {
 									return templ_7745c5c3_Err
 								}
 								var templ_7745c5c3_Var277 string
 								templ_7745c5c3_Var277, templ_7745c5c3_Err = templ.JoinStringErrs(contactAddressBookDisplayName(book))
 								if templ_7745c5c3_Err != nil {
-									return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/contacts.templ`, Line: 2248, Col: 86}
+									return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/contacts.templ`, Line: 2262, Col: 86}
 								}
 								_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var277))
 								if templ_7745c5c3_Err != nil {
@@ -6944,7 +6966,7 @@ func ContactSyncTargetsSelect(contact *models.Contact, accounts []models.Account
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 401, "<p class=\"mt-1.5 text-xs leading-relaxed text-ink/40\">Selected locations participate in Gofer Sync. Turning sync off keeps this selection for later.</p></div>")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 403, "<p class=\"mt-1.5 text-xs leading-relaxed text-ink/40\">Selected locations participate in Gofer Sync. Turning sync off keeps this selection for later.</p></div>")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -7009,20 +7031,20 @@ func ContactSyncSetupDialog(setup models.ContactSyncSetup) templ.Component {
 						}()
 					}
 					ctx = templ.InitializeContext(ctx)
-					templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 402, "<div><div class=\"text-[10px] font-semibold uppercase tracking-[0.16em] text-ink/35\">")
+					templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 404, "<div><div class=\"text-[10px] font-semibold uppercase tracking-[0.16em] text-ink/35\">")
 					if templ_7745c5c3_Err != nil {
 						return templ_7745c5c3_Err
 					}
 					var templ_7745c5c3_Var282 string
 					templ_7745c5c3_Var282, templ_7745c5c3_Err = templ.JoinStringErrs(contactSyncSetupStep(setup.Phase))
 					if templ_7745c5c3_Err != nil {
-						return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/contacts.templ`, Line: 2265, Col: 41}
+						return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/contacts.templ`, Line: 2279, Col: 41}
 					}
 					_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var282))
 					if templ_7745c5c3_Err != nil {
 						return templ_7745c5c3_Err
 					}
-					templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 403, "</div>")
+					templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 405, "</div>")
 					if templ_7745c5c3_Err != nil {
 						return templ_7745c5c3_Err
 					}
@@ -7038,7 +7060,7 @@ func ContactSyncSetupDialog(setup models.ContactSyncSetup) templ.Component {
 							}()
 						}
 						ctx = templ.InitializeContext(ctx)
-						templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 404, "Set up Gofer Sync ")
+						templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 406, "Set up Gofer Sync ")
 						if templ_7745c5c3_Err != nil {
 							return templ_7745c5c3_Err
 						}
@@ -7061,12 +7083,12 @@ func ContactSyncSetupDialog(setup models.ContactSyncSetup) templ.Component {
 						}
 						ctx = templ.InitializeContext(ctx)
 						if setup.Phase == "resolve" {
-							templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 405, "Choose which conflicting values Gofer should use across every synchronized copy.")
+							templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 407, "Choose which conflicting values Gofer should use across every synchronized copy.")
 							if templ_7745c5c3_Err != nil {
 								return templ_7745c5c3_Err
 							}
 						} else {
-							templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 406, "Find existing copies of this contact and decide which ones should join the synchronized profile.")
+							templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 408, "Find existing copies of this contact and decide which ones should join the synchronized profile.")
 							if templ_7745c5c3_Err != nil {
 								return templ_7745c5c3_Err
 							}
@@ -7077,7 +7099,7 @@ func ContactSyncSetupDialog(setup models.ContactSyncSetup) templ.Component {
 					if templ_7745c5c3_Err != nil {
 						return templ_7745c5c3_Err
 					}
-					templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 407, "</div>")
+					templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 409, "</div>")
 					if templ_7745c5c3_Err != nil {
 						return templ_7745c5c3_Err
 					}
@@ -7109,7 +7131,7 @@ func ContactSyncSetupDialog(setup models.ContactSyncSetup) templ.Component {
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
-				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 408, " <div class=\"flex min-h-0 flex-1 flex-col overflow-hidden\" data-contact-sync-setup-body>")
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 410, " <div class=\"flex min-h-0 flex-1 flex-col overflow-hidden\" data-contact-sync-setup-body>")
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
@@ -7129,7 +7151,7 @@ func ContactSyncSetupDialog(setup models.ContactSyncSetup) templ.Component {
 						return templ_7745c5c3_Err
 					}
 				}
-				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 409, "</div>")
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 411, "</div>")
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
@@ -7170,20 +7192,20 @@ func ContactSyncSetupSearching(setup models.ContactSyncSetup) templ.Component {
 			templ_7745c5c3_Var286 = templ.NopComponent
 		}
 		ctx = templ.ClearChildren(ctx)
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 410, "<div class=\"flex min-h-0 flex-1 items-center justify-center overflow-y-auto px-6 py-10\" data-contact-sync-setup-auto-search=\"")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 412, "<div class=\"flex min-h-0 flex-1 items-center justify-center overflow-y-auto px-6 py-10\" data-contact-sync-setup-auto-search=\"")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
 		var templ_7745c5c3_Var287 string
 		templ_7745c5c3_Var287, templ_7745c5c3_Err = templ.JoinStringErrs(fmt.Sprintf("/api/contacts/%s/sync-setup/findings?mode=automatic", setup.Contact.ID))
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/contacts.templ`, Line: 2294, Col: 211}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/contacts.templ`, Line: 2308, Col: 211}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var287))
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 411, "\"><div class=\"max-w-sm text-center\"><div class=\"mx-auto flex size-11 items-center justify-center rounded-full bg-ink/[0.04] text-ink/45\">")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 413, "\"><div class=\"max-w-sm text-center\"><div class=\"mx-auto flex size-11 items-center justify-center rounded-full bg-ink/[0.04] text-ink/45\">")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -7191,7 +7213,7 @@ func ContactSyncSetupSearching(setup models.ContactSyncSetup) templ.Component {
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 412, "</div><div class=\"mt-4 text-sm font-semibold text-ink\">Searching sync locations</div><p class=\"mt-1 text-xs leading-relaxed text-ink/45\">Gofer is comparing email addresses, phone numbers, and names. You can refine or replace this search when the findings appear.</p></div></div>")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 414, "</div><div class=\"mt-4 text-sm font-semibold text-ink\">Searching sync locations</div><p class=\"mt-1 text-xs leading-relaxed text-ink/45\">Gofer is comparing email addresses, phone numbers, and names. You can refine or replace this search when the findings appear.</p></div></div>")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -7221,59 +7243,59 @@ func ContactSyncSetupDiscover(setup models.ContactSyncSetup) templ.Component {
 		}
 		ctx = templ.ClearChildren(ctx)
 		selectionFormID := "contact-sync-setup-selection-" + setup.Contact.ID
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 413, "<div class=\"flex min-h-0 flex-1 flex-col\"><div class=\"min-h-0 flex-1 overflow-y-auto px-5 py-5 sm:px-6\"><form id=\"")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 415, "<div class=\"flex min-h-0 flex-1 flex-col\"><div class=\"min-h-0 flex-1 overflow-y-auto px-5 py-5 sm:px-6\"><form id=\"")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
 		var templ_7745c5c3_Var289 string
 		templ_7745c5c3_Var289, templ_7745c5c3_Err = templ.JoinStringErrs(selectionFormID)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/contacts.templ`, Line: 2309, Col: 29}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/contacts.templ`, Line: 2323, Col: 29}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var289))
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 414, "\" method=\"post\" action=\"")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 416, "\" method=\"post\" action=\"")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
 		var templ_7745c5c3_Var290 templ.SafeURL
 		templ_7745c5c3_Var290, templ_7745c5c3_Err = templ.JoinURLErrs(fmt.Sprintf("/api/contacts/%s/sync-setup/preview", setup.Contact.ID))
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/contacts.templ`, Line: 2309, Col: 123}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/contacts.templ`, Line: 2323, Col: 123}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var290))
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 415, "\" class=\"space-y-3\" data-contact-sync-setup-form><div class=\"rounded-lg border border-ink/10 bg-paper/45 px-4 py-3\"><div class=\"text-xs font-semibold uppercase tracking-wider text-ink/40\">Local</div><div class=\"mt-1 text-sm font-semibold text-ink\">")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 417, "\" class=\"space-y-3\" data-contact-sync-setup-form><div class=\"rounded-lg border border-ink/10 bg-paper/45 px-4 py-3\"><div class=\"text-xs font-semibold uppercase tracking-wider text-ink/40\">Local</div><div class=\"mt-1 text-sm font-semibold text-ink\">")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
 		var templ_7745c5c3_Var291 string
 		templ_7745c5c3_Var291, templ_7745c5c3_Err = templ.JoinStringErrs(contactDisplay(setup.Contact))
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/contacts.templ`, Line: 2312, Col: 84}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/contacts.templ`, Line: 2326, Col: 84}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var291))
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 416, "</div><div class=\"text-xs text-ink/45\">")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 418, "</div><div class=\"text-xs text-ink/45\">")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
 		var templ_7745c5c3_Var292 string
-		templ_7745c5c3_Var292, templ_7745c5c3_Err = templ.JoinStringErrs(setup.Contact.Email)
+		templ_7745c5c3_Var292, templ_7745c5c3_Err = templ.JoinStringErrs(contactListDetail(setup.Contact))
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/contacts.templ`, Line: 2313, Col: 58}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/contacts.templ`, Line: 2327, Col: 71}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var292))
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 417, "</div></div>")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 419, "</div></div>")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -7283,7 +7305,7 @@ func ContactSyncSetupDiscover(setup models.ContactSyncSetup) templ.Component {
 				return templ_7745c5c3_Err
 			}
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 418, "</form></div>")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 420, "</form></div>")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -7311,7 +7333,7 @@ func ContactSyncSetupDiscover(setup models.ContactSyncSetup) templ.Component {
 					}()
 				}
 				ctx = templ.InitializeContext(ctx)
-				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 419, "Keep sync disabled ")
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 421, "Keep sync disabled ")
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
@@ -7321,7 +7343,7 @@ func ContactSyncSetupDiscover(setup models.ContactSyncSetup) templ.Component {
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 420, " ")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 422, " ")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
@@ -7337,7 +7359,7 @@ func ContactSyncSetupDiscover(setup models.ContactSyncSetup) templ.Component {
 					}()
 				}
 				ctx = templ.InitializeContext(ctx)
-				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 421, "Review values")
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 423, "Review values")
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
@@ -7357,7 +7379,7 @@ func ContactSyncSetupDiscover(setup models.ContactSyncSetup) templ.Component {
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 422, "</div>")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 424, "</div>")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -7386,74 +7408,74 @@ func ContactSyncSetupLocation(contactID string, location models.ContactSyncSetup
 			templ_7745c5c3_Var296 = templ.NopComponent
 		}
 		ctx = templ.ClearChildren(ctx)
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 423, "<div class=\"overflow-hidden rounded-lg border border-ink/10 bg-paper/45\" data-contact-sync-setup-location=\"")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 425, "<div class=\"overflow-hidden rounded-lg border border-ink/10 bg-paper/45\" data-contact-sync-setup-location=\"")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
 		var templ_7745c5c3_Var297 string
 		templ_7745c5c3_Var297, templ_7745c5c3_Err = templ.JoinStringErrs(location.AccountID)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/contacts.templ`, Line: 2331, Col: 127}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/contacts.templ`, Line: 2345, Col: 127}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var297))
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 424, "\"><div class=\"flex items-center justify-between gap-3 border-b border-ink/10 px-4 py-3\"><div><div class=\"text-sm font-semibold text-ink\">")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 426, "\"><div class=\"flex items-center justify-between gap-3 border-b border-ink/10 px-4 py-3\"><div><div class=\"text-sm font-semibold text-ink\">")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
 		var templ_7745c5c3_Var298 string
 		templ_7745c5c3_Var298, templ_7745c5c3_Err = templ.JoinStringErrs(location.Label)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/contacts.templ`, Line: 2334, Col: 68}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/contacts.templ`, Line: 2348, Col: 68}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var298))
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 425, "</div><div class=\"text-[10px] font-semibold uppercase tracking-wider text-ink/35\">")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 427, "</div><div class=\"text-[10px] font-semibold uppercase tracking-wider text-ink/35\">")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
 		var templ_7745c5c3_Var299 string
 		templ_7745c5c3_Var299, templ_7745c5c3_Err = templ.JoinStringErrs(location.Provider)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/contacts.templ`, Line: 2335, Col: 103}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/contacts.templ`, Line: 2349, Col: 103}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var299))
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 426, "</div></div><div class=\"flex items-center gap-2\">")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 428, "</div></div><div class=\"flex items-center gap-2\">")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
 		if len(location.Candidates) == 0 {
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 427, "<span class=\"rounded-md bg-ink/[0.04] px-2 py-1 text-[10px] font-semibold uppercase tracking-wider text-ink/40\">No match found</span>")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 429, "<span class=\"rounded-md bg-ink/[0.04] px-2 py-1 text-[10px] font-semibold uppercase tracking-wider text-ink/40\">No match found</span>")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
 		} else if len(location.Candidates) == 1 {
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 428, "<span class=\"rounded-md bg-ink/[0.04] px-2 py-1 text-[10px] font-semibold uppercase tracking-wider text-ink/40\">1 possible match</span>")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 430, "<span class=\"rounded-md bg-ink/[0.04] px-2 py-1 text-[10px] font-semibold uppercase tracking-wider text-ink/40\">1 possible match</span>")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
 		} else {
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 429, "<span class=\"rounded-md bg-ink/[0.04] px-2 py-1 text-[10px] font-semibold uppercase tracking-wider text-ink/40\">")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 431, "<span class=\"rounded-md bg-ink/[0.04] px-2 py-1 text-[10px] font-semibold uppercase tracking-wider text-ink/40\">")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
 			var templ_7745c5c3_Var300 string
 			templ_7745c5c3_Var300, templ_7745c5c3_Err = templ.JoinStringErrs(fmt.Sprintf("%d possible matches", len(location.Candidates)))
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/contacts.templ`, Line: 2343, Col: 183}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/contacts.templ`, Line: 2357, Col: 183}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var300))
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 430, "</span>")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 432, "</span>")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
@@ -7474,7 +7496,7 @@ func ContactSyncSetupLocation(contactID string, location models.ContactSyncSetup
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 431, " Search manually")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 433, " Search manually")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
@@ -7484,20 +7506,20 @@ func ContactSyncSetupLocation(contactID string, location models.ContactSyncSetup
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 432, "</div></div><div class=\"hidden border-b border-ink/10 bg-ink/[0.02] px-4 py-3\" data-contact-sync-location-search-panel data-contact-sync-location-search-url=\"")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 434, "</div></div><div class=\"hidden border-b border-ink/10 bg-ink/[0.02] px-4 py-3\" data-contact-sync-location-search-panel data-contact-sync-location-search-url=\"")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
 		var templ_7745c5c3_Var302 string
 		templ_7745c5c3_Var302, templ_7745c5c3_Err = templ.JoinStringErrs(fmt.Sprintf("/api/contacts/%s/sync-setup/findings?mode=custom&account_id=%s", contactID, url.QueryEscape(location.AccountID)))
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/contacts.templ`, Line: 2351, Col: 278}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/contacts.templ`, Line: 2365, Col: 278}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var302))
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 433, "\"><div class=\"flex flex-col gap-2 sm:flex-row\">")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 435, "\"><div class=\"flex flex-col gap-2 sm:flex-row\">")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -7517,7 +7539,7 @@ func ContactSyncSetupLocation(contactID string, location models.ContactSyncSetup
 				}()
 			}
 			ctx = templ.InitializeContext(ctx)
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 434, "Search this account ")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 436, "Search this account ")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
@@ -7527,35 +7549,35 @@ func ContactSyncSetupLocation(contactID string, location models.ContactSyncSetup
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 435, "</div></div>")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 437, "</div></div>")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
 		if location.Error != "" {
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 436, "<div class=\"border-b border-amber-500/15 bg-amber-500/[0.07] px-4 py-2 text-xs text-amber-800 dark:text-amber-200\">")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 438, "<div class=\"border-b border-amber-500/15 bg-amber-500/[0.07] px-4 py-2 text-xs text-amber-800 dark:text-amber-200\">")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
 			var templ_7745c5c3_Var304 string
 			templ_7745c5c3_Var304, templ_7745c5c3_Err = templ.JoinStringErrs(location.Error)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/contacts.templ`, Line: 2358, Col: 137}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/contacts.templ`, Line: 2372, Col: 137}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var304))
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 437, "</div>")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 439, "</div>")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 438, "<div class=\"divide-y divide-ink/10\">")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 440, "<div class=\"divide-y divide-ink/10\">")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
 		for index, candidate := range location.Candidates {
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 439, "<label class=\"grid cursor-pointer gap-3 px-4 py-3 transition-colors hover:bg-ink/[0.025] has-[:checked]:bg-primary/[0.045] sm:grid-cols-[auto_minmax(0,1fr)_auto] sm:items-center\">")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 441, "<label class=\"grid cursor-pointer gap-3 px-4 py-3 transition-colors hover:bg-ink/[0.025] has-[:checked]:bg-primary/[0.045] sm:grid-cols-[auto_minmax(0,1fr)_auto] sm:items-center\">")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
@@ -7563,84 +7585,84 @@ func ContactSyncSetupLocation(contactID string, location models.ContactSyncSetup
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 440, "<div class=\"min-w-0\"><div class=\"truncate text-sm font-semibold text-ink\">")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 442, "<div class=\"min-w-0\"><div class=\"truncate text-sm font-semibold text-ink\">")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
 			var templ_7745c5c3_Var305 string
 			templ_7745c5c3_Var305, templ_7745c5c3_Err = templ.JoinStringErrs(contactReadOnlyValue(candidate.Name))
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/contacts.templ`, Line: 2365, Col: 100}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/contacts.templ`, Line: 2379, Col: 100}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var305))
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 441, "</div><div class=\"truncate text-xs text-ink/45\">")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 443, "</div><div class=\"truncate text-xs text-ink/45\">")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
 			var templ_7745c5c3_Var306 string
 			templ_7745c5c3_Var306, templ_7745c5c3_Err = templ.JoinStringErrs(contactReadOnlyValue(candidate.Email))
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/contacts.templ`, Line: 2366, Col: 90}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/contacts.templ`, Line: 2380, Col: 90}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var306))
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 442, "</div>")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 444, "</div>")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
 			if candidate.Phone != "" || candidate.Organization != "" {
-				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 443, "<div class=\"mt-1 truncate text-[11px] text-ink/35\">")
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 445, "<div class=\"mt-1 truncate text-[11px] text-ink/35\">")
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
 				var templ_7745c5c3_Var307 string
 				templ_7745c5c3_Var307, templ_7745c5c3_Err = templ.JoinStringErrs(strings.Trim(strings.Join([]string{candidate.Phone, candidate.Organization}, " · "), " ·"))
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/contacts.templ`, Line: 2368, Col: 155}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/contacts.templ`, Line: 2382, Col: 155}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var307))
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
-				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 444, "</div>")
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 446, "</div>")
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 445, "</div><div class=\"flex flex-wrap items-center gap-1.5 sm:justify-end\">")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 447, "</div><div class=\"flex flex-wrap items-center gap-1.5 sm:justify-end\">")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
 			if contactSyncSetupCandidateChecked(location.Candidates, index) {
-				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 446, "<span class=\"rounded-md bg-primary/10 px-2 py-1 text-[10px] font-semibold uppercase tracking-wider text-primary\">Recommended</span> ")
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 448, "<span class=\"rounded-md bg-primary/10 px-2 py-1 text-[10px] font-semibold uppercase tracking-wider text-primary\">Recommended</span> ")
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 447, "<span class=\"rounded-md border border-emerald-500/20 bg-emerald-500/10 px-2 py-1 text-[10px] font-semibold uppercase tracking-wider text-emerald-700\">")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 449, "<span class=\"rounded-md border border-emerald-500/20 bg-emerald-500/10 px-2 py-1 text-[10px] font-semibold uppercase tracking-wider text-emerald-700\">")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
 			var templ_7745c5c3_Var308 string
 			templ_7745c5c3_Var308, templ_7745c5c3_Err = templ.JoinStringErrs(contactSyncSetupCandidateMatchLabel(candidate))
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/contacts.templ`, Line: 2375, Col: 207}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/contacts.templ`, Line: 2389, Col: 207}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var308))
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 448, "</span></div></label> ")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 450, "</span></div></label> ")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 449, "<label class=\"flex cursor-pointer items-start gap-3 px-4 py-3 transition-colors hover:bg-ink/[0.025] has-[:checked]:bg-primary/[0.045]\">")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 451, "<label class=\"flex cursor-pointer items-start gap-3 px-4 py-3 transition-colors hover:bg-ink/[0.025] has-[:checked]:bg-primary/[0.045]\">")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -7648,22 +7670,22 @@ func ContactSyncSetupLocation(contactID string, location models.ContactSyncSetup
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 450, "<div class=\"min-w-0\">")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 452, "<div class=\"min-w-0\">")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
 		if len(location.Candidates) == 0 {
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 451, "<div class=\"text-sm font-semibold text-ink/70\">Create a new contact in this account</div>")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 453, "<div class=\"text-sm font-semibold text-ink/70\">Create a new contact in this account</div>")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
 		} else {
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 452, "<div class=\"text-sm font-semibold text-ink/70\">None of these contacts are the same person</div><div class=\"mt-0.5 text-xs text-ink/40\">Do not link a match; create a separate contact in this account instead.</div>")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 454, "<div class=\"text-sm font-semibold text-ink/70\">None of these contacts are the same person</div><div class=\"mt-0.5 text-xs text-ink/40\">Do not link a match; create a separate contact in this account instead.</div>")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 453, "</div></label></div></div>")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 455, "</div></label></div></div>")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -7693,25 +7715,25 @@ func ContactSyncSetupResolve(setup models.ContactSyncSetup) templ.Component {
 		}
 		ctx = templ.ClearChildren(ctx)
 		resolverFields := contactProfileResolverFields(setup.ConflictFields)
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 454, "<form method=\"post\" action=\"")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 456, "<form method=\"post\" action=\"")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
 		var templ_7745c5c3_Var310 templ.SafeURL
 		templ_7745c5c3_Var310, templ_7745c5c3_Err = templ.JoinURLErrs(fmt.Sprintf("/api/contacts/%s/sync-setup/confirm", setup.Contact.ID))
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/contacts.templ`, Line: 2396, Col: 98}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/contacts.templ`, Line: 2410, Col: 98}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var310))
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 455, "\" class=\"flex min-h-0 flex-1 flex-col\" data-contact-sync-setup-confirm><div class=\"min-h-0 overflow-y-auto px-5 py-5 sm:px-6\">")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 457, "\" class=\"flex min-h-0 flex-1 flex-col\" data-contact-sync-setup-confirm><div class=\"min-h-0 overflow-y-auto px-5 py-5 sm:px-6\">")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
 		if len(resolverFields) == 0 {
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 456, "<div class=\"rounded-lg border border-emerald-500/20 bg-emerald-500/[0.07] px-4 py-5 text-center\">")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 458, "<div class=\"rounded-lg border border-emerald-500/20 bg-emerald-500/[0.07] px-4 py-5 text-center\">")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
@@ -7719,51 +7741,51 @@ func ContactSyncSetupResolve(setup models.ContactSyncSetup) templ.Component {
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 457, "<div class=\"mt-2 text-sm font-semibold text-ink\">No conflicting values found</div><p class=\"mt-1 text-xs text-ink/45\">The selected copies agree, so Gofer can enable synchronization safely.</p></div>")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 459, "<div class=\"mt-2 text-sm font-semibold text-ink\">No conflicting values found</div><p class=\"mt-1 text-xs text-ink/45\">The selected copies agree, so Gofer can enable synchronization safely.</p></div>")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
 		} else {
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 458, "<div class=\"space-y-3\">")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 460, "<div class=\"space-y-3\">")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
 			for _, kind := range contactProfileResolverKinds(resolverFields) {
 				groups := contactResolverValueGroups(resolverFields, kind)
-				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 459, "<div class=\"overflow-hidden rounded-lg border border-ink/10 bg-paper/45\"><div class=\"border-b border-ink/10 px-4 py-3\"><div class=\"text-xs font-semibold uppercase tracking-wider text-ink/55\">Choose the primary ")
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 461, "<div class=\"overflow-hidden rounded-lg border border-ink/10 bg-paper/45\"><div class=\"border-b border-ink/10 px-4 py-3\"><div class=\"text-xs font-semibold uppercase tracking-wider text-ink/55\">Choose the primary ")
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
 				var templ_7745c5c3_Var311 string
 				templ_7745c5c3_Var311, templ_7745c5c3_Err = templ.JoinStringErrs(strings.ToLower(contactFieldKindLabel(kind)))
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/contacts.templ`, Line: 2410, Col: 145}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/contacts.templ`, Line: 2424, Col: 145}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var311))
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
-				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 460, "</div><p class=\"mt-1 text-xs leading-relaxed text-ink/40\">")
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 462, "</div><p class=\"mt-1 text-xs leading-relaxed text-ink/40\">")
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
 				var templ_7745c5c3_Var312 string
 				templ_7745c5c3_Var312, templ_7745c5c3_Err = templ.JoinStringErrs(contactSyncSetupConflictHelp(kind))
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/contacts.templ`, Line: 2411, Col: 96}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/contacts.templ`, Line: 2425, Col: 96}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var312))
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
-				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 461, "</p></div><div class=\"divide-y divide-ink/10\">")
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 463, "</p></div><div class=\"divide-y divide-ink/10\">")
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
 				for index, group := range groups {
 					inputID := fmt.Sprintf("contact-sync-primary-%s-%d", kind, index)
 					locationLabels := contactSyncSetupLocationLabels(group.Sources, setup.Locations)
-					templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 462, "<div class=\"grid grid-cols-[auto_minmax(0,1fr)] items-start gap-3 px-4 py-3 transition-colors hover:bg-ink/[0.025] has-[:checked]:bg-primary/[0.045]\">")
+					templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 464, "<div class=\"grid grid-cols-[auto_minmax(0,1fr)] items-start gap-3 px-4 py-3 transition-colors hover:bg-ink/[0.025] has-[:checked]:bg-primary/[0.045]\">")
 					if templ_7745c5c3_Err != nil {
 						return templ_7745c5c3_Err
 					}
@@ -7771,38 +7793,38 @@ func ContactSyncSetupResolve(setup models.ContactSyncSetup) templ.Component {
 					if templ_7745c5c3_Err != nil {
 						return templ_7745c5c3_Err
 					}
-					templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 463, "<div class=\"min-w-0\"><label for=\"")
+					templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 465, "<div class=\"min-w-0\"><label for=\"")
 					if templ_7745c5c3_Err != nil {
 						return templ_7745c5c3_Err
 					}
 					var templ_7745c5c3_Var313 string
 					templ_7745c5c3_Var313, templ_7745c5c3_Err = templ.JoinStringErrs(inputID)
 					if templ_7745c5c3_Err != nil {
-						return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/contacts.templ`, Line: 2420, Col: 31}
+						return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/contacts.templ`, Line: 2434, Col: 31}
 					}
 					_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var313))
 					if templ_7745c5c3_Err != nil {
 						return templ_7745c5c3_Err
 					}
-					templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 464, "\" class=\"block cursor-pointer break-all text-sm font-semibold leading-relaxed text-ink\">")
+					templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 466, "\" class=\"block cursor-pointer break-all text-sm font-semibold leading-relaxed text-ink\">")
 					if templ_7745c5c3_Err != nil {
 						return templ_7745c5c3_Err
 					}
 					var templ_7745c5c3_Var314 string
 					templ_7745c5c3_Var314, templ_7745c5c3_Err = templ.JoinStringErrs(group.Field.Value)
 					if templ_7745c5c3_Err != nil {
-						return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/contacts.templ`, Line: 2420, Col: 139}
+						return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/contacts.templ`, Line: 2434, Col: 139}
 					}
 					_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var314))
 					if templ_7745c5c3_Err != nil {
 						return templ_7745c5c3_Err
 					}
-					templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 465, "</label><div class=\"mt-1.5 flex flex-wrap items-center gap-2\">")
+					templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 467, "</label><div class=\"mt-1.5 flex flex-wrap items-center gap-2\">")
 					if templ_7745c5c3_Err != nil {
 						return templ_7745c5c3_Err
 					}
 					if group.IsCanonicalPrimary {
-						templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 466, "<span class=\"rounded-md border border-ink/10 bg-ink/[0.04] px-2 py-1 text-[10px] font-semibold uppercase tracking-wider text-ink/40\">Current primary</span> ")
+						templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 468, "<span class=\"rounded-md border border-ink/10 bg-ink/[0.04] px-2 py-1 text-[10px] font-semibold uppercase tracking-wider text-ink/40\">Current primary</span> ")
 						if templ_7745c5c3_Err != nil {
 							return templ_7745c5c3_Err
 						}
@@ -7813,22 +7835,22 @@ func ContactSyncSetupResolve(setup models.ContactSyncSetup) templ.Component {
 							return templ_7745c5c3_Err
 						}
 					}
-					templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 467, "</div></div></div>")
+					templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 469, "</div></div></div>")
 					if templ_7745c5c3_Err != nil {
 						return templ_7745c5c3_Err
 					}
 				}
-				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 468, "</div></div>")
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 470, "</div></div>")
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 469, "</div>")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 471, "</div>")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 470, "</div>")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 472, "</div>")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -7856,7 +7878,7 @@ func ContactSyncSetupResolve(setup models.ContactSyncSetup) templ.Component {
 					}()
 				}
 				ctx = templ.InitializeContext(ctx)
-				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 471, "Keep sync disabled ")
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 473, "Keep sync disabled ")
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
@@ -7866,7 +7888,7 @@ func ContactSyncSetupResolve(setup models.ContactSyncSetup) templ.Component {
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 472, " ")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 474, " ")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
@@ -7886,7 +7908,7 @@ func ContactSyncSetupResolve(setup models.ContactSyncSetup) templ.Component {
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
-				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 473, " Use selected values and sync")
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 475, " Use selected values and sync")
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
@@ -7902,7 +7924,7 @@ func ContactSyncSetupResolve(setup models.ContactSyncSetup) templ.Component {
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 474, "</form>")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 476, "</form>")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -7955,20 +7977,20 @@ func ContactSyncSetupValueLocations(labels []string) templ.Component {
 					}()
 				}
 				ctx = templ.InitializeContext(ctx)
-				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 475, "<button type=\"button\" class=\"inline-flex items-center gap-1 rounded-md px-1 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-ink/40 transition-colors hover:bg-ink/[0.05] hover:text-ink/65 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ink/20\" aria-label=\"")
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 477, "<button type=\"button\" class=\"inline-flex items-center gap-1 rounded-md px-1 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-ink/40 transition-colors hover:bg-ink/[0.05] hover:text-ink/65 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ink/20\" aria-label=\"")
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
 				var templ_7745c5c3_Var321 string
 				templ_7745c5c3_Var321, templ_7745c5c3_Err = templ.JoinStringErrs(contactSyncSetupLocationCountLabel(len(labels)) + "; show locations")
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/contacts.templ`, Line: 2451, Col: 361}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/contacts.templ`, Line: 2465, Col: 361}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var321))
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
-				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 476, "\">")
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 478, "\">")
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
@@ -7979,13 +8001,13 @@ func ContactSyncSetupValueLocations(labels []string) templ.Component {
 				var templ_7745c5c3_Var322 string
 				templ_7745c5c3_Var322, templ_7745c5c3_Err = templ.JoinStringErrs(contactSyncSetupLocationCountLabel(len(labels)))
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/contacts.templ`, Line: 2453, Col: 53}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/contacts.templ`, Line: 2467, Col: 53}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var322))
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
-				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 477, "</button>")
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 479, "</button>")
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
@@ -7995,7 +8017,7 @@ func ContactSyncSetupValueLocations(labels []string) templ.Component {
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 478, " ")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 480, " ")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
@@ -8011,12 +8033,12 @@ func ContactSyncSetupValueLocations(labels []string) templ.Component {
 					}()
 				}
 				ctx = templ.InitializeContext(ctx)
-				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 479, "<div class=\"text-[10px] font-semibold uppercase tracking-wider text-ink/40\">Locations using this value</div><div class=\"mt-2 space-y-1.5\">")
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 481, "<div class=\"text-[10px] font-semibold uppercase tracking-wider text-ink/40\">Locations using this value</div><div class=\"mt-2 space-y-1.5\">")
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
 				for _, label := range labels {
-					templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 480, "<div class=\"flex min-w-0 items-start gap-2 rounded-md bg-ink/[0.035] px-2.5 py-2\">")
+					templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 482, "<div class=\"flex min-w-0 items-start gap-2 rounded-md bg-ink/[0.035] px-2.5 py-2\">")
 					if templ_7745c5c3_Err != nil {
 						return templ_7745c5c3_Err
 					}
@@ -8024,25 +8046,25 @@ func ContactSyncSetupValueLocations(labels []string) templ.Component {
 					if templ_7745c5c3_Err != nil {
 						return templ_7745c5c3_Err
 					}
-					templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 481, "<span class=\"min-w-0 break-words text-xs font-medium leading-relaxed text-ink/65\">")
+					templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 483, "<span class=\"min-w-0 break-words text-xs font-medium leading-relaxed text-ink/65\">")
 					if templ_7745c5c3_Err != nil {
 						return templ_7745c5c3_Err
 					}
 					var templ_7745c5c3_Var324 string
 					templ_7745c5c3_Var324, templ_7745c5c3_Err = templ.JoinStringErrs(label)
 					if templ_7745c5c3_Err != nil {
-						return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/contacts.templ`, Line: 2462, Col: 95}
+						return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/contacts.templ`, Line: 2476, Col: 95}
 					}
 					_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var324))
 					if templ_7745c5c3_Err != nil {
 						return templ_7745c5c3_Err
 					}
-					templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 482, "</span></div>")
+					templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 484, "</span></div>")
 					if templ_7745c5c3_Err != nil {
 						return templ_7745c5c3_Err
 					}
 				}
-				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 483, "</div>")
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 485, "</div>")
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
@@ -8083,7 +8105,7 @@ func ContactSyncQueuedNotice() templ.Component {
 			templ_7745c5c3_Var325 = templ.NopComponent
 		}
 		ctx = templ.ClearChildren(ctx)
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 484, "<div class=\"flex items-start gap-2 rounded-lg border border-emerald-500/20 bg-emerald-500/10 px-3 py-2 text-xs text-emerald-800\">")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 486, "<div class=\"flex items-start gap-2 rounded-lg border border-emerald-500/20 bg-emerald-500/10 px-3 py-2 text-xs text-emerald-800\">")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -8091,7 +8113,7 @@ func ContactSyncQueuedNotice() templ.Component {
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 485, "<div class=\"min-w-0\"><div class=\"font-semibold\">Sync queued</div><p class=\"mt-0.5 leading-relaxed opacity-80\">The preferred contact value will be pushed through the contact sync worker.</p></div></div>")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 487, "<div class=\"min-w-0\"><div class=\"font-semibold\">Sync queued</div><p class=\"mt-0.5 leading-relaxed opacity-80\">The preferred contact value will be pushed through the contact sync worker.</p></div></div>")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -8120,20 +8142,20 @@ func ContactLabelSelect(name string, value string, options []string, ariaLabel s
 			templ_7745c5c3_Var326 = templ.NopComponent
 		}
 		ctx = templ.ClearChildren(ctx)
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 486, "<div class=\"w-24 shrink-0\" aria-label=\"")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 488, "<div class=\"w-24 shrink-0\" aria-label=\"")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
 		var templ_7745c5c3_Var327 string
 		templ_7745c5c3_Var327, templ_7745c5c3_Err = templ.JoinStringErrs(ariaLabel)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/contacts.templ`, Line: 2481, Col: 50}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/contacts.templ`, Line: 2495, Col: 50}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var327))
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 487, "\">")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 489, "\">")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -8171,7 +8193,7 @@ func ContactLabelSelect(name string, value string, options []string, ariaLabel s
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 488, " ")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 490, " ")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
@@ -8203,7 +8225,7 @@ func ContactLabelSelect(name string, value string, options []string, ariaLabel s
 						var templ_7745c5c3_Var332 string
 						templ_7745c5c3_Var332, templ_7745c5c3_Err = templ.JoinStringErrs(option)
 						if templ_7745c5c3_Err != nil {
-							return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/contacts.templ`, Line: 2489, Col: 14}
+							return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/contacts.templ`, Line: 2503, Col: 14}
 						}
 						_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var332))
 						if templ_7745c5c3_Err != nil {
@@ -8228,7 +8250,7 @@ func ContactLabelSelect(name string, value string, options []string, ariaLabel s
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 489, "</div>")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 491, "</div>")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -8257,7 +8279,7 @@ func ContactProfileInsights(insights []models.ContactInsight) templ.Component {
 			templ_7745c5c3_Var333 = templ.NopComponent
 		}
 		ctx = templ.ClearChildren(ctx)
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 490, "<div class=\"space-y-2\"><div class=\"flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-ink/45\">")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 492, "<div class=\"space-y-2\"><div class=\"flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-ink/45\">")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -8265,7 +8287,7 @@ func ContactProfileInsights(insights []models.ContactInsight) templ.Component {
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 491, "Suggestions</div><div class=\"grid gap-2\">")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 493, "Suggestions</div><div class=\"grid gap-2\">")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -8275,7 +8297,7 @@ func ContactProfileInsights(insights []models.ContactInsight) templ.Component {
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 492, "<div class=\"")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 494, "<div class=\"")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
@@ -8288,71 +8310,71 @@ func ContactProfileInsights(insights []models.ContactInsight) templ.Component {
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 493, "\"><div class=\"flex items-start justify-between gap-3\"><div class=\"min-w-0\"><div class=\"text-sm font-semibold\">")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 495, "\"><div class=\"flex items-start justify-between gap-3\"><div class=\"min-w-0\"><div class=\"text-sm font-semibold\">")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
 			var templ_7745c5c3_Var336 string
 			templ_7745c5c3_Var336, templ_7745c5c3_Err = templ.JoinStringErrs(contactInsightDisplayTitle(insight))
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/contacts.templ`, Line: 2508, Col: 79}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/contacts.templ`, Line: 2522, Col: 79}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var336))
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 494, "</div>")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 496, "</div>")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
 			if contactInsightDisplayMessage(insight) != "" {
-				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 495, "<p class=\"mt-0.5 text-xs leading-relaxed opacity-80\">")
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 497, "<p class=\"mt-0.5 text-xs leading-relaxed opacity-80\">")
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
 				var templ_7745c5c3_Var337 string
 				templ_7745c5c3_Var337, templ_7745c5c3_Err = templ.JoinStringErrs(contactInsightDisplayMessage(insight))
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/contacts.templ`, Line: 2510, Col: 100}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/contacts.templ`, Line: 2524, Col: 100}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var337))
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
-				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 496, "</p>")
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 498, "</p>")
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 497, "</div>")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 499, "</div>")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
 			if insight.Count > 0 {
-				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 498, "<span class=\"shrink-0 rounded border border-current/15 px-1.5 py-0.5 text-[10px] font-semibold tabular-nums opacity-80\">")
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 500, "<span class=\"shrink-0 rounded border border-current/15 px-1.5 py-0.5 text-[10px] font-semibold tabular-nums opacity-80\">")
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
 				var templ_7745c5c3_Var338 string
 				templ_7745c5c3_Var338, templ_7745c5c3_Err = templ.JoinStringErrs(fmt.Sprintf("%d", insight.Count))
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/contacts.templ`, Line: 2514, Col: 161}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/contacts.templ`, Line: 2528, Col: 161}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var338))
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
-				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 499, "</span>")
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 501, "</span>")
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 500, "</div></div>")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 502, "</div></div>")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 501, "</div></div>")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 503, "</div></div>")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -8381,7 +8403,7 @@ func ContactProfileSyncTargetRow(card models.ContactCard, accounts []models.Acco
 			templ_7745c5c3_Var339 = templ.NopComponent
 		}
 		ctx = templ.ClearChildren(ctx)
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 502, "<div class=\"rounded-md border border-ink/10 bg-paper/45 px-3 py-2.5\"><div class=\"flex min-w-0 items-center gap-2\">")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 504, "<div class=\"rounded-md border border-ink/10 bg-paper/45 px-3 py-2.5\"><div class=\"flex min-w-0 items-center gap-2\">")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -8389,20 +8411,20 @@ func ContactProfileSyncTargetRow(card models.ContactCard, accounts []models.Acco
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 503, "<div class=\"truncate text-sm font-semibold text-ink\">")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 505, "<div class=\"truncate text-sm font-semibold text-ink\">")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
 		var templ_7745c5c3_Var340 string
 		templ_7745c5c3_Var340, templ_7745c5c3_Err = templ.JoinStringErrs(contactCardAccountLabel(card, accounts))
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/contacts.templ`, Line: 2527, Col: 97}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/contacts.templ`, Line: 2541, Col: 97}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var340))
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 504, "</div></div><div class=\"mt-1 text-xs leading-relaxed text-ink/45\">Changes saved in Gofer will be queued here.</div></div>")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 506, "</div></div><div class=\"mt-1 text-xs leading-relaxed text-ink/45\">Changes saved in Gofer will be queued here.</div></div>")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -8431,7 +8453,7 @@ func ContactProfileSourceRow(card models.ContactCard, accounts []models.Account)
 			templ_7745c5c3_Var341 = templ.NopComponent
 		}
 		ctx = templ.ClearChildren(ctx)
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 505, "<div class=\"rounded-md border border-ink/10 bg-paper/45 px-3 py-2.5\"><div class=\"flex min-w-0 items-center gap-2\">")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 507, "<div class=\"rounded-md border border-ink/10 bg-paper/45 px-3 py-2.5\"><div class=\"flex min-w-0 items-center gap-2\">")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -8456,7 +8478,7 @@ func ContactProfileSourceRow(card models.ContactCard, accounts []models.Account)
 				return templ_7745c5c3_Err
 			}
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 506, "<div class=\"truncate text-sm font-semibold text-ink\">")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 508, "<div class=\"truncate text-sm font-semibold text-ink\">")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -8464,7 +8486,7 @@ func ContactProfileSourceRow(card models.ContactCard, accounts []models.Account)
 			var templ_7745c5c3_Var342 string
 			templ_7745c5c3_Var342, templ_7745c5c3_Err = templ.JoinStringErrs(contactCardAccountLabel(card, accounts))
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/contacts.templ`, Line: 2547, Col: 46}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/contacts.templ`, Line: 2561, Col: 46}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var342))
 			if templ_7745c5c3_Err != nil {
@@ -8474,27 +8496,27 @@ func ContactProfileSourceRow(card models.ContactCard, accounts []models.Account)
 			var templ_7745c5c3_Var343 string
 			templ_7745c5c3_Var343, templ_7745c5c3_Err = templ.JoinStringErrs(contactCardKindLabel(card))
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/contacts.templ`, Line: 2549, Col: 33}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/contacts.templ`, Line: 2563, Col: 33}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var343))
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 507, "</div></div><div class=\"mt-1 text-xs leading-relaxed text-ink/45\">")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 509, "</div></div><div class=\"mt-1 text-xs leading-relaxed text-ink/45\">")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
 		var templ_7745c5c3_Var344 string
 		templ_7745c5c3_Var344, templ_7745c5c3_Err = templ.JoinStringErrs(contactSourceDescription(card, accounts))
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/contacts.templ`, Line: 2553, Col: 98}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/contacts.templ`, Line: 2567, Col: 98}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var344))
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 508, "</div></div>")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 510, "</div></div>")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -8523,7 +8545,7 @@ func ContactProfileCardRow(card models.ContactCard, accounts []models.Account) t
 			templ_7745c5c3_Var345 = templ.NopComponent
 		}
 		ctx = templ.ClearChildren(ctx)
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 509, "<div class=\"rounded-md border border-ink/10 bg-paper/35 px-3 py-2.5\"><div class=\"flex items-start justify-between gap-3\"><div class=\"min-w-0\"><div class=\"flex min-w-0 items-center gap-2\">")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 511, "<div class=\"rounded-md border border-ink/10 bg-paper/35 px-3 py-2.5\"><div class=\"flex items-start justify-between gap-3\"><div class=\"min-w-0\"><div class=\"flex min-w-0 items-center gap-2\">")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -8543,66 +8565,66 @@ func ContactProfileCardRow(card models.ContactCard, accounts []models.Account) t
 				return templ_7745c5c3_Err
 			}
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 510, "<div class=\"truncate text-sm font-semibold text-ink\">")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 512, "<div class=\"truncate text-sm font-semibold text-ink\">")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
 		var templ_7745c5c3_Var346 string
 		templ_7745c5c3_Var346, templ_7745c5c3_Err = templ.JoinStringErrs(contactCardKindLabel(card))
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/contacts.templ`, Line: 2569, Col: 86}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/contacts.templ`, Line: 2583, Col: 86}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var346))
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 511, "</div></div><div class=\"mt-1 truncate text-xs text-ink/45\">")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 513, "</div></div><div class=\"mt-1 truncate text-xs text-ink/45\">")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
 		var templ_7745c5c3_Var347 string
 		templ_7745c5c3_Var347, templ_7745c5c3_Err = templ.JoinStringErrs(contactCardAccountLabel(card, accounts))
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/contacts.templ`, Line: 2571, Col: 92}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/contacts.templ`, Line: 2585, Col: 92}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var347))
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 512, "</div></div>")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 514, "</div></div>")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
 		if card.Etag != "" {
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 513, "<span class=\"shrink-0 rounded border border-ink/10 bg-ink/[0.04] px-1.5 py-0.5 text-[10px] font-semibold text-ink/40\">etag</span>")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 515, "<span class=\"shrink-0 rounded border border-ink/10 bg-ink/[0.04] px-1.5 py-0.5 text-[10px] font-semibold text-ink/40\">etag</span>")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 514, "</div>")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 516, "</div>")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
 		if card.RemoteID != "" {
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 515, "<div class=\"mt-2 truncate rounded border border-ink/10 bg-ink/[0.025] px-2 py-1 font-mono text-[10px] text-ink/35\">")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 517, "<div class=\"mt-2 truncate rounded border border-ink/10 bg-ink/[0.025] px-2 py-1 font-mono text-[10px] text-ink/35\">")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
 			var templ_7745c5c3_Var348 string
 			templ_7745c5c3_Var348, templ_7745c5c3_Err = templ.JoinStringErrs(card.RemoteID)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/contacts.templ`, Line: 2578, Col: 133}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/contacts.templ`, Line: 2592, Col: 133}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var348))
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 516, "</div>")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 518, "</div>")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 517, "</div>")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 519, "</div>")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -8631,7 +8653,7 @@ func ContactProfileFieldRow(field models.ContactField, accounts []models.Account
 			templ_7745c5c3_Var349 = templ.NopComponent
 		}
 		ctx = templ.ClearChildren(ctx)
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 518, "<div class=\"rounded-md border border-ink/10 bg-paper/35 px-3 py-2.5\"><div class=\"flex items-start justify-between gap-3\"><div class=\"min-w-0\"><div class=\"flex min-w-0 items-center gap-2\">")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 520, "<div class=\"rounded-md border border-ink/10 bg-paper/35 px-3 py-2.5\"><div class=\"flex items-start justify-between gap-3\"><div class=\"min-w-0\"><div class=\"flex min-w-0 items-center gap-2\">")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -8651,88 +8673,88 @@ func ContactProfileFieldRow(field models.ContactField, accounts []models.Account
 				return templ_7745c5c3_Err
 			}
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 519, "<div class=\"truncate text-sm font-semibold text-ink\">")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 521, "<div class=\"truncate text-sm font-semibold text-ink\">")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
 		var templ_7745c5c3_Var350 string
 		templ_7745c5c3_Var350, templ_7745c5c3_Err = templ.JoinStringErrs(field.Value)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/contacts.templ`, Line: 2595, Col: 71}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/contacts.templ`, Line: 2609, Col: 71}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var350))
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 520, "</div></div><div class=\"mt-1 flex flex-wrap items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wider text-ink/35\"><span>")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 522, "</div></div><div class=\"mt-1 flex flex-wrap items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wider text-ink/35\"><span>")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
 		var templ_7745c5c3_Var351 string
 		templ_7745c5c3_Var351, templ_7745c5c3_Err = templ.JoinStringErrs(contactFieldKindLabel(field.Kind))
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/contacts.templ`, Line: 2598, Col: 46}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/contacts.templ`, Line: 2612, Col: 46}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var351))
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 521, "</span> ")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 523, "</span> ")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
 		if contactFieldDisplayLabel(field) != "" {
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 522, "<span>")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 524, "<span>")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
 			var templ_7745c5c3_Var352 string
 			templ_7745c5c3_Var352, templ_7745c5c3_Err = templ.JoinStringErrs(contactFieldDisplayLabel(field))
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/contacts.templ`, Line: 2600, Col: 45}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/contacts.templ`, Line: 2614, Col: 45}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var352))
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 523, "</span> ")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 525, "</span> ")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
 		}
 		if field.IsPrimary {
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 524, "<span class=\"rounded border border-emerald-500/20 bg-emerald-500/10 px-1.5 py-0.5 text-emerald-700\">Primary</span> ")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 526, "<span class=\"rounded border border-emerald-500/20 bg-emerald-500/10 px-1.5 py-0.5 text-emerald-700\">Primary</span> ")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 525, "<span class=\"rounded border border-ink/10 bg-ink/[0.04] px-1.5 py-0.5\">")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 527, "<span class=\"rounded border border-ink/10 bg-ink/[0.04] px-1.5 py-0.5\">")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
 		var templ_7745c5c3_Var353 string
 		templ_7745c5c3_Var353, templ_7745c5c3_Err = templ.JoinStringErrs(contactFieldSourceDisplay(field.Source, accounts))
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/contacts.templ`, Line: 2605, Col: 127}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/contacts.templ`, Line: 2619, Col: 127}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var353))
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 526, "</span></div></div><div class=\"flex shrink-0 items-center gap-1.5\"><span class=\"text-[10px] tabular-nums text-ink/35\">")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 528, "</span></div></div><div class=\"flex shrink-0 items-center gap-1.5\"><span class=\"text-[10px] tabular-nums text-ink/35\">")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
 		var templ_7745c5c3_Var354 string
 		templ_7745c5c3_Var354, templ_7745c5c3_Err = templ.JoinStringErrs(fmt.Sprintf("%.0f%%", field.Confidence*100))
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/contacts.templ`, Line: 2609, Col: 100}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/contacts.templ`, Line: 2623, Col: 100}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var354))
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 527, "</span></div></div></div>")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 529, "</span></div></div></div>")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -8774,7 +8796,7 @@ func ContactRecentActivityHeader(contact models.Contact) templ.Component {
 			templ_7745c5c3_Var355 = templ.NopComponent
 		}
 		ctx = templ.ClearChildren(ctx)
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 528, "<div class=\"mb-3 flex items-center justify-between gap-3\"><div><h2 class=\"text-xs font-semibold uppercase tracking-wider text-ink/45\">Recent activity</h2><p class=\"mt-1 text-xs text-ink/35\">Latest emails involving this contact.</p></div><div class=\"flex shrink-0 items-center gap-2\"><span class=\"rounded bg-ink/[0.05] px-2 py-1 text-[10px] font-semibold uppercase tracking-wider text-ink/40\">Top 10</span> ")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 530, "<div class=\"mb-3 flex items-center justify-between gap-3\"><div><h2 class=\"text-xs font-semibold uppercase tracking-wider text-ink/45\">Recent activity</h2><p class=\"mt-1 text-xs text-ink/35\">Latest emails involving this contact.</p></div><div class=\"flex shrink-0 items-center gap-2\"><span class=\"rounded bg-ink/[0.05] px-2 py-1 text-[10px] font-semibold uppercase tracking-wider text-ink/40\">Top 10</span> ")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -8792,7 +8814,7 @@ func ContactRecentActivityHeader(contact models.Contact) templ.Component {
 					}()
 				}
 				ctx = templ.InitializeContext(ctx)
-				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 529, "See all")
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 531, "See all")
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
@@ -8821,7 +8843,7 @@ func ContactRecentActivityHeader(contact models.Contact) templ.Component {
 				return templ_7745c5c3_Err
 			}
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 530, "</div></div>")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 532, "</div></div>")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -8850,20 +8872,20 @@ func ContactRecentActivityLoader(contact models.Contact) templ.Component {
 			templ_7745c5c3_Var357 = templ.NopComponent
 		}
 		ctx = templ.ClearChildren(ctx)
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 531, "<div class=\"w-full rounded-lg border border-ink/10 bg-ink/[0.025] p-4\" hx-get=\"")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 533, "<div class=\"w-full rounded-lg border border-ink/10 bg-ink/[0.025] p-4\" hx-get=\"")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
 		var templ_7745c5c3_Var358 string
 		templ_7745c5c3_Var358, templ_7745c5c3_Err = templ.JoinStringErrs(templ.URL(contactRecentActivityURL(contact.ID)))
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/contacts.templ`, Line: 2664, Col: 58}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/contacts.templ`, Line: 2678, Col: 58}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var358))
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 532, "\" hx-trigger=\"load\" hx-target=\"this\" hx-swap=\"outerHTML\" aria-busy=\"true\" data-contact-recent-activity-loading>")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 534, "\" hx-trigger=\"load\" hx-target=\"this\" hx-swap=\"outerHTML\" aria-busy=\"true\" data-contact-recent-activity-loading>")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -8871,17 +8893,17 @@ func ContactRecentActivityLoader(contact models.Contact) templ.Component {
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 533, "<div class=\"overflow-hidden rounded-md border border-ink/10 bg-paper/35\">")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 535, "<div class=\"overflow-hidden rounded-md border border-ink/10 bg-paper/35\">")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
 		for i := 0; i < 4; i++ {
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 534, "<div class=\"border-b border-ink/10 px-3 py-2.5 last:border-b-0\"><div class=\"flex items-start justify-between gap-3\"><div class=\"min-w-0 flex flex-1 items-center gap-2\"><div class=\"h-5 w-9 shrink-0 rounded border border-ink/10 bg-ink/[0.04] animate-pulse\"></div><div class=\"h-3 min-w-0 flex-1 rounded bg-ink/5 animate-pulse\"></div></div><div class=\"h-3 w-16 shrink-0 rounded bg-ink/5 animate-pulse\"></div></div><div class=\"mt-2 h-3 w-4/5 rounded bg-ink/5 animate-pulse\"></div></div>")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 536, "<div class=\"border-b border-ink/10 px-3 py-2.5 last:border-b-0\"><div class=\"flex items-start justify-between gap-3\"><div class=\"min-w-0 flex flex-1 items-center gap-2\"><div class=\"h-5 w-9 shrink-0 rounded border border-ink/10 bg-ink/[0.04] animate-pulse\"></div><div class=\"h-3 min-w-0 flex-1 rounded bg-ink/5 animate-pulse\"></div></div><div class=\"h-3 w-16 shrink-0 rounded bg-ink/5 animate-pulse\"></div></div><div class=\"mt-2 h-3 w-4/5 rounded bg-ink/5 animate-pulse\"></div></div>")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 535, "</div></div>")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 537, "</div></div>")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -8910,7 +8932,7 @@ func ContactRecentActivity(contact models.Contact, emails []models.Email) templ.
 			templ_7745c5c3_Var359 = templ.NopComponent
 		}
 		ctx = templ.ClearChildren(ctx)
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 536, "<div class=\"w-full rounded-lg border border-ink/10 bg-ink/[0.025] p-4\">")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 538, "<div class=\"w-full rounded-lg border border-ink/10 bg-ink/[0.025] p-4\">")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -8919,102 +8941,102 @@ func ContactRecentActivity(contact models.Contact, emails []models.Email) templ.
 			return templ_7745c5c3_Err
 		}
 		if len(emails) == 0 {
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 537, "<div class=\"rounded-md border border-dashed border-ink/10 px-3 py-4 text-sm text-ink/40\">No recent emails found for this contact.</div>")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 539, "<div class=\"rounded-md border border-dashed border-ink/10 px-3 py-4 text-sm text-ink/40\">No recent emails found for this contact.</div>")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
 		} else {
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 538, "<div class=\"divide-y divide-ink/10 overflow-hidden rounded-md border border-ink/10 bg-paper/35\">")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 540, "<div class=\"divide-y divide-ink/10 overflow-hidden rounded-md border border-ink/10 bg-paper/35\">")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
 			for _, email := range emails {
-				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 539, "<a href=\"")
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 541, "<a href=\"")
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
 				var templ_7745c5c3_Var360 templ.SafeURL
 				templ_7745c5c3_Var360, templ_7745c5c3_Err = templ.JoinURLErrs(contactActivityHref(email))
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/contacts.templ`, Line: 2697, Col: 41}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/contacts.templ`, Line: 2711, Col: 41}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var360))
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
-				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 540, "\" class=\"group flex items-start gap-3 px-3 py-2.5 transition-colors hover:bg-ink/[0.035]\"><div class=\"min-w-0 flex-1\"><div class=\"flex items-start justify-between gap-3\"><div class=\"min-w-0 flex items-center gap-2\"><span class=\"shrink-0 rounded border border-ink/10 bg-ink/[0.04] px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wider text-ink/45\">")
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 542, "\" class=\"group flex items-start gap-3 px-3 py-2.5 transition-colors hover:bg-ink/[0.035]\"><div class=\"min-w-0 flex-1\"><div class=\"flex items-start justify-between gap-3\"><div class=\"min-w-0 flex items-center gap-2\"><span class=\"shrink-0 rounded border border-ink/10 bg-ink/[0.04] px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wider text-ink/45\">")
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
 				var templ_7745c5c3_Var361 string
 				templ_7745c5c3_Var361, templ_7745c5c3_Err = templ.JoinStringErrs(contactActivityDirection(contact, email))
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/contacts.templ`, Line: 2701, Col: 190}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/contacts.templ`, Line: 2715, Col: 190}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var361))
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
-				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 541, "</span><p class=\"truncate text-sm font-semibold text-ink group-hover:text-ink/80\">")
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 543, "</span><p class=\"truncate text-sm font-semibold text-ink group-hover:text-ink/80\">")
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
 				var templ_7745c5c3_Var362 string
 				templ_7745c5c3_Var362, templ_7745c5c3_Err = templ.JoinStringErrs(contactActivitySubject(email))
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/contacts.templ`, Line: 2702, Col: 115}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/contacts.templ`, Line: 2716, Col: 115}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var362))
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
-				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 542, "</p></div><span class=\"shrink-0 text-xs tabular-nums text-ink/35\">")
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 544, "</p></div><span class=\"shrink-0 text-xs tabular-nums text-ink/35\">")
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
 				var templ_7745c5c3_Var363 string
 				templ_7745c5c3_Var363, templ_7745c5c3_Err = templ.JoinStringErrs(email.Date)
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/contacts.templ`, Line: 2704, Col: 76}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/contacts.templ`, Line: 2718, Col: 76}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var363))
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
-				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 543, "</span></div>")
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 545, "</span></div>")
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
 				if email.Preview != "" {
-					templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 544, "<p class=\"mt-0.5 line-clamp-1 text-xs leading-relaxed text-ink/45\">")
+					templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 546, "<p class=\"mt-0.5 line-clamp-1 text-xs leading-relaxed text-ink/45\">")
 					if templ_7745c5c3_Err != nil {
 						return templ_7745c5c3_Err
 					}
 					var templ_7745c5c3_Var364 string
 					templ_7745c5c3_Var364, templ_7745c5c3_Err = templ.JoinStringErrs(email.Preview)
 					if templ_7745c5c3_Err != nil {
-						return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/contacts.templ`, Line: 2707, Col: 90}
+						return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/contacts.templ`, Line: 2721, Col: 90}
 					}
 					_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var364))
 					if templ_7745c5c3_Err != nil {
 						return templ_7745c5c3_Err
 					}
-					templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 545, "</p>")
+					templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 547, "</p>")
 					if templ_7745c5c3_Err != nil {
 						return templ_7745c5c3_Err
 					}
 				}
-				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 546, "</div></a>")
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 548, "</div></a>")
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 547, "</div>")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 549, "</div>")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 548, "</div>")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 550, "</div>")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}

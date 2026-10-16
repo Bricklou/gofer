@@ -139,7 +139,23 @@ func writeFoldedVCardLine(b *strings.Builder, line string) {
 	b.WriteString("\r\n")
 }
 
+// parseVCardContacts reads an imported vCard file, which must hold at least
+// one contact.
 func parseVCardContacts(r io.Reader, saveTargets []string) ([]models.Contact, error) {
+	contacts, err := decodeVCardContacts(r, saveTargets)
+	if err != nil {
+		return nil, err
+	}
+	if len(contacts) == 0 {
+		return nil, fmt.Errorf("no contacts found")
+	}
+	return contacts, nil
+}
+
+// decodeVCardContacts reads the contacts in r, leaving out groups and cards
+// with nothing to identify a person by. A synced address book can hold such
+// cards next to its contacts.
+func decodeVCardContacts(r io.Reader, saveTargets []string) ([]models.Contact, error) {
 	dec := emersionvcard.NewDecoder(r)
 	var contacts []models.Contact
 	for {
@@ -155,19 +171,31 @@ func parseVCardContacts(r io.Reader, saveTargets []string) ([]models.Contact, er
 			contacts = append(contacts, contact)
 		}
 	}
-	if len(contacts) == 0 {
-		return nil, fmt.Errorf("no contacts with email addresses found")
-	}
 	return contacts, nil
 }
 
+// vCardIsGroup reports whether card describes a group of contacts rather than
+// a person. vCard 4 says so in KIND; Apple's address books use their own
+// property, also in vCard 3.
+func vCardIsGroup(card emersionvcard.Card) bool {
+	for _, field := range []string{emersionvcard.FieldKind, "X-ADDRESSBOOKSERVER-KIND"} {
+		if strings.EqualFold(strings.TrimSpace(card.Value(field)), "group") {
+			return true
+		}
+	}
+	return false
+}
+
 func contactFromVCard(card emersionvcard.Card, saveTargets []string) (models.Contact, bool) {
+	if vCardIsGroup(card) {
+		return models.Contact{}, false
+	}
 	email := strings.TrimSpace(card.PreferredValue(emersionvcard.FieldEmail))
 	if email == "" {
 		email = strings.TrimSpace(card.Value(emersionvcard.FieldEmail))
 	}
-	if email == "" {
-		return models.Contact{}, false
+	if !strings.Contains(email, "@") {
+		email = ""
 	}
 	emails, emailLabels := cleanVCardFields(card[emersionvcard.FieldEmail], email)
 	phones, phoneLabels := cleanVCardFields(card[emersionvcard.FieldTelephone], card.PreferredValue(emersionvcard.FieldTelephone))
@@ -178,7 +206,7 @@ func contactFromVCard(card emersionvcard.Card, saveTargets []string) (models.Con
 	if name == "" {
 		name = email
 	}
-	return models.Contact{
+	contact := models.Contact{
 		Name:                  cleanVCardText(name),
 		Email:                 cleanVCardText(email),
 		EmailLabel:            contactVCardFieldLabel(card.Preferred(emersionvcard.FieldEmail), "primary"),
@@ -193,7 +221,8 @@ func contactFromVCard(card emersionvcard.Card, saveTargets []string) (models.Con
 		Notes:                 cleanVCardText(card.PreferredValue(emersionvcard.FieldNote)),
 		AvatarURL:             contactVCardPhotoURL(card),
 		SaveTargets:           saveTargets,
-	}, true
+	}
+	return contact, contact.HasDetails()
 }
 
 func contactVCardPhotoURL(card emersionvcard.Card) string {

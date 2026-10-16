@@ -137,6 +137,18 @@ func contactFormEmail(contact *models.Contact) string {
 	return contact.Email
 }
 
+// contactListDetail is the line under a contact's name in the list: its email
+// address, or its phone number for a contact without one.
+func contactListDetail(contact models.Contact) string {
+	if email := strings.TrimSpace(contact.Email); email != "" {
+		return email
+	}
+	if phone := strings.TrimSpace(contact.Phone); phone != "" && phone != strings.TrimSpace(contact.Name) {
+		return phone
+	}
+	return ""
+}
+
 func contactFormEmailLabel(contact *models.Contact) string {
 	if contact == nil || strings.TrimSpace(contact.EmailLabel) == "" {
 		return "primary"
@@ -1452,7 +1464,7 @@ templ ContactListCard(contact models.Contact, filters models.ContactFilters, sel
 				}
 			</div>
 			<div class="mail-list-card-zone mail-list-card-zone-body" data-mail-card-zone="body">
-				<p class="truncate text-[13px] font-medium text-foreground/60" data-contact-email data-mail-card-field="subject">{ contact.Email }</p>
+				<p class="truncate text-[13px] font-medium text-foreground/60" data-contact-email data-mail-card-field="subject">{ contactListDetail(contact) }</p>
 			</div>
 			<div class="mail-list-card-zone mail-list-card-zone-footer" data-mail-card-zone="footer">
 				@ContactSourceChips(contact, accounts)
@@ -1508,7 +1520,7 @@ templ ContactListTableRow(contact models.Contact, filters models.ContactFilters,
 				</div>
 				<div class="min-w-0">
 					<div class="truncate font-semibold text-foreground" data-contact-name>{ contact.Name }</div>
-					<div class="truncate text-xs text-muted-foreground" data-contact-email>{ contact.Email }</div>
+					<div class="truncate text-xs text-muted-foreground" data-contact-email>{ contactListDetail(contact) }</div>
 				</div>
 			</div>
 			<div class="truncate text-xs text-muted-foreground">
@@ -1895,7 +1907,7 @@ templ ContactEmailFields(contact *models.Contact) {
 		</template>
 		<div class="space-y-2" data-contact-value-list="additional_emails">
 			<div class="flex items-center gap-2">
-				<input type="email" name="email" value={ contactFormEmail(contact) } placeholder="jane@example.com" required class="h-10 min-w-0 flex-1 rounded-lg border border-ink/10 bg-ink/[0.04] px-3 text-sm text-ink placeholder:text-ink/35 focus:outline-none focus:ring-2 focus:ring-ink/10"/>
+				<input type="email" name="email" value={ contactFormEmail(contact) } placeholder="jane@example.com" class="h-10 min-w-0 flex-1 rounded-lg border border-ink/10 bg-ink/[0.04] px-3 text-sm text-ink placeholder:text-ink/35 focus:outline-none focus:ring-2 focus:ring-ink/10"/>
 				@ContactLabelSelect("email_label", contactFormEmailLabel(contact), contactEmailLabelOptions(contactFormEmailLabel(contact)), "Email label")
 			</div>
 			for i, email := range contactAdditionalEmails(contact) {
@@ -1990,9 +2002,11 @@ templ ContactEditorHeader(contact *models.Contact, profile *models.ContactProfil
 							Edit
 						</button>
 					}
-					<a href={ "mailto:" + contact.Email } class="size-9 rounded-md flex items-center justify-center text-ink/45 hover:text-ink/75 hover:bg-ink/5 transition-colors" aria-label="Email contact">
-						@icon.Mail(icon.Props{Class: "size-4"})
-					</a>
+					if strings.TrimSpace(contact.Email) != "" {
+						<a href={ "mailto:" + contact.Email } class="size-9 rounded-md flex items-center justify-center text-ink/45 hover:text-ink/75 hover:bg-ink/5 transition-colors" aria-label="Email contact">
+							@icon.Mail(icon.Props{Class: "size-4"})
+						</a>
+					}
 					<a href={ fmt.Sprintf("/api/contacts/%s/export", contact.ID) } class="size-9 rounded-md flex items-center justify-center text-ink/45 hover:text-ink/75 hover:bg-ink/5 transition-colors" aria-label="Export vCard">
 						@icon.Download(icon.Props{Class: "size-4"})
 					</a>
@@ -2310,7 +2324,7 @@ templ ContactSyncSetupDiscover(setup models.ContactSyncSetup) {
 			<div class="rounded-lg border border-ink/10 bg-paper/45 px-4 py-3">
 				<div class="text-xs font-semibold uppercase tracking-wider text-ink/40">Local</div>
 				<div class="mt-1 text-sm font-semibold text-ink">{ contactDisplay(setup.Contact) }</div>
-				<div class="text-xs text-ink/45">{ setup.Contact.Email }</div>
+				<div class="text-xs text-ink/45">{ contactListDetail(setup.Contact) }</div>
 			</div>
 				for _, location := range setup.Locations {
 					@ContactSyncSetupLocation(setup.Contact.ID, location)

@@ -90,7 +90,7 @@ func (h *Handler) syncOutlookContacts(ctx context.Context, userID, accountID, ac
 			if photoURL, err := h.fetchOutlookContactPhotoDataURL(ctx, accessToken, remote.ID); err == nil {
 				contact.AvatarURL = photoURL
 			}
-			if strings.TrimSpace(contact.Email) == "" {
+			if !contact.HasDetails() {
 				continue
 			}
 			contactID, canonicalChanged, err := h.upsertInboundSyncedContact(ctx, userID, providers.ProviderOutlook, accountID, remote.ID, contact)
@@ -360,6 +360,10 @@ func (h *Handler) deleteOutlookContactsByEmail(ctx context.Context, accessToken,
 }
 
 func (h *Handler) searchOutlookContactsByEmail(ctx context.Context, accessToken, email string) ([]outlookContact, error) {
+	// A contact without an email address has no copy to find this way.
+	if strings.TrimSpace(email) == "" {
+		return nil, nil
+	}
 	values := outlookContactListQuery()
 	values.Set("$top", "25")
 	values.Set("$filter", "emailAddresses/any(a:a/address eq '"+escapeODataString(email)+"')")

@@ -279,7 +279,7 @@ func (h *Handler) syncGooglePeopleConnections(ctx context.Context, userID, accou
 
 		for _, person := range people.Connections {
 			contact := googleContactFromPerson(person)
-			if strings.TrimSpace(contact.Email) == "" {
+			if !contact.HasDetails() {
 				continue
 			}
 			contactID, canonicalChanged, err := h.upsertInboundSyncedContact(ctx, userID, providers.ProviderGmail, accountID, person.ResourceName, contact)
@@ -488,7 +488,7 @@ func googleContactLabel(value, fallback string) string {
 }
 
 func (h *Handler) syncContactToAccountTargets(ctx context.Context, userID string, contact models.Contact, previous *models.Contact, excludedAccountID string) error {
-	if !contact.GoferSyncEnabled || contact.ID == "" || contact.Email == "" {
+	if !contact.GoferSyncEnabled || contact.ID == "" || !contact.HasDetails() {
 		return nil
 	}
 
@@ -743,7 +743,7 @@ func (h *Handler) processContactSyncOperation(parent context.Context, op storage
 }
 
 func (h *Handler) contactNeedsAccountSync(ctx context.Context, userID string, contact models.Contact, previous *models.Contact) bool {
-	if !contact.GoferSyncEnabled || contact.ID == "" || contact.Email == "" {
+	if !contact.GoferSyncEnabled || contact.ID == "" || !contact.HasDetails() {
 		return false
 	}
 	currentTargets, err := h.contactTargetAccountSet(ctx, userID, contact.SaveTargets)
@@ -1047,6 +1047,10 @@ func (h *Handler) deleteGoogleContactsByEmail(ctx context.Context, accessToken, 
 }
 
 func (h *Handler) searchGoogleContactsByEmail(ctx context.Context, accessToken, email string) ([]googlePerson, error) {
+	// A contact without an email address has no copy to find this way.
+	if strings.TrimSpace(email) == "" {
+		return nil, nil
+	}
 	results, err := h.searchGoogleContacts(ctx, accessToken, email)
 	if err != nil {
 		return nil, err

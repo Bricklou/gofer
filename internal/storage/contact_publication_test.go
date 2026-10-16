@@ -299,9 +299,25 @@ func TestInboundContactPublicationCardResurrectionAndLegacyMissingRemote(t *test
 	if err := db.Read().QueryRow(`SELECT COUNT(*) FROM contact_cards WHERE profile_id=?`, legacy.ProfileID).Scan(&count); err != nil || count != 0 {
 		t.Fatal("invented missing remote card", count, err)
 	}
-	empty := publishTestContact(t, db, InboundContact{Contact: models.Contact{Name: "No email"}, RemoteID: "people/no-email"})
+	// A provider contact without an email address is kept as its own contact
+	// and found again by its remote ID; one with nothing in it is not.
+	phoneOnly := InboundContact{Contact: models.Contact{Name: "Robin Vale", Phone: "+1 555 0142"}, RemoteID: "people/robin"}
+	noEmail := publishTestContact(t, db, phoneOnly)
+	if noEmail.ProfileID == "" || !noEmail.Created {
+		t.Fatal("contact without email dropped", noEmail)
+	}
+	phoneOnly.Contact.Phone = "+1 555 0143"
+	again := publishTestContact(t, db, phoneOnly)
+	if again.ProfileID != noEmail.ProfileID || again.Created {
+		t.Fatal("contact without email not matched by remote ID", again, noEmail)
+	}
+	sameName := publishTestContact(t, db, InboundContact{Contact: models.Contact{Name: "Robin Vale"}, RemoteID: "people/other-robin"})
+	if sameName.ProfileID == "" || sameName.ProfileID == noEmail.ProfileID {
+		t.Fatal("contacts without email merged by name", sameName, noEmail)
+	}
+	empty := publishTestContact(t, db, InboundContact{Contact: models.Contact{}, RemoteID: "people/empty"})
 	if empty.ProfileID != "" || empty.Created {
-		t.Fatal("missing-email behavior changed", empty)
+		t.Fatal("empty provider contact imported", empty)
 	}
 	// A legacy DAV configuration without a book row still imports with an empty ID.
 	if _, err := db.Write().Exec(`DELETE FROM account_contact_address_books WHERE account_id='dav'`); err != nil {

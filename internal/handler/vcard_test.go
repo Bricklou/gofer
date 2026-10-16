@@ -110,8 +110,11 @@ func TestParseVCardContacts(t *testing.T) {
 	if err != nil {
 		t.Fatalf("parseVCardContacts() error = %v", err)
 	}
-	if len(contacts) != 1 {
-		t.Fatalf("parseVCardContacts() len = %d, want 1", len(contacts))
+	if len(contacts) != 2 {
+		t.Fatalf("parseVCardContacts() len = %d, want 2", len(contacts))
+	}
+	if contacts[1].Name != "No Email" || contacts[1].Email != "" {
+		t.Fatalf("parseVCardContacts() contact without email = %#v", contacts[1])
 	}
 	if contacts[0].Name != "Jane Doe" || contacts[0].Email != "jane@example.com" || contacts[0].Phone != "+1 555 0100" || contacts[0].Organization != "Example Inc." || contacts[0].Title != "Product Lead" || contacts[0].Notes != "Important contact" {
 		t.Fatalf("parseVCardContacts() contact = %#v, want extra fields", contacts[0])
@@ -152,5 +155,49 @@ func TestParseVCardContactsFallsBackToStructuredName(t *testing.T) {
 	}
 	if contacts[0].Name != "Jane Doe" {
 		t.Fatalf("Name = %q, want Jane Doe", contacts[0].Name)
+	}
+}
+
+func TestDecodeVCardContactsKeepsPhoneOnlyAndSkipsGroups(t *testing.T) {
+	input := strings.Join([]string{
+		"BEGIN:VCARD",
+		"VERSION:3.0",
+		"N:;;;;",
+		"TEL;TYPE=CELL:+1 555 0142",
+		"END:VCARD",
+		"BEGIN:VCARD",
+		"VERSION:3.0",
+		"FN:Book club",
+		"X-ADDRESSBOOKSERVER-KIND:group",
+		"X-ADDRESSBOOKSERVER-MEMBER:urn:uuid:4a1f0c5e-0000-4000-8000-000000000001",
+		"END:VCARD",
+		"BEGIN:VCARD",
+		"VERSION:4.0",
+		"KIND:group",
+		"FN:Neighbours",
+		"END:VCARD",
+		"BEGIN:VCARD",
+		"VERSION:4.0",
+		"FN:",
+		"END:VCARD",
+		"",
+	}, "\r\n")
+
+	contacts, err := decodeVCardContacts(strings.NewReader(input), nil)
+	if err != nil {
+		t.Fatalf("decodeVCardContacts() error = %v", err)
+	}
+	if len(contacts) != 1 || contacts[0].Phone != "+1 555 0142" || contacts[0].Email != "" || contacts[0].Name != "" {
+		t.Fatalf("decodeVCardContacts() = %#v, want only the phone-only contact", contacts)
+	}
+
+	// A synced card with nothing usable is skipped without failing the sync.
+	contacts, err = decodeVCardContacts(strings.NewReader("BEGIN:VCARD\r\nVERSION:4.0\r\nKIND:group\r\nFN:Family\r\nEND:VCARD\r\n"), nil)
+	if err != nil || len(contacts) != 0 {
+		t.Fatalf("decodeVCardContacts(group) = %#v, %v; want none and no error", contacts, err)
+	}
+	// An imported file still needs at least one contact.
+	if _, err := parseVCardContacts(strings.NewReader("BEGIN:VCARD\r\nVERSION:4.0\r\nKIND:group\r\nFN:Family\r\nEND:VCARD\r\n"), nil); err == nil {
+		t.Fatal("parseVCardContacts(group only) succeeded, want an error")
 	}
 }

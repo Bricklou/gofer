@@ -218,7 +218,7 @@ func contactSyncProfileStateTx(ctx context.Context, tx *sql.Tx, c *ContactSyncCl
 		profile.Fields = canonical
 	}
 	p := &ContactSyncProfile{claim: c, contact: contactValuesFromProfile(ctx, *profile)}
-	if normalizeContactEmail(p.contact.Email) == "" {
+	if !p.contact.HasDetails() {
 		return nil, nil
 	}
 	rows, err := tx.QueryContext(ctx, `SELECT account_id,address_book_id FROM contact_sync_memberships WHERE user_id=? AND profile_id=? AND enabled=1 ORDER BY account_id,address_book_id`, c.owner, c.profile)

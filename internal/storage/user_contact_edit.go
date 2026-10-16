@@ -17,7 +17,9 @@ import (
 )
 
 var ErrContactEditChanged = errors.New("contact or sync locations changed during editing")
-var ErrContactEditInvalid = errors.New("email is required")
+
+// ErrContactEditInvalid is a contact with nothing to identify it by.
+var ErrContactEditInvalid = ErrContactEmpty
 
 // ContactEditSnapshot contains copied editor state, never a database handle.
 // Its private identity/state prevents browser fields from authorizing publication.
@@ -69,7 +71,7 @@ func contactEditState(profile *models.ContactProfile) ([32]byte, error) {
 func contactEditorProjection(ctx context.Context, profile models.ContactProfile) models.Contact {
 	c := contactValuesFromProfile(ctx, profile)
 	c.AvatarHash = avatarresolver.GravatarHash(c.Email)
-	c.Initials = initials(contactDisplayName(c.Name, c.Email))
+	c.Initials = contactInitials(c)
 	for _, card := range profile.Cards {
 		if card.Kind == "local" && !card.IsDeleted {
 			c.SaveTargets = append(c.SaveTargets, "local")
@@ -146,7 +148,10 @@ func contactEditTargetsQuery(ctx context.Context, query contactProfileQuery, own
 func (db *DB) SnapshotUserContactEdit(ctx context.Context, owner string, request models.Contact, guard func(*sql.Tx) error, inspect func(*sql.Tx, []string) error) (*ContactEditSnapshot, error) {
 	request = cloneContactEditValue(request)
 	request.Email, request.ID = strings.TrimSpace(request.Email), strings.TrimSpace(request.ID)
-	if normalizeContactEmail(request.Email) == "" {
+	if request.Email != "" && normalizeContactEmail(request.Email) == "" {
+		return nil, ErrContactEmailInvalid
+	}
+	if !request.HasDetails() {
 		return nil, ErrContactEditInvalid
 	}
 	tx, err := db.Read().BeginTx(ctx, &sql.TxOptions{ReadOnly: true})
@@ -158,7 +163,7 @@ func (db *DB) SnapshotUserContactEdit(ctx context.Context, owner string, request
 		return nil, err
 	}
 	s := &ContactEditSnapshot{owner: owner, id: request.ID, request: request}
-	if s.id == "" {
+	if s.id == "" && request.Email != "" {
 		s.lookupEmail = normalizeContactEmail(request.Email)
 		s.id, err = contactEditIdentityQuery(ctx, tx, owner, s.lookupEmail)
 		if err != nil {
@@ -206,7 +211,7 @@ func (db *DB) SnapshotUserContactUnify(ctx context.Context, owner, id string, gu
 	if err != nil {
 		return nil, err
 	}
-	if normalizeContactEmail(snapshot.request.Email) == "" {
+	if !snapshot.request.HasDetails() {
 		return nil, ErrContactEditInvalid
 	}
 	snapshot.setup = false

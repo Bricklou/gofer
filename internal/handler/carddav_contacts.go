@@ -556,7 +556,7 @@ func (h *Handler) syncCardDAVContacts(ctx context.Context, userID string, accoun
 			if addressData == "" {
 				continue
 			}
-			contacts, err := parseVCardContacts(strings.NewReader(addressData), []string{"account:" + account.ID})
+			contacts, err := decodeVCardContacts(strings.NewReader(addressData), []string{"account:" + account.ID})
 			if err != nil {
 				return imported, err
 			}

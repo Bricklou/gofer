@@ -274,7 +274,7 @@ func (p *userContactPull) google(ctx context.Context) (int, error) {
 		inputs := make([]storage.InboundContact, 0, len(page.Connections))
 		for _, person := range page.Connections {
 			contact := googleContactFromPerson(person)
-			if strings.TrimSpace(contact.Email) == "" {
+			if !contact.HasDetails() {
 				continue
 			}
 			inputs = append(inputs, storage.InboundContact{Contact: contact, RemoteID: person.ResourceName, Etag: person.Etag})
@@ -331,7 +331,7 @@ func (p *userContactPull) outlook(ctx context.Context) (int, error) {
 		inputs := make([]storage.InboundContact, 0, len(page.Contacts))
 		for _, remote := range page.Contacts {
 			contact := outlookContactFromGraph(remote)
-			if strings.TrimSpace(contact.Email) == "" {
+			if !contact.HasDetails() {
 				continue
 			}
 			var photo string
@@ -405,7 +405,9 @@ func (p *userContactPull) dav(ctx context.Context) (int, error) {
 			if data == "" {
 				continue
 			}
-			contacts, err := parseVCardContacts(strings.NewReader(data), nil)
+			// A card Gofer can't use, such as a group, is skipped; it stays in
+			// SeenRemoteIDs so it isn't mistaken for a deleted one.
+			contacts, err := decodeVCardContacts(strings.NewReader(data), nil)
 			if err != nil {
 				return imported, err
 			}
