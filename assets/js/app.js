@@ -5983,9 +5983,77 @@ document.addEventListener("DOMContentLoaded", function () {
     else if (mode === "mail") document.title = "Gofer - Email"
   }
 
+  // Mail and Contacts reopen where they were left: the folder or filters,
+  // and the open email or contact. Each section button carries that address,
+  // remembered for the browser tab.
+  // These run before this callback reaches its variables, so they hold no state.
+  function isSectionPath(mode, path) {
+    if (mode === "mail") return /^\/(?:folder\/[^/]+(?:\/[^/]+)?)?$/.test(path)
+    return mode === "contacts" && path === "/contacts"
+  }
+
+  function sectionLocations() {
+    try { return JSON.parse(sessionStorage.getItem("gofer:section-locations") || "{}") || {} } catch (_) { return {} }
+  }
+
+  function rememberSectionLocation(mode) {
+    if (!isSectionPath(mode, location.pathname)) return
+    var locations = sectionLocations()
+    locations[mode] = location.pathname + location.search
+    try { sessionStorage.setItem("gofer:section-locations", JSON.stringify(locations)) } catch (_) {}
+    pointSectionButton(mode, locations[mode])
+  }
+
+  // The switch asks the section's own page for its panes. Mail's folder and
+  // email live in the path, which only the index takes as parameters.
+  function sectionRequestURL(mode, address) {
+    var url = new URL(address, location.href)
+    var mail = mode === "mail" && /^\/folder\/([^/]+)(?:\/([^/]+))?$/.exec(url.pathname)
+    if (!mail) return url.pathname + url.search
+    url.searchParams.set("folder", decodeURIComponent(mail[1]))
+    if (mail[2]) url.searchParams.set("email", decodeURIComponent(mail[2]))
+    return "/?" + url.searchParams.toString()
+  }
+
+  function pointSectionButton(mode, address) {
+    var button = document.querySelector('[data-sidebar-app-button="' + mode + '"]')
+    if (!button || !address || !isSectionPath(mode, new URL(address, location.href).pathname)) return
+    var requestURL = sectionRequestURL(mode, address)
+    if (button.getAttribute("hx-push-url") === address && button.getAttribute("hx-get") === requestURL) return
+    button.setAttribute("href", address)
+    button.setAttribute("hx-get", requestURL)
+    button.setAttribute("hx-push-url", address)
+    if (window.htmx) window.htmx.process(button)
+  }
+
+  // Whether the section opens an email or contact, so its reader shows a
+  // loading sheet rather than the empty state.
+  function sectionOpensItem(mode) {
+    var button = document.querySelector('[data-sidebar-app-button="' + mode + '"]')
+    var address = button && new URL(button.getAttribute("hx-push-url") || button.getAttribute("href") || "/", location.href)
+    if (!address) return false
+    if (mode === "mail") return /^\/folder\/[^/]+\/[^/]+$/.test(address.pathname) || !!address.searchParams.get("email")
+    if (mode === "contacts") return !!address.searchParams.get("contact") || address.searchParams.get("new") === "1"
+    return false
+  }
+
   function setupSidebarAppNavToggle() {
     var request = null
     var previous = null
+
+    // The buttons come back with their default addresses whenever the server
+    // draws the sidebar again.
+    function pointSectionButtons() {
+      var currentSection = document.getElementById("sidebar-app-body")
+      var locations = sectionLocations()
+      ;["mail", "contacts"].forEach(function (mode) {
+        if (!currentSection || currentSection.dataset.sidebarAppBody !== mode) pointSectionButton(mode, locations[mode])
+      })
+    }
+    pointSectionButtons()
+    document.body.addEventListener("htmx:afterSwap", function (event) {
+      if (event.target && event.target.querySelector && event.target.querySelector("[data-sidebar-app-button]")) pointSectionButtons()
+    })
     function restore() {
       if (!previous) return
       previous.panes.forEach(function (saved) {
@@ -6024,6 +6092,7 @@ document.addEventListener("DOMContentLoaded", function () {
         e.stopPropagation()
         return
       }
+      if (sidebar && !request) rememberSectionLocation(sidebar.dataset.sidebarAppBody)
       setSidebarAppNavMode(mode)
 
       if (!href) return
@@ -6087,11 +6156,24 @@ document.addEventListener("DOMContentLoaded", function () {
     })
     document.body.addEventListener("htmx:afterSwap", function (event) {
       if (!event.detail || event.detail.xhr !== request) return
+      if (request.goferAppSwitchMode === "mail") openSwitchedEmail(event.detail.requestConfig && event.detail.requestConfig.path)
       previous = null
       request = null
       document.getElementById("app-shell").removeAttribute("data-hx-history")
       endAppSwitch()
     })
+    // Mail's panes arrive with the reopened email still loading, as on a full
+    // page load. It is fetched once all of them are in.
+    function openSwitchedEmail(path) {
+      var emailID = path && new URL(path, location.href).searchParams.get("email")
+      if (!emailID || typeof htmx === "undefined") return
+      setTimeout(function () {
+        var view = document.getElementById("mail-view")
+        if (!view || !view.querySelector('[aria-busy="true"]')) return
+        preserveMailListSelectionFor = emailID
+        htmx.ajax("GET", mailViewRequestURL(emailID), "#mail-view")
+      }, 0)
+    }
     // Pane changes are observed after the swap's own tasks, so the flag stays until then.
     function endAppSwitch() {
       setTimeout(function () { document.documentElement.removeAttribute("data-app-switching") }, 0)
@@ -6107,21 +6189,14 @@ document.addEventListener("DOMContentLoaded", function () {
     document.body.addEventListener("htmx:sendAbort", completed)
   }
 
-  function mailMainContentClass() {
-    var layout = window.GoferSettings ? GoferSettings.get("mail_pane_layout") : ""
-    return layout === "stacked" ? "flex flex-1 min-w-0 flex-col" : "flex flex-1 min-w-0"
-  }
-
+  // Each section has its own side-by-side or stacked layout.
   function setMainContentAppMode(mode) {
     var main = document.getElementById("main-content")
     if (!main) return
-    if (mode === "contacts" || mode === "calendar") {
-      main.className = "flex flex-1 min-w-0 bg-background"
-      main.removeAttribute("data-mail-pane-layout")
-      return
-    }
-    main.className = mailMainContentClass()
-    main.setAttribute("data-mail-pane-layout", window.GoferSettings && GoferSettings.get("mail_pane_layout") === "stacked" ? "stacked" : "side")
+    var layout = window.GoferSettings ? GoferSettings.paneLayout(mode) : "side"
+    var base = mode === "contacts" || mode === "calendar" ? "flex flex-1 min-w-0 bg-background" : "flex flex-1 min-w-0"
+    main.className = layout === "stacked" ? base + " flex-col" : base
+    main.setAttribute("data-mail-pane-layout", layout)
   }
 
   function sidebarPendingHTML(mode) {
@@ -6343,6 +6418,11 @@ document.addEventListener("DOMContentLoaded", function () {
       '</div>'
   }
 
+  function emptyReadPaneHTML(mode) {
+    var template = document.getElementById(mode === "contacts" ? "contacts-view-empty" : "mail-view-empty")
+    return template ? template.innerHTML : readPanePendingHTML(mode)
+  }
+
   function readPanePendingHTML(mode) {
     var label = mode === "contacts" ? "Loading contacts..." : "Loading message..."
     return '<div class="flex flex-col h-full p-2"><div class="surface-paper rounded-md flex flex-col h-full overflow-hidden"><div class="flex items-center justify-between px-6 py-2.5"><div class="flex items-center gap-1"><div class="size-8 rounded-md bg-ink/[0.03] border border-ink/6"></div><div class="size-8 rounded-md bg-ink/[0.03] border border-ink/6"></div></div><div class="h-4 w-20 rounded bg-ink/5 animate-pulse"></div></div><div class="h-px bg-gradient-to-r from-transparent via-amber-900/10 to-transparent"></div><div class="flex-1 overflow-y-auto"><div class="mx-auto px-8 py-6"><div class="flex items-center gap-2 text-sm text-ink/45"><div class="size-4 border-2 border-ink/15 border-t-ink/45 rounded-full animate-spin"></div><span>' + label + '</span></div><div class="space-y-3 mt-5"><div class="h-4 w-full rounded bg-ink/5 animate-pulse"></div><div class="h-4 w-11/12 rounded bg-ink/5 animate-pulse"></div><div class="h-4 w-4/5 rounded bg-ink/5 animate-pulse"></div></div></div></div></div></div>'
@@ -6363,6 +6443,12 @@ document.addEventListener("DOMContentLoaded", function () {
 
   function showAppSwitchPending(mode) {
     if (mode !== "contacts" && mode !== "mail" && mode !== "calendar") return
+    var panels = typeof measureAppPanels === "function" ? measureAppPanels() : null
+    showAppSwitchPendingPanes(mode)
+    if (typeof slideAppPanels === "function") slideAppPanels(panels, mode)
+  }
+
+  function showAppSwitchPendingPanes(mode) {
     document.documentElement.setAttribute("data-app-switching", "")
     animateAppSwitch()
     setMainContentAppMode(mode)
@@ -6395,6 +6481,7 @@ document.addEventListener("DOMContentLoaded", function () {
       var rows = pendingRowCount(list, mode, viewMode)
       list.className = "w-full lg:flex flex-col border-r border-border bg-card h-full overflow-hidden"
       list.dataset.viewMode = viewMode
+      list.dataset.panelSection = mode
       if (mode === "contacts") {
         list.setAttribute("data-contact-list-shell", "")
         list.removeAttribute("data-mail-list-view")
@@ -6418,7 +6505,7 @@ document.addEventListener("DOMContentLoaded", function () {
       pane.removeAttribute("aria-busy")
       pane.removeAttribute("data-calendar-agenda")
       pane.className = mode === "contacts" ? "hidden flex-1 min-w-0 bg-background surface-desk xl:flex xl:flex-col" : "hidden lg:flex flex-1 flex-col min-w-0 bg-background surface-desk"
-      pane.innerHTML = readPanePendingHTML(mode)
+      pane.innerHTML = sectionOpensItem(mode) ? readPanePendingHTML(mode) : emptyReadPaneHTML(mode)
     }
   }
 
@@ -9433,7 +9520,19 @@ document.addEventListener("click", function (event) {
   }
 })
 
-document.body.addEventListener("htmx:afterSwap", initializeCalendarDaySelection)
+// Switching sections swaps four side panes before the list, all at once.
+// Calendar setup waits for the list instead of laying out the calendar for
+// each of them.
+function isAppSwitchSidePaneSwap(event) {
+  var detail = event && event.detail
+  // The list replaces the request's target, so the two are matched by id.
+  return !!(detail && detail.xhr && detail.xhr.goferAppSwitchMode && detail.target && event.target &&
+    event.target.id !== detail.target.id)
+}
+
+document.body.addEventListener("htmx:afterSwap", function (event) {
+  if (!isAppSwitchSidePaneSwap(event)) initializeCalendarDaySelection()
+})
 if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", initializeCalendarDaySelection)
 else initializeCalendarDaySelection()
 
@@ -9567,17 +9666,29 @@ function layoutCalendarMonth(calendar) {
     if (!weeks.has(key)) weeks.set(key, [])
     weeks.get(key).push({ container: container, buttons: buttons, overflow: overflow })
   })
+  // Every day is prepared before any is measured. Measuring each day right
+  // after changing it made the browser lay out the whole page once per day.
   weeks.forEach(function (days) {
-    var rows = _calendarAllDayEventRows(days), spanLimits = new Map()
+    days.rows = _calendarAllDayEventRows(days)
     days.forEach(function (day) {
-      var buttons = day.buttons, overflow = day.overflow
-      var totalRows = Math.max.apply(null, buttons.map(function (button) { return rows.get(button) })) + 1
       // Measuring a visible candidate avoids stale zero heights after a resize.
-      buttons[0].hidden = false
-      buttons[0].style.display = ""
-      buttons[0].style.gridRow = "1"
-      overflow.hidden = false
-      day.limit = _calendarMonthVisibleCount(totalRows, day.container.clientHeight, buttons[0].offsetHeight, overflow.offsetHeight, 4)
+      day.buttons[0].hidden = false
+      day.buttons[0].style.display = ""
+      day.buttons[0].style.gridRow = "1"
+      day.overflow.hidden = false
+    })
+  })
+  weeks.forEach(function (days) {
+    days.forEach(function (day) {
+      day.size = [day.container.clientHeight, day.buttons[0].offsetHeight, day.overflow.offsetHeight]
+    })
+  })
+  weeks.forEach(function (days) {
+    var rows = days.rows, spanLimits = new Map()
+    days.forEach(function (day) {
+      var buttons = day.buttons
+      var totalRows = Math.max.apply(null, buttons.map(function (button) { return rows.get(button) })) + 1
+      day.limit = _calendarMonthVisibleCount(totalRows, day.size[0], day.size[1], day.size[2], 4)
       buttons.forEach(function (button) {
         var event = button.dataset
         if (event.calendarEventAllDay !== "true" || !event.calendarMonthEvent) return
@@ -9935,7 +10046,11 @@ function initializeCalendarViewport() {
     if (pane && window.ResizeObserver) {
       // Lay out again before the frame is painted. Waiting for the next frame shows
       // one frame of the grid sized for the old space.
-      _calendarViewportObserver = new ResizeObserver(function () { initializeCalendarViewport() })
+      _calendarViewportObserver = new ResizeObserver(function () {
+        // Sliding panels resize the pane every frame. The calendar is laid
+        // out once they stop.
+        if (!document.documentElement.hasAttribute("data-panels-sliding")) initializeCalendarViewport()
+      })
       _calendarViewportObserver.observe(pane)
       if (surface) _calendarViewportObserver.observe(surface)
     }
@@ -9961,7 +10076,10 @@ document.addEventListener("click", function (event) {
   setCalendarWeekZoom(action === "fit" ? 0 : Math.max(0, Math.min(3, _calendarWeekZoom + (action === "in" ? 1 : -1))))
 })
 window.addEventListener("resize", initializeCalendarViewport)
-document.body.addEventListener("htmx:afterSwap", initializeCalendarViewport)
+document.addEventListener("gofer:panels-slid", initializeCalendarViewport)
+document.body.addEventListener("htmx:afterSwap", function (event) {
+  if (!isAppSwitchSidePaneSwap(event)) initializeCalendarViewport()
+})
 if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", initializeCalendarViewport)
 else initializeCalendarViewport()
 

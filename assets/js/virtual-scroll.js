@@ -784,18 +784,24 @@ class VirtualMailList {
   animateEnteringRows(nodes, duration, ease, offsetY, delay, stagger) {
     delay = delay || 0
     stagger = stagger || 0
+    // Every row takes its starting style before one reflow commits them all.
+    // A reflow per row made the browser lay out the page once per row.
+    var bases = []
     for (var i = 0; i < nodes.length; i++) {
       var node = nodes[i]
-      var base = node.style.transform || ""
-      var itemDelay = delay + Math.min(120, i * stagger)
+      bases.push(node.style.transform || "")
       node.style.transition = "none"
       node.style.opacity = "0"
-      node.style.transform = base + " translateY(" + offsetY + "px) scale(0.985)"
-      node.offsetHeight
-      node.style.transition = "transform " + duration + "ms " + ease + " " + itemDelay + "ms, opacity " + duration + "ms ease-out " + itemDelay + "ms"
-      node.style.opacity = "1"
-      node.style.transform = base
-      this.cleanupTransition(node, duration + itemDelay)
+      node.style.transform = bases[i] + " translateY(" + offsetY + "px) scale(0.985)"
+    }
+    if (nodes.length) nodes[0].offsetHeight
+    for (var j = 0; j < nodes.length; j++) {
+      var row = nodes[j]
+      var itemDelay = delay + Math.min(120, j * stagger)
+      row.style.transition = "transform " + duration + "ms " + ease + " " + itemDelay + "ms, opacity " + duration + "ms ease-out " + itemDelay + "ms"
+      row.style.opacity = "1"
+      row.style.transform = bases[j]
+      this.cleanupTransition(row, duration + itemDelay)
     }
   }
 
@@ -3420,18 +3426,24 @@ class VirtualContactsList {
   animateEnteringRows(nodes, duration, ease, offsetY, delay, stagger) {
     delay = delay || 0
     stagger = stagger || 0
+    // Every row takes its starting style before one reflow commits them all.
+    // A reflow per row made the browser lay out the page once per row.
+    var bases = []
     for (var i = 0; i < nodes.length; i++) {
       var node = nodes[i]
-      var base = node.style.transform || ""
-      var itemDelay = delay + Math.min(120, i * stagger)
+      bases.push(node.style.transform || "")
       node.style.transition = "none"
       node.style.opacity = "0"
-      node.style.transform = base + " translateY(" + offsetY + "px) scale(0.985)"
-      node.offsetHeight
-      node.style.transition = "transform " + duration + "ms " + ease + " " + itemDelay + "ms, opacity " + duration + "ms ease-out " + itemDelay + "ms"
-      node.style.opacity = "1"
-      node.style.transform = base
-      this.cleanupTransition(node, duration + itemDelay)
+      node.style.transform = bases[i] + " translateY(" + offsetY + "px) scale(0.985)"
+    }
+    if (nodes.length) nodes[0].offsetHeight
+    for (var j = 0; j < nodes.length; j++) {
+      var row = nodes[j]
+      var itemDelay = delay + Math.min(120, j * stagger)
+      row.style.transition = "transform " + duration + "ms " + ease + " " + itemDelay + "ms, opacity " + duration + "ms ease-out " + itemDelay + "ms"
+      row.style.opacity = "1"
+      row.style.transform = bases[j]
+      this.cleanupTransition(row, duration + itemDelay)
     }
   }
 

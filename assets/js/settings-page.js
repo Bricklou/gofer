@@ -53,9 +53,9 @@
     if (defaultComposeView && typeof GoferSettings !== 'undefined') {
       GoferSettings.set(defaultComposeView.name, defaultComposeView.value);
     }
-    var mailPaneLayout = e.target.closest('input[name="mail_pane_layout"]');
-    if (mailPaneLayout && typeof GoferSettings !== 'undefined') {
-      GoferSettings.set('mail_pane_layout', mailPaneLayout.value);
+    var paneLayout = e.target.closest('input[name="mail_pane_layout"], input[name="contacts_pane_layout"], input[name="calendar_pane_layout"]');
+    if (paneLayout && typeof GoferSettings !== 'undefined') {
+      GoferSettings.set(paneLayout.name, paneLayout.value);
     }
     var autosaveToggle = e.target.closest('[data-compose-autosave-setting="enabled"]');
     if (autosaveToggle && typeof GoferSettings !== 'undefined') {

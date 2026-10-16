@@ -957,11 +957,7 @@ func (h *Handler) handleContacts(w http.ResponseWriter, r *http.Request) {
 			case "app-shell":
 				return views.ContactsShell(accounts, contacts, selected, profile, showNew, syncQueued, filters, total, settings), nil
 			}
-			width := settings["mail_list_width"]
-			if width == "" {
-				width = "50%"
-			}
-			return views.ContactsPage(contacts, selected, profile, showNew, syncQueued, filters, total, width, accounts), nil
+			return views.ContactsPage(contacts, selected, profile, showNew, syncQueued, filters, total, settings, accounts), nil
 		}
 		return views.ContactsLayout(accounts, contacts, selected, profile, showNew, syncQueued, filters, total, settings), nil
 	})

@@ -59,7 +59,7 @@ func settingsSectionHeading(section string) (string, string) {
 		case "contacts":
 			return "Contacts", "Manage local contacts and sync contacts from connected accounts."
 		case "appearance":
-			return "Appearance", "Choose the visual style and color mode for Gofer."
+			return "Appearance", "Choose the visual style, color mode, and pane layout for Gofer."
 		case "regional":
 			return "Regional", "Choose the time zone used for message dates and scheduled sends."
 		case "compose-display":
@@ -204,25 +204,6 @@ templ SettingsComposeDisplayTab(uiSettings map[string]string, signatureData []mo
 			<div>
 				<h3 class="text-sm font-semibold text-muted-foreground uppercase tracking-wider mb-1">List view</h3>
 				<p class="text-xs text-muted-foreground">Control how messages are summarized in the email list.</p>
-			</div>
-			<div class="settings-row border-t border-border/60 pt-5 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-				<div class="min-w-0">
-					<h4 class="text-sm font-medium text-foreground">Email pane layout</h4>
-					<p class="text-xs text-muted-foreground mt-1">Choose whether the message list and reading pane sit beside each other or stack vertically.</p>
-				</div>
-				<div class="w-full sm:w-44 shrink-0" data-mail-pane-layout-picker>
-					@selectbox.SelectBox(selectbox.Props{Class: "settings-select"}) {
-						@selectbox.Trigger(selectbox.TriggerProps{Name: "mail_pane_layout", Class: "bg-background", DisableClear: true}) {
-							@selectbox.Value(selectbox.ValueProps{Placeholder: "Side by side"}) {
-								{ mailPaneLayoutSettingLabel(uiSettingGet(uiSettings, "mail_pane_layout", "side")) }
-							}
-						}
-						@selectbox.Content(selectbox.ContentProps{NoSearch: true, Class: "mobile-sheet"}) {
-							@selectbox.Item(selectbox.ItemProps{Value: "side", Selected: mailPaneLayout(uiSettingGet(uiSettings, "mail_pane_layout", "side")) == "side"}) { Side by side }
-							@selectbox.Item(selectbox.ItemProps{Value: "stacked", Selected: mailPaneLayout(uiSettingGet(uiSettings, "mail_pane_layout", "side")) == "stacked"}) { Stacked }
-						}
-					}
-				</div>
 			</div>
 			<div class="settings-row border-t border-border/60 pt-5 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
 				<div class="min-w-0">
@@ -520,7 +501,38 @@ templ SettingsAppearanceTab(uiSettings map[string]string) {
 					</label>
 				</div>
 			</div>
+			<div class="settings-card bg-card rounded-lg border p-6 space-y-5">
+				<div>
+					<h3 class="text-sm font-semibold text-muted-foreground uppercase tracking-wider mb-1">Pane layout</h3>
+					<p class="text-xs text-muted-foreground">Choose whether each list and its detail pane sit beside each other or stack vertically. Small screens always show one pane at a time.</p>
+				</div>
+				@paneLayoutSettingRow("mail_pane_layout", "Email", "The message list and the reading pane.", PaneLayout(uiSettings, "mail"))
+				@paneLayoutSettingRow("contacts_pane_layout", "Contacts", "The contact list and the contact details.", PaneLayout(uiSettings, "contacts"))
+				@paneLayoutSettingRow("calendar_pane_layout", "Calendar", "The calendar grid and the agenda.", PaneLayout(uiSettings, "calendar"))
+			</div>
 		</div>
+}
+
+templ paneLayoutSettingRow(name string, title string, description string, layout string) {
+	<div class="settings-row border-t border-border/60 pt-5 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+		<div class="min-w-0">
+			<h4 class="text-sm font-medium text-foreground">{ title }</h4>
+			<p class="text-xs text-muted-foreground mt-1">{ description }</p>
+		</div>
+		<div class="w-full sm:w-44 shrink-0" data-pane-layout-picker>
+			@selectbox.SelectBox(selectbox.Props{Class: "settings-select"}) {
+				@selectbox.Trigger(selectbox.TriggerProps{Name: name, Class: "bg-background", DisableClear: true}) {
+					@selectbox.Value(selectbox.ValueProps{Placeholder: "Side by side"}) {
+						{ mailPaneLayoutSettingLabel(layout) }
+					}
+				}
+				@selectbox.Content(selectbox.ContentProps{NoSearch: true, Class: "mobile-sheet"}) {
+					@selectbox.Item(selectbox.ItemProps{Value: "side", Selected: layout == "side"}) { Side by side }
+					@selectbox.Item(selectbox.ItemProps{Value: "stacked", Selected: layout == "stacked"}) { Stacked }
+				}
+			}
+		</div>
+	</div>
 }
 
 templ SettingsRegionalTab(uiSettings map[string]string) {

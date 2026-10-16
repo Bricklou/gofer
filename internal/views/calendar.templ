@@ -40,6 +40,7 @@ templ CalendarLayout(accounts []models.Account, month CalendarMonthData, uiSetti
 			<div id="app-pane-dialogs"></div>
 			@ComposeDialog(accounts)
 			@CalendarLoadingTemplates(accounts, uiSettings)
+			@AppSwitchEmptyPaneTemplates()
 			<script src={ assetver.URL("/assets/js/htmx.min.js") }></script>
 			<script src={ assetver.URL("/assets/js/virtual-scroll.js") }></script>
 			<script src={ assetver.URL("/assets/js/app.js") }></script>
@@ -54,7 +55,7 @@ templ CalendarLayout(accounts []models.Account, month CalendarMonthData, uiSetti
 templ CalendarShell(accounts []models.Account, month CalendarMonthData, uiSettings map[string]string) {
 	<div id="app-shell" class="app-shell flex h-screen overflow-hidden">
 		@MobileTopBar()
-		@CalendarSidebar(accounts, uiSettingGet(uiSettings, "sidebar_width", "256px"))
+		@CalendarSidebar(accounts, PanelSetting(uiSettings, "calendar", "sidebar_width", "256px"))
 		@ResizeHandle("sidebar")
 		@CalendarPage(month, uiSettings)
 	</div>
@@ -134,7 +135,7 @@ templ CalendarSidebarContent(accounts []models.Account, loading bool) {
 }
 
 templ CalendarPage(month CalendarMonthData, uiSettings map[string]string) {
-	<div id="main-content" class="flex flex-1 min-w-0 bg-background">
+	<div id="main-content" class={ mailPaneLayoutClass(PaneLayout(uiSettings, "calendar")) + " bg-background" } data-mail-pane-layout={ PaneLayout(uiSettings, "calendar") }>
 		@CalendarMainPane(month, uiSettings)
 		@ResizeHandle("maillist")
 		@CalendarAgendaPane(month)
@@ -159,7 +160,7 @@ templ CalendarSourceSyncIndicator(source models.AccountCalendarSource, loading b
 }
 
 templ CalendarMainPane(month CalendarMonthData, uiSettings map[string]string) {
-	<section id="mail-list" class="flex w-full max-lg:!w-full lg:flex flex-col border-r border-border bg-card h-full min-w-0 overflow-hidden" style={ "width:" + mailListWidthCSS(uiSettingGet(uiSettings, "mail_list_width", "50%")) } aria-busy={ strconv.FormatBool(month.Loading) }>
+	<section id="mail-list" class="flex w-full max-lg:!w-full lg:flex flex-col border-r border-border bg-card h-full min-w-0 overflow-hidden" style={ "width:" + mailListWidthCSS(PanelSetting(uiSettings, "calendar", "mail_list_width", "50%")) } data-panel-section="calendar" aria-busy={ strconv.FormatBool(month.Loading) }>
 		@CalendarMainContent(month)
 		<button type="button" class="mobile-compose-fab" data-on-click='["goferClickElement","[data-calendar-create-trigger]"]' aria-label="New event">
 			@icon.CalendarPlus(icon.Props{Class: "size-6"})

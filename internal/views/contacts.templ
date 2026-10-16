@@ -1148,16 +1148,16 @@ func contactInsightSeverityClass(severity string) string {
 	}
 }
 
-templ ContactsPage(contacts []models.Contact, selected *models.Contact, selectedProfile *models.ContactProfile, showNew bool, syncQueued bool, filters models.ContactFilters, totalCount int, width string, accounts []models.Account) {
-	<div id="main-content" class="flex flex-1 min-w-0 bg-background">
-		@ContactsListPane(contacts, selected, filters, totalCount, width, accounts)
+templ ContactsPage(contacts []models.Contact, selected *models.Contact, selectedProfile *models.ContactProfile, showNew bool, syncQueued bool, filters models.ContactFilters, totalCount int, uiSettings map[string]string, accounts []models.Account) {
+	<div id="main-content" class={ mailPaneLayoutClass(PaneLayout(uiSettings, "contacts")) + " bg-background" } data-mail-pane-layout={ PaneLayout(uiSettings, "contacts") }>
+		@ContactsListPane(contacts, selected, filters, totalCount, PanelSetting(uiSettings, "contacts", "mail_list_width", "50%"), accounts)
 		@ResizeHandle("maillist")
 		@ContactsViewPane(selected, selectedProfile, showNew, syncQueued, accounts)
 	</div>
 }
 
 templ ContactsListPane(contacts []models.Contact, selected *models.Contact, filters models.ContactFilters, totalCount int, width string, accounts []models.Account) {
-	<section id="mail-list" class="w-full lg:flex flex-col border-r border-border bg-card h-full overflow-hidden" style={ "width:" + mailListWidthCSS(width) } data-view-mode={ contactViewMode(filters.View) } data-contact-list-shell>
+	<section id="mail-list" class="w-full lg:flex flex-col border-r border-border bg-card h-full overflow-hidden" style={ "width:" + mailListWidthCSS(width) } data-view-mode={ contactViewMode(filters.View) } data-contact-list-shell data-panel-section="contacts">
 		<div class="contacts-list-header px-4 py-4 space-y-3">
 			<div class="contacts-list-title-row flex items-center justify-between">
 				<div class="flex items-center gap-2">

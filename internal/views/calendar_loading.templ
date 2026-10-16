@@ -4,6 +4,18 @@ import "github.com/cristianadrielbraun/gofer/internal/models"
 
 // Inert templates reuse the real layout, including saved widths and timezone.
 // They stay outside the HTMX/history targets so switching apps needs no fetch.
+// AppSwitchEmptyPaneTemplates hold the read pane Mail and Contacts show with
+// nothing open. Switching to a section with nothing to open shows this at
+// once instead of a loading placeholder.
+templ AppSwitchEmptyPaneTemplates() {
+	<template id="mail-view-empty">
+		@MailViewEmpty()
+	</template>
+	<template id="contacts-view-empty">
+		@ContactsDetail(nil, nil, false, false, nil)
+	</template>
+}
+
 templ CalendarLoadingTemplates(accounts []models.Account, uiSettings map[string]string) {
 	<template id="calendar-event-loading">
 		@CalendarEventLoadingDialog()

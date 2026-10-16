@@ -24,10 +24,18 @@
     return n ? n + "px" : null;
   }
 
+  // Contacts and calendar keep their own sizes, and use mail's until resized.
+  // Their layout is their own from the start.
+  var section = /^\/(contacts|calendar)(\/|$)/.exec(location.pathname);
+  section = section ? section[1] : "";
+  function saved(key, sectionKey) {
+    return (section && settings[section + "_" + sectionKey]) || settings[key];
+  }
+
   var vw = window.innerWidth || 1024;
-  var stacked = settings.mail_pane_layout === "stacked";
-  var sidebar = px(settings.sidebar_width, 180, Math.min(400, vw * 0.25));
-  var mailList = stacked ? px(settings.mail_list_height, 180) : mailListWidth(settings.mail_list_width);
+  var stacked = settings[section ? section + "_pane_layout" : "mail_pane_layout"] === "stacked";
+  var sidebar = px(saved("sidebar_width", "sidebar_width"), 180, Math.min(400, vw * 0.25));
+  var mailList = stacked ? px(saved("mail_list_height", "list_height"), 180) : mailListWidth(saved("mail_list_width", "list_width"));
   if (!sidebar && !mailList && !stacked) return;
 
   var style = document.createElement("style");

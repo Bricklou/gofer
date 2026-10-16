@@ -1,4 +1,6 @@
 var initResizeHandles;
+var measureAppPanels;
+var slideAppPanels;
 
 (function () {
   function getPanel(el) {
@@ -51,10 +53,23 @@ var initResizeHandles;
     return Math.max(min, Math.min(max, v));
   }
 
-  function settingKey(panelName) {
+  function baseSettingKey(panelName) {
     if (panelName === "sidebar") return "sidebar_width";
     if (panelName === "maillist") return isStackedMailList(panelName) ? "mail_list_height" : "mail_list_width";
     return panelName + "_width";
+  }
+
+  // Mail, contacts and calendar each save their own sizes.
+  function settingKey(panelName) {
+    return GoferSettings.panelKey(baseSettingKey(panelName));
+  }
+
+  function savedSize(panelName) {
+    var saved = GoferSettings.panelSetting(baseSettingKey(panelName));
+    // The sidebar stays on screen across sections, so one without a saved
+    // width goes back to the default rather than keeping the last section's.
+    if (!saved && panelName === "sidebar") return "256";
+    return saved;
   }
 
   function getBounds(panelName) {
@@ -139,7 +154,7 @@ var initResizeHandles;
     document.querySelectorAll(".resize-handle").forEach(function (h) {
       var name = h.dataset.panel;
       if (typeof GoferSettings !== "undefined" && !(name === "sidebar" && phoneQuery.matches)) {
-        var saved = GoferSettings.get(settingKey(name));
+        var saved = savedSize(name);
         if (saved) {
           var b = getBounds(name);
           var panel = getPanel(h);
@@ -162,4 +177,127 @@ var initResizeHandles;
   phoneQuery.addEventListener("change", function (e) {
     if (!e.matches) initResizeHandles();
   });
+
+  // Switching sections slides the sidebar and the pane divider to the new
+  // section's sizes rather than jumping. The divider only slides when both
+  // sections use the same layout; otherwise the panes are rearranged anyway.
+  var SLIDE_MS = 260;
+  var SLIDE_EASING = "cubic-bezier(0.2, 0.8, 0.2, 1)";
+  var listSlide = null;
+  var listPlaced = null;
+  var slides = [];
+
+  // Marks the page while panels slide, so work that follows pane sizes, like
+  // the calendar's layout, can wait for the end instead of running each frame.
+  function trackSlide(animation) {
+    slides.push(animation);
+    document.documentElement.setAttribute("data-panels-sliding", "");
+    function done() {
+      if (slides.indexOf(animation) === -1) return;
+      slides = slides.filter(function (other) { return other !== animation; });
+      if (slides.length) return;
+      document.documentElement.removeAttribute("data-panels-sliding");
+      document.dispatchEvent(new CustomEvent("gofer:panels-slid"));
+    }
+    animation.addEventListener("finish", done);
+    animation.addEventListener("cancel", done);
+    // A slide never holds the calendar back for long, even if its element
+    // leaves the page without the animation reporting an end.
+    setTimeout(done, SLIDE_MS * 3);
+    return animation;
+  }
+
+  function canSlide() {
+    return !phoneQuery.matches && typeof GoferSettings !== "undefined" &&
+      !window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  }
+
+  function slideKeyframes(prop, from, to) {
+    var start = {}, end = {};
+    start[prop] = from + "px";
+    end[prop] = to + "px";
+    return [start, end];
+  }
+
+  measureAppPanels = function () {
+    var aside = document.querySelector("aside");
+    var list = document.getElementById("mail-list");
+    return {
+      sidebar: aside ? aside.getBoundingClientRect().width : 0,
+      layout: isStackedMailList("maillist") ? "stacked" : "side",
+      list: list ? list.getBoundingClientRect() : null,
+    };
+  };
+
+  slideAppPanels = function (before, section) {
+    if (!before || !canSlide()) return;
+    var aside = document.querySelector("aside");
+    var list = document.getElementById("mail-list");
+    var layout = GoferSettings.paneLayout(section);
+    var slideList = list && before.list && layout === before.layout;
+    var placeList = list && !phoneQuery.matches;
+    var prop = layout === "stacked" ? "height" : "width";
+
+    // Settle on the final sizes first, so the list is measured against the
+    // sidebar's final width, then animate from where everything was.
+    var sidebarTo = 0;
+    if (aside && before.sidebar) {
+      var b = getBounds("sidebar");
+      sidebarTo = clamp(parseInt(GoferSettings.panelSetting("sidebar_width", section), 10) || 256, b.min, b.max);
+      aside.style.width = sidebarTo + "px";
+    }
+    // The list takes the new section's size even when the layout changes, so
+    // it doesn't jump a second time when the section finishes loading.
+    var listTo = 0;
+    if (placeList) {
+      if (prop === "height") {
+        var height = parseInt(GoferSettings.panelSetting("mail_list_height", section), 10);
+        if (height > 0) list.style.height = Math.max(180, height) + "px";
+      } else {
+        list.style.height = "";
+        list.style.width = mailListWidthCSS(GoferSettings.panelSetting("mail_list_width", section) || "50%");
+      }
+      listTo = list.getBoundingClientRect()[prop];
+      listPlaced = { el: list, section: section, width: list.style.width, height: list.style.height };
+    }
+
+    if (sidebarTo && Math.abs(sidebarTo - before.sidebar) > 1) {
+      trackSlide(aside.animate(slideKeyframes("width", before.sidebar, sidebarTo), { duration: SLIDE_MS, easing: SLIDE_EASING }));
+    }
+    if (slideList && Math.abs(listTo - before.list[prop]) > 1) {
+      listSlide = {
+        el: list,
+        prop: prop,
+        from: before.list[prop],
+        to: listTo,
+        animation: trackSlide(list.animate(slideKeyframes(prop, before.list[prop], listTo), { duration: SLIDE_MS, easing: SLIDE_EASING })),
+      };
+    }
+  };
+
+  // The loaded section replaces the list element, which would drop its size
+  // until the handles settle and cut a slide short when the response is quick.
+  // The new element takes the size at once and finishes the slide.
+  function continueListSlide() {
+    var list = document.getElementById("mail-list");
+    if (listPlaced && list && list !== listPlaced.el) {
+      if (list.dataset.panelSection === listPlaced.section) {
+        list.style.width = listPlaced.width;
+        list.style.height = listPlaced.height;
+      }
+      listPlaced = null;
+    }
+    if (!listSlide || !list || list === listSlide.el) return;
+    var slide = listSlide;
+    listSlide = null;
+    if (slide.animation.playState !== "running") return;
+    // The same animation, picked up at the same moment, so the handover has
+    // no change of speed.
+    var animation = list.animate(slideKeyframes(slide.prop, slide.from, slide.to), { duration: SLIDE_MS, easing: SLIDE_EASING });
+    animation.currentTime = slide.animation.currentTime;
+    listSlide = { el: list, prop: slide.prop, from: slide.from, to: slide.to, animation: trackSlide(animation) };
+    slide.animation.cancel();
+  }
+
+  document.addEventListener("htmx:afterSwap", continueListSlide);
 })();

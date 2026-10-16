@@ -8266,6 +8266,8 @@ func defaultUISettings() map[string]string {
 		"compose_autosave_debounce":         "5",
 		"sender_display":                    "name",
 		"mail_pane_layout":                  "side",
+		"contacts_pane_layout":              "side",
+		"calendar_pane_layout":              "side",
 		"mail_list_width":                   "50%",
 		"mail_list_height":                  "360",
 		"mail_list_navigation":              "infinite",

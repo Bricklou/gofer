@@ -6,6 +6,48 @@ var GoferSettings;
   var _saveTimer = null;
   var _migratedPanelSize = false;
 
+  // Contacts and calendar keep their own panel sizes and pane layout. Mail
+  // owns the original keys, and a section that was never resized uses mail's
+  // size. The layout does not fall back: each section starts side by side.
+  var PANEL_SECTION_KEYS = {
+    contacts: { sidebar_width: "contacts_sidebar_width", mail_list_width: "contacts_list_width", mail_list_height: "contacts_list_height", mail_pane_layout: "contacts_pane_layout" },
+    calendar: { sidebar_width: "calendar_sidebar_width", mail_list_width: "calendar_list_width", mail_list_height: "calendar_list_height", mail_pane_layout: "calendar_pane_layout" },
+  };
+
+  function panelSection() {
+    var list = document.getElementById("mail-list");
+    return (list && list.dataset.panelSection) || "mail";
+  }
+
+  function sectionKey(section, key) {
+    var keys = PANEL_SECTION_KEYS[section];
+    return (keys && keys[key]) || key;
+  }
+
+  function panelKey(key) {
+    return sectionKey(panelSection(), key);
+  }
+
+  function paneLayout(section) {
+    return mailPaneLayout(_cache[sectionKey(section || panelSection(), "mail_pane_layout")]);
+  }
+
+  function panelSetting(key, section) {
+    return _cache[sectionKey(section || panelSection(), key)] || _cache[key] || null;
+  }
+
+  function isSectionKey(base, key) {
+    if (key === base) return true;
+    for (var section in PANEL_SECTION_KEYS) {
+      if (PANEL_SECTION_KEYS[section][base] === key) return true;
+    }
+    return false;
+  }
+
+  function isPanelSizeKey(key) {
+    return isSectionKey("sidebar_width", key) || isSectionKey("mail_list_width", key) || isSectionKey("mail_list_height", key);
+  }
+
   function readCache() {
     try {
       var raw = localStorage.getItem(LS_KEY);
@@ -414,8 +456,8 @@ var GoferSettings;
     return value === "stacked" ? "stacked" : "side";
   }
 
-  function applyMailPaneLayout(value) {
-    var layout = mailPaneLayout(value);
+  function applyPaneLayout() {
+    var layout = paneLayout();
     var main = document.getElementById("main-content");
     if (!main || !main.querySelector("#mail-list") || !main.querySelector("#mail-view")) return;
 
@@ -426,10 +468,11 @@ var GoferSettings;
     if (list) {
       if (layout === "stacked") {
         list.style.width = "";
-        if (_cache.mail_list_height) list.style.height = parseInt(_cache.mail_list_height, 10) + "px";
+        var height = parseInt(panelSetting("mail_list_height"), 10);
+        list.style.height = !isNaN(height) && height > 0 ? height + "px" : "";
       } else {
         list.style.height = "";
-        list.style.width = mailListWidthCSS(_cache.mail_list_width, list);
+        list.style.width = mailListWidthCSS(panelSetting("mail_list_width"), list);
       }
     }
 
@@ -467,7 +510,7 @@ var GoferSettings;
     if (!isNaN(px) && px > 0) {
       var converted = mailListPercentFromPixels(panel, Math.max(300, px));
       if (converted) {
-        _cache.mail_list_width = converted;
+        _cache[panelKey("mail_list_width")] = converted;
         _migratedPanelSize = true;
         return mailListWidthCSS(converted, panel);
       }
@@ -541,30 +584,24 @@ var GoferSettings;
       applyThemeStyle(value);
       if (typeof applyEmailBodyTheme === "function") applyEmailBodyTheme();
     }
-    if (key === "sidebar_width") {
-      var panel = document.querySelector("aside");
-      if (panel && value) {
-        var w = parseInt(value, 10);
-        if (!isNaN(w) && w > 0) panel.style.width = w + "px";
-      }
-    }
-    if (key === "mail_list_width") {
-      var panel = document.getElementById("mail-list");
-      if (panel && value && mailPaneLayout(_cache.mail_pane_layout) !== "stacked") {
-        panel.style.width = mailListWidthCSS(value, panel);
-      }
-    }
-    if (key === "mail_list_height") {
-      var listPanel = document.getElementById("mail-list");
-      if (listPanel && value && mailPaneLayout(_cache.mail_pane_layout) === "stacked") {
-        var h = parseInt(value, 10);
-        if (!isNaN(h) && h > 0) listPanel.style.height = h + "px";
+    if (isPanelSizeKey(key)) {
+      var sidebarWidth = parseInt(panelSetting("sidebar_width"), 10);
+      var sidebar = document.querySelector("aside");
+      if (sidebar && !isNaN(sidebarWidth) && sidebarWidth > 0) sidebar.style.width = sidebarWidth + "px";
+
+      var list = document.getElementById("mail-list");
+      if (list && paneLayout() === "stacked") {
+        var listHeight = parseInt(panelSetting("mail_list_height"), 10);
+        if (!isNaN(listHeight) && listHeight > 0) list.style.height = listHeight + "px";
         refreshVirtualMailListLayout();
+      } else if (list) {
+        var listWidth = panelSetting("mail_list_width");
+        if (listWidth) list.style.width = mailListWidthCSS(listWidth, list);
       }
     }
-    if (key === "mail_pane_layout") {
-      _cache.mail_pane_layout = mailPaneLayout(value);
-      applyMailPaneLayout(_cache.mail_pane_layout);
+    if (isSectionKey("mail_pane_layout", key)) {
+      _cache[key] = mailPaneLayout(value);
+      if (key === panelKey("mail_pane_layout")) applyPaneLayout();
     }
     if (key === "mail_table_column_widths") {
       _cache.mail_table_column_widths = value;
@@ -636,6 +673,18 @@ var GoferSettings;
     get: function (key) {
       return _cache[key] || null;
     },
+
+    // The key a panel size is saved under in the section on screen.
+    panelKey: panelKey,
+
+    // A panel size for a section, or the one on screen, falling back to mail's.
+    panelSetting: panelSetting,
+
+    // "side" or "stacked" for a section, or for the one on screen.
+    paneLayout: paneLayout,
+
+    // Lays the panes out for the section now on screen.
+    applyPaneLayout: applyPaneLayout,
 
     // The light or dark mode actually shown, which Express forces to light.
     effectiveTheme: function () {

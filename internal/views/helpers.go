@@ -253,6 +253,24 @@ func uiSettingGet(settings map[string]string, key, fallback string) string {
 	return fallback
 }
 
+// panelSectionKeys names the panel sizes contacts and calendar keep apart from
+// mail. Mail owns the original keys.
+var panelSectionKeys = map[string]map[string]string{
+	"contacts": {"sidebar_width": "contacts_sidebar_width", "mail_list_width": "contacts_list_width", "mail_list_height": "contacts_list_height"},
+	"calendar": {"sidebar_width": "calendar_sidebar_width", "mail_list_width": "calendar_list_width", "mail_list_height": "calendar_list_height"},
+}
+
+// PanelSetting reads a panel size for one app section. A section that was
+// never resized uses mail's size.
+func PanelSetting(settings map[string]string, section, key, fallback string) string {
+	if sectionKey := panelSectionKeys[section][key]; sectionKey != "" {
+		if v := settings[sectionKey]; v != "" {
+			return v
+		}
+	}
+	return uiSettingGet(settings, key, fallback)
+}
+
 func uiSettingsLocation(settings map[string]string) *time.Location {
 	timezone := strings.TrimSpace(uiSettingGet(settings, "timezone", "local"))
 	if timezone != "" && timezone != "local" {
@@ -681,6 +699,15 @@ func mailPaneLayout(value string) string {
 		return "stacked"
 	}
 	return "side"
+}
+
+// PaneLayout is "side" or "stacked" for one app section. Unlike the panel
+// sizes, contacts and calendar never borrow mail's layout.
+func PaneLayout(settings map[string]string, section string) string {
+	if section == "contacts" || section == "calendar" {
+		return mailPaneLayout(settings[section+"_pane_layout"])
+	}
+	return mailPaneLayout(settings["mail_pane_layout"])
 }
 
 func mailPaneLayoutClass(value string) string {
