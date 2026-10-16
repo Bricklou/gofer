@@ -6054,6 +6054,8 @@ document.addEventListener("DOMContentLoaded", function () {
     document.body.addEventListener("htmx:afterSwap", function (event) {
       if (event.target && event.target.querySelector && event.target.querySelector("[data-sidebar-app-button]")) pointSectionButtons()
     })
+    var heldSwap = null
+    var queuedSectionButton = null
     function restore() {
       if (!previous) return
       previous.panes.forEach(function (saved) {
@@ -6090,6 +6092,12 @@ document.addEventListener("DOMContentLoaded", function () {
       if (sidebar && sidebar.dataset.sidebarAppBody === mode && (request || samePath)) {
         e.preventDefault()
         e.stopPropagation()
+        return
+      }
+      if (heldSwap) {
+        e.preventDefault()
+        e.stopPropagation()
+        queuedSectionButton = btn
         return
       }
       if (sidebar && !request) rememberSectionLocation(sidebar.dataset.sidebarAppBody)
@@ -6153,6 +6161,14 @@ document.addEventListener("DOMContentLoaded", function () {
       if (xhr && xhr.goferAppPaneMode && sidebar && xhr.goferAppPaneMode !== sidebar.dataset.sidebarAppBody) event.detail.shouldSwap = false
       if (request && xhr !== request && event.detail.target &&
           /^(mail-list|mail-view|main-content|sidebar-app-body)$/.test(event.detail.target.id)) event.detail.shouldSwap = false
+      // The new section waits for the panels to finish sliding. Its first
+      // render takes long enough to stall a slide it lands in the middle of.
+      var sliding = typeof appPanelsSlideRemaining === "function" ? appPanelsSlideRemaining() : 0
+      if (xhr && xhr === request && event.detail.shouldSwap && sliding > 16) {
+        heldSwap = xhr
+        event.detail.swapOverride = (event.detail.swapOverride || "outerHTML") + " swap:" + Math.ceil(sliding) + "ms"
+        setTimeout(function () { if (heldSwap === xhr) releaseHeldSwap() }, sliding + 1000)
+      }
     })
     document.body.addEventListener("htmx:afterSwap", function (event) {
       if (!event.detail || event.detail.xhr !== request) return
@@ -6161,7 +6177,19 @@ document.addEventListener("DOMContentLoaded", function () {
       request = null
       document.getElementById("app-shell").removeAttribute("data-hx-history")
       endAppSwitch()
+      releaseHeldSwap()
     })
+    document.body.addEventListener("htmx:swapError", function (event) {
+      if (heldSwap && event.detail && event.detail.xhr === heldSwap) releaseHeldSwap()
+    })
+    // A held swap can't be called off, so a section chosen while one waits
+    // is opened right after it lands instead of being overwritten by it.
+    function releaseHeldSwap() {
+      heldSwap = null
+      var button = queuedSectionButton
+      queuedSectionButton = null
+      if (button) setTimeout(function () { button.click() }, 0)
+    }
     // Mail's panes arrive with the reopened email still loading, as on a full
     // page load. It is fetched once all of them are in.
     function openSwitchedEmail(path) {

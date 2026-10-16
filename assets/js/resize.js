@@ -1,6 +1,7 @@
 var initResizeHandles;
 var measureAppPanels;
 var slideAppPanels;
+var appPanelsSlideRemaining;
 
 (function () {
   function getPanel(el) {
@@ -218,6 +219,15 @@ var slideAppPanels;
     end[prop] = to + "px";
     return [start, end];
   }
+
+  // Milliseconds until every running slide has ended.
+  appPanelsSlideRemaining = function () {
+    return slides.reduce(function (longest, animation) {
+      var timing = animation.effect && animation.effect.getComputedTiming();
+      if (!timing || animation.playState === "finished") return longest;
+      return Math.max(longest, (timing.endTime || 0) - (timing.localTime || 0));
+    }, 0);
+  };
 
   measureAppPanels = function () {
     var aside = document.querySelector("aside");
