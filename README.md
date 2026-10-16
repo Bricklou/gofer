@@ -24,7 +24,7 @@ For reference, I'm actively using it with six configured accounts and around 100
 What you can do with it today:
 
 - **Users and access:** multiple users with separate administrators, invitations, and security policies; personal mode for one protected profile; and a no-login mode for local use.
-- **Accounts and sync:** multiple IMAP/SMTP, Gmail, and Outlook accounts, with mail cached in the instance's SQLite database.
+- **Accounts and sync:** multiple IMAP/SMTP, Gmail, and Outlook accounts, with mail cached in the instance's SQLite database. iCloud Mail works as an IMAP/SMTP account with an app-specific password.
 - **Reading and sending:** threads, attachments, drafts with autosave, signatures, scheduled send, and translation.
 - **Organization and search:** folders, labels, stars, archive, spam controls, and advanced search filters. Drag emails onto a folder to move them.
 - **Contacts:** local address books, vCard import/export, Google, Outlook, and CardDAV sync, plus Gofer Sync for automatic contact syncing between accounts.
@@ -82,12 +82,14 @@ An existing shared database is converted automatically the first time Gofer star
 
 To convert into a separate file instead, stop Gofer and run `./gofer storage migrate --db data/gofer.db --to data/gofer-users.db` (repeat with `--retry` if interrupted), then set `GOFER_DB_PATH=data/gofer-users.db`.
 
-Generic IMAP/SMTP accounts need no OAuth application credentials. Gmail and Outlook currently require your own provider client ID and secret. Mailbox authorization and optional Google/Microsoft application sign-in use separate clients and callbacks.
+Generic IMAP/SMTP accounts need no OAuth application credentials. Gmail and Outlook currently require your own provider client ID and secret.
+
+iCloud is an IMAP/SMTP account with Apple's servers filled in. Apple doesn't let other mail apps sign in with your Apple Account password, so create an app-specific password at [account.apple.com](https://account.apple.com) under **Sign-In and Security** (this needs two-factor authentication) and enter it when adding the account. Contacts and Calendar use the same login through CardDAV and CalDAV. Changing your Apple Account password revokes app-specific passwords, so you'll need to create a new one and enter it under **Edit account**. iCloud+ custom-domain addresses should work by signing in with your @icloud.com address, but haven't been tested yet. Mailbox authorization and optional Google/Microsoft application sign-in use separate clients and callbacks.
 
 > [!NOTE]
 > I plan to add Gmail and Outlook connections that don't require you to provide your own OAuth app credentials. First, I need to research the right way to set up public OAuth applications and complete the providers' identity verification and any required app reviews. Until then, you'll need to use your own credentials as described above.
 
-Configure Calendar under **Settings → Accounts**: enable it for an account, discover calendars, and select which ones to sync. Google and Outlook use the account's existing OAuth connection; reconnect older accounts to grant Calendar access if needed. Generic accounts can connect a CalDAV server using an HTTPS URL and server credentials, which may require an app password.
+Configure Calendar under **Settings → Accounts**: enable it for an account, discover calendars, and select which ones to sync. Google and Outlook use the account's existing OAuth connection; reconnect older accounts to grant Calendar access if needed. Generic accounts can connect a CalDAV server using an HTTPS URL and server credentials, which may require an app password. iCloud accounts connect to iCloud's CalDAV server with the account's app-specific password.
 
 ## deployment precautions
 
