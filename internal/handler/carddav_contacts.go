@@ -57,6 +57,7 @@ type davProp struct {
 	DisplayName           string      `xml:"displayname"`
 	CalendarDescription   string      `xml:"calendar-description"`
 	CTag                  string      `xml:"getctag"`
+	SyncToken             string      `xml:"DAV: sync-token"`
 	CurrentUserPrincipal  davHrefProp `xml:"current-user-principal"`
 	AddressBookHomeSet    davHrefProp `xml:"addressbook-home-set"`
 	CalendarHomeSet       davHrefProp `xml:"calendar-home-set"`

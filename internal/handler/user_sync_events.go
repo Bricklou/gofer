@@ -24,6 +24,7 @@ func (h *Handler) handleUserSSE(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	defer releaseActive()
+	go h.wakeUserCalendarOnline(ctx, owner)
 	// Events here name their owner; AnyAccount also passes those naming only
 	// an account, whose ownership writeEvent checks.
 	events := h.userIMAP.Events().SubscribeFor(mail.SubscribeOptions{UserID: owner, AnyAccount: true})

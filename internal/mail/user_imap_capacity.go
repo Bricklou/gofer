@@ -22,7 +22,10 @@ const (
 	// message, across all users. It is separate from background syncs so
 	// that a busy sync backlog never delays it.
 	interactiveSlots = 32
-	syncQueueSize    = 1024
+	// calendarServiceSlots bounds calendar provider calls at once: up to 16
+	// from background work, with room left for what people do themselves.
+	calendarServiceSlots = 24
+	syncQueueSize        = 1024
 	// syncLateAfter is how long a due sync may wait for a worker before
 	// Gofer warns that background capacity is short.
 	syncLateAfter = 2 * time.Minute

@@ -72,6 +72,36 @@ func TestAccountServiceNudgeIsDueButNotForced(t *testing.T) {
 	if err := r.NudgeServiceAccount(t.Context(), "bob", account.AccountID, ScheduledCalendar, now); !errors.Is(err, ErrAccountRoute) {
 		t.Fatal("another owner's account nudged", err)
 	}
+	// Opening Gofer nudges all the owner's accounts, and only theirs.
+	second := createRoutingTestAccount(t, r, "alice")
+	other := createRoutingTestAccount(t, r, "bob")
+	for _, id := range []string{account.AccountID, second.AccountID, other.AccountID} {
+		owner := "alice"
+		if id == other.AccountID {
+			owner = "bob"
+		}
+		revision, reserved, _, err := r.ReserveServiceAccountWithWake(t.Context(), owner, id, ScheduledCalendar, now, now.Add(time.Minute), true)
+		if err != nil || !reserved {
+			t.Fatal(reserved, err)
+		}
+		if ok, err := r.CompleteServiceAccount(t.Context(), owner, id, ScheduledCalendar, revision, now.Add(time.Hour)); err != nil || !ok {
+			t.Fatal(ok, err)
+		}
+	}
+	if err := r.NudgeServiceAccount(t.Context(), "alice", "", ScheduledCalendar, now); err != nil {
+		t.Fatal(err)
+	}
+	due, err := r.ListDueServiceAccounts(t.Context(), ScheduledCalendar, "", now.Add(time.Second), 10, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	found := map[string]bool{}
+	for _, entry := range due {
+		found[entry.AccountID] = true
+	}
+	if len(due) != 2 || !found[account.AccountID] || !found[second.AccountID] {
+		t.Fatal("owner's accounts not all due", due)
+	}
 }
 
 func TestAccountServiceScheduleActivationHintFailureRecoversLocalAccount(t *testing.T) {

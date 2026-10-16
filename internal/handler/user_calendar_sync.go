@@ -75,33 +75,43 @@ func (p *userCalendarRequest) fetchEvents(ctx context.Context, query calendar.Ev
 		}
 		return listOutlookCalendarEventsWithFetch(ctx, source.RemoteID, query, func(endpoint string, out any) error { return p.getJSON(ctx, endpoint, out) })
 	case storage.CalendarSourceProviderCalDAV:
-		service := p.service()
-		base, username, useAccount := service.CalDAVSettings()
-		base, err := normalizeCalDAVBaseURL(base)
+		username, password, err := p.calDAVCredentials(source)
 		if err != nil {
 			return calendar.EventPage{}, err
-		}
-		if _, err := resolveCalDAVHref(base, source.RemoteID); err != nil {
-			return calendar.EventPage{}, err
-		}
-		if useAccount {
-			username = strings.TrimSpace(service.Identity().Username)
-			if username == "" {
-				username = service.Identity().EmailAddress
-			}
-		}
-		password, err := service.CalDAVPassword("", useAccount)
-		if err != nil {
-			return calendar.EventPage{}, err
-		}
-		if strings.TrimSpace(username) == "" || password == "" {
-			return calendar.EventPage{}, errors.New("complete Calendar authentication in account setup")
 		}
 		ctx = context.WithValue(ctx, calendarDiscoveryDAVGuardKey{}, calendarDiscoveryDAVCallbacks{ready: p.ready, failure: p.recordRetry})
 		return listCalDAVCalendarEvents(ctx, source, username, password, query)
 	default:
 		return calendar.EventPage{}, errors.New("calendar provider is not supported")
 	}
+}
+
+// calDAVCredentials are the CalDAV sign-in of the request's calendar, which
+// must be on the account's CalDAV server.
+func (p *userCalendarRequest) calDAVCredentials(source storage.CalendarSource) (username, password string, err error) {
+	service := p.service()
+	base, username, useAccount := service.CalDAVSettings()
+	base, err = normalizeCalDAVBaseURL(base)
+	if err != nil {
+		return "", "", err
+	}
+	if _, err := resolveCalDAVHref(base, source.RemoteID); err != nil {
+		return "", "", err
+	}
+	if useAccount {
+		username = strings.TrimSpace(service.Identity().Username)
+		if username == "" {
+			username = service.Identity().EmailAddress
+		}
+	}
+	password, err = service.CalDAVPassword("", useAccount)
+	if err != nil {
+		return "", "", err
+	}
+	if strings.TrimSpace(username) == "" || password == "" {
+		return "", "", errors.New("complete Calendar authentication in account setup")
+	}
+	return username, password, nil
 }
 
 func (h *Handler) performUserCalendarSourceSync(parent context.Context, source storage.CalendarSource, start, end time.Time, scheduled, forced bool) (count int, err error) {
@@ -147,6 +157,12 @@ func (h *Handler) performUserCalendarSourceSync(parent context.Context, source s
 		h.publishUserCalendarSync(operation, source, false)
 		request := &userCalendarRequest{h: h, claim: claim}
 		fetchCtx, cancel := context.WithTimeout(operation, calendarSourceTimeout)
+		// What the calendar was like as the download began, for the quick
+		// checks that follow; a change during the download is seen by them.
+		began, tag := time.Now(), ""
+		if source.Provider == storage.CalendarSourceProviderCalDAV {
+			tag, _ = request.calDAVChangeTag(fetchCtx, claim.Source())
+		}
 		page, fetchErr := request.fetchEvents(fetchCtx, calendar.EventQuery{WindowStart: start, WindowEnd: end, IncludeDeleted: true})
 		if fetchErr == nil {
 			fetchErr = fetchCtx.Err()
@@ -181,6 +197,7 @@ func (h *Handler) performUserCalendarSourceSync(parent context.Context, source s
 			fetchErr = h.userAccounts.PublishCalendarSync(operation, claim, events, next, guards...)
 			if fetchErr == nil {
 				count = publishedCount
+				h.calendarChanges.downloaded(source, tag, began)
 			}
 		}
 		if fetchErr != nil {

@@ -59,6 +59,12 @@ func (a *ownedCalendarSeriesUpdateAPI) serve(base http.Handler) http.Handler {
 			}
 			collection = "/users/" + owner + "/calendars/primary/"
 			id = "event.ics"
+			if r.Method == "PROPFIND" && r.URL.Path == collection {
+				// The calendar's change tag, read before each download.
+				w.WriteHeader(207)
+				_, _ = io.WriteString(w, `<d:multistatus xmlns:d="DAV:" xmlns:cs="http://calendarserver.org/ns/"><d:response><d:href>`+collection+`</d:href><d:propstat><d:prop><cs:getctag>1</cs:getctag></d:prop><d:status>HTTP/1.1 200 OK</d:status></d:propstat></d:response></d:multistatus>`)
+				return
+			}
 		}
 		if owner != "alice" && owner != "bob" {
 			a.t.Error("unknown series owner", owner)

@@ -12,7 +12,12 @@ import (
 	"github.com/cristianadrielbraun/gofer/internal/storage"
 )
 
-type UserCalendarSyncOptions struct{ ScanInterval, RecoveryInterval time.Duration }
+// UserCalendarSyncOptions: background calendar work runs on MinWorkers
+// workers, and on more, up to MaxWorkers, while accounts wait their turn.
+type UserCalendarSyncOptions struct {
+	ScanInterval, RecoveryInterval time.Duration
+	MinWorkers, MaxWorkers         int
+}
 type userCalendarJob struct{ owner, account string }
 type userCalendarWorkers struct {
 	h       *Handler
@@ -23,7 +28,13 @@ type userCalendarWorkers struct {
 	pending map[userCalendarJob]bool
 	rescan  bool
 	done    chan struct{}
+	// workers counts running workers, idle those waiting for a job.
+	workers, idle int
 }
+
+// calendarWorkerIdle is how long a worker added for a backlog waits for
+// another job before it stops.
+const calendarWorkerIdle = 30 * time.Second
 
 // Central due hints discover bounded account pages. Only the two workers open
 // local stores; no local lease survives a provider call or a dispatch wait.
@@ -40,6 +51,13 @@ func (h *Handler) StartUserCalendarSync(ctx context.Context, options UserCalenda
 	if options.RecoveryInterval == 0 {
 		options.RecoveryInterval = 5 * time.Minute
 	}
+	if options.MinWorkers <= 0 {
+		options.MinWorkers = 2
+	}
+	if options.MaxWorkers <= 0 {
+		options.MaxWorkers = 16
+	}
+	options.MaxWorkers = max(options.MaxWorkers, options.MinWorkers)
 	if err := ctx.Err(); err != nil {
 		return err
 	}
@@ -57,8 +75,8 @@ func (h *Handler) StartUserCalendarSync(ctx context.Context, options UserCalenda
 	}
 	h.userCalendarWorkers = w
 	go h.runUserCalendarReminders(ctx)
-	if h.syncer != nil {
-		go h.wakeUserCalendarOnNewMail(ctx, h.syncer.Events())
+	if h.userIMAP.Events() != nil {
+		go h.wakeUserCalendarOnNewMail(ctx, h.userIMAP.Events())
 	}
 	return nil
 }
@@ -98,6 +116,24 @@ func (h *Handler) wakeUserCalendarOnNewMail(ctx context.Context, events *mail.Ev
 			}
 		}
 	}
+}
+
+// wakeUserCalendarOnline checks an owner's calendars as they open Gofer,
+// rather than at their next turn. The checks themselves keep their pace.
+func (h *Handler) wakeUserCalendarOnline(ctx context.Context, owner string) {
+	h.calendarSyncMu.Lock()
+	running := h.userCalendarWorkers != nil
+	h.calendarSyncMu.Unlock()
+	if !running {
+		return
+	}
+	ctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
+	defer cancel()
+	if err := h.userStorage.NudgeServiceAccount(ctx, owner, "", storage.ScheduledCalendar, time.Now()); err != nil {
+		log.Printf("owned calendar: wake for an owner who opened Gofer: %v", err)
+		return
+	}
+	h.signalUserCalendar()
 }
 
 // calendarInvitationFolderRole reports whether invitations are read from
@@ -172,26 +208,73 @@ func (w *userCalendarWorkers) enqueue(job userCalendarJob) bool {
 		return false
 	}
 }
+
+// work runs jobs until ctx ends; a worker added for a backlog also stops
+// once it has waited calendarWorkerIdle for one. The caller counted it as
+// running and idle.
+func (w *userCalendarWorkers) work(ctx context.Context, extra bool) {
+	var idle <-chan time.Time
+	for {
+		if extra {
+			idle = time.After(calendarWorkerIdle)
+		}
+		select {
+		case <-ctx.Done():
+			w.mu.Lock()
+			w.workers--
+			w.idle--
+			w.mu.Unlock()
+			return
+		case <-idle:
+			w.mu.Lock()
+			w.workers--
+			w.idle--
+			w.mu.Unlock()
+			return
+		case job := <-w.queue:
+			w.mu.Lock()
+			w.idle--
+			w.mu.Unlock()
+			w.process(ctx, job)
+			w.mu.Lock()
+			delete(w.pending, job)
+			w.idle++
+			w.mu.Unlock()
+			w.signal(false)
+		}
+	}
+}
+
+// grow adds workers while more accounts wait than workers are free.
+func (w *userCalendarWorkers) grow(start func(extra bool)) {
+	w.mu.Lock()
+	added := 0
+	for len(w.queue) > w.idle && w.workers < w.options.MaxWorkers {
+		w.workers++
+		w.idle++
+		added++
+	}
+	w.mu.Unlock()
+	for range added {
+		start(true)
+	}
+}
+
 func (w *userCalendarWorkers) run(ctx context.Context) {
 	defer close(w.done)
 	var workers sync.WaitGroup
-	for range 2 {
+	start := func(extra bool) {
 		workers.Add(1)
 		go func() {
 			defer workers.Done()
-			for {
-				select {
-				case <-ctx.Done():
-					return
-				case job := <-w.queue:
-					w.process(ctx, job)
-					w.mu.Lock()
-					delete(w.pending, job)
-					w.mu.Unlock()
-					w.signal(false)
-				}
-			}
+			w.work(ctx, extra)
 		}()
+	}
+	w.mu.Lock()
+	w.workers, w.idle = w.options.MinWorkers, w.options.MinWorkers
+	w.mu.Unlock()
+	for range w.options.MinWorkers {
+		start(false)
 	}
 	defer workers.Wait()
 	ticker := time.NewTicker(w.options.ScanInterval)
@@ -228,6 +311,7 @@ func (w *userCalendarWorkers) run(ctx context.Context) {
 					progress = true
 				}
 				if progress {
+					w.grow(start)
 					w.signal(false)
 				}
 			}
@@ -294,6 +378,15 @@ func (w *userCalendarWorkers) process(parent context.Context, job userCalendarJo
 		w.report(ctx, "read background window", err)
 		return
 	}
+	online := w.h.userIMAP.OwnerOnline(job.owner)
+	var checkErr error
+	if online && !forced {
+		checkErr = w.h.checkUserCalendarChanges(ctx, job.owner, job.account, start, end)
+		w.report(ctx, "check for changes", checkErr)
+		if ctx.Err() != nil {
+			return
+		}
+	}
 	_, syncErr := w.h.syncUserCalendarWindow(ctx, job.owner, start, end, job.account, true, forced)
 	if !errors.Is(syncErr, errCalendarAccountNotConfigured) {
 		w.report(ctx, "refresh account", syncErr)
@@ -302,6 +395,9 @@ func (w *userCalendarWorkers) process(parent context.Context, job userCalendarJo
 		return
 	}
 	next := time.Now().Add(w.options.RecoveryInterval)
+	if online && !errors.Is(syncErr, errCalendarAccountNotConfigured) {
+		next = time.Now().Add(calendarQuickCheckInterval)
+	}
 	err = w.h.userAccounts.WithAccountForUser(ctx, job.owner, job.account, func(_ *config.AccountStore, db *storage.DB) error {
 		sources, err := db.ListSelectedCalendarSources(ctx, job.owner)
 		if err != nil {
@@ -365,6 +461,11 @@ func (w *userCalendarWorkers) process(parent context.Context, job userCalendarJo
 		}
 	}
 	if errors.As(incomingErr, &hint) {
+		if at, ok := hint.RetryAfter(); ok && at.After(next) {
+			next = at
+		}
+	}
+	if errors.As(checkErr, &hint) {
 		if at, ok := hint.RetryAfter(); ok && at.After(next) {
 			next = at
 		}

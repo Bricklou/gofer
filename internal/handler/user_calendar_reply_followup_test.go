@@ -35,6 +35,12 @@ func (a *ownedReplyFollowupAPI) ServeHTTP(w http.ResponseWriter, r *http.Request
 		w.WriteHeader(204)
 		return
 	}
+	if r.Method == "PROPFIND" && r.URL.Path == "/alice/primary/" {
+		// The calendar's change tag, read before each download.
+		w.WriteHeader(207)
+		_, _ = fmt.Fprint(w, `<d:multistatus xmlns:d="DAV:" xmlns:cs="http://calendarserver.org/ns/"><d:response><d:href>/alice/primary/</d:href><d:propstat><d:prop><cs:getctag>1</cs:getctag></d:prop><d:status>HTTP/1.1 200 OK</d:status></d:propstat></d:response></d:multistatus>`)
+		return
+	}
 	if r.Method == "REPORT" && r.URL.Path == "/alice/primary/" {
 		a.mu.Lock()
 		body, etag := a.body, a.etag

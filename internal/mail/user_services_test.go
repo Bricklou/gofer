@@ -145,6 +145,8 @@ func TestUserAccountServiceBoundsContactsWithoutBlockingCalendarOrMail(t *testin
 	if err != nil {
 		t.Fatal(err)
 	}
+	// Two slots, so three jobs show the bound.
+	f.worker.calendarSlots = make(chan struct{}, 2)
 	release := make(chan struct{})
 	var active, peak atomic.Int32
 	started := make(chan struct{}, 3)

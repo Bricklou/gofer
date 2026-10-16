@@ -109,6 +109,7 @@ type Handler struct {
 	calendarSyncRunning        map[string]*calendarSyncRun
 	calendarUserSyncRunning    map[string]*calendarSyncRun
 	userCalendarWorkers        *userCalendarWorkers
+	calendarChanges            calendarChangeMarks
 	calendarFetchEvents        func(context.Context, storage.CalendarSource, calendar.EventQuery) (calendar.EventPage, error)
 	calendarIncomingLookupTXT  func(context.Context, string) ([]string, error)
 	calendarCreateEvent        func(context.Context, storage.CalendarSource, calendar.EventDraft) (calendar.RemoteEvent, error)
