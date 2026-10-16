@@ -257,6 +257,16 @@ function handleCalendarSourceSaveResult(event) {
   _calendarSourceStatus(form, message || "Could not save calendar source selection.", true)
 }
 
+// Sets every contact conflict in a profile import to the same choice. A
+// contact that cannot take that choice keeps its own.
+function setProfileConflictChoices(button, value) {
+  var list = button && button.closest && button.closest("[data-profile-contact-conflicts]")
+  if (!list) return
+  list.querySelectorAll('[data-profile-conflict-choice="' + value + '"]').forEach(function (input) {
+    if (!input.disabled) input.checked = true
+  })
+}
+
 function toggleUnencryptedTransportWarning(input) {
   if (!input || !input.closest) return
   var field = input.closest(".select-container")
@@ -968,6 +978,7 @@ var settingsTabs = [
   "compose-display",
   "security",
   "advanced",
+  "export-import",
 ]
 
 function normalizeSettingsTab(tab) {

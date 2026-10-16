@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log"
 	"net/http"
 	"strconv"
 	"strings"
@@ -14,6 +15,7 @@ import (
 	"github.com/cristianadrielbraun/gofer/internal/mail"
 	"github.com/cristianadrielbraun/gofer/internal/models"
 	"github.com/cristianadrielbraun/gofer/internal/providers"
+	"github.com/cristianadrielbraun/gofer/internal/storage"
 )
 
 func contactTestConfig(r *http.Request, owner, id string) models.ContactSyncConfig {
@@ -93,6 +95,13 @@ func (h *Handler) handleUserSaveAccountContactSync(w http.ResponseWriter, r *htt
 	if inputMessage != "" {
 		htmlStatus(w, http.StatusBadRequest, inputMessage)
 		return
+	}
+	if cfg.Enabled && (r.FormValue("password") != "" || r.FormValue("use_account_credentials") == "1") {
+		if remaining, waiting, err := h.resolveImportedLogin(r.Context(), owner, id, storage.ImportedLoginContacts); err != nil {
+			log.Printf("routed account %s: turn on imported contacts: %v", id, err)
+		} else if waiting {
+			markImportedLoginResolved(w, storage.ImportedLoginContacts, remaining)
+		}
 	}
 	if err := h.WakeUserContactAccount(r.Context(), owner, id); err != nil {
 		htmlStatus(w, http.StatusServiceUnavailable, "Contact settings saved; worker refresh failed, retry saving.")

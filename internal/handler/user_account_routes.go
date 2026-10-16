@@ -198,6 +198,9 @@ func (h *Handler) handleUserUpdateAccount(w http.ResponseWriter, r *http.Request
 		userAccountError(w, r, err)
 		return
 	}
+	if err := h.resolveImportedMailLogin(w, r.Context(), owner, id, &req); err != nil {
+		log.Printf("routed account %s: turn on imported services: %v", id, err)
+	}
 	w.Header().Set("X-Gofer-Account-ID", id)
 	if err := h.userStorage.WithAccountActivityForUser(r.Context(), owner, id, func() error {
 		return h.userAccountHooks.Updated(r.Context(), id)

@@ -105,6 +105,7 @@
     "selectMoveFolder",
     "sendCompose",
     "setActiveComposeEditor",
+    "setProfileConflictChoices",
     "showComposeSignaturePicker",
     "syncAddContactStepAfterSwap",
     "syncCalendarDescription",

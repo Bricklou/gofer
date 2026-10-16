@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"github.com/cristianadrielbraun/gofer/internal/models"
 	"github.com/cristianadrielbraun/gofer/internal/providers"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -43,6 +44,8 @@ templ SettingsPage(accounts []models.Account, syncSettings models.SyncSettings, 
 					@SettingsComposeDisplayTab(uiSettings, signatureData)
 				} else if activeTab == "advanced" {
 					@SettingsAdvancedTab(uiSettings)
+				} else if activeTab == "export-import" {
+					@SettingsExportImportTab()
 				}
 			</div>
 		</div>
@@ -71,6 +74,8 @@ func settingsSectionHeading(section string) (string, string) {
 			return "Security", "Choose which mail servers Gofer may connect to. Sign-in settings appear only when Gofer runs with sign-in."
 		case "advanced":
 			return "Advanced", "Configure prefetching, notifications, and email link handling."
+		case "export-import":
+			return "Export and import", "Move your Gofer profile to another installation."
 		default:
 			return "Settings", "Manage your accounts and preferences."
 	}
@@ -1360,6 +1365,12 @@ templ SettingsAccountCard(account models.Account) {
 							@SettingsAccountSyncErrorPopover(account, syncError, syncErrorAt)
 						</div>
 						<p class="mt-0.5 truncate text-xs text-muted-foreground">{ account.Email }</p>
+						if account.ReconnectPending && !account.IsDeleting {
+							<p class="mt-1.5 flex items-start gap-1.5 text-xs text-amber-700 dark:text-amber-400" data-account-reconnect-pending>
+								@icon.KeyRound(icon.Props{Class: "mt-0.5 size-3.5 shrink-0"})
+								<span>{ accountReconnectPendingMessage(account) }</span>
+							</p>
+						}
 					</div>
 				</div>
 				<div class="flex shrink-0 items-center justify-end gap-2" data-account-actions>
@@ -1369,6 +1380,9 @@ templ SettingsAccountCard(account models.Account) {
 							Deleting
 						</button>
 					} else {
+						if account.ReconnectPending {
+							@AccountReconnectButton(account)
+						}
 						<button
 							type="button"
 							data-account-primary-action="edit"
@@ -1492,6 +1506,38 @@ templ SettingsAccountCard(account models.Account) {
 			}
 		}
 	</div>
+}
+
+const accountReconnectButtonClass = "inline-flex h-[30px] items-center gap-1.5 rounded-md bg-primary px-2.5 text-xs font-medium text-primary-foreground transition-colors hover:bg-primary/90"
+
+// AccountReconnectButton finishes setting up an account imported without its
+// credentials: Gmail and Outlook sign in again, other accounts open Edit to
+// take the password.
+templ AccountReconnectButton(account models.Account) {
+	if slices.Contains(account.ReconnectNeeds, reconnectSignIn) {
+		<form method="POST" action="/api/accounts/oauth2/authorize" class="contents">
+			<input type="hidden" name="flow_action" value="reconnect"/>
+			<input type="hidden" name="provider" value={ account.Provider }/>
+			<input type="hidden" name="email_address" value={ account.Email }/>
+			<input type="hidden" name="display_name" value={ account.Name }/>
+			<button type="submit" data-account-primary-action="reconnect" class={ accountReconnectButtonClass }>
+				@icon.RefreshCw(icon.Props{Class: "size-3.5"})
+				Reconnect
+			</button>
+		</form>
+	} else {
+		<button
+			type="button"
+			data-account-primary-action="reconnect"
+			class={ accountReconnectButtonClass }
+			hx-get={ fmt.Sprintf("/api/accounts/%s/edit", account.ID) }
+			hx-target="#edit-account-container"
+			hx-swap="innerHTML"
+		>
+			@icon.KeyRound(icon.Props{Class: "size-3.5"})
+			{ accountReconnectButtonLabel(account) }
+		</button>
+	}
 }
 
 templ SettingsAccountSyncErrorPopover(account models.Account, syncError string, syncErrorAt string) {
@@ -1776,6 +1822,20 @@ func editAccountSkipsSending(data models.EditAccountData) bool {
 
 // editAccountIsICloud reports whether the account being edited is on iCloud
 // Mail. Its forms leave out server settings, which are always Apple's.
+func editAccountSMTPPasswordPlaceholder(data models.EditAccountData) string {
+	if data.ReconnectSMTP {
+		return "Enter the password"
+	}
+	return "Leave blank to keep current"
+}
+
+func editAccountPasswordPlaceholder(data models.EditAccountData) string {
+	if editAccountNeeds(data, reconnectMail) {
+		return "Enter the password"
+	}
+	return "Leave blank to keep current"
+}
+
 func editAccountIsICloud(data models.EditAccountData) bool {
 	return providers.IsICloudAccount(data.Provider, data.AuthMethod, data.IMAPHost)
 }
@@ -2693,15 +2753,16 @@ templ AccountWizardEditSidebar(data models.EditAccountData) {
 			<div class="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Settings sections</div>
 			<p class="mt-0.5 text-[11px] leading-snug text-muted-foreground/80">Enable/disable the services you need</p>
 		</div>
+		{{ emailEnabled := data.EmailSyncEnabled || data.ReconnectPending }}
 		if accountEditUsesProviderAPI(data.Provider) {
-			@AccountWizardProviderAPIEmailSection("editWizardGo", data.AccountID, data.Provider, data.EmailSyncEnabled, true)
+			@AccountWizardProviderAPIEmailSection("editWizardGo", data.AccountID, data.Provider, emailEnabled, true)
 		} else if editAccountIsICloud(data) {
-			@AccountWizardICloudEmailSection("editWizardGo", data.AccountID, data.EmailSyncEnabled, false, true, "Test and save")
+			@AccountWizardICloudEmailSection("editWizardGo", data.AccountID, emailEnabled, false, true, "Test and save")
 		} else {
-			@AccountWizardEmailSection("editWizardGo", data.AccountID, data.EmailSyncEnabled, false, true, "Test and save")
+			@AccountWizardEmailSection("editWizardGo", data.AccountID, emailEnabled, false, true, "Test and save")
 		}
-		@AccountWizardTopStep("editWizardGo", 4, "2", "Contacts", "Sync contacts", false, true, data.AccountID, "contacts", data.ContactSync.Enabled, false, nil)
-		@AccountWizardTopStep("editWizardGo", 5, "3", "Calendar", "Sync calendars", false, true, data.AccountID, "calendar", data.CalendarSync.Enabled, false, nil)
+		@AccountWizardTopStep("editWizardGo", 4, "2", "Contacts", "Sync contacts", false, true, data.AccountID, "contacts", data.ContactSync.Enabled || data.ReconnectContacts, false, nil)
+		@AccountWizardTopStep("editWizardGo", 5, "3", "Calendar", "Sync calendars", false, true, data.AccountID, "calendar", data.CalendarSync.Enabled || data.ReconnectCalendar, false, nil)
 	</aside>
 }
 
@@ -2801,6 +2862,7 @@ templ AccountWizardSubStep(goFn string, step int, index string, title string, de
 	<button type="button" data-on-click={ onAction(goFn, step) } data-account-wizard-action={ goFn } data-account-wizard-target-step={ strconv.Itoa(step) } class="account-wizard-step" data-account-wizard-step={ strconv.Itoa(step) } data-active={ strconv.FormatBool(active) } disabled?={ disabled }>
 		<span class="account-wizard-index">{ index }</span>
 		<span class="min-w-0"><span class="block text-xs font-semibold">{ title }</span><span class="block text-[11px] text-muted-foreground">{ description }</span></span>
+		@reconnectMarkBadge(reconnectMark(ctx, step))
 	</button>
 }
 
@@ -2811,12 +2873,21 @@ templ AccountWizardTopStep(goFn string, step int, index string, title string, de
 			<button type="button" data-on-click={ onAction(goFn, step) } data-account-wizard-action={ goFn } data-account-wizard-target-step={ strconv.Itoa(step) } class="account-wizard-section-title" data-account-wizard-step={ strconv.Itoa(step) } data-active="false" disabled?={ navigationDisabled }>
 				<span class="account-wizard-index">{ index }</span>
 				<span class="min-w-0"><span class="block text-sm font-semibold">{ title }</span><span class="block text-xs text-muted-foreground">{ description }</span></span>
+				@reconnectMarkBadge(reconnectMark(ctx, step))
 			</button>
 			if service != "" {
 				@AccountWizardSectionSwitch(goFn, accountID, service, enabled, switchDisabled, accountID != "" && service != "contacts" && service != "calendar", false, attrs)
 			}
 		</div>
 	</div>
+}
+
+// reconnectMarkBadge marks a step where an imported account still needs a
+// password.
+templ reconnectMarkBadge(login string) {
+	if login != "" {
+		<span class="ml-auto inline-flex size-4 shrink-0 items-center justify-center rounded-full bg-amber-500 text-[11px] font-bold leading-none text-white" data-reconnect-mark={ login } title="Password needed" aria-label="Password needed">!</span>
+	}
 }
 
 templ AccountWizardSectionSwitch(goFn string, accountID string, service string, enabled bool, disabled bool, persist bool, oob bool, attrs templ.Attributes) {
@@ -2963,7 +3034,7 @@ templ ICloudSignInPanel(username string, passwordPlaceholder string, passwordReq
 				Type:        input.TypePassword,
 				Placeholder: passwordPlaceholder,
 				Required:    passwordRequired,
-				Attributes:  templ.Attributes{"autocomplete": "new-password"},
+				Attributes:  mergeTemplAttrs(templ.Attributes{"autocomplete": "new-password"}, reconnectRequiredAttrs(reconnectMail, passwordRequired)),
 			})
 		</div>
 	</div>
@@ -3035,11 +3106,21 @@ templ EditAccountDialog(data models.EditAccountData) {
 					Update mail settings and optional contacts and calendar services.
 				}
 			}
+			if data.ReconnectPending {
+				<p class="flex items-start gap-2 rounded-lg border border-amber-300/50 bg-amber-100/50 px-3 py-2 text-xs text-amber-800 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-300" data-edit-account-reconnect-pending>
+					@icon.KeyRound(icon.Props{Class: "mt-0.5 size-3.5 shrink-0"})
+					if editAccountNeeds(data, reconnectSignIn) {
+						<span>This account was imported from a profile. Use Reconnect on the account to sign in again; its services start syncing once you do.</span>
+					} else {
+						<span data-reconnect-note>{ editAccountReconnectNote(data) }</span>
+					}
+				</p>
+			}
 			<div class="account-wizard-shell grid gap-4 pt-2 md:grid-cols-[14.5rem_minmax(0,1fr)]">
 		if editAccountSkipsSending(data) {
 			<div data-wizard-skip-sending hidden></div>
 		}
-		@AccountWizardEditSidebar(data)
+		@withReconnectMarks(data, AccountWizardEditSidebar(data))
 				<div id="edit-wizard-viewport" class="account-wizard-viewport">
 					<div id="edit-wizard-track" class="flex items-start transition-transform duration-300 ease-in-out" style="width: 600%">
 						<form id="edit-account-form" hx-post={ fmt.Sprintf("/api/accounts/%s/edit", data.AccountID) } hx-target="#edit-account-save-status" hx-swap="innerHTML" data-on-htmx-before-request='["handleEditAccountSaveStart","$event"]' data-on-htmx-after-request='["handleEditAccountSaveResult","$event"]' class="contents">
@@ -3088,7 +3169,7 @@ templ EditAccountDialog(data models.EditAccountData) {
 							if accountEditUsesProviderAPI(data.Provider) {
 								@ProviderAPIMailPanel(data.Provider)
 							} else if editAccountIsICloud(data) {
-								@ICloudSignInPanel(data.Username, "Leave blank to keep current", false)
+								@ICloudSignInPanel(data.Username, editAccountPasswordPlaceholder(data), editAccountNeeds(data, reconnectMail))
 							} else {
 								<h4 class="account-wizard-sticky-header text-sm font-semibold text-foreground flex items-center gap-2">
 									@icon.Inbox(icon.Props{Class: "size-4 text-muted-foreground"})
@@ -3149,7 +3230,9 @@ templ EditAccountDialog(data models.EditAccountData) {
 										@input.Input(input.Props{
 											Name:        "password",
 											Type:        input.TypePassword,
-											Placeholder: "Leave blank to keep current",
+											Placeholder: editAccountPasswordPlaceholder(data),
+											Required:    editAccountNeeds(data, reconnectMail),
+											Attributes:  reconnectRequiredAttrs(reconnectMail, editAccountNeeds(data, reconnectMail)),
 										})
 									</div>
 									<div class="col-span-2">
@@ -3249,8 +3332,10 @@ templ EditAccountDialog(data models.EditAccountData) {
 										@input.Input(input.Props{
 											Name:        "smtp_password",
 											Type:        input.TypePassword,
-											Placeholder: "Leave blank to keep current",
+											Placeholder: editAccountSMTPPasswordPlaceholder(data),
 											Disabled:    data.SameSmtpAuth,
+											Required:    data.ReconnectSMTP,
+											Attributes:  reconnectRequiredAttrs(reconnectMail, data.ReconnectSMTP),
 										})
 									</div>
 								</div>
@@ -3371,12 +3456,12 @@ templ EditAccountWizardFooter(data models.EditAccountData) {
 				Back
 			</button>
 			<div class="ml-auto flex flex-wrap justify-end gap-2">
-				<button type="submit" form="edit-account-form" data-account-test-action data-account-test-anyway class="inline-flex items-center gap-1.5 text-sm font-medium px-3 py-2 rounded-lg border border-border text-foreground hover:bg-accent transition-colors disabled:pointer-events-none disabled:opacity-50">Skip test and save</button>
-				<button type="button" data-on-click='["editAccountTest.run",true]' data-account-test-action data-account-test-retest hidden class="inline-flex items-center gap-1.5 text-sm font-medium px-4 py-2 rounded-lg bg-primary text-primary-foreground hover:bg-primary/90 transition-colors disabled:pointer-events-none disabled:opacity-50">
+				<button type="submit" form="edit-account-form" data-account-test-action data-account-test-anyway { reconnectGateAttrs("edit-account-form", "", editAccountNeeds(data, reconnectMail))... } class="inline-flex items-center gap-1.5 text-sm font-medium px-3 py-2 rounded-lg border border-border text-foreground hover:bg-accent transition-colors disabled:pointer-events-none disabled:opacity-50">Skip test and save</button>
+				<button type="button" data-on-click='["editAccountTest.run",true]' data-account-test-action data-account-test-retest hidden { reconnectGateAttrs("edit-account-form", "", editAccountNeeds(data, reconnectMail))... } class="inline-flex items-center gap-1.5 text-sm font-medium px-4 py-2 rounded-lg bg-primary text-primary-foreground hover:bg-primary/90 transition-colors disabled:pointer-events-none disabled:opacity-50">
 					@icon.RefreshCw(icon.Props{Class: "size-4"})
 					Test again
 				</button>
-				<button type="button" data-on-click='["editAccountSaveOrContinue"]' data-account-test-action data-account-test-save hidden class="inline-flex items-center gap-1.5 text-sm font-medium px-4 py-2 rounded-lg bg-primary text-primary-foreground hover:bg-primary/90 transition-colors disabled:pointer-events-none disabled:opacity-50">
+				<button type="button" data-on-click='["editAccountSaveOrContinue"]' data-account-test-action data-account-test-save hidden { reconnectGateAttrs("edit-account-form", "", editAccountNeeds(data, reconnectMail))... } class="inline-flex items-center gap-1.5 text-sm font-medium px-4 py-2 rounded-lg bg-primary text-primary-foreground hover:bg-primary/90 transition-colors disabled:pointer-events-none disabled:opacity-50">
 					<span data-edit-account-save-label>Save changes</span>
 					@icon.ChevronRight(icon.Props{Class: "size-4"})
 				</button>
@@ -3392,7 +3477,7 @@ templ EditAccountWizardFooter(data models.EditAccountData) {
 				@icon.ArrowLeft(icon.Props{Class: "size-4"})
 				Back
 			</button>
-			<button type="button" data-on-click='["wizardServiceNext","$this","contacts",5]' class="inline-flex items-center gap-1.5 rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90">
+			<button type="button" data-on-click='["wizardServiceNext","$this","contacts",5]' { reconnectGateAttrs(fmt.Sprintf("account-contact-sync-form-%s", data.AccountID), "contacts", editAccountNeeds(data, reconnectContacts))... } class="inline-flex items-center gap-1.5 rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90">
 				Next
 				@icon.ChevronRight(icon.Props{Class: "size-4"})
 			</button>
@@ -3487,7 +3572,7 @@ templ ContactSyncSettings(data models.EditAccountData) {
 						</div>
 						<div>
 							<label class="text-xs font-medium text-muted-foreground mb-1.5 block">Password or app password</label>
-							@input.Input(input.Props{Name: "password", Type: input.TypePassword, Placeholder: contactSyncPasswordPlaceholder(data.ContactSync), Disabled: sameCardDAVAuth})
+							@input.Input(input.Props{Name: "password", Type: input.TypePassword, Placeholder: contactSyncPasswordPlaceholder(data.ContactSync), Disabled: sameCardDAVAuth, Attributes: reconnectRequiredAttrs(reconnectContacts, editAccountNeeds(data, reconnectContacts))})
 						</div>
 					</div>
 					}
@@ -3637,7 +3722,7 @@ templ CalendarSyncSettingsPanel(data models.EditAccountData, message string, isE
 				</button>
 			</form>
 		} else if data.Provider == "imap" {
-			<form method="POST" action={ fmt.Sprintf("/api/accounts/%s/calendar/discover", data.AccountID) } data-calendar-discovery-form hx-post={ fmt.Sprintf("/api/accounts/%s/calendar/discover", data.AccountID) } hx-target={ fmt.Sprintf("#account-calendar-sync-panel-%s", data.AccountID) } hx-swap="outerHTML" data-on-htmx-before-request='["handleCalendarDiscoveryStart","$event"]' data-on-htmx-after-request='["handleCalendarDiscoveryResult","$event"]' class="space-y-3">
+			<form id={ fmt.Sprintf("account-calendar-discovery-form-%s", data.AccountID) } method="POST" action={ fmt.Sprintf("/api/accounts/%s/calendar/discover", data.AccountID) } data-calendar-discovery-form hx-post={ fmt.Sprintf("/api/accounts/%s/calendar/discover", data.AccountID) } hx-target={ fmt.Sprintf("#account-calendar-sync-panel-%s", data.AccountID) } hx-swap="outerHTML" data-on-htmx-before-request='["handleCalendarDiscoveryStart","$event"]' data-on-htmx-after-request='["handleCalendarDiscoveryResult","$event"]' class="space-y-3">
 				<div class="grid gap-3 sm:grid-cols-2">
 					<div class="sm:col-span-2">
 						<div class="mb-1.5 flex flex-col gap-1.5 sm:flex-row sm:items-center sm:justify-between">
@@ -3666,12 +3751,12 @@ templ CalendarSyncSettingsPanel(data models.EditAccountData, message string, isE
 						</div>
 						<div>
 							<label class="mb-1.5 block text-xs font-medium text-muted-foreground">Password or app password</label>
-							@input.Input(input.Props{Name: "password", Type: input.TypePassword, Placeholder: calDAVPasswordPlaceholder(data.CalendarSync), Disabled: data.CalendarSync.CalDAVUseAccountCredentials})
+							@input.Input(input.Props{Name: "password", Type: input.TypePassword, Placeholder: calDAVPasswordPlaceholder(data.CalendarSync), Disabled: data.CalendarSync.CalDAVUseAccountCredentials, Attributes: reconnectRequiredAttrs(reconnectCalendar, editAccountNeeds(data, reconnectCalendar))})
 						</div>
 					</div>
 				</div>
 				<div class="flex flex-wrap justify-end gap-2">
-					<button type="submit" data-calendar-discovery-submit class="inline-flex h-8 shrink-0 items-center gap-1.5 rounded-md bg-primary px-3 text-xs font-semibold text-primary-foreground transition-colors hover:bg-primary/90 disabled:pointer-events-none disabled:opacity-70">
+					<button type="submit" data-calendar-discovery-submit { reconnectGateAttrs(fmt.Sprintf("account-calendar-discovery-form-%s", data.AccountID), "", editAccountNeeds(data, reconnectCalendar))... } class="inline-flex h-8 shrink-0 items-center gap-1.5 rounded-md bg-primary px-3 text-xs font-semibold text-primary-foreground transition-colors hover:bg-primary/90 disabled:pointer-events-none disabled:opacity-70">
 						@icon.RefreshCw(icon.Props{Class: "size-3.5"})
 						<span data-calendar-discovery-label>
 							if data.CalendarSync.SourceCount > 0 {

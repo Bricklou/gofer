@@ -7,6 +7,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"slices"
 	"strings"
 
 	mailtransport "github.com/cristianadrielbraun/gofer/internal/mail/transport"
@@ -147,6 +148,15 @@ func (s *AccountStore) GetEditData(ctx context.Context, accountID string) (*mode
 		data.SignatureSettings, _ = s.db.GetAccountSignatureSettings(ctx, userID, accountID)
 		data.ContactSync, _ = s.GetContactSyncConfig(ctx, userID, accountID)
 		data.CalendarSync, _ = s.GetCalendarSyncConfig(ctx, userID, accountID)
+		if pending, err := s.db.ImportedAccountsPending(ctx, userID); err == nil {
+			if waiting, found := pending[accountID]; found {
+				data.ReconnectPending = true
+				data.ReconnectNeeds = waiting.Missing()
+				data.ReconnectSMTP = waiting.SMTPSeparate && slices.Contains(data.ReconnectNeeds, storage.ImportedLoginMail)
+				data.ReconnectContacts = waiting.Contacts
+				data.ReconnectCalendar = len(waiting.Calendars) > 0
+			}
+		}
 		if isBuiltinContactProvider(data.Provider) && data.ContactSync.Provider != data.Provider {
 			data.ContactSync.Provider = data.Provider
 			data.ContactSync.Enabled = true
@@ -648,14 +658,14 @@ func (s *AccountStore) createAccountWithID(ctx context.Context, userID, id strin
 		  imap_host, imap_port, imap_tls_mode,
 		  smtp_host, smtp_port, smtp_tls_mode,
 		  username, encrypted_password, auth_method,
-		  smtp_username, encrypted_smtp_password)
-		 SELECT ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?`
+		  smtp_username, encrypted_smtp_password, email_sync_enabled)
+		 SELECT ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?`
 	args := []any{
 		id, userID, req.Provider, req.ProviderAccountID, req.EmailAddress, req.DisplayName, color, initials,
 		req.IMAPHost, req.IMAPPort, req.IMAPTLSMode,
 		req.SMTPHost, req.SMTPPort, req.SMTPTLSMode,
 		req.Username, encrypted, req.AuthMethod,
-		req.SmtpUsername, encryptedSmtpPw}
+		req.SmtpUsername, encryptedSmtpPw, boolInt(!req.EmailSyncDisabled)}
 	if !purgeDeleting {
 		// The single local writer makes this check/insert atomic for concurrent
 		// UUID reservations. The same email may belong to different user stores.

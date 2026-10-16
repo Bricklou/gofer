@@ -272,6 +272,7 @@ func (h *Handler) RegisterUserStorageRoutes(ctx context.Context, mux *http.Serve
 	private("GET /api/accounts/{id}/deletion-status", routed.handleUserAccountDeletionStatus)
 	if option.Accounts != nil {
 		routed.registerUserSignatures(private)
+		routed.registerProfileTransferRoutes(private)
 		private("POST /api/accounts", routed.handleUserCreateAccount)
 		private("GET /api/settings/contacts/suppressed", routed.handleUserSuppressedContactsSettings)
 		private("GET /api/accounts/{id}/edit", routed.handleUserEditAccount)

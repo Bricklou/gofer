@@ -494,6 +494,9 @@ func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("POST /api/settings/sync", h.handleSaveSyncSettings)
 	mux.HandleFunc("GET /api/settings/signatures/manage", h.handleManageSignaturesSettings)
 	mux.HandleFunc("GET /api/settings/ui", h.handleGetUISettings)
+	h.registerProfileTransferRoutes(func(pattern string, handler http.HandlerFunc) {
+		mux.HandleFunc(pattern, handler)
+	})
 	mux.HandleFunc("PATCH /api/settings/ui", h.handleSaveUISettings)
 	mux.HandleFunc("GET /api/push/vapid-public-key", h.handlePushVAPIDPublicKey)
 	mux.HandleFunc("POST /api/push/subscription", h.handleSavePushSubscription)
@@ -2815,6 +2818,9 @@ func (h *Handler) handleUpdateAccount(w http.ResponseWriter, r *http.Request) {
 		views.AccountFormError(fmt.Sprintf("Failed to update account: %v", err)).Render(r.Context(), w)
 		return
 	}
+	if err := h.resolveImportedMailLogin(w, r.Context(), h.userID(r.Context()), accountID, &req); err != nil {
+		log.Printf("account %s: turn on imported services: %v", accountID, err)
+	}
 	h.closeBodyClient(accountID)
 	h.syncer.RestartAccount(accountID)
 
@@ -3297,7 +3303,7 @@ func (h *Handler) handleSettings(w http.ResponseWriter, r *http.Request) {
 
 func (h *Handler) handleSettingsTab(w http.ResponseWriter, r *http.Request) {
 	tab := r.PathValue("tab")
-	if tab != "accounts" && tab != "sync" && tab != "operations" && tab != "contacts" && tab != "appearance" && tab != "regional" && tab != "compose-display" && tab != "security" && tab != "advanced" {
+	if tab != "accounts" && tab != "sync" && tab != "operations" && tab != "contacts" && tab != "appearance" && tab != "regional" && tab != "compose-display" && tab != "security" && tab != "advanced" && tab != "export-import" {
 		http.NotFound(w, r)
 		return
 	}
@@ -6920,6 +6926,8 @@ func (h *Handler) handleGoogleAccountCallback(w http.ResponseWriter, r *http.Req
 	err = h.mailCredentials().UpsertOAuthAccount(r.Context(), accountID, providers.OAuthGoogle, info.Sub, token.AccessToken, token.RefreshToken, token.TokenType, expiresAt, scopes)
 	if err != nil {
 		log.Printf("warning: failed to store oauth tokens for account %s: %v", accountID, err)
+	} else if _, _, err := h.resolveImportedLogin(r.Context(), userID, accountID, storage.ImportedLoginSignIn); err != nil {
+		log.Printf("gmail callback: turn on imported services for %s: %v", accountID, err)
 	}
 
 	h.closeBodyClient(accountID)
@@ -7007,6 +7015,8 @@ func (h *Handler) handleMicrosoftAccountCallback(w http.ResponseWriter, r *http.
 	err = h.mailCredentials().UpsertOAuthAccount(r.Context(), accountID, providers.OAuthMicrosoft, providerAccountID, token.AccessToken, token.RefreshToken, token.TokenType, expiresAt, scopes)
 	if err != nil {
 		log.Printf("warning: failed to store microsoft oauth tokens for account %s: %v", accountID, err)
+	} else if _, _, err := h.resolveImportedLogin(r.Context(), userID, accountID, storage.ImportedLoginSignIn); err != nil {
+		log.Printf("microsoft callback: turn on imported services for %s: %v", accountID, err)
 	}
 
 	h.closeBodyClient(accountID)

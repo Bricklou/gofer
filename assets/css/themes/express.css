@@ -578,6 +578,87 @@ html:root[data-theme="express"] :is(.account-wizard-card-footer, .account-wizard
   box-shadow: var(--xp-bevel-in);
 }
 
+/* Radio buttons are the classic sunken circle: a white well inside two
+   rings that are dark on the top left and light on the bottom right, with a
+   dark dot when chosen. A round border splits its colors diagonally, which
+   draws each ring's two halves. */
+[data-theme="express"] input[type="radio"] {
+  width: 12px;
+  height: 12px;
+  border: 1px solid;
+  border-color: var(--xp-mid) var(--xp-light) var(--xp-light) var(--xp-mid);
+  border-radius: 50%;
+  background: var(--card);
+  box-shadow: none;
+}
+
+[data-theme="express"] input[type="radio"]::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border: 1px solid;
+  border-color: var(--xp-dark) var(--xp-face) var(--xp-face) var(--xp-dark);
+  border-radius: 50%;
+}
+
+[data-theme="express"] input[type="radio"]:checked {
+  background: var(--card);
+  border-color: var(--xp-mid) var(--xp-light) var(--xp-light) var(--xp-mid);
+}
+
+[data-theme="express"] input[type="radio"]::before {
+  z-index: 1;
+  width: 4px;
+  height: 4px;
+  background: transparent;
+}
+
+[data-theme="express"] input[type="radio"]:checked::before {
+  background: var(--foreground);
+}
+
+[data-theme="express"] input[type="radio"]:disabled {
+  background: var(--xp-face);
+}
+
+[data-theme="express"] input[type="radio"]:disabled:checked::before {
+  background: var(--xp-mid);
+}
+
+[data-theme="express"] input[type="radio"]:focus-visible {
+  --tw-ring-shadow: 0 0 #0000;
+  --tw-ring-offset-shadow: 0 0 #0000;
+  outline: 1px dotted var(--foreground);
+  outline-offset: 1px;
+}
+
+/* A file picker is a sunken field with a raised button, like the other
+   inputs and buttons. */
+[data-theme="express"] input[type="file"] {
+  background-color: var(--card);
+  border-color: transparent;
+  border-radius: 0;
+  box-shadow: var(--xp-bevel-in);
+}
+
+[data-theme="express"] input[type="file"]::file-selector-button {
+  background: var(--xp-face);
+  color: var(--foreground);
+  border: none;
+  border-radius: 0;
+  box-shadow: var(--xp-bevel-out);
+  transition: none;
+}
+
+[data-theme="express"] input[type="file"]::file-selector-button:hover {
+  background: color-mix(in srgb, var(--xp-face) 92%, var(--xp-light));
+  color: var(--foreground);
+}
+
+[data-theme="express"] input[type="file"]::file-selector-button:active {
+  box-shadow: var(--xp-bevel-pressed);
+}
+
 [data-theme="express"] input:not([type="checkbox"], [type="radio"], [type="range"], [type="file"], [type="color"], [role="switch"]):focus-visible,
 [data-theme="express"] textarea:focus-visible {
   --tw-ring-shadow: 0 0 #0000;

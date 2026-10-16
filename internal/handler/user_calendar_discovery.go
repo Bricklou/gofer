@@ -362,7 +362,7 @@ func (h *Handler) handleUserDiscoverCalendars(w http.ResponseWriter, r *http.Req
 		return
 	}
 	owner, id := h.userID(r.Context()), strings.TrimSpace(r.PathValue("id"))
-	message, failed := "", false
+	message, failed, davSaved := "", false, false
 	err := h.userIMAP.RunAccountService(r.Context(), owner, id, mail.AccountServiceCalendar, cardDAVDiscoveryOverallTimeout, func(ctx context.Context) error {
 		snapshot, err := h.userAccounts.SnapshotCalendarDiscovery(ctx, owner, id)
 		if err != nil {
@@ -402,6 +402,7 @@ func (h *Handler) handleUserDiscoverCalendars(w http.ResponseWriter, r *http.Req
 		if _, err := h.userAccounts.PublishCalendarDiscovery(ctx, snapshot, sources, dav, guards...); err != nil {
 			return err
 		}
+		davSaved = dav != nil
 		h.wakeUserCalendarAccount(ctx, owner, id)
 		label := "Google calendar source(s)"
 		if snapshot.Provider() == "outlook" {
@@ -419,6 +420,14 @@ func (h *Handler) handleUserDiscoverCalendars(w http.ResponseWriter, r *http.Req
 			userAccountError(w, r, err)
 		}
 		return
+	}
+	if davSaved && (r.PostForm.Get("password") != "" || r.PostForm.Get("use_account_credentials") == "1") {
+		if remaining, waiting, err := h.resolveImportedLogin(r.Context(), owner, id, storage.ImportedLoginCalendar); err != nil {
+			log.Printf("routed account %s: turn on imported calendars: %v", id, err)
+		} else if waiting {
+			markImportedLoginResolved(w, storage.ImportedLoginCalendar, remaining)
+			message = strings.Replace(message, "The primary calendar is selected by default.", "The calendars from your profile are selected.", 1)
+		}
 	}
 	data, err := h.userEditData(r.Context(), owner, id)
 	if err != nil {
