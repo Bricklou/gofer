@@ -141,6 +141,26 @@ func mailMoveTargets(folders []models.Folder) []mailMoveTarget {
 	return targets
 }
 
+// mailMoveAccountProblem says why another account can't take an email from
+// the Move dialog, or nothing when it can.
+func mailMoveAccountProblem(account models.Account, own bool) string {
+	switch {
+	case own:
+		return ""
+	case account.ReconnectPending:
+		return "Needs its password"
+	case account.Provider == "outlook":
+		return "Can't receive from other accounts yet"
+	}
+	return ""
+}
+
+// mailMoveTakesOtherAccounts reports whether a folder can take email from
+// another account. Gmail only takes drafts made as drafts.
+func mailMoveTakesOtherAccounts(account models.Account, folder models.Folder) bool {
+	return !(account.Provider == "gmail" && folder.Role == "drafts")
+}
+
 func mailRoleIsTrash(role string) bool {
 	return strings.TrimSpace(strings.ToLower(role)) == "trash"
 }

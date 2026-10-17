@@ -135,8 +135,8 @@ func TestMailImportOfAGoferExport(t *testing.T) {
 	f.h.handleReviewMailImport(review, req)
 	body := review.Body.String()
 	for _, want := range []string{
-		`<option value="` + f.folders["inbox"] + `" selected>Inbox</option>`,
-		`<option value="` + f.folders["archive-2024"] + `" selected>Archive/2024</option>`,
+		`data-tui-selectbox-value="` + f.folders["inbox"] + `" data-tui-selectbox-selected="true"`,
+		`data-tui-selectbox-value="` + f.folders["archive-2024"] + `" data-tui-selectbox-selected="true"`,
 		"Exported from robin@example.test by Gofer.",
 	} {
 		if !strings.Contains(body, want) {
@@ -162,7 +162,7 @@ func TestMailImportOfAGoferExport(t *testing.T) {
 	start.SetPathValue("id", job.ID)
 	started := httptest.NewRecorder()
 	f.h.handleStartMailImport(started, start)
-	if !strings.Contains(started.Body.String(), "data-mail-import-job") {
+	if !strings.Contains(started.Header().Get("HX-Trigger"), `"gofer-close-dialog":"mail-import-dialog"`) || !strings.Contains(started.Body.String(), "data-mail-import-upload") {
 		t.Fatalf("start = %s", started.Body.String())
 	}
 	job = f.waitImportFinished(t, job.ID)

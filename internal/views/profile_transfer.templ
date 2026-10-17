@@ -64,64 +64,28 @@ const profileButtonClass = "inline-flex h-8 shrink-0 items-center justify-center
 
 const profilePrimaryButtonClass = "inline-flex h-8 shrink-0 items-center justify-center gap-2 whitespace-nowrap rounded-md bg-primary px-3 text-xs font-medium text-primary-foreground transition-colors hover:bg-primary/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50"
 
-templ SettingsExportImportTab() {
-	<div class="mt-6 space-y-6">
-		<div class="settings-card bg-card rounded-lg border p-6 space-y-5">
-			<div>
-				<h3 class="text-sm font-semibold text-muted-foreground uppercase tracking-wider mb-1">Export profile</h3>
-				<p class="text-xs text-muted-foreground leading-relaxed">Save your preferences, signatures, accounts and contacts to a file you can import into another Gofer installation.</p>
-			</div>
-			<form method="get" action="/api/profile/export" class="settings-row border-t border-border/60 pt-5 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between sm:gap-6">
-				<div class="min-w-0 space-y-3">
-					<label class="flex items-start gap-2.5 text-sm text-foreground">
-						@checkbox.Checkbox(checkbox.Props{ID: "profile-export-contacts", Name: "contacts", Value: "1", Checked: true})
-						<span>
-							<span class="font-medium">Include contacts saved only in Gofer</span>
-							<span class="block text-xs text-muted-foreground mt-0.5">Contacts synced from your accounts come back when the accounts sync, so they are left out.</span>
-						</span>
-					</label>
-					<p class="text-xs text-muted-foreground leading-relaxed">The file has no passwords or sign-ins. Imported accounts ask you to reconnect them before they sync.</p>
-				</div>
-				<button type="submit" class={ profilePrimaryButtonClass } data-profile-export>
-					@icon.Download(icon.Props{Class: "size-3.5"})
-					Export profile
-				</button>
-			</form>
-		</div>
-		<div class="settings-card bg-card rounded-lg border p-6 space-y-5">
-			<div>
-				<h3 class="text-sm font-semibold text-muted-foreground uppercase tracking-wider mb-1">Import profile</h3>
-				<p class="text-xs text-muted-foreground leading-relaxed">Add a profile exported from Gofer. You can choose what to import before anything changes.</p>
-			</div>
-			<div id="profile-import-panel" class="settings-row border-t border-border/60 pt-5">
-				@ProfileImportUploadForm("")
-			</div>
-		</div>
-		@SettingsMailExportCard()
-		@SettingsMailImportCard()
-	</div>
-}
-
 templ ProfileImportUploadForm(message string) {
-	<form
-		hx-post="/api/profile/import/preview"
-		hx-encoding="multipart/form-data"
-		hx-target="#profile-import-panel"
-		hx-swap="innerHTML"
-		class="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between sm:gap-6"
-	>
-		<div class="min-w-0 flex-1 space-y-1.5">
+	@dataDialogScroll("pb-6") {
+		<form
+			hx-post="/api/profile/import/preview"
+			hx-encoding="multipart/form-data"
+			hx-target="#profile-import-panel"
+			hx-swap="innerHTML"
+			class="space-y-1.5"
+		>
 			<label for="profile-import-file" class="block text-sm font-medium text-foreground">Profile file</label>
-			<input id="profile-import-file" type="file" name="profile" accept=".json,application/json" required class="profile-file-input block h-8 w-full rounded-md border border-input bg-background p-[3px] text-xs text-foreground file:mr-3 file:h-full file:cursor-pointer file:rounded file:border-0 file:bg-primary file:px-3 file:text-xs file:font-medium file:text-primary-foreground hover:file:bg-primary/90"/>
+			<div class="flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-3">
+				<input id="profile-import-file" type="file" name="profile" accept=".json,application/json" required class="profile-file-input block h-8 w-full min-w-0 flex-1 rounded-md border border-input bg-background p-[3px] text-xs text-foreground file:mr-3 file:h-full file:cursor-pointer file:rounded file:border-0 file:bg-primary file:px-3 file:text-xs file:font-medium file:text-primary-foreground hover:file:bg-primary/90"/>
+				<button type="submit" class={ profileButtonClass }>
+					@icon.Upload(icon.Props{Class: "size-3.5"})
+					Review import
+				</button>
+			</div>
 			if message != "" {
 				<p class="text-xs text-destructive" role="alert" data-profile-import-error>{ message }</p>
 			}
-		</div>
-		<button type="submit" class={ profileButtonClass }>
-			@icon.Upload(icon.Props{Class: "size-3.5"})
-			Review import
-		</button>
-	</form>
+		</form>
+	}
 }
 
 func profileImportStatusLabel(status string) string {
@@ -159,46 +123,48 @@ templ ProfileImportPreview(data ProfileImportPreviewData) {
 		hx-post="/api/profile/import"
 		hx-target="#profile-import-panel"
 		hx-swap="innerHTML"
-		class="space-y-5"
+		class={ dataDialogFormClass }
 		data-profile-import-preview
 	>
-		<textarea name="profile" hidden>{ data.Profile }</textarea>
-		if data.ExportedAt != "" {
-			<p class="text-xs text-muted-foreground">Exported { data.ExportedAt }.</p>
-		}
-		<div class="space-y-3">
-			if data.HasPreferences {
-				@profileImportSection("preferences", "Preferences", "Appearance, layout, compose, notification, sync and regional settings. They replace your current ones.", true)
+		@dataDialogScroll("space-y-5 pb-4") {
+			<textarea name="profile" hidden>{ data.Profile }</textarea>
+			if data.ExportedAt != "" {
+				<p class="text-xs text-muted-foreground">Exported { data.ExportedAt }.</p>
 			}
-			if len(data.Signatures) > 0 {
-				@profileImportSection("signatures", profileCount(len(data.Signatures), "signature", "signatures"), profileSignatureNames(data.Signatures), true)
-			}
-			if data.Contacts > 0 {
-				@profileImportSection("contacts", profileCount(data.Contacts, "contact", "contacts"), profileContactsDescription(data), true)
-			}
-		</div>
-		if len(data.Conflicts) > 0 {
-			@profileContactConflicts(data.Conflicts)
-		}
-		if len(data.Accounts) > 0 {
-			<div class="space-y-2">
-				<p class="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Accounts</p>
-				for _, account := range data.Accounts {
-					<div class={ "flex flex-wrap items-start gap-3 rounded-lg border border-border/60 bg-background/40 p-3", templ.KV("opacity-60", account.Status != "new" && !account.CanReplace) } data-profile-import-account={ account.Email }>
-						if account.CanReplace {
-							@profileAccountSummary(account)
-							@profileConflictChoices("account_action:"+account.Ref, "skip", false, "Replace settings")
-						} else {
-							<label class="flex min-w-0 flex-1 items-start gap-3">
-								@checkbox.Checkbox(checkbox.Props{Name: "account", Value: account.Ref, Checked: account.Status == "new", Disabled: account.Status != "new"})
-								@profileAccountSummary(account)
-							</label>
-						}
-					</div>
+			<div class="space-y-3">
+				if data.HasPreferences {
+					@profileImportSection("preferences", "Preferences", "Appearance, layout, compose, notification, sync and regional settings. They replace your current ones.", true)
+				}
+				if len(data.Signatures) > 0 {
+					@profileImportSection("signatures", profileCount(len(data.Signatures), "signature", "signatures"), profileSignatureNames(data.Signatures), true)
+				}
+				if data.Contacts > 0 {
+					@profileImportSection("contacts", profileCount(data.Contacts, "contact", "contacts"), profileContactsDescription(data), true)
 				}
 			</div>
+			if len(data.Conflicts) > 0 {
+				@profileContactConflicts(data.Conflicts)
+			}
+			if len(data.Accounts) > 0 {
+				<div class="space-y-2">
+					<p class="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Accounts</p>
+					for _, account := range data.Accounts {
+						<div class={ "flex flex-wrap items-start gap-3 rounded-lg border border-border/60 bg-background/40 p-3", templ.KV("opacity-60", account.Status != "new" && !account.CanReplace) } data-profile-import-account={ account.Email }>
+							if account.CanReplace {
+								@profileAccountSummary(account)
+								@profileConflictChoices("account_action:"+account.Ref, "skip", false, "Replace settings")
+							} else {
+								<label class="flex min-w-0 flex-1 items-start gap-3">
+									@checkbox.Checkbox(checkbox.Props{Name: "account", Value: account.Ref, Checked: account.Status == "new", Disabled: account.Status != "new"})
+									@profileAccountSummary(account)
+								</label>
+							}
+						</div>
+					}
+				</div>
+			}
 		}
-		<div class="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+		@dataDialogFooter() {
 			<button type="button" class={ profileButtonClass } hx-get="/api/profile/import/upload" hx-target="#profile-import-panel" hx-swap="innerHTML">
 				Cancel
 			</button>
@@ -206,7 +172,7 @@ templ ProfileImportPreview(data ProfileImportPreviewData) {
 				@icon.Upload(icon.Props{Class: "size-3.5"})
 				Import
 			</button>
-		</div>
+		}
 	</form>
 }
 
@@ -363,43 +329,45 @@ func profileAccountLabel(account ProfileImportAccount) string {
 }
 
 templ ProfileImportResult(result ProfileImportResultData) {
-	<div class="space-y-4" data-profile-import-result>
-		<div class="flex items-start gap-2.5">
-			@icon.CircleCheck(icon.Props{Class: "mt-0.5 size-4 shrink-0 text-emerald-600 dark:text-emerald-400"})
-			<div class="min-w-0 space-y-1 text-sm text-foreground">
-				<p class="font-medium">Profile imported.</p>
-				<ul class="space-y-0.5 text-xs text-muted-foreground">
-					if result.Preferences {
-						<li>Preferences applied. Reload Gofer to see all of them.</li>
-					}
-					if result.Signatures > 0 {
-						<li>{ profileCount(result.Signatures, "signature", "signatures") } added.</li>
-					}
-					if result.Contacts > 0 {
-						<li>{ profileCount(result.Contacts, "contact", "contacts") } added.</li>
-					}
-					if result.ContactsReplaced > 0 {
-						<li>{ profileCount(result.ContactsReplaced, "contact", "contacts") } replaced.</li>
-					}
-					if result.ContactsSkipped > 0 {
-						<li>{ profileCount(result.ContactsSkipped, "contact", "contacts") } skipped.</li>
-					}
-					if len(result.Accounts) > 0 {
-						<li>{ profileCount(len(result.Accounts), "account", "accounts") } added: { joinWithAnd(result.Accounts) }. Reconnect them in Accounts to start syncing.</li>
-					}
-					if len(result.AccountsReplaced) > 0 {
-						<li>Settings replaced for { joinWithAnd(result.AccountsReplaced) }.</li>
-					}
-				</ul>
+	<div class={ dataDialogFormClass } data-profile-import-result>
+		@dataDialogScroll("space-y-4 pb-4") {
+			<div class="flex items-start gap-2.5">
+				@icon.CircleCheck(icon.Props{Class: "mt-0.5 size-4 shrink-0 text-emerald-600 dark:text-emerald-400"})
+				<div class="min-w-0 space-y-1 text-sm text-foreground">
+					<p class="font-medium">Profile imported.</p>
+					<ul class="space-y-0.5 text-xs text-muted-foreground">
+						if result.Preferences {
+							<li>Preferences applied. Reload Gofer to see all of them.</li>
+						}
+						if result.Signatures > 0 {
+							<li>{ profileCount(result.Signatures, "signature", "signatures") } added.</li>
+						}
+						if result.Contacts > 0 {
+							<li>{ profileCount(result.Contacts, "contact", "contacts") } added.</li>
+						}
+						if result.ContactsReplaced > 0 {
+							<li>{ profileCount(result.ContactsReplaced, "contact", "contacts") } replaced.</li>
+						}
+						if result.ContactsSkipped > 0 {
+							<li>{ profileCount(result.ContactsSkipped, "contact", "contacts") } skipped.</li>
+						}
+						if len(result.Accounts) > 0 {
+							<li>{ profileCount(len(result.Accounts), "account", "accounts") } added: { joinWithAnd(result.Accounts) }. Reconnect them in Accounts to start syncing.</li>
+						}
+						if len(result.AccountsReplaced) > 0 {
+							<li>Settings replaced for { joinWithAnd(result.AccountsReplaced) }.</li>
+						}
+					</ul>
+				</div>
 			</div>
-		</div>
-		if len(result.AccountFailures) > 0 {
-			<div class="flex items-start gap-2.5 rounded-lg border border-destructive/30 bg-destructive/5 p-3 text-xs text-destructive" role="alert">
-				@icon.TriangleAlert(icon.Props{Class: "mt-0.5 size-3.5 shrink-0"})
-				<p>{ profileAccountFailureMessage(result.AccountFailures) }</p>
-			</div>
+			if len(result.AccountFailures) > 0 {
+				<div class="flex items-start gap-2.5 rounded-lg border border-destructive/30 bg-destructive/5 p-3 text-xs text-destructive" role="alert">
+					@icon.TriangleAlert(icon.Props{Class: "mt-0.5 size-3.5 shrink-0"})
+					<p>{ profileAccountFailureMessage(result.AccountFailures) }</p>
+				</div>
+			}
 		}
-		<div class="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+		@dataDialogFooter() {
 			<button type="button" class={ profileButtonClass } hx-get="/api/profile/import/upload" hx-target="#profile-import-panel" hx-swap="innerHTML">
 				Import another
 			</button>
@@ -412,7 +380,7 @@ templ ProfileImportResult(result ProfileImportResultData) {
 					Reload
 				</a>
 			}
-		</div>
+		}
 	</div>
 }
 

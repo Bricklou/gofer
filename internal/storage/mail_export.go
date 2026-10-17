@@ -2,6 +2,7 @@ package storage
 
 import (
 	"context"
+	"database/sql"
 	"strings"
 	"time"
 
@@ -126,6 +127,10 @@ func (db *DB) MailExportMessages(ctx context.Context, accountID, folderID string
 		return nil, err
 	}
 	defer rows.Close()
+	return scanMailExportMessages(rows)
+}
+
+func scanMailExportMessages(rows *sql.Rows) ([]MailExportMessage, error) {
 	var messages []MailExportMessage
 	for rows.Next() {
 		var message MailExportMessage
@@ -171,4 +176,32 @@ func (db *DB) FolderMessageIDs(ctx context.Context, accountID, folderID string) 
 		}
 	}
 	return ids, rows.Err()
+}
+
+// MailExportMessagesByID returns the messages of a folder among ids, in ID
+// order. Messages no longer in the folder are left out.
+func (db *DB) MailExportMessagesByID(ctx context.Context, accountID, folderID string, ids []int64) ([]MailExportMessage, error) {
+	if len(ids) == 0 {
+		return nil, nil
+	}
+	args := []any{folderID, accountID, accountID}
+	placeholders := make([]string, 0, len(ids))
+	for _, id := range ids {
+		placeholders = append(placeholders, "?")
+		args = append(args, id)
+	}
+	rows, err := db.Read().QueryContext(ctx, `
+		SELECT m.id, COALESCE(m.raw_path, ''), m.from_email, CAST(COALESCE(m.date_received, m.date_sent, '') AS TEXT),
+		       COALESCE(s.remote_uid, 0), s.is_read, MAX(s.is_flagged, s.is_starred), s.is_draft
+		FROM message_folder_state s
+		JOIN messages m ON m.id = s.message_id
+		JOIN folders f ON f.id = s.folder_id
+		WHERE s.folder_id = ? AND f.account_id = ? AND m.account_id = ? AND s.is_deleted = 0
+		  AND m.id IN (`+strings.Join(placeholders, ",")+`)
+		ORDER BY m.id`, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	return scanMailExportMessages(rows)
 }

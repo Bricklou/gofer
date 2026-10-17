@@ -278,6 +278,8 @@ func (h *Handler) RegisterUserStorageRoutes(ctx context.Context, mux *http.Serve
 			routed.registerMailExportRoutes(private)
 			routed.StartMailImports(ctx)
 			routed.registerMailImportRoutes(private)
+			routed.StartMailTransfers(ctx)
+			routed.registerMailTransferRoutes(private)
 		}
 		private("POST /api/accounts", routed.handleUserCreateAccount)
 		private("GET /api/settings/contacts/suppressed", routed.handleUserSuppressedContactsSettings)

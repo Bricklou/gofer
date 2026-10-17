@@ -175,6 +175,7 @@ func RunShared() {
 	h.StartAuthenticationEventRetentionWorker(ctx)
 	h.StartMailExports(ctx)
 	h.StartMailImports(ctx)
+	h.StartMailTransfers(ctx)
 	h.RegisterRoutes(mux)
 	log.Printf("boot: HTTP routes registered")
 	h.StartAccountDeletionCleanup(ctx)

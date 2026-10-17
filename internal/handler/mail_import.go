@@ -480,7 +480,7 @@ var (
 func (h *Handler) runMailImport(ctx context.Context, job *mailImportJob) {
 	err := h.importMail(ctx, job)
 	if ctx.Err() == nil {
-		h.syncImportedAccount(job)
+		h.syncMailAccount(h.mailImports.ctx, job.Owner, job.AccountID)
 	}
 	h.mailImports.finish(ctx, job, err, mailImportErrorText)
 }
@@ -498,23 +498,24 @@ func mailImportErrorText(err error) string {
 
 var errMailImportAccount = errors.New("account unavailable")
 
-// syncImportedAccount fetches the account's mail, so imported messages show.
-func (h *Handler) syncImportedAccount(job *mailImportJob) {
+// syncMailAccount fetches an account's mail in the background, so messages
+// a job added show.
+func (h *Handler) syncMailAccount(ctx context.Context, owner, accountID string) {
 	if h.userIMAP != nil {
 		go func() {
-			if err := h.userIMAP.Sync(h.mailImports.ctx, job.Owner, job.AccountID); err != nil {
-				log.Printf("mail import %s: sync: %v", job.ID, err)
+			if err := h.userIMAP.Sync(ctx, owner, accountID); err != nil {
+				log.Printf("sync %s after mail job: %v", accountID, err)
 			}
 		}()
 		return
 	}
 	if h.syncer != nil {
-		h.syncer.SyncAccount(h.mailImports.ctx, job.AccountID)
+		go h.syncer.SyncAccount(ctx, accountID)
 	}
 }
 
 func (h *Handler) importMail(ctx context.Context, job *mailImportJob) error {
-	writer, err := h.mailImportWriter(ctx, job)
+	writer, err := h.mailAccountWriter(ctx, job.Owner, job.AccountID)
 	if err != nil {
 		log.Printf("mail import %s: connect: %v", job.ID, err)
 		return errMailImportAccount
@@ -715,12 +716,13 @@ type mailImportWriter interface {
 	close()
 }
 
-func (h *Handler) mailImportWriter(ctx context.Context, job *mailImportJob) (mailImportWriter, error) {
+// mailAccountWriter connects to an account to upload messages into it.
+func (h *Handler) mailAccountWriter(ctx context.Context, owner, accountID string) (mailImportWriter, error) {
 	var cfg *models.AccountConfig
 	var password string
-	err := h.withProfileAccount(ctx, job.Owner, job.AccountID, func(accounts *config.AccountStore, _ *storage.DB) error {
+	err := h.withProfileAccount(ctx, owner, accountID, func(accounts *config.AccountStore, _ *storage.DB) error {
 		var err error
-		cfg, err = accounts.GetConfig(ctx, job.AccountID)
+		cfg, err = accounts.GetConfig(ctx, accountID)
 		if err != nil {
 			return err
 		}
@@ -728,13 +730,13 @@ func (h *Handler) mailImportWriter(ctx context.Context, job *mailImportJob) (mai
 			return nil
 		}
 		if h.userIMAP == nil {
-			password, err = h.resolvePassword(ctx, cfg, job.AccountID)
+			password, err = h.resolvePassword(ctx, cfg, accountID)
 			return err
 		}
 		if cfg.AuthMethod != "plain" {
 			return errors.New("this account can't be imported into")
 		}
-		password, err = accounts.DecryptPassword(ctx, job.AccountID)
+		password, err = accounts.DecryptPassword(ctx, accountID)
 		return err
 	})
 	if err != nil {
@@ -742,7 +744,7 @@ func (h *Handler) mailImportWriter(ctx context.Context, job *mailImportJob) (mai
 	}
 	switch cfg.Provider {
 	case "gmail":
-		return &gmailImportWriter{token: h.mailImportGmailToken(job)}, nil
+		return &gmailImportWriter{token: h.mailImportGmailToken(owner, accountID)}, nil
 	case "outlook":
 		return nil, errors.New("importing into Outlook is not available")
 	}
@@ -846,13 +848,13 @@ func (w *imapImportWriter) upload(ctx context.Context, remote string, msg mailIm
 
 // mailImportGmailToken returns a function giving a Gmail access token, a new
 // one when refresh is set.
-func (h *Handler) mailImportGmailToken(job *mailImportJob) func(context.Context, bool) (string, error) {
+func (h *Handler) mailImportGmailToken(owner, accountID string) func(context.Context, bool) (string, error) {
 	if h.userIMAP != nil {
 		return func(ctx context.Context, refresh bool) (string, error) {
 			if h.userCredentials == nil {
 				return "", errors.New("mail credentials unavailable")
 			}
-			current, err := h.userCredentials.MailboxAuthorization(ctx, job.Owner, job.AccountID)
+			current, err := h.userCredentials.MailboxAuthorization(ctx, owner, accountID)
 			if err != nil {
 				return "", err
 			}
@@ -868,7 +870,7 @@ func (h *Handler) mailImportGmailToken(job *mailImportJob) func(context.Context,
 		if h.mailCredentials() == nil {
 			return "", errors.New("mail credentials unavailable")
 		}
-		return h.mailCredentials().GetOAuthTokenForAccount(ctx, job.AccountID)
+		return h.mailCredentials().GetOAuthTokenForAccount(ctx, accountID)
 	}
 }
 

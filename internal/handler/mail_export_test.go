@@ -34,6 +34,8 @@ type mailExportFixture struct {
 	ids     map[string]int64
 	// imapAddr is the fake server, for checking what an import added.
 	imapAddr string
+	mem      *imapmemserver.Server
+	port     int
 }
 
 func mailExportTestMessage(subject, body string) string {
@@ -118,7 +120,7 @@ func newMailExportFixture(t *testing.T) *mailExportFixture {
 	if err != nil {
 		t.Fatal(err)
 	}
-	f := &mailExportFixture{h: h, db: db, folders: map[string]string{}, ids: map[string]int64{}, imapAddr: listener.Addr().String()}
+	f := &mailExportFixture{h: h, db: db, folders: map[string]string{}, ids: map[string]int64{}, imapAddr: listener.Addr().String(), mem: mem, port: port}
 	account, found, err := h.mailExportAccount(ctx, "owner", created.ID)
 	if err != nil || !found {
 		t.Fatalf("account not listed: %v", err)
@@ -190,9 +192,11 @@ func newMailExportFixture(t *testing.T) *mailExportFixture {
 		cancel()
 		f.h.mailExports.wg.Wait()
 		f.h.mailImports.wg.Wait()
+		f.h.mailTransfers.wg.Wait()
 	})
 	h.StartMailExports(ctxExports)
 	h.StartMailImports(ctxExports)
+	h.StartMailTransfers(ctxExports)
 	return f
 }
 

@@ -140,6 +140,7 @@ type Handler struct {
 	userRetention             *userRetentionWorker
 	mailExports               *mailJobManager[*mailExportJob]
 	mailImports               *mailJobManager[*mailImportJob]
+	mailTransfers             *mailJobManager[*mailTransferJob]
 	authEventRetentionWake    chan struct{}
 	authEventRetentionWorkers sync.WaitGroup
 	smtpProfileMu             sync.RWMutex
@@ -503,6 +504,9 @@ func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
 		mux.HandleFunc(pattern, handler)
 	})
 	h.registerMailImportRoutes(func(pattern string, handler http.HandlerFunc) {
+		mux.HandleFunc(pattern, handler)
+	})
+	h.registerMailTransferRoutes(func(pattern string, handler http.HandlerFunc) {
 		mux.HandleFunc(pattern, handler)
 	})
 	mux.HandleFunc("PATCH /api/settings/ui", h.handleSaveUISettings)

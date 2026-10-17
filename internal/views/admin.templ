@@ -1453,7 +1453,7 @@ templ MailSecurityExceptionsPanel(data models.MailSecurityAdminData) {
 		<section class="rounded-lg border border-border bg-card p-5">
 			<div class={ adminPanelTitleClass() }>HTTP discovery</div>
 			<p class="mt-1 text-sm text-muted-foreground">Allow Gofer to try HTTP autoconfig for one exact email domain after all HTTPS sources fail.</p>
-			<form method="post" action={ templ.URL(data.ActionBase + "/http-discovery") } class="mt-5 space-y-4" data-confirm="Allow HTTP mail discovery for this domain? The response can be changed in transit.">
+			<form method="post" action={ templ.URL(data.ActionBase + "/http-discovery") } class="mt-5 space-y-4" data-confirm-action="Allow HTTP discovery" data-confirm="Allow HTTP mail discovery for this domain? The response can be changed in transit.">
 				if data.CSRFTokens[data.ActionBase+"/http-discovery"] != "" {
 					<input type="hidden" name="_csrf" value={ data.CSRFTokens[data.ActionBase+"/http-discovery"] }/>
 				}
@@ -1471,7 +1471,7 @@ templ MailSecurityExceptionsPanel(data models.MailSecurityAdminData) {
 		<section class="rounded-lg border border-border bg-card p-5">
 			<div class={ adminPanelTitleClass() }>Plaintext mail transport</div>
 			<p class="mt-1 text-sm text-muted-foreground">Allow one exact IMAP or SMTP endpoint to connect without TLS. OAuth tokens are never allowed over this mode.</p>
-			<form method="post" action={ templ.URL(data.ActionBase + "/plaintext") } class="mt-5 space-y-4" data-confirm="Allow credentials and message data to travel without encryption to this endpoint?">
+			<form method="post" action={ templ.URL(data.ActionBase + "/plaintext") } class="mt-5 space-y-4" data-confirm-action="Allow without encryption" data-confirm-destructive data-confirm="Allow credentials and message data to travel without encryption to this endpoint?">
 				if data.CSRFTokens[data.ActionBase+"/plaintext"] != "" {
 					<input type="hidden" name="_csrf" value={ data.CSRFTokens[data.ActionBase+"/plaintext"] }/>
 				}
@@ -1503,7 +1503,7 @@ templ MailSecurityExceptionsPanel(data models.MailSecurityAdminData) {
 	<section class="mt-5 rounded-lg border border-border bg-card p-5">
 		<div class={ adminPanelTitleClass() }>Private discovery or mail target</div>
 		<p class="mt-1 max-w-3xl text-sm text-muted-foreground">Gofer refuses to connect to loopback, private, link-local, or otherwise internal addresses, so no account or message can reach your local network through it. Allow one exact server here, such as a mail server on your own network, a local mail bridge, or a test lab.</p>
-		<form method="post" action={ templ.URL(data.ActionBase + "/private-target") } class="mt-5 space-y-4" data-confirm="Allow Gofer to connect to this exact private target?">
+		<form method="post" action={ templ.URL(data.ActionBase + "/private-target") } class="mt-5 space-y-4" data-confirm-action="Allow private target" data-confirm="Allow Gofer to connect to this exact private target?">
 			if data.CSRFTokens[data.ActionBase+"/private-target"] != "" {
 				<input type="hidden" name="_csrf" value={ data.CSRFTokens[data.ActionBase+"/private-target"] }/>
 			}
@@ -1568,7 +1568,7 @@ templ MailSecurityExceptionsPanel(data models.MailSecurityAdminData) {
 								</div>
 							}
 						</div>
-						<form method="post" action={ templ.URL(data.ActionBase + "/exceptions/" + item.ID + "/delete") } data-confirm="Revoke this security exception? Accounts using it will stop reconnecting.">
+						<form method="post" action={ templ.URL(data.ActionBase + "/exceptions/" + item.ID + "/delete") } data-confirm-action="Revoke exception" data-confirm-destructive data-confirm="Revoke this security exception? Accounts using it will stop reconnecting.">
 							if action := data.ActionBase + "/exceptions/" + item.ID + "/delete"; data.CSRFTokens[action] != "" {
 								<input type="hidden" name="_csrf" value={ data.CSRFTokens[action] }/>
 							}

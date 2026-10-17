@@ -1254,10 +1254,9 @@ templ MailViewMobileLabels(email *models.Email) {
 	}
 }
 
-// MailMoveDialog lists every account with its folders. Only the email's own
-// account can take it: moving mail between accounts isn't supported yet, so the
-// other accounts' folders are shown greyed out. Clicking a folder selects it;
-// Move does the move.
+// MailMoveDialog lists every account with its folders. Clicking a folder
+// selects it; Move does the move. A folder of another account asks first,
+// since that copies the email there and deletes it here.
 templ MailMoveDialog(email *models.Email, accounts []models.Account) {
 	@dialog.Dialog(dialog.Props{ID: "mail-move-dialog"}) {
 		@dialog.Content(dialog.ContentProps{Class: "sm:max-w-md"}) {
@@ -1275,15 +1274,18 @@ templ MailMoveDialog(email *models.Email, accounts []models.Account) {
 					data-on-input={ onAction("filterMoveFolders", actionElement) }
 				/>
 			}
-			<div class="h-[50vh] max-h-96 overflow-y-auto rounded-md border border-border bg-muted/50 p-1" role="listbox" aria-label="Folders" data-mail-move-list>
+			<div class="h-[50vh] max-h-96 overflow-y-auto rounded-md border border-border bg-muted/50 p-1" role="listbox" aria-label="Folders" data-mail-move-list data-mail-move-source-account={ email.AccountID }>
 				for _, account := range accounts {
 					{{ own := account.ID == email.AccountID }}
+					{{ problem := mailMoveAccountProblem(account, own) }}
 					<div class="mb-2 last:mb-0" data-mail-move-account>
 						<div class="flex items-center gap-2 px-2.5 pt-1 pb-1">
 							<div class="account-color-marker size-2.5 shrink-0" style={ accountColorStyle(account.Color) }></div>
 							<span class="truncate text-xs font-semibold text-foreground">{ account.Email }</span>
-							if !own {
-								<span class="ml-auto shrink-0 text-[11px] text-muted-foreground">Moving between accounts isn't supported yet</span>
+							if problem != "" {
+								<span class="ml-auto shrink-0 text-[11px] text-muted-foreground">{ problem }</span>
+							} else if !own {
+								<span class="ml-auto shrink-0 text-[11px] text-muted-foreground">Other account</span>
 							}
 						</div>
 						for _, target := range mailMoveTargets(account.Folders) {
@@ -1292,10 +1294,11 @@ templ MailMoveDialog(email *models.Email, accounts []models.Account) {
 								type="button"
 								role="option"
 								aria-selected="false"
-								disabled?={ !own || current }
+								disabled?={ problem != "" || current || (!own && !mailMoveTakesOtherAccounts(account, target.Folder)) }
 								class="flex w-full items-center gap-2.5 rounded-md px-2.5 py-1.5 text-left text-sm enabled:hover:bg-accent enabled:hover:text-accent-foreground aria-selected:bg-primary/10 aria-selected:text-primary disabled:cursor-default disabled:opacity-50"
 								style={ fmt.Sprintf("padding-left: %.2frem", 0.625+float64(target.Depth)*1.25) }
 								data-mail-move-folder={ target.Folder.ID }
+								data-mail-move-account={ account.ID }
 								data-mail-move-name={ strings.ToLower(target.Folder.Name) }
 								data-on-click={ onAction("selectMoveFolder", actionElement) }
 							>

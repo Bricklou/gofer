@@ -977,7 +977,7 @@ templ SidebarFooter() {
 				</span>
 				<span class="truncate">Settings</span>
 			</a>
-			@popover.Root(popover.RootProps{Class: "hidden shrink-0 lg:block"}) {
+			@popover.Root(popover.RootProps{ID: "sidebar-shortcuts", Class: "hidden shrink-0 lg:block"}) {
 				@popover.Trigger() {
 					<button
 						type="button"
@@ -1005,6 +1005,7 @@ templ SidebarFooter() {
 						@SidebarShortcutHint("Delete", "Del / #")
 						@SidebarShortcutHint("Star", "s")
 						@SidebarShortcutHint("Toggle read", "u")
+						@SidebarShortcutHint("Select all loaded", "Ctrl+A")
 						@SidebarShortcutHint("Clear selection", "Esc")
 					</div>
 				}

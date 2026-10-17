@@ -54,43 +54,32 @@ type MailExportJob struct {
 
 type MailExportPanelData struct {
 	Accounts []MailExportAccount
-	Jobs     []MailExportJob
 	Message  string
 }
 
-templ SettingsMailExportCard() {
-	<div class="settings-card bg-card rounded-lg border p-6 space-y-5">
-		<div>
-			<h3 class="text-sm font-semibold text-muted-foreground uppercase tracking-wider mb-1">Export mail</h3>
-			<p class="text-xs text-muted-foreground leading-relaxed">Download every message of an account as mbox files, one per folder, in a ZIP. Most mail apps can open them.</p>
-		</div>
-		<div id="mail-export-panel" class="settings-row border-t border-border/60 pt-5" hx-get="/api/mail/exports" hx-trigger="load" hx-swap="innerHTML">
-			<p class="text-xs text-muted-foreground">Loading accounts…</p>
-		</div>
-	</div>
-}
-
+// MailExportPanel lists the accounts to export, in the Export mail dialog.
 templ MailExportPanel(data MailExportPanelData) {
-	<div class="space-y-5" data-mail-export-panel>
-		<div id="mail-export-form" class="space-y-2">
-			if data.Message != "" {
-				<p class="text-xs text-destructive" role="alert" data-mail-export-error>{ data.Message }</p>
-			}
-			if len(data.Accounts) == 0 {
-				<p class="text-xs text-muted-foreground">Add a mail account to export its messages.</p>
-			}
-			for _, account := range data.Accounts {
-				<div class="flex flex-wrap items-center gap-3 rounded-lg border border-border/60 bg-background/40 p-3" data-mail-export-account={ account.Email }>
-					@mailExportAccountSummary(account)
-					<button type="button" class={ profileButtonClass } hx-get={ "/api/mail/exports/new?account=" + account.ID } hx-target="#mail-export-form" hx-swap="innerHTML">
-						@icon.Download(icon.Props{Class: "size-3.5"})
-						Export…
-					</button>
-				</div>
-			}
+	@dataDialogScroll("space-y-5 pb-6") {
+		<div class="space-y-5" data-mail-export-panel>
+			<div class="space-y-2">
+				if data.Message != "" {
+					<p class="text-xs text-destructive" role="alert" data-mail-export-error>{ data.Message }</p>
+				}
+				if len(data.Accounts) == 0 {
+					<p class="text-xs text-muted-foreground">Add a mail account to export its messages.</p>
+				}
+				for _, account := range data.Accounts {
+					<div class="flex flex-wrap items-center gap-3 rounded-lg border border-border/60 bg-background/40 p-3" data-mail-export-account={ account.Email }>
+						@mailExportAccountSummary(account)
+						<button type="button" class={ profileButtonClass } hx-get={ "/api/mail/exports/new?account=" + account.ID } hx-target="#mail-export-dialog-body" hx-swap="innerHTML">
+							@icon.Download(icon.Props{Class: "size-3.5"})
+							Export…
+						</button>
+					</div>
+				}
+			</div>
 		</div>
-		@MailExportJobs(data.Jobs)
-	</div>
+	}
 }
 
 templ mailExportAccountSummary(account MailExportAccount) {
@@ -121,57 +110,59 @@ templ mailExportAccountSummary(account MailExportAccount) {
 templ MailExportForm(data MailExportFormData) {
 	<form
 		hx-post="/api/mail/exports"
-		hx-target="#mail-export-panel"
+		hx-target="#mail-export-dialog-body"
 		hx-swap="innerHTML"
-		class="space-y-4 rounded-lg border border-border/60 bg-background/40 p-4"
+		class={ dataDialogFormClass }
 		data-mail-export-form
 	>
-		<input type="hidden" name="account" value={ data.Account.ID }/>
-		<div class="flex flex-wrap items-center gap-3">
-			@mailExportAccountSummary(data.Account)
-		</div>
-		if data.Message != "" {
-			<p class="text-xs text-destructive" role="alert" data-mail-export-error>{ data.Message }</p>
-		}
-		if len(data.Folders) == 0 {
-			<p class="text-xs text-muted-foreground">This account has no folders with mail yet. Once it syncs, its folders show here.</p>
-		} else {
-			<div class="space-y-2">
-				<label class="flex items-center gap-2.5 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-					@checkbox.Checkbox(checkbox.Props{Group: "mail-export-folders", GroupParent: true, Checked: true, Attributes: templ.Attributes{"aria-label": "All folders"}})
-					Folders
-				</label>
-				<div class="max-h-72 space-y-1 overflow-y-auto rounded-md border border-border/60 bg-background p-2">
-					for _, folder := range data.Folders {
-						<label class="flex items-center gap-2.5 rounded px-1.5 py-1 text-sm text-foreground hover:bg-accent/50" data-mail-export-folder={ folder.Path }>
-							@checkbox.Checkbox(checkbox.Props{Name: "folder", Value: folder.ID, Group: "mail-export-folders", Checked: mailExportFolderChecked(folder)})
-							<span class="min-w-0 flex-1 truncate">{ folder.Path }</span>
-							<span class="shrink-0 text-xs tabular-nums text-muted-foreground">{ mailExportCount(folder.Messages, "message", "messages") }</span>
-						</label>
-					}
-				</div>
-				<p class="text-xs text-muted-foreground">Spam and Trash are left out unless you choose them.</p>
+		@dataDialogScroll("space-y-4 pb-4") {
+			<input type="hidden" name="account" value={ data.Account.ID }/>
+			<div class="flex flex-wrap items-center gap-3">
+				@mailExportAccountSummary(data.Account)
 			</div>
-			<label class="flex items-start gap-2.5 text-sm text-foreground">
-				@checkbox.Checkbox(checkbox.Props{ID: "mail-export-saved-only", Name: "saved_only", Value: "1", Checked: data.Account.Pending, Disabled: data.Account.Pending})
-				<span>
-					<span class="font-medium">Only messages saved in Gofer</span>
-					<span class="block text-xs text-muted-foreground mt-0.5">Doesn't connect to the server, so it also works when the server is gone. Gofer only has the full content of some messages, so the rest are left out and counted in the summary.</span>
-				</span>
-			</label>
-			if data.Account.Pending {
-				<input type="hidden" name="saved_only" value="1"/>
+			if data.Message != "" {
+				<p class="text-xs text-destructive" role="alert" data-mail-export-error>{ data.Message }</p>
+			}
+			if len(data.Folders) == 0 {
+				<p class="text-xs text-muted-foreground">This account has no folders with mail yet. Once it syncs, its folders show here.</p>
+			} else {
+				<div class="space-y-2">
+					<label class="flex items-center gap-2.5 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+						@checkbox.Checkbox(checkbox.Props{Group: "mail-export-folders", GroupParent: true, Checked: true, Attributes: templ.Attributes{"aria-label": "All folders"}})
+						Folders
+					</label>
+					<div class="max-h-72 space-y-1 overflow-y-auto rounded-md border border-border/60 bg-background p-2">
+						for _, folder := range data.Folders {
+							<label class="flex items-center gap-2.5 rounded px-1.5 py-1 text-sm text-foreground hover:bg-accent/50" data-mail-export-folder={ folder.Path }>
+								@checkbox.Checkbox(checkbox.Props{Name: "folder", Value: folder.ID, Group: "mail-export-folders", Checked: mailExportFolderChecked(folder)})
+								<span class="min-w-0 flex-1 truncate">{ folder.Path }</span>
+								<span class="shrink-0 text-xs tabular-nums text-muted-foreground">{ mailExportCount(folder.Messages, "message", "messages") }</span>
+							</label>
+						}
+					</div>
+					<p class="text-xs text-muted-foreground">Spam and Trash are left out unless you choose them.</p>
+				</div>
+				<label class="flex items-start gap-2.5 text-sm text-foreground">
+					@checkbox.Checkbox(checkbox.Props{ID: "mail-export-saved-only", Name: "saved_only", Value: "1", Checked: data.Account.Pending, Disabled: data.Account.Pending})
+					<span>
+						<span class="font-medium">Only messages saved in Gofer</span>
+						<span class="block text-xs text-muted-foreground mt-0.5">Doesn't connect to the server, so it also works when the server is gone. Gofer only has the full content of some messages, so the rest are left out and counted in the summary.</span>
+					</span>
+				</label>
+				if data.Account.Pending {
+					<input type="hidden" name="saved_only" value="1"/>
+				}
 			}
 		}
-		<div class="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
-			<button type="button" class={ profileButtonClass } hx-get="/api/mail/exports" hx-target="#mail-export-panel" hx-swap="innerHTML">Cancel</button>
+		@dataDialogFooter() {
+			<button type="button" class={ profileButtonClass } hx-get="/api/mail/exports" hx-target="#mail-export-dialog-body" hx-swap="innerHTML">Back</button>
 			if len(data.Folders) > 0 {
 				<button type="submit" class={ profilePrimaryButtonClass } data-mail-export-start>
 					@icon.Download(icon.Props{Class: "size-3.5"})
 					Start export
 				</button>
 			}
-		</div>
+		}
 	</form>
 }
 

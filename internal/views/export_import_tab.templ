@@ -1,0 +1,157 @@
+package views
+
+import (
+	"github.com/cristianadrielbraun/gofer/components/checkbox"
+	"github.com/cristianadrielbraun/gofer/components/dialog"
+	"github.com/cristianadrielbraun/gofer/components/icon"
+)
+
+// The Export and import tab lists each action as a short row; an action that
+// takes choices opens a dialog for them. Mail jobs are listed under the
+// action that started them, and refresh when one starts.
+templ SettingsExportImportTab() {
+	<div class="mt-6 space-y-6">
+		<div class="settings-card bg-card rounded-lg border p-6 space-y-5">
+			<div>
+				<h3 class="text-sm font-semibold text-muted-foreground uppercase tracking-wider mb-1">Profile</h3>
+				<p class="text-xs text-muted-foreground leading-relaxed">Your preferences, signatures, accounts and contacts, to move Gofer to another installation.</p>
+			</div>
+			@dataActionRow("Export profile", "Save them to a file. It has no passwords or sign-ins.", "profile-export-dialog", "", "", "Export…", icon.Download(icon.Props{Class: "size-3.5"}))
+			@dataActionRow("Import profile", "Add a profile exported from Gofer. You choose what to import before anything changes.", "profile-import-dialog", "profile-import-panel", "/api/profile/import/upload", "Import…", icon.Upload(icon.Props{Class: "size-3.5"}))
+		</div>
+		<div class="settings-card bg-card rounded-lg border p-6 space-y-5">
+			<div>
+				<h3 class="text-sm font-semibold text-muted-foreground uppercase tracking-wider mb-1">Mail</h3>
+				<p class="text-xs text-muted-foreground leading-relaxed">The messages in your accounts. These run in the background, so you can leave this page while they work.</p>
+			</div>
+			@dataActionRow("Export mail", "Download an account's folders as mbox files in a ZIP. Most mail apps can open them.", "mail-export-dialog", "", "/api/mail/exports", "Export…", icon.Download(icon.Props{Class: "size-3.5"})) {
+				@dataJobList("/api/mail/exports/jobs")
+			}
+			@dataActionRow("Import mail", "Add messages from mbox or eml files, or a ZIP of them such as a Gofer export, to one of your accounts.", "mail-import-dialog", "", "/api/mail/imports", "Import…", icon.Upload(icon.Props{Class: "size-3.5"})) {
+				@dataJobList("/api/mail/imports/jobs")
+			}
+			@dataActionRow("Copy or move mail between accounts", "Copy folders from one account into another. Moving also deletes them from the first account once their copies are saved.", "mail-transfer-dialog", "", "/api/mail/transfers", "Copy or move…", icon.ArrowRightLeft(icon.Props{Class: "size-3.5"})) {
+				@dataJobList("/api/mail/transfers/jobs")
+			}
+		</div>
+		@dataActionDialog("profile-export-dialog", "", "Export profile", "sm:max-w-lg") {
+			@ProfileExportForm()
+		}
+		@dataActionDialog("profile-import-dialog", "profile-import-panel", "Import profile", "sm:max-w-2xl") {
+			@dataDialogLoading()
+		}
+		@dataActionDialog("mail-export-dialog", "", "Export mail", "sm:max-w-xl") {
+			@dataDialogLoading()
+		}
+		@dataActionDialog("mail-import-dialog", "", "Import mail", "sm:max-w-2xl") {
+			@dataDialogLoading()
+		}
+		@dataActionDialog("mail-transfer-dialog", "", "Copy or move mail between accounts", "sm:max-w-2xl") {
+			@dataDialogLoading()
+		}
+	</div>
+}
+
+func dataDialogBodyID(dialogID, bodyID string) string {
+	if bodyID != "" {
+		return bodyID
+	}
+	return dialogID + "-body"
+}
+
+// dataActionRow is one action: its name, what it does, and the button that
+// opens its dialog, loading the dialog's content from load when set.
+templ dataActionRow(title, description, dialogID, bodyID, load, label string, buttonIcon templ.Component) {
+	<div class="settings-row border-t border-border/60 pt-5 space-y-3" data-data-action={ dialogID }>
+		<div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between sm:gap-6">
+			<div class="min-w-0">
+				<h4 class="text-sm font-medium text-foreground">{ title }</h4>
+				<p class="text-xs text-muted-foreground mt-1 leading-relaxed">{ description }</p>
+			</div>
+			@dialog.Trigger(dialog.TriggerProps{For: dialogID}) {
+				<button
+					type="button"
+					class={ profileButtonClass }
+					if load != "" {
+						hx-get={ load }
+						hx-target={ "#" + dataDialogBodyID(dialogID, bodyID) }
+						hx-swap="innerHTML"
+					}
+					data-open-data-dialog={ dialogID }
+				>
+					@buttonIcon
+					{ label }
+				</button>
+			}
+		</div>
+		{ children... }
+	</div>
+}
+
+templ dataJobList(load string) {
+	<div hx-get={ load } hx-trigger="load, mail-jobs-changed from:body" hx-swap="innerHTML"></div>
+}
+
+// dataActionDialog is a templui dialog laid out like the calendar's: the
+// header stays at the top and the content scrolls. Content that has buttons
+// puts them in a dataDialogFooter after its dataDialogScroll, inside one
+// dataDialogFormClass form, so the footer stays at the bottom.
+templ dataActionDialog(id, bodyID, title, class string) {
+	@dialog.Dialog(dialog.Props{ID: id}) {
+		@dialog.Content(dialog.ContentProps{Class: "data-dialog max-h-[calc(100dvh-2rem)] [&>[data-tui-dialog-panel]]:flex [&>[data-tui-dialog-panel]]:max-h-[calc(100dvh-2rem)] [&>[data-tui-dialog-panel]]:min-h-0 [&>[data-tui-dialog-panel]]:flex-col [&>[data-tui-dialog-panel]]:gap-0 [&>[data-tui-dialog-panel]]:p-0 " + class}) {
+			@dialog.Header(dialog.HeaderProps{Class: "shrink-0 px-6 pt-6 pb-4"}) {
+				@dialog.Title() {
+					{ title }
+				}
+			}
+			<div id={ dataDialogBodyID(id, bodyID) } class="flex min-h-0 min-w-0 flex-1 flex-col" data-data-dialog-body>
+				{ children... }
+			</div>
+		}
+	}
+}
+
+// dataDialogFormClass makes a form hold a dialog's scrolling content and its
+// footer.
+const dataDialogFormClass = "flex min-h-0 flex-1 flex-col"
+
+// dataDialogScroll is the part of a data dialog that scrolls.
+templ dataDialogScroll(class string) {
+	<div class={ "min-h-0 flex-1 overflow-y-auto overscroll-contain px-6 " + class } data-data-dialog-scroll>
+		{ children... }
+	</div>
+}
+
+// dataDialogFooter is a data dialog's button row, under its scrolling part.
+templ dataDialogFooter() {
+	@dialog.Footer(dialog.FooterProps{Class: "shrink-0 border-t border-border/60 px-6 py-4", Attributes: templ.Attributes{"data-data-dialog-footer": ""}}) {
+		{ children... }
+	}
+}
+
+templ ProfileExportForm() {
+	<form method="get" action="/api/profile/export" class={ dataDialogFormClass } data-close-dialog-on-submit="profile-export-dialog">
+		@dataDialogScroll("space-y-4 pb-4") {
+			<label class="flex items-start gap-2.5 text-sm text-foreground">
+				@checkbox.Checkbox(checkbox.Props{ID: "profile-export-contacts", Name: "contacts", Value: "1", Checked: true})
+				<span>
+					<span class="font-medium">Include contacts saved only in Gofer</span>
+					<span class="block text-xs text-muted-foreground mt-0.5">Contacts synced from your accounts come back when the accounts sync, so they are left out.</span>
+				</span>
+			</label>
+			<p class="text-xs text-muted-foreground leading-relaxed">The file has no passwords or sign-ins. Imported accounts ask you to reconnect them before they sync.</p>
+		}
+		@dataDialogFooter() {
+			<button type="submit" class={ profilePrimaryButtonClass } data-profile-export>
+				@icon.Download(icon.Props{Class: "size-3.5"})
+				Export profile
+			</button>
+		}
+	</form>
+}
+
+templ dataDialogLoading() {
+	@dataDialogScroll("pb-6") {
+		<p class="text-xs text-muted-foreground">Loading…</p>
+	}
+}

@@ -367,8 +367,15 @@ func (h *Handler) mailExportRaw(ctx context.Context, job *mailExportJob, folder 
 }
 
 func (h *Handler) readMailExportRaw(ctx context.Context, job *mailExportJob, folder *mailExportFolderJob, msg storage.MailExportMessage) ([]byte, error) {
+	return h.readAccountMessage(ctx, job.Owner, job.AccountID, folder.RemoteID, msg, !job.LocalOnly)
+}
+
+// readAccountMessage reads a message's original, from Gofer's saved copy
+// when it has one and, with download, otherwise from the server. A download
+// is not kept.
+func (h *Handler) readAccountMessage(ctx context.Context, owner, accountID, folderRemoteID string, msg storage.MailExportMessage, download bool) ([]byte, error) {
 	if h.userIMAP != nil {
-		return h.userIMAP.ReadRawMessageForExport(ctx, job.Owner, msg.ID, !job.LocalOnly)
+		return h.userIMAP.ReadRawMessageForExport(ctx, owner, msg.ID, download)
 	}
 	if msg.RawPath != "" {
 		raw, err := message.ReadSavedMessage(ctx, msg.RawPath)
@@ -376,10 +383,10 @@ func (h *Handler) readMailExportRaw(ctx context.Context, job *mailExportJob, fol
 			return raw, err
 		}
 	}
-	if job.LocalOnly {
+	if !download {
 		return nil, mail.ErrRawMessageNotSaved
 	}
-	info := &storage.MessageFetchInfo{AccountID: job.AccountID, FolderRemoteID: folder.RemoteID, RemoteUID: msg.RemoteUID}
+	info := &storage.MessageFetchInfo{AccountID: accountID, FolderRemoteID: folderRemoteID, RemoteUID: msg.RemoteUID}
 	return h.fetchBodyRemote(ctx, msg.ID, info)
 }
 

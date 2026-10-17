@@ -67,15 +67,9 @@ func mailImportTitle(job *mailImportJob) string {
 	return strings.Join(names, ", ")
 }
 
+// renderMailImportPanel shows the upload form in the Import mail dialog.
 func (h *Handler) renderMailImportPanel(w http.ResponseWriter, r *http.Request, message string) {
-	jobs, err := h.mailImportJobViews(h.userID(r.Context()))
-	if err != nil {
-		log.Printf("mail import: %v", err)
-		http.Error(w, "could not list imports", http.StatusInternalServerError)
-		return
-	}
-	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	_ = views.MailImportPanel(views.MailImportPanelData{Jobs: jobs, Message: message}).Render(r.Context(), w)
+	renderMailImportUploadError(w, r, message)
 }
 
 func (h *Handler) renderMailImportJobs(w http.ResponseWriter, r *http.Request) {
@@ -209,7 +203,7 @@ func (h *Handler) handleStartMailImport(w http.ResponseWriter, r *http.Request) 
 	ctx, owner := r.Context(), h.userID(r.Context())
 	job, err := h.mailImports.loadOwned(owner, r.PathValue("id"))
 	if err != nil || job.State != mailJobReview {
-		h.renderMailImportPanel(w, r, "That upload is no longer waiting. Upload the files again.")
+		renderMailImportUploadError(w, r, "That upload is no longer waiting. Upload the files again.")
 		return
 	}
 	accountID := r.PostForm.Get("account")
@@ -233,22 +227,12 @@ func (h *Handler) handleStartMailImport(w http.ResponseWriter, r *http.Request) 
 		h.renderMailImportReviewInPanel(w, r, job, account.ID, message)
 		return
 	}
+	mailJobStarted(w, "mail-import-dialog")
 	h.renderMailImportPanel(w, r, "")
 }
 
-// renderMailImportReviewInPanel shows the review again with an error after
-// starting failed, keeping the list of imports below it.
 func (h *Handler) renderMailImportReviewInPanel(w http.ResponseWriter, r *http.Request, job *mailImportJob, accountID, message string) {
-	jobs, err := h.mailImportJobViews(job.Owner)
-	if err != nil {
-		log.Printf("mail import: %v", err)
-	}
-	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	_, _ = w.Write([]byte(`<div class="space-y-5" data-mail-import-panel><div id="mail-import-form">`))
 	h.renderMailImportReview(w, r, job, accountID, message)
-	_, _ = w.Write([]byte(`</div>`))
-	_ = views.MailImportJobs(jobs).Render(r.Context(), w)
-	_, _ = w.Write([]byte(`</div>`))
 }
 
 func (h *Handler) handleCancelMailImport(w http.ResponseWriter, r *http.Request) {

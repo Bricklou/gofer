@@ -369,14 +369,28 @@ document.addEventListener("DOMContentLoaded", function () {
         if (!cancelForm) return
         var initialState = cancelForm.dataset.initialState || contactEditorState(cancelForm)
         var hasChanges = contactEditorState(cancelForm) !== initialState
-        if (hasChanges && !window.confirm("Discard unsaved contact changes?")) return
-        var cancelDialogID = cancelForm.getAttribute("data-contact-edit-dialog") || ""
-        if (cancelDialogID && window.tui && window.tui.dialog) window.tui.dialog.close(cancelDialogID)
-        if (hasChanges && cancelForm.dataset.contactId) {
-          window.setTimeout(function () {
-            refreshContactsDetail(cancelForm.dataset.contactId, null, false)
-          }, 220)
+        var closeEditor = function () {
+          var cancelDialogID = cancelForm.getAttribute("data-contact-edit-dialog") || ""
+          if (cancelDialogID && window.tui && window.tui.dialog) window.tui.dialog.close(cancelDialogID)
+          if (hasChanges && cancelForm.dataset.contactId) {
+            window.setTimeout(function () {
+              refreshContactsDetail(cancelForm.dataset.contactId, null, false)
+            }, 220)
+          }
         }
+        if (!hasChanges) {
+          closeEditor()
+          return
+        }
+        window.goferConfirm({
+          title: "Discard your changes?",
+          message: "The changes you made to this contact aren't saved.",
+          confirmLabel: "Discard changes",
+          cancelLabel: "Keep editing",
+          destructive: true,
+        }).then(function (confirmed) {
+          if (confirmed) closeEditor()
+        })
         return
       }
 
@@ -2295,7 +2309,10 @@ document.addEventListener("DOMContentLoaded", function () {
         if (!folderID || folderID === drag.sourceFolderID) return "same"
         if (!accountID) return MAIL_DROP_COMBINED_FOLDERS[folderID] ? "" : "kind"
         if (MAIL_DROP_REFUSED_ROLES[role]) return "kind"
-        if (drag.accounts.length !== 1 || drag.accounts[0] !== accountID) return "accounts"
+        // Another account's folder takes the emails after asking; one that
+        // already has some of them doesn't.
+        if (drag.accounts.indexOf(accountID) === -1) return ""
+        if (drag.accounts.length !== 1) return "accounts"
         return ""
       }
 
@@ -2541,12 +2558,27 @@ document.addEventListener("DOMContentLoaded", function () {
         e.preventDefault()
         var ids = drag.ids
         var sourceFolderID = drag.sourceFolderID
+        var accountID = link.getAttribute("data-mail-drop-account") || ""
+        if (accountID && drag.accounts.indexOf(accountID) === -1) {
+          var accounts = drag.accounts
+          var targets = selectedMailTargets(ids)
+          endDrag()
+          openMessagesToAccount({
+            targets: targets,
+            folderID: link.getAttribute("data-mail-drop-folder"),
+            sourceFolderID: sourceFolderID,
+            accounts: accounts,
+            count: mailToAccountCount(targets),
+            done: clearMailSelection,
+          })
+          return
+        }
         endDrag(link)
         moveDroppedMail(ids, link.getAttribute("data-mail-drop-folder"), sourceFolderID)
       })
 
-      // A drop on another account's folder is refused by the cursor; letting go
-      // there also says why.
+      // A drop on an account that already has some of the emails is refused
+      // by the cursor; letting go there also says why.
       document.addEventListener("dragend", function () {
         if (!drag) return
         var refusedTarget = pointerTarget && dropRefusal(pointerTarget) === "accounts"
@@ -2554,7 +2586,7 @@ document.addEventListener("DOMContentLoaded", function () {
         if (refusedTarget) {
           showGoferToast({
             title: "Can't move these emails there",
-            description: "Moving mail between accounts isn't supported yet.",
+            description: "Some of them are already in that account. Move them separately.",
             variant: "warning",
             duration: 4000,
           })
@@ -2707,12 +2739,8 @@ document.addEventListener("DOMContentLoaded", function () {
       var target = e.target
       if (!target || !target.closest) return false
 
-      var help = document.getElementById("mail-shortcut-help")
-      if (help && help.contains(target)) return false
       if (target.closest("input, textarea, select, [contenteditable='true'], [data-compose-editor], [data-compose-pane]")) return true
-
-      var openDialog = document.querySelector("dialog[open]")
-      if (openDialog && (!help || !help.contains(openDialog))) return true
+      if (document.querySelector("dialog[open]")) return true
       return false
     }
 
@@ -2867,56 +2895,17 @@ document.addEventListener("DOMContentLoaded", function () {
       else if (typeof toggleRead === "function") toggleRead(id)
     }
 
-    function shortcutHelpRow(keys, label) {
-      return '<div class="flex items-center justify-between gap-5 rounded-md border border-border/60 bg-background/45 px-3 py-2">' +
-        '<span class="text-sm text-foreground">' + label + '</span>' +
-        '<span class="flex shrink-0 gap-1">' + keys.map(function (key) {
-          return '<kbd class="min-w-6 rounded border border-border bg-card px-1.5 py-0.5 text-center text-[11px] font-semibold text-muted-foreground shadow-sm">' + key + '</kbd>'
-        }).join('') + '</span>' +
-      '</div>'
-    }
-
-    function shortcutHelpHTML() {
-      return '<div id="mail-shortcut-help" class="fixed inset-0 z-[1000] flex items-center justify-center bg-background/70 px-4 backdrop-blur-sm" role="dialog" aria-modal="true" aria-label="Keyboard shortcuts">' +
-        '<div class="w-full max-w-lg rounded-2xl border border-border bg-card p-5 shadow-raised animate-fade-in">' +
-          '<div class="mb-4 flex items-start justify-between gap-3">' +
-            '<div><h2 class="text-lg font-bold tracking-tight" style="font-family: var(--font-serif)">Keyboard shortcuts</h2><p class="mt-1 text-xs text-muted-foreground">Shortcuts are disabled while typing or composing.</p></div>' +
-            '<button type="button" class="rounded-md border border-border px-2 py-1 text-xs font-semibold text-muted-foreground hover:bg-accent hover:text-foreground" data-mail-shortcut-help-close>Esc</button>' +
-          '</div>' +
-          '<div class="grid gap-2 sm:grid-cols-2">' +
-            shortcutHelpRow(['j', 'Down'], 'Next email') +
-            shortcutHelpRow(['k', 'Up'], 'Previous email') +
-            shortcutHelpRow(['Enter', 'o'], 'Open email') +
-            shortcutHelpRow(['/'], 'Focus search') +
-            shortcutHelpRow(['c'], 'Compose') +
-            shortcutHelpRow(['r'], 'Reply') +
-            shortcutHelpRow(['a'], 'Reply all') +
-            shortcutHelpRow(['f'], 'Forward') +
-            shortcutHelpRow(['e'], 'Archive selected') +
-            shortcutHelpRow(['Del', '#'], 'Delete selected') +
-            shortcutHelpRow(['s'], 'Star selected') +
-            shortcutHelpRow(['u'], 'Toggle read') +
-            shortcutHelpRow(['Ctrl', 'A'], 'Select all loaded') +
-            shortcutHelpRow(['Esc'], 'Clear selection') +
-          '</div>' +
-        '</div>' +
-      '</div>'
-    }
-
+    // The shortcuts are listed in the sidebar's "?" popover; the key opens
+    // the same popover.
     function toggleShortcutHelp() {
-      if (closeShortcutHelp()) return
-      document.body.insertAdjacentHTML("beforeend", shortcutHelpHTML())
-      var overlay = document.getElementById("mail-shortcut-help")
-      if (!overlay) return
-      overlay.addEventListener("click", function (e) {
-        if (e.target === overlay || (e.target.closest && e.target.closest("[data-mail-shortcut-help-close]"))) closeShortcutHelp()
-      })
+      var root = document.getElementById("sidebar-shortcuts")
+      if (!root || !window.tui || !window.tui.popover || !root.getClientRects().length) return
+      window.tui.popover.toggle("sidebar-shortcuts")
     }
 
     function closeShortcutHelp() {
-      var help = document.getElementById("mail-shortcut-help")
-      if (!help) return false
-      help.remove()
+      if (!window.tui || !window.tui.popover || !window.tui.popover.isOpen("sidebar-shortcuts")) return false
+      window.tui.popover.close("sidebar-shortcuts")
       return true
     }
   }
@@ -7310,11 +7299,20 @@ function loadActiveOutgoingSends() {
 function outgoingSendAction(action, id, button) {
   if (!action || !id) return
   var summary = _outgoingSendStatusByID[id]
-  var confirm = false
   if (action === "retry" && summary && summary.ambiguous_warning_required) {
-    confirm = window.confirm("Gofer lost the connection after sending this message, so it may already have been delivered. Check Sent before retrying. Retrying can send a duplicate. Continue?")
-    if (!confirm) return
+    window.goferConfirm({
+      title: "Send this message again?",
+      message: "Gofer lost the connection after sending it, so it may already have been delivered. Check Sent before retrying: retrying can send a duplicate.",
+      confirmLabel: "Send again",
+    }).then(function (confirmed) {
+      if (confirmed) runOutgoingSendAction(action, id, button, true)
+    })
+    return
   }
+  runOutgoingSendAction(action, id, button, false)
+}
+
+function runOutgoingSendAction(action, id, button, confirm) {
   if (button) button.disabled = true
   var endpoint = "/api/outgoing-sends/" + encodeURIComponent(id) + "/" + action
   var options = { method: "POST", headers: { "Accept": "application/json" } }
@@ -10772,17 +10770,37 @@ function calendarDescriptionExec(el, command, value) {
   var editor = form && form.querySelector("[data-calendar-rich-editor]")
   if (!editor || editor.getAttribute("contenteditable") !== "true") return
   if (command === "createLink") {
-    value = window.prompt("Paste a URL or email address")
-    if (!value) return
-    value = value.trim()
-    if (value.indexOf("@") > 0 && !/^[a-z][a-z0-9+.-]*:/i.test(value)) value = "mailto:" + value
-    if (!/^[a-z][a-z0-9+.-]*:/i.test(value)) value = "https://" + value
-    if (!/^(https?:|mailto:)/i.test(value)) return
+    _saveComposeSelection(editor)
+    promptForLink().then(function (link) {
+      if (!link) return
+      editor.focus()
+      _restoreComposeSelection(editor)
+      document.execCommand("createLink", false, link)
+      syncCalendarDescription(editor)
+    })
+    return
   }
   editor.focus()
   _restoreComposeSelection(editor)
   document.execCommand(command, false, value || null)
   syncCalendarDescription(editor)
+}
+
+// promptForLink asks for a link's address and resolves it as a web or mail
+// link, or nothing.
+function promptForLink() {
+  return window.goferPrompt({
+    title: "Add a link",
+    label: "Web address or email address",
+    placeholder: "example.com or name@example.com",
+    confirmLabel: "Add link",
+  }).then(function (value) {
+    value = String(value || "").trim()
+    if (!value) return ""
+    if (value.indexOf("@") > 0 && !/^[a-z][a-z0-9+.-]*:/i.test(value)) value = "mailto:" + value
+    if (!/^[a-z][a-z0-9+.-]*:/i.test(value)) value = "https://" + value
+    return /^(https?:|mailto:)/i.test(value) ? value : ""
+  })
 }
 
 function pasteCalendarDescription(event) {
@@ -13216,13 +13234,15 @@ function composeCreateLink(el) {
   if (!editor) return
   editor.focus()
   _restoreComposeSelection(editor)
-  var url = window.prompt("Paste a URL or email address")
-  if (!url) return
-  if (url.indexOf("@") > 0 && !/^[a-z][a-z0-9+.-]*:/i.test(url)) url = "mailto:" + url
-  if (!/^(https?:|mailto:)/i.test(url)) url = "https://" + url
-  document.execCommand("createLink", false, url)
-  syncComposeEditor(editor)
-  updateComposeToolbar(editor)
+  _saveComposeSelection(editor)
+  promptForLink().then(function (url) {
+    if (!url) return
+    editor.focus()
+    _restoreComposeSelection(editor)
+    document.execCommand("createLink", false, url)
+    syncComposeEditor(editor)
+    updateComposeToolbar(editor)
+  })
 }
 
 function updateComposeToolbar(editor) {
@@ -13876,51 +13896,46 @@ function _saveComposeDropSelection(form, event) {
 function _closeComposeDropChoice() {
   var choice = _composeDropChoice
   _composeDropChoice = null
-  if (!choice) return
-  if (choice._composeKeyHandler) document.removeEventListener("keydown", choice._composeKeyHandler)
-  choice.remove()
+  if (choice) choice.close()
 }
 
-function _composeDropChoiceButton(label, action) {
-  var button = document.createElement("button")
-  button.type = "button"
-  button.textContent = label
-  button.dataset.composeDropAction = action
-  return button
+// placePointPopover moves a point popover's anchor (pointPopover in
+// app_dialogs.templ) to a spot on the screen, so its arrow points there.
+function placePointPopover(root, x, y) {
+  var anchor = root && root.querySelector("[data-point-popover-anchor]")
+  if (!anchor) return
+  anchor.style.left = Math.round(x) + "px"
+  anchor.style.top = Math.round(y) + "px"
+  // Inside a shifted dialog "fixed" counts from the dialog, not the screen,
+  // so correct by where the anchor actually landed.
+  var placed = anchor.getBoundingClientRect()
+  anchor.style.left = Math.round(2 * x - placed.left) + "px"
+  anchor.style.top = Math.round(2 * y - placed.top) + "px"
 }
 
-function _showComposeImageDropChoice(form, images) {
+// Images dropped on a compose form ask, in a popover in the middle of the
+// form, whether they go in the message or become attachments.
+function _showComposeImageDropChoice(form, images, event) {
   _closeComposeDropChoice()
   if (!form || !images || !images.length) return
-  var choice = document.createElement("div")
-  choice.className = "compose-drop-choice-backdrop"
-  choice.setAttribute("role", "presentation")
+  var root = form.querySelector("[data-compose-drop-choice]")
+  var content = root && root.querySelector("[data-tui-popover-content]")
+  if (!content || !window.tui || !window.tui.popover) {
+    uploadComposeAttachments(images, form)
+    return
+  }
+  root.querySelector("[data-compose-drop-label]").textContent = images.length === 1 ? "Add the image to the message, or attach it?" : "Add the " + images.length + " images to the message, or attach them?"
+  root.querySelector("[data-compose-drop-limit]").textContent = "Max " + _composeUploadLimitLabel() + " per file, " + _composeMessageLimitLabel() + " total"
+  // It sits in the middle of the form: the popover hangs centred below its
+  // anchor, so once open the anchor rises by half the popover's height.
+  var rect = form.getBoundingClientRect()
+  var centerX = rect.left + rect.width / 2
+  var centerY = rect.top + rect.height / 2
+  placePointPopover(root, centerX, centerY)
 
-  var panel = document.createElement("div")
-  panel.className = "compose-drop-choice"
-  panel.setAttribute("role", "dialog")
-  choice.setAttribute("aria-label", "Choose how to add dropped images")
-
-  var label = document.createElement("span")
-  label.textContent = images.length === 1 ? "Add image as" : "Add " + images.length + " images as"
-  panel.appendChild(label)
-  var limit = document.createElement("span")
-  limit.className = "compose-drop-choice-limit"
-  limit.textContent = "Max " + _composeUploadLimitLabel() + " per file, " + _composeMessageLimitLabel() + " total"
-  panel.appendChild(limit)
-  panel.appendChild(_composeDropChoiceButton("Insert inline", "inline"))
-  panel.appendChild(_composeDropChoiceButton("Attach", "attach"))
-  panel.appendChild(_composeDropChoiceButton("Cancel", "cancel"))
-  choice.appendChild(panel)
-
-  panel.addEventListener("mousedown", function (e) {
-    e.preventDefault()
-    e.stopPropagation()
-  })
-  choice.addEventListener("click", function (e) {
-    if (e.target === choice) _closeComposeDropChoice()
-  })
-  choice.addEventListener("click", function (e) {
+  // Pressing a choice keeps the editor's selection, for an inline image.
+  var keepSelection = function (e) { e.preventDefault() }
+  var choose = function (e) {
     var button = e.target && e.target.closest ? e.target.closest("[data-compose-drop-action]") : null
     if (!button) return
     e.preventDefault()
@@ -13928,14 +13943,34 @@ function _showComposeImageDropChoice(form, images) {
     _closeComposeDropChoice()
     if (action === "inline") uploadComposeInlineImages(images, form)
     else if (action === "attach") uploadComposeAttachments(images, form)
-  })
-  choice._composeKeyHandler = function (e) {
-    if (e.key === "Escape") _closeComposeDropChoice()
   }
-  document.addEventListener("keydown", choice._composeKeyHandler)
-
-  document.body.appendChild(choice)
-  _composeDropChoice = choice
+  var outside = function (e) {
+    if (!content.contains(e.target)) _closeComposeDropChoice()
+  }
+  var escape = function (e) {
+    if (e.key !== "Escape") return
+    e.preventDefault()
+    e.stopPropagation()
+    _closeComposeDropChoice()
+  }
+  content.addEventListener("mousedown", keepSelection)
+  content.addEventListener("click", choose)
+  document.addEventListener("pointerdown", outside, true)
+  document.addEventListener("keydown", escape, true)
+  window.tui.popover.open(root.id)
+  requestAnimationFrame(function () {
+    var offset = parseInt(content.getAttribute("data-tui-popover-offset"), 10) || 0
+    placePointPopover(root, centerX, centerY - content.offsetHeight / 2 - offset)
+  })
+  _composeDropChoice = {
+    close: function () {
+      content.removeEventListener("mousedown", keepSelection)
+      content.removeEventListener("click", choose)
+      document.removeEventListener("pointerdown", outside, true)
+      document.removeEventListener("keydown", escape, true)
+      window.tui.popover.close(root.id)
+    },
+  }
 }
 
 function _handleComposeDroppedFiles(form, files, event) {
@@ -14624,10 +14659,18 @@ function _showComposeOptionalFields(form, vals) {
   renderComposeAttachments(form, vals.attachments || [])
 }
 
+// Resolves true when the message being written can be replaced: it has no
+// unsaved changes, or the person agrees to lose them.
 function _activeComposeCanBeReplaced() {
   var form = document.querySelector("[data-compose-pane] #compose-pane-form") || document.getElementById("compose-form")
-  if (!form || form.dataset.composeDirty !== "true" || !_composeHasDraftContent(form)) return true
-  return window.confirm("Replace the current unsaved draft?")
+  if (!form || form.dataset.composeDirty !== "true" || !_composeHasDraftContent(form)) return Promise.resolve(true)
+  return window.goferConfirm({
+    title: "Replace the unsaved draft?",
+    message: "The message you're writing has changes that aren't saved.",
+    confirmLabel: "Replace draft",
+    cancelLabel: "Keep writing",
+    destructive: true,
+  })
 }
 
 function composeViewPreference(kind) {
@@ -14640,7 +14683,12 @@ function composeViewPreference(kind) {
 }
 
 function continueEditingDraft(emailId) {
-  if (!_activeComposeCanBeReplaced()) return
+  _activeComposeCanBeReplaced().then(function (replace) {
+    if (replace) loadDraftIntoCompose(emailId)
+  })
+}
+
+function loadDraftIntoCompose(emailId) {
   fetch("/api/drafts/" + encodeURIComponent(emailId))
     .then(function (r) {
       if (!r.ok) throw new Error("Failed to load draft")
@@ -14676,7 +14724,17 @@ function continueEditingDraft(emailId) {
 }
 
 function discardReadPaneDraft(emailId) {
-  if (!window.confirm("Discard this draft?")) return
+  window.goferConfirm({
+    title: "Discard this draft?",
+    message: "It's deleted from your drafts.",
+    confirmLabel: "Discard draft",
+    destructive: true,
+  }).then(function (confirmed) {
+    if (confirmed) deleteReadPaneDraft(emailId)
+  })
+}
+
+function deleteReadPaneDraft(emailId) {
   fetch("/api/drafts/" + encodeURIComponent(emailId), { method: "DELETE" })
     .then(function (r) {
       if (!r.ok) throw new Error("Failed to discard draft")
@@ -15421,8 +15479,14 @@ function writeComposePrefill(form, vals, prefix, mode) {
   focusComposePrefill(form, mode)
 }
 
+// openComposePrefill resolves whether compose opened with the values.
 function openComposePrefill(vals, mode) {
-  if (!_activeComposeCanBeReplaced()) return false
+  return _activeComposeCanBeReplaced().then(function (replace) {
+    return replace ? writeComposeIntoView(vals, mode) : false
+  })
+}
+
+function writeComposeIntoView(vals, mode) {
   var activePane = document.querySelector("[data-compose-pane]")
   if (activePane) {
     writeComposePrefill(document.getElementById("compose-pane-form"), vals, "compose-pane-", mode)
@@ -15557,7 +15621,9 @@ function setupMailtoIntent() {
     return
   }
 
-  if (openComposePrefill(values, "new")) clearMailtoIntentFromURL()
+  openComposePrefill(values, "new").then(function (opened) {
+    if (opened) clearMailtoIntentFromURL()
+  })
 }
 
 function handleReply(el, mode) {
@@ -16338,7 +16404,117 @@ function selectMoveFolder(button) {
 function confirmMoveDialog(emailId, thread) {
   var selected = document.querySelector('#mail-move-dialog [data-mail-move-folder][aria-selected="true"]')
   if (!selected) return
+  var list = document.querySelector("#mail-move-dialog [data-mail-move-list]")
+  var source = list ? list.getAttribute("data-mail-move-source-account") || "" : ""
+  var account = selected.getAttribute("data-mail-move-account") || ""
+  if (source && account && account !== source) {
+    var targets = [{ id: String(emailId), thread: !!thread }]
+    closeMoveDialog()
+    openMessagesToAccount({
+      targets: targets,
+      folderID: selected.getAttribute("data-mail-move-folder"),
+      sourceFolderID: mailActionCurrentFolderID(),
+      accounts: [source],
+      count: mailToAccountCount(targets),
+    })
+    return
+  }
   moveMessage(emailId, selected.getAttribute("data-mail-move-folder"), thread)
+}
+
+// Emails going into a folder of another account are copied there and then
+// deleted here, so a dialog naming both accounts asks first. The copy runs
+// in the background; each email leaves the list once its copy is saved.
+var pendingMessagesToAccount = null
+
+// mailToAccountCount is how many emails the dialog names, or 0 when some are
+// conversations and the number isn't known here.
+function mailToAccountCount(targets) {
+  for (var i = 0; i < targets.length; i++) {
+    if (targets[i].thread) return 0
+  }
+  return targets.length
+}
+
+function openMessagesToAccount(pending) {
+  pendingMessagesToAccount = pending
+  var params = new URLSearchParams()
+  params.set("folder_id", pending.folderID || "")
+  params.set("accounts", (pending.accounts || []).join(","))
+  params.set("count", String(pending.count || 0))
+  fetch("/api/messages/to-account?" + params.toString())
+    .then(function (response) {
+      if (!response.ok) throw new Error("dialog unavailable")
+      return response.text()
+    })
+    .then(function (html) {
+      var host = document.getElementById("mail-to-account-dialog-host")
+      if (!host) {
+        host = document.createElement("div")
+        host.id = "mail-to-account-dialog-host"
+        document.body.appendChild(host)
+      }
+      host.innerHTML = html
+      if (window.tui && window.tui.dialog) {
+        window.tui.dialog.open("mail-to-account-dialog")
+        return
+      }
+      var content = host.querySelector("[data-tui-dialog-content]")
+      if (content && !content.open) {
+        try { content.showModal() } catch (_) {}
+      }
+    })
+    .catch(function () {
+      pendingMessagesToAccount = null
+      showGoferToast({ title: "Couldn't move the emails", description: "Please try again.", variant: "error", icon: "error", duration: 6000 })
+    })
+}
+
+function closeMessagesToAccountDialog() {
+  if (!document.getElementById("mail-to-account-dialog")) return
+  if (window.tui && window.tui.dialog) {
+    window.tui.dialog.close("mail-to-account-dialog")
+    return
+  }
+  var content = document.querySelector("#mail-to-account-dialog [data-tui-dialog-content]")
+  if (content && content.open) content.close()
+}
+
+function confirmMessagesToAccount(mode) {
+  var pending = pendingMessagesToAccount
+  pendingMessagesToAccount = null
+  closeMessagesToAccountDialog()
+  if (!pending) return
+  fetch("/api/messages/to-account", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ targets: pending.targets, folder_id: pending.folderID, source_folder_id: pending.sourceFolderID, mode: mode }),
+  })
+    .then(function (response) {
+      if (response.ok) return response.json()
+      return response.text().then(function (text) {
+        var err = new Error("transfer failed")
+        err.reason = String(text || "").trim() || "The server answered " + response.status + "."
+        throw err
+      })
+    })
+    .then(function (result) {
+      if (typeof pending.done === "function") pending.done()
+      var emails = result.messages === 1 ? "1 email" : result.messages + " emails"
+      showGoferToast({
+        title: (mode === "copy" ? "Copying " : "Moving ") + emails + " to " + result.account,
+        description: mode === "copy"
+          ? "The copies go into " + result.folder + ". You can follow it in Settings, under Export and import."
+          : "Each email leaves this folder once its copy is saved in " + result.folder + ". You can follow it in Settings, under Export and import.",
+        variant: "success",
+        icon: "success",
+        duration: 7000,
+      })
+    })
+    .catch(function (err) {
+      var reason = err && err.reason ? err.reason : "Please try again."
+      showGoferToast({ title: "Couldn't move the emails", description: reason, variant: "error", icon: "error", duration: 8000 })
+    })
 }
 
 // Search hides folders whose name doesn't match, and accounts left with none.
@@ -18166,44 +18342,46 @@ function undoCalendarMove(back, at) {
 // Asks, next to where an event was dropped, before it is moved; a meeting's
 // guests are sent the change. Clicking elsewhere or Escape cancels it.
 function confirmCalendarMove(point, guests, move, cancel) {
-  var existing = document.querySelector("[data-calendar-move-confirm]")
-  if (existing && existing._calendarCancel) existing._calendarCancel()
-  var box = document.createElement("div")
-  box.dataset.calendarMoveConfirm = ""
-  box.setAttribute("role", "dialog")
+  var root = document.getElementById("calendar-move-confirm")
+  if (root && root._calendarCancel) root._calendarCancel()
+  var content = root && root.querySelector("[data-tui-popover-content]")
+  if (!content || !window.tui || !window.tui.popover) {
+    cancel()
+    return
+  }
   var title = point.title || (guests ? "Move this meeting?" : point.resize ? "Change when this event ends?" : "Move this event?")
-  var detail = point.detail || ((point.when ? point.when + ". " : "") + (guests ? "Guests will be sent the new time." : ""))
+  var detail = (point.detail || ((point.when ? point.when + ". " : "") + (guests ? "Guests will be sent the new time." : ""))).trim()
   var action = point.action || (guests ? "Move and notify guests" : point.resize ? "Save" : "Move")
-  box.setAttribute("aria-label", title)
-  box.className = "fixed z-[70] w-72 max-w-[calc(100vw-1rem)] rounded-lg border bg-popover p-3 text-sm text-popover-foreground shadow-lg"
-  box.innerHTML = '<p class="font-semibold">' + _escapeComposeHTML(title) + '</p>' +
-    (detail.trim() ? '<p class="mt-1 text-xs text-muted-foreground">' + _escapeComposeHTML(detail.trim()) + '</p>' : '') +
-    '<div class="mt-3 flex justify-end gap-2">' +
-      '<button type="button" data-calendar-move-cancel class="inline-flex h-8 cursor-pointer items-center justify-center rounded-md border bg-background px-3 text-sm font-medium shadow-xs hover:bg-accent hover:text-accent-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">Cancel</button>' +
-      '<button type="button" data-calendar-move-confirm-button class="inline-flex h-8 cursor-pointer items-center justify-center rounded-md bg-primary px-3 text-sm font-medium text-primary-foreground shadow-xs hover:bg-primary/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">' + _escapeComposeHTML(action) + '</button>' +
-    '</div>'
-  document.body.appendChild(box)
-  // Just below and to the right of the drop, kept on screen.
-  var x = point && isFinite(point.x) ? point.x : window.innerWidth / 2
-  var y = point && isFinite(point.y) ? point.y : window.innerHeight / 2
-  var width = box.offsetWidth, height = box.offsetHeight, margin = 8
-  var left = Math.min(Math.max(margin, x + 12), window.innerWidth - width - margin)
-  var top = y + 12 + height > window.innerHeight - margin ? y - height - 12 : y + 12
-  box.style.left = left + "px"
-  box.style.top = Math.max(margin, top) + "px"
+  root.querySelector("[data-calendar-move-title]").textContent = title
+  var detailLine = root.querySelector("[data-calendar-move-detail]")
+  detailLine.textContent = detail
+  detailLine.hidden = !detail
+  var confirmButton = root.querySelector("[data-calendar-move-confirm-button]")
+  var cancelButton = root.querySelector("[data-calendar-move-cancel]")
+  confirmButton.textContent = action
+  content.setAttribute("aria-label", title)
+  // It opens below and to the right of the drop, clear of the pointer, and
+  // stays on screen.
+  placePointPopover(root,
+    (point && isFinite(point.x) ? point.x : window.innerWidth / 2) + 16,
+    (point && isFinite(point.y) ? point.y : window.innerHeight / 2) + 16)
+
   var closed = false
   var close = function (moving) {
     if (closed) return
     closed = true
-    box.remove()
+    root._calendarCancel = null
+    confirmButton.onclick = null
+    cancelButton.onclick = null
     document.removeEventListener("pointerdown", outside, true)
     document.removeEventListener("keydown", escape, true)
+    window.tui.popover.close("calendar-move-confirm")
     if (moving) move()
     else cancel()
   }
   // A press elsewhere only closes it; what was pressed doesn't also act.
   var outside = function (event) {
-    if (box.contains(event.target)) return
+    if (content.contains(event.target)) return
     event.stopPropagation()
     close(false)
     swallowCalendarClick()
@@ -18214,12 +18392,13 @@ function confirmCalendarMove(point, guests, move, cancel) {
     event.stopPropagation()
     close(false)
   }
-  box._calendarCancel = function () { close(false) }
-  box.querySelector("[data-calendar-move-cancel]").addEventListener("click", function () { close(false) })
-  box.querySelector("[data-calendar-move-confirm-button]").addEventListener("click", function () { close(true) })
+  root._calendarCancel = function () { close(false) }
+  cancelButton.onclick = function () { close(false) }
+  confirmButton.onclick = function () { close(true) }
   document.addEventListener("pointerdown", outside, true)
   document.addEventListener("keydown", escape, true)
-  box.querySelector("[data-calendar-move-confirm-button]").focus()
+  window.tui.popover.open("calendar-move-confirm")
+  setTimeout(function () { confirmButton.focus() }, 0)
 }
 
 // Drops the click that follows the press being released, if there is one.

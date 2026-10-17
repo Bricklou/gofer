@@ -267,12 +267,38 @@ function setProfileConflictChoices(button, value) {
   })
 }
 
+// A dialog whose work has started closes when the server says so, and the
+// profile export dialog closes once its download begins.
+document.addEventListener("gofer-close-dialog", function (event) {
+  var id = event.detail && event.detail.value
+  if (id && window.tui && window.tui.dialog) window.tui.dialog.close(id)
+})
+
+document.addEventListener("submit", function (event) {
+  var form = event.target && event.target.closest && event.target.closest("[data-close-dialog-on-submit]")
+  if (!form) return
+  var id = form.getAttribute("data-close-dialog-on-submit")
+  setTimeout(function () {
+    if (window.tui && window.tui.dialog) window.tui.dialog.close(id)
+  }, 100)
+})
+
+function confirmSignatureDelete(name) {
+  return window.goferConfirm({
+    title: "Delete " + name + "?",
+    message: "Accounts using it will stop inserting it.",
+    confirmLabel: "Delete signature",
+    destructive: true,
+  })
+}
+
 // Mail import: choosing "New folder…" for a folder of messages asks for the
 // new folder's name, and the upload says how far it has got.
 document.addEventListener("change", function (event) {
   var select = event.target && event.target.closest && event.target.closest("[data-mail-import-target]")
   if (!select) return
-  var name = select.parentElement.querySelector("[data-mail-import-new-name]")
+  var row = select.closest("[data-mail-import-source], [data-mail-transfer-folder]")
+  var name = row && row.querySelector("[data-mail-import-new-name]")
   if (!name) return
   var isNew = select.value === "new"
   name.classList.toggle("hidden", !isNew)
@@ -797,14 +823,17 @@ function setupAccountSignaturesManager(manager) {
 
     if (e.target.closest("[data-signature-delete]")) {
       var signatureName = row.getAttribute("data-signature-name") || "this signature"
-      if (!window.confirm("Delete " + signatureName + "? Accounts using it will stop inserting it.")) return
-      fetch("/api/signatures/" + encodeURIComponent(row.getAttribute("data-signature-id") || ""), { method: "DELETE" })
-        .then(function (r) { if (!r.ok) throw new Error("Failed to delete signature") })
-        .then(reloadDialog)
-        .catch(function (err) {
-          var status = form && form.querySelector("[data-signature-save-status]")
-          if (status) status.textContent = err && err.message ? err.message : "Failed to delete signature"
-        })
+      var signatureID = row.getAttribute("data-signature-id") || ""
+      confirmSignatureDelete(signatureName).then(function (confirmed) {
+        if (!confirmed) return
+        fetch("/api/signatures/" + encodeURIComponent(signatureID), { method: "DELETE" })
+          .then(function (r) { if (!r.ok) throw new Error("Failed to delete signature") })
+          .then(reloadDialog)
+          .catch(function (err) {
+            var status = form && form.querySelector("[data-signature-save-status]")
+            if (status) status.textContent = err && err.message ? err.message : "Failed to delete signature"
+          })
+      })
     }
   })
 
@@ -820,13 +849,15 @@ function setupAccountSignaturesManager(manager) {
       return
     }
     var signatureName = (name && name.value) || "this signature"
-    if (!window.confirm("Delete " + signatureName + "? Accounts using it will stop inserting it.")) return
-    fetch("/api/signatures/" + encodeURIComponent(signatureID), { method: "DELETE" })
-      .then(function (r) { if (!r.ok) throw new Error("Failed to delete signature") })
-      .then(reloadDialog)
-      .catch(function (err) {
-        if (status) status.textContent = err && err.message ? err.message : "Failed to delete signature"
-      })
+    confirmSignatureDelete(signatureName).then(function (confirmed) {
+      if (!confirmed) return
+      fetch("/api/signatures/" + encodeURIComponent(signatureID), { method: "DELETE" })
+        .then(function (r) { if (!r.ok) throw new Error("Failed to delete signature") })
+        .then(reloadDialog)
+        .catch(function (err) {
+          if (status) status.textContent = err && err.message ? err.message : "Failed to delete signature"
+        })
+    })
   })
 
   if (form) {

@@ -47,8 +47,13 @@ func (h *Handler) mailExportPanelData(r *http.Request, message string) (views.Ma
 		}
 		data.Accounts = append(data.Accounts, mailExportAccountView(account))
 	}
-	data.Jobs, err = h.mailExportJobViews(owner)
-	return data, err
+	return data, nil
+}
+
+// mailJobStarted closes the dialog a job was started from and has the job
+// lists on the page refresh.
+func mailJobStarted(w http.ResponseWriter, dialogID string) {
+	w.Header().Set("HX-Trigger", `{"gofer-close-dialog":"`+dialogID+`","mail-jobs-changed":true}`)
 }
 
 func (h *Handler) mailExportJobViews(owner string) ([]views.MailExportJob, error) {
@@ -161,6 +166,7 @@ func (h *Handler) handleStartMailExport(w http.ResponseWriter, r *http.Request) 
 		h.renderMailExportPanel(w, r, message)
 		return
 	}
+	mailJobStarted(w, "mail-export-dialog")
 	h.renderMailExportPanel(w, r, "")
 }
 
