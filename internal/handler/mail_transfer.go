@@ -164,10 +164,7 @@ func (h *Handler) createMailTransfer(ctx context.Context, owner string, source, 
 			if !found {
 				return nil, errMailImportNoTarget
 			}
-			entry.TargetFolderID, entry.TargetName, entry.TargetRemote = destination.ID, destination.Path, destination.RemoteID
-			if target.Provider == "gmail" {
-				entry.TargetRemote = destination.ProviderRemoteID
-			}
+			entry.TargetFolderID, entry.TargetName, entry.TargetRemote = destination.ID, destination.Path, mailImportFolderRemote(target.Provider, destination)
 		}
 		job.Folders = append(job.Folders, entry)
 	}
@@ -470,10 +467,7 @@ func (h *Handler) mailTransferMessages(ctx context.Context, owner string, source
 	if err != nil {
 		return nil, err
 	}
-	targetRemote := destination.RemoteID
-	if target.Provider == "gmail" {
-		targetRemote = destination.ProviderRemoteID
-	}
+	targetRemote := mailImportFolderRemote(target.Provider, destination)
 	now := time.Now().UTC()
 	job := &mailTransferJob{
 		mailJobInfo:     mailJobInfo{ID: newMailJobID(), Owner: owner, State: mailJobRunning, CreatedAt: now, UpdatedAt: now},

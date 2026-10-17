@@ -381,8 +381,8 @@ func sameMailImportRole(a, b string) bool {
 func mailImportTargets(provider string, folders []storage.MailExportFolder) []storage.MailExportFolder {
 	var targets []storage.MailExportFolder
 	for _, folder := range folders {
-		// Gmail only takes drafts made as drafts.
-		if provider == "gmail" && folder.Role == "drafts" {
+		// Gmail and Outlook only take drafts made as drafts.
+		if (provider == "gmail" || provider == "outlook") && folder.Role == "drafts" {
 			continue
 		}
 		targets = append(targets, folder)
@@ -415,8 +415,6 @@ func mailImportAccountProblem(account models.Account) string {
 	switch {
 	case account.ReconnectPending:
 		return "Enter its password first."
-	case account.Provider == "outlook":
-		return "Importing into Outlook accounts isn't available yet."
 	}
 	return ""
 }
@@ -451,10 +449,7 @@ func (h *Handler) startMailImport(ctx context.Context, job *mailImportJob, accou
 				return errMailImportNoTarget
 			}
 			source.TargetFolderID, source.TargetName = folder.ID, folder.Path
-			source.TargetRemote = folder.RemoteID
-			if account.Provider == "gmail" {
-				source.TargetRemote = folder.ProviderRemoteID
-			}
+			source.TargetRemote = mailImportFolderRemote(account.Provider, folder)
 		}
 		chosen++
 	}
@@ -704,7 +699,7 @@ func (h *Handler) importMailEML(job *mailImportJob, source *mailImportSource, ha
 func mailImportFinalError(err error) bool {
 	var statusErr *goimap.Error
 	var apiErr *mailImportAPIError
-	return errors.As(err, &statusErr) || (errors.As(err, &apiErr) && apiErr.Status >= 400 && apiErr.Status < 500 && apiErr.Status != http.StatusTooManyRequests && apiErr.Status != http.StatusUnauthorized)
+	return errors.Is(err, errOutlookImportDraft) || errors.As(err, &statusErr) || (errors.As(err, &apiErr) && apiErr.Status >= 400 && apiErr.Status < 500 && apiErr.Status != http.StatusTooManyRequests && apiErr.Status != http.StatusUnauthorized)
 }
 
 // mailImportWriter uploads messages into an account's folders.
@@ -744,9 +739,9 @@ func (h *Handler) mailAccountWriter(ctx context.Context, owner, accountID string
 	}
 	switch cfg.Provider {
 	case "gmail":
-		return &gmailImportWriter{token: h.mailImportGmailToken(owner, accountID)}, nil
+		return &gmailImportWriter{mailImportCaller{token: h.mailImportToken(owner, accountID)}}, nil
 	case "outlook":
-		return nil, errors.New("importing into Outlook is not available")
+		return &outlookImportWriter{mailImportCaller{token: h.mailImportToken(owner, accountID)}}, nil
 	}
 	return &imapImportWriter{cfg: cfg, password: password}, nil
 }
@@ -846,9 +841,9 @@ func (w *imapImportWriter) upload(ctx context.Context, remote string, msg mailIm
 	return err
 }
 
-// mailImportGmailToken returns a function giving a Gmail access token, a new
-// one when refresh is set.
-func (h *Handler) mailImportGmailToken(owner, accountID string) func(context.Context, bool) (string, error) {
+// mailImportToken returns a function giving a Gmail or Outlook access
+// token, a new one when refresh is set.
+func (h *Handler) mailImportToken(owner, accountID string) func(context.Context, bool) (string, error) {
 	if h.userIMAP != nil {
 		return func(ctx context.Context, refresh bool) (string, error) {
 			if h.userCredentials == nil {
@@ -883,8 +878,14 @@ func (e *mailImportAPIError) Error() string {
 	return fmt.Sprintf("the server answered %d: %s", e.Status, e.Body)
 }
 
-type gmailImportWriter struct {
+// mailImportCaller sends requests to a provider's API, signing in again
+// once if the token expired.
+type mailImportCaller struct {
 	token func(context.Context, bool) (string, error)
+}
+
+type gmailImportWriter struct {
+	mailImportCaller
 }
 
 func (w *gmailImportWriter) close() {}
@@ -893,8 +894,7 @@ func gmailUploadBaseURL() string {
 	return strings.Replace(gmailAPIBaseURL, "/gmail/v1", "/upload/gmail/v1", 1)
 }
 
-// call sends a request to Gmail, signing in again once if the token expired.
-func (w *gmailImportWriter) call(ctx context.Context, method, endpoint, contentType string, body func() io.Reader, out any) error {
+func (w mailImportCaller) call(ctx context.Context, method, endpoint, contentType string, body func() io.Reader, out any) error {
 	for attempt := 0; ; attempt++ {
 		token, err := w.token(ctx, attempt > 0)
 		if err != nil {

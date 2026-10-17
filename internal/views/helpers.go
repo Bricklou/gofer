@@ -149,16 +149,14 @@ func mailMoveAccountProblem(account models.Account, own bool) string {
 		return ""
 	case account.ReconnectPending:
 		return "Needs its password"
-	case account.Provider == "outlook":
-		return "Can't receive from other accounts yet"
 	}
 	return ""
 }
 
 // mailMoveTakesOtherAccounts reports whether a folder can take email from
-// another account. Gmail only takes drafts made as drafts.
+// another account. Gmail and Outlook only take drafts made as drafts.
 func mailMoveTakesOtherAccounts(account models.Account, folder models.Folder) bool {
-	return !(account.Provider == "gmail" && folder.Role == "drafts")
+	return !((account.Provider == "gmail" || account.Provider == "outlook") && folder.Role == "drafts")
 }
 
 func mailRoleIsTrash(role string) bool {

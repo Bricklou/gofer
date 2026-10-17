@@ -3,7 +3,10 @@ package handler
 import (
 	"bytes"
 	"context"
+	"encoding/base64"
 	"encoding/json"
+	"errors"
+	"fmt"
 	"io"
 	"mime"
 	"mime/multipart"
@@ -384,5 +387,221 @@ func TestMailImportContinuesWhereItStopped(t *testing.T) {
 	}
 	if strings.Join(subjects, ",") != "Part two,Part three" {
 		t.Fatalf("uploaded after continuing: %v", subjects)
+	}
+}
+
+// Outlook gets each message built from its parts, with the properties of a
+// delivered message, then its read and flagged state. A message Outlook
+// still keeps as a draft is deleted and reported.
+func TestOutlookImportWriter(t *testing.T) {
+	var mu sync.Mutex
+	var created []string
+	var uploads []map[string]any
+	var patches []string
+	var deleted []string
+	draft := false
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		mu.Lock()
+		defer mu.Unlock()
+		body, _ := io.ReadAll(r.Body)
+		switch {
+		case r.Method == http.MethodGet && r.URL.Path == "/v1.0/me/mailFolders":
+			if strings.Contains(r.URL.Query().Get("$filter"), "'Projects'") {
+				_, _ = io.WriteString(w, `{"value":[{"id":"folder-projects"}]}`)
+				return
+			}
+			_, _ = io.WriteString(w, `{"value":[]}`)
+		case r.Method == http.MethodGet && r.URL.Path == "/v1.0/me/mailFolders/folder-projects/childFolders":
+			_, _ = io.WriteString(w, `{"value":[]}`)
+		case r.Method == http.MethodPost && r.URL.Path == "/v1.0/me/mailFolders/folder-projects/childFolders":
+			created = append(created, string(body))
+			_, _ = io.WriteString(w, `{"id":"folder-garden"}`)
+		case r.Method == http.MethodPost && r.URL.Path == "/v1.0/me/mailFolders/folder-garden/messages":
+			var message map[string]any
+			if r.Header.Get("Content-Type") != "application/json" || json.Unmarshal(body, &message) != nil {
+				http.Error(w, "bad message", http.StatusBadRequest)
+				return
+			}
+			uploads = append(uploads, message)
+			_, _ = fmt.Fprintf(w, `{"id":"msg-%d","isDraft":%t}`, len(uploads), draft)
+		case r.Method == http.MethodPatch && strings.HasPrefix(r.URL.Path, "/v1.0/me/messages/"):
+			patches = append(patches, strings.TrimPrefix(r.URL.Path, "/v1.0/me/messages/")+" "+string(body))
+			_, _ = io.WriteString(w, `{}`)
+		case r.Method == http.MethodDelete && strings.HasPrefix(r.URL.Path, "/v1.0/me/messages/"):
+			deleted = append(deleted, strings.TrimPrefix(r.URL.Path, "/v1.0/me/messages/"))
+			w.WriteHeader(http.StatusNoContent)
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer server.Close()
+	previous := outlookGraphBaseURL
+	outlookGraphBaseURL = server.URL + "/v1.0"
+	t.Cleanup(func() { outlookGraphBaseURL = previous })
+
+	writer := &outlookImportWriter{mailImportCaller{token: func(context.Context, bool) (string, error) { return "token", nil }}}
+	ctx := t.Context()
+	folder, err := writer.ensureFolder(ctx, "Projects/Garden")
+	if err != nil || folder != "folder-garden" || len(created) != 1 || !strings.Contains(created[0], `"displayName":"Garden"`) {
+		t.Fatalf("folder %q, %v, created %v", folder, err, created)
+	}
+
+	raw := "From: Juno Tester <juno@example.test>\r\n" +
+		"To: Robin Example <robin@example.test>, sky@example.test\r\n" +
+		"Subject: =?UTF-8?Q?Garden_plans=C2=A0for_spring?=\r\n" +
+		"Message-ID: <garden@example.test>\r\n" +
+		"Date: Mon, 03 Mar 2025 10:00:00 +0100\r\n" +
+		"MIME-Version: 1.0\r\n" +
+		"Content-Type: multipart/related; boundary=b1\r\n\r\n" +
+		"--b1\r\nContent-Type: text/html; charset=utf-8\r\n\r\n<p>The tomatoes go by the fence.</p><img src=\"cid:bean@example.test\">\r\n" +
+		"--b1\r\nContent-Type: image/png\r\nContent-ID: <bean@example.test>\r\nContent-Disposition: inline; filename=bean.png\r\nContent-Transfer-Encoding: base64\r\n\r\naGVsbG8=\r\n" +
+		"--b1--\r\n"
+	msg := prepareMailImportMessage([]byte(raw), "")
+	if msg.Subject != "Garden plans\u00a0for spring" {
+		t.Fatalf("subject for display = %q", msg.Subject)
+	}
+	msg.Read, msg.Flagged = false, true
+	if err := writer.upload(ctx, folder, msg); err != nil {
+		t.Fatal(err)
+	}
+	if len(uploads) != 1 {
+		t.Fatalf("uploads = %d", len(uploads))
+	}
+	got, _ := json.Marshal(uploads[0])
+	for _, want := range []string{
+		"\"subject\":\"Garden plans\u00a0for spring\"",
+		`"from":{"emailAddress":{"address":"juno@example.test","name":"Juno Tester"}}`,
+		`{"emailAddress":{"address":"sky@example.test"}}`,
+		`"body":{"content":"\u003cp\u003eThe tomatoes go by the fence.\u003c/p\u003e\u003cimg src=\"cid:bean@example.test\"\u003e","contentType":"html"}`,
+		`"contentBytes":"aGVsbG8="`, `"contentId":"bean@example.test"`, `"isInline":true`,
+		`"internetMessageId":"\u003cgarden@example.test\u003e"`,
+		`{"id":"Integer 0x0E07","value":"1"}`,
+		`{"id":"SystemTime 0x0039","value":"2025-03-03T09:00:00Z"}`,
+		`{"id":"SystemTime 0x0E06","value":"2025-03-03T09:00:00Z"}`,
+	} {
+		if !strings.Contains(string(got), want) {
+			t.Fatalf("message lacks %s:\n%s", want, got)
+		}
+	}
+	if len(patches) != 1 || patches[0] != `msg-1 {"flag":{"flagStatus":"flagged"},"isRead":false}` {
+		t.Fatalf("state = %q", patches)
+	}
+
+	draft = true
+	if err := writer.upload(ctx, folder, msg); !errors.Is(err, errOutlookImportDraft) || !mailImportFinalError(err) {
+		t.Fatalf("draft upload = %v", err)
+	}
+	if len(deleted) != 1 || deleted[0] != "msg-2" || len(patches) != 1 {
+		t.Fatalf("deleted %v, patched %v", deleted, patches)
+	}
+}
+
+// Attachments that would make the request too big follow the message: in
+// one request when small, and in pieces through an upload session when
+// large. A message that can't take one of them is removed.
+func TestOutlookImportWriterSendsLargeAttachmentsAfterTheMessage(t *testing.T) {
+	previousBudget, previousSmall, previousChunk := outlookRequestBudget, outlookSmallAttachment, outlookUploadChunk
+	outlookRequestBudget, outlookSmallAttachment, outlookUploadChunk = 16<<10, 32<<10, 20000
+	t.Cleanup(func() {
+		outlookRequestBudget, outlookSmallAttachment, outlookUploadChunk = previousBudget, previousSmall, previousChunk
+	})
+	medium := bytes.Repeat([]byte("m"), 12<<10)
+	large := make([]byte, 50000)
+	for i := range large {
+		large[i] = byte(i % 251)
+	}
+
+	var mu sync.Mutex
+	var steps []string
+	var created map[string]any
+	var session map[string]any
+	var received []byte
+	failUpload := false
+	var server *httptest.Server
+	server = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		mu.Lock()
+		defer mu.Unlock()
+		body, _ := io.ReadAll(r.Body)
+		switch {
+		case r.Method == http.MethodPost && r.URL.Path == "/v1.0/me/mailFolders/folder-inbox/messages":
+			steps = append(steps, "create")
+			if len(body) > 4<<20 {
+				http.Error(w, "too big", http.StatusRequestEntityTooLarge)
+				return
+			}
+			_ = json.Unmarshal(body, &created)
+			_, _ = io.WriteString(w, `{"id":"msg-1","isDraft":false}`)
+		case r.Method == http.MethodPost && r.URL.Path == "/v1.0/me/messages/msg-1/attachments":
+			var attachment map[string]any
+			_ = json.Unmarshal(body, &attachment)
+			steps = append(steps, "attach "+attachment["name"].(string))
+			_, _ = io.WriteString(w, `{}`)
+		case r.Method == http.MethodPost && r.URL.Path == "/v1.0/me/messages/msg-1/attachments/createUploadSession":
+			_ = json.Unmarshal(body, &session)
+			steps = append(steps, "session")
+			_, _ = fmt.Fprintf(w, `{"uploadUrl":%q}`, server.URL+"/upload/session-1?token=x")
+		case r.Method == http.MethodPut && r.URL.Path == "/upload/session-1":
+			if r.Header.Get("Authorization") != "" {
+				http.Error(w, "the session URL carries its own authorization", http.StatusBadRequest)
+				return
+			}
+			steps = append(steps, "put "+r.Header.Get("Content-Range"))
+			if failUpload {
+				http.Error(w, "broken", http.StatusInternalServerError)
+				return
+			}
+			received = append(received, body...)
+			w.WriteHeader(http.StatusOK)
+		case r.Method == http.MethodPatch && r.URL.Path == "/v1.0/me/messages/msg-1":
+			steps = append(steps, "state")
+			_, _ = io.WriteString(w, `{}`)
+		case r.Method == http.MethodDelete && r.URL.Path == "/v1.0/me/messages/msg-1":
+			steps = append(steps, "delete")
+			w.WriteHeader(http.StatusNoContent)
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer server.Close()
+	previous := outlookGraphBaseURL
+	outlookGraphBaseURL = server.URL + "/v1.0"
+	t.Cleanup(func() { outlookGraphBaseURL = previous })
+
+	var raw bytes.Buffer
+	raw.WriteString("From: Juno Tester <juno@example.test>\r\nTo: robin@example.test\r\nSubject: Garden photos\r\nDate: Mon, 03 Mar 2025 10:00:00 +0000\r\nMIME-Version: 1.0\r\nContent-Type: multipart/mixed; boundary=b1\r\n\r\n")
+	raw.WriteString("--b1\r\nContent-Type: text/plain\r\n\r\nPhotos attached.\r\n")
+	for _, file := range []struct {
+		name string
+		data []byte
+	}{{"tiny.txt", []byte("tiny")}, {"medium.bin", medium}, {"large.bin", large}} {
+		raw.WriteString("--b1\r\nContent-Type: application/octet-stream\r\nContent-Disposition: attachment; filename=" + file.name + "\r\nContent-Transfer-Encoding: base64\r\n\r\n")
+		raw.WriteString(base64.StdEncoding.EncodeToString(file.data) + "\r\n")
+	}
+	raw.WriteString("--b1--\r\n")
+	msg := prepareMailImportMessage(raw.Bytes(), "")
+
+	writer := &outlookImportWriter{mailImportCaller{token: func(context.Context, bool) (string, error) { return "token", nil }}}
+	if err := writer.upload(t.Context(), "folder-inbox", msg); err != nil {
+		t.Fatal(err)
+	}
+	want := "create, attach medium.bin, session, put bytes 0-19999/50000, put bytes 20000-39999/50000, put bytes 40000-49999/50000, state"
+	if got := strings.Join(steps, ", "); got != want {
+		t.Fatalf("steps:\n%s\nwant:\n%s", got, want)
+	}
+	attachments, _ := created["attachments"].([]any)
+	if len(attachments) != 1 || attachments[0].(map[string]any)["name"] != "tiny.txt" {
+		t.Fatalf("attachments created with the message = %v", attachments)
+	}
+	item := session["AttachmentItem"].(map[string]any)
+	if item["name"] != "large.bin" || item["size"] != float64(50000) || !bytes.Equal(received, large) {
+		t.Fatalf("upload session %v, received %d bytes intact %t", item, len(received), bytes.Equal(received, large))
+	}
+
+	steps, received, failUpload = nil, nil, true
+	if err := writer.upload(t.Context(), "folder-inbox", msg); err == nil || !strings.Contains(err.Error(), "attach large.bin") {
+		t.Fatalf("broken upload = %v", err)
+	}
+	if steps[len(steps)-1] != "delete" {
+		t.Fatalf("the half-made message was kept: %v", steps)
 	}
 }

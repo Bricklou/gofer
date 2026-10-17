@@ -274,7 +274,7 @@ func prepareMailImportMessage(raw []byte, fromLine string) mailImportMessage {
 
 	if header, err := netmail.ReadMessage(bytes.NewReader(msg.Raw)); err == nil {
 		msg.MessageID = message.NormalizeMessageID(header.Header.Get("Message-ID"))
-		msg.Subject = header.Header.Get("Subject")
+		msg.Subject = message.DecodeHeader(header.Header.Get("Subject"))
 		if date, err := header.Header.Date(); err == nil {
 			msg.Date = date
 		}

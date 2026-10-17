@@ -244,7 +244,7 @@ func TestMessagesMoveToAnotherAccount(t *testing.T) {
 	req := ownerRequest(httptest.NewRequest(http.MethodGet, "/api/messages/to-account?"+query.Encode(), nil))
 	rec := httptest.NewRecorder()
 	f.h.handleMessagesToAccountDialog(rec, req)
-	for _, want := range []string{"Move to another account?", "2 emails will go from robin@example.test to Inbox in sky@example.test, a different account.", "Copy instead", "Move to sky@example.test"} {
+	for _, want := range []string{"Move to another account?", "2 emails will go from robin@example.test to Inbox in sky@example.test, a different account.", "Copy instead", "data-mail-to-account-move"} {
 		if !strings.Contains(rec.Body.String(), want) {
 			t.Fatalf("dialog lacks %q:\n%s", want, rec.Body.String())
 		}
