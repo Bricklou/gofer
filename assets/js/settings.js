@@ -267,6 +267,29 @@ function setProfileConflictChoices(button, value) {
   })
 }
 
+// Mail import: choosing "New folder…" for a folder of messages asks for the
+// new folder's name, and the upload says how far it has got.
+document.addEventListener("change", function (event) {
+  var select = event.target && event.target.closest && event.target.closest("[data-mail-import-target]")
+  if (!select) return
+  var name = select.parentElement.querySelector("[data-mail-import-new-name]")
+  if (!name) return
+  var isNew = select.value === "new"
+  name.classList.toggle("hidden", !isNew)
+  name.required = isNew
+  if (isNew) name.focus()
+})
+
+document.addEventListener("htmx:xhr:progress", function (event) {
+  var form = event.target && event.target.closest && event.target.closest("[data-mail-import-upload]")
+  var detail = event.detail
+  if (!form || !detail || !detail.lengthComputable || !detail.total) return
+  var status = form.querySelector("[data-mail-import-upload-status]")
+  if (!status) return
+  var percent = Math.floor((detail.loaded * 100) / detail.total)
+  status.textContent = percent < 100 ? "Uploading… " + percent + "%" : "Reading the messages…"
+})
+
 function toggleUnencryptedTransportWarning(input) {
   if (!input || !input.closest) return
   var field = input.closest(".select-container")

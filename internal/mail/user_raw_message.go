@@ -76,10 +76,29 @@ func (s *UserIMAP) RefreshCalendarIncomingRaw(ctx context.Context, candidate *co
 	return s.accounts.RefreshCalendarIncomingRaw(ctx, candidate, raw.snapshot)
 }
 
+// ErrRawMessageNotSaved is returned when a message's original was never saved
+// and the caller asked not to download it.
+var ErrRawMessageNotSaved = errors.New("message was not saved in full")
+
 // ReadRawMessage serializes with body/attachment recovery, joins account and
 // runtime cancellation, and never holds a store lease across file/network I/O.
 // Missing raw files are restored even when the parsed body is already cached.
 func (s *UserIMAP) ReadRawMessage(ctx context.Context, owner string, id int64) (*RawMessage, error) {
+	return s.readRawMessage(ctx, owner, id, true, true)
+}
+
+// ReadRawMessageForExport reads a message's original for an export. A
+// download is not kept, so exporting a mailbox doesn't fill the disk with a
+// second copy of it. Without download, only originals already saved are read.
+func (s *UserIMAP) ReadRawMessageForExport(ctx context.Context, owner string, id int64, download bool) ([]byte, error) {
+	raw, err := s.readRawMessage(ctx, owner, id, download, false)
+	if err != nil {
+		return nil, err
+	}
+	return raw.data, nil
+}
+
+func (s *UserIMAP) readRawMessage(ctx context.Context, owner string, id int64, download, keep bool) (*RawMessage, error) {
 	release, err := s.blobs.PinUserFiles(ctx, owner)
 	if err != nil {
 		return nil, err
@@ -134,6 +153,9 @@ func (s *UserIMAP) ReadRawMessage(ctx context.Context, owner string, id int64) (
 			} else if !errors.Is(err, os.ErrNotExist) {
 				return err
 			}
+		}
+		if len(raw) == 0 && !download {
+			return ErrRawMessageNotSaved
 		}
 		if len(raw) == 0 {
 			scope, err := s.snapshot(operation, owner, account)
@@ -201,6 +223,10 @@ func (s *UserIMAP) ReadRawMessage(ctx context.Context, owner string, id int64) (
 			}
 			if err := validate(); err != nil {
 				return err
+			}
+			if !keep {
+				result = &RawMessage{owner: owner, data: raw, snapshot: snapshot, runtime: s}
+				return nil
 			}
 			candidate, err := s.blobs.NewMessageVersion()
 			if err != nil {

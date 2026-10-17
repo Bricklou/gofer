@@ -138,6 +138,8 @@ type Handler struct {
 	retentionMu               sync.RWMutex
 	retentionState            models.MailRetentionDiagnostics
 	userRetention             *userRetentionWorker
+	mailExports               *mailJobManager[*mailExportJob]
+	mailImports               *mailJobManager[*mailImportJob]
 	authEventRetentionWake    chan struct{}
 	authEventRetentionWorkers sync.WaitGroup
 	smtpProfileMu             sync.RWMutex
@@ -495,6 +497,12 @@ func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/settings/signatures/manage", h.handleManageSignaturesSettings)
 	mux.HandleFunc("GET /api/settings/ui", h.handleGetUISettings)
 	h.registerProfileTransferRoutes(func(pattern string, handler http.HandlerFunc) {
+		mux.HandleFunc(pattern, handler)
+	})
+	h.registerMailExportRoutes(func(pattern string, handler http.HandlerFunc) {
+		mux.HandleFunc(pattern, handler)
+	})
+	h.registerMailImportRoutes(func(pattern string, handler http.HandlerFunc) {
 		mux.HandleFunc(pattern, handler)
 	})
 	mux.HandleFunc("PATCH /api/settings/ui", h.handleSaveUISettings)
