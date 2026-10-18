@@ -28,6 +28,7 @@ What you can do with it today:
 - **Reading and sending:** threads, attachments, drafts with autosave, signatures, scheduled send, and translation.
 - **Organization and search:** folders, labels, stars, archive, spam controls, and advanced search filters. Drag emails onto a folder to move them.
 - **Contacts:** local address books, vCard import/export, Google, Outlook, and CardDAV sync, plus Gofer Sync for automatic contact syncing between accounts.
+- **Export and import:** save your profile (preferences, signatures, accounts, and Gofer-only contacts) to a file and bring it into another Gofer. Export folders as mbox files, import mbox or eml files into any account, and copy or move mail between accounts.
 - **Calendar:** Google Calendar, Outlook, and CalDAV sync, month and week views, and an agenda. Create, edit, and delete events, including recurring series and single dates. Drag events to move or resize them, or drag over empty time to create one. Events can have reminders, show you as busy or free, and be private. Calendars you have open update within a minute.
 - **Meetings:** guest invitations, including for recurring meetings, RSVP from Calendar or Mail, forwarding invitations, rich event descriptions, and Google Meet or Microsoft Teams links where the provider supports them. Invitations a CalDAV server doesn't add to the calendar are added from the email.
 - **Security:** encrypted stored credentials, remote content blocked by default, password and external sign-in, and MFA with TOTP or passkeys.
@@ -41,7 +42,6 @@ Things I'm still improving, in no particular order:
 - shared OAuth applications so users do not need to register their own provider clients
 - clearer diagnostics and reconnect flows
 - broader test coverage around provider sync behavior
-- moving mail between accounts
 - deeper labels/tags workflows
 - broader calendar provider compatibility
 - richer regional and language settings
