@@ -3,107 +3,43 @@
   Gofer
 </h1>
 
-| Minimal light | Classic dark |
-| --- | --- |
-| <img alt="Gofer email card view in the minimal light theme" src="./screenshots/emails-card-minimal-light.png" /> | <img alt="Gofer email card view in the classic dark theme" src="./screenshots/emails-card-classic-dark.png" /> |
+<img alt="Gofer's inbox in its three styles, side by side: Classic in dark mode, Minimal, and Express" src="./screenshots/themes.png" />
+<p align="center">Classic, Minimal, and Express, left to right</p>
 
 [View all screenshots](./screenshots/README.md)
 
 <br>
 
-Gofer is a self-hosted email, contacts, and calendar app I'm building. It started as a small mail thing and has grown to support personal use and shared installations with multiple users, separate administrators, invitations, and security policies.
+Gofer is a self-hosted webmail I'm building because I wanted one that's actually nice to use. Mail, contacts, and calendar in one place, running on your own machine or server, open in any browser.
 
-You can run it on your own machine or a server and access it through a browser. Mail and related data are cached in SQLite wherever you host it. Gofer talks directly to your providers: IMAP/SMTP for generic mail accounts, Google APIs for Gmail, contacts, and calendars, Microsoft Graph for Outlook, and CardDAV/CalDAV for compatible contact and calendar services.
+It's pre-1.0, so things still change, but I use it every day with six accounts and around 100k emails, and it holds up fine.
 
-I'm still working on it, and it's pre-1.0, so expect things to keep changing as the app settles. Provider compatibility, setup, and upgrades still need care. Please keep backups before upgrading.
+## what it does
 
-For reference, I'm actively using it with six configured accounts and around 100k emails in total. So far, I haven't run into performance issues or increased memory consumption.
+- **All your accounts in one place:** Gmail, Outlook, iCloud, and any IMAP/SMTP server.
+- **Mail the way you'd expect:** threads, labels, drag and drop, scheduled send, signatures, translation, and solid search.
+- **Contacts and calendar too:** syncs with Google, Outlook, CardDAV, and CalDAV. Drag events around, send invites, RSVP right from the email, and add Meet or Teams links.
+- **Your data stays yours:** export mailboxes as mbox, import from other apps, move mail between accounts, and take your whole setup to another Gofer.
+- **For you, your family, or your office:** run it with no login, as one protected profile, or for several users with their own admins.
+- **Safe by default:** encrypted credentials, remote images blocked, and MFA with passkeys or TOTP.
+- **Make it yours:** three looks (Classic, Minimal, and a retro one called Express), flexible layouts, and push notifications.
 
-## features
+## try it
 
-What you can do with it today:
+Grab a binary from the [releases page](https://github.com/cristianadrielbraun/gofer/releases), run it, and open `http://localhost:8090`. IMAP accounts work right away. Gmail and Outlook need your own OAuth app for now (I'm working on that).
 
-- **Users and access:** multiple users with separate administrators, invitations, and security policies; personal mode for one protected profile; and a no-login mode for local use.
-- **Accounts and sync:** multiple IMAP/SMTP, Gmail, and Outlook accounts, with mail cached in the instance's SQLite database. iCloud Mail works as an IMAP/SMTP account with an app-specific password.
-- **Reading and sending:** threads, attachments, drafts with autosave, signatures, scheduled send, and translation.
-- **Organization and search:** folders, labels, stars, archive, spam controls, and advanced search filters. Drag emails onto a folder to move them.
-- **Contacts:** local address books, vCard import/export, Google, Outlook, and CardDAV sync, plus Gofer Sync for automatic contact syncing between accounts.
-- **Export and import:** save your profile (preferences, signatures, accounts, and Gofer-only contacts) to a file and bring it into another Gofer. Export folders as mbox files, import mbox or eml files into any account, and copy or move mail between accounts.
-- **Calendar:** Google Calendar, Outlook, and CalDAV sync, month and week views, and an agenda. Create, edit, and delete events, including recurring series and single dates. Drag events to move or resize them, or drag over empty time to create one. Events can have reminders, show you as busy or free, and be private. Calendars you have open update within a minute.
-- **Meetings:** guest invitations, including for recurring meetings, RSVP from Calendar or Mail, forwarding invitations, rich event descriptions, and Google Meet or Microsoft Teams links where the provider supports them. Invitations a CalDAV server doesn't add to the calendar are added from the email.
-- **Security:** encrypted stored credentials, remote content blocked by default, password and external sign-in, and MFA with TOTP or passkeys.
-- **Customization:** three visual styles (Classic, Minimal, and the retro Express), side-by-side or stacked panes with their own sizes for Mail, Contacts, and Calendar, account colors, regional settings, and browser/Web Push notifications.
+Auth modes, accounts, upgrades, and deployment are all in [docs/setup.md](./docs/setup.md). Please keep backups before upgrading.
 
-## still moving
-
-Things I'm still improving, in no particular order:
-
-- smoother first-run setup and OAuth credential guidance
-- shared OAuth applications so users do not need to register their own provider clients
-- clearer diagnostics and reconnect flows
-- broader test coverage around provider sync behavior
-- deeper labels/tags workflows
-- broader calendar provider compatibility
-- richer regional and language settings
-- more keyboard shortcuts, bulk actions, and cleanup flows
-
-## running and building
-
-Downloaded release binaries include the web assets. Development from source requires Go 1.27.1 or later, `templ`, `tailwindcss`, and `task`.
+To build from source you need Go 1.27.1+, `templ`, `tailwindcss`, and `task`:
 
 ```sh
-task dev      # development server with hot reload
-task build    # local build at ./dist/gofer
+task dev      # dev server with hot reload, at http://local.localhost:8090
 task release  # self-contained binary at ./dist/gofer
 ```
 
-With the development server running, open `http://local.localhost:8090`. See the [Taskfile](./Taskfile.yml) for packaging and other build tasks.
+## what's next
 
-## setup and configuration
-
-Choose `GOFER_AUTH_MODE=managed` for multiple users with separate administrator accounts, or `personal` for one protected profile with multiple mailboxes. Both modes guide you through first-run setup using a token printed in the terminal. The default `open` mode has no login and is intended for local use. See [`.env.example`](./.env.example) for configuration options.
-
-Managed mode keeps each user's mail, contacts, Calendar and preferences in a separate SQLite database. Authentication and installation settings stay in the central database. New installations initialize this layout automatically.
-
-An existing shared database is converted automatically the first time Gofer starts in managed mode, keeping the same `GOFER_DB_PATH`. Conversion can take a while for large mailboxes; the server starts listening once it finishes. The original database is kept as `<database>.shared` next to the new central database, its `.users` directory and `.layout.json` file. Back up the new files together with the encryption key and the `accounts` directory. If conversion fails, the original database is put back unchanged and the error is logged; if it is interrupted, it resumes on the next start. When the failure comes from the database's contents, later starts report the same error immediately instead of repeating the conversion, until the database or Gofer changes; delete `<database>.migration-failed.json` to retry anyway. Personal and open modes keep shared storage.
-
-> [!NOTE]
-> **Staying in open or personal mode?** Nothing changes for you in 0.5.0. Your database receives the usual automatic schema upgrade on the first start, and the per-user conversion below never runs unless you switch to managed mode.
-
-> [!WARNING]
-> **Upgrading a managed installation from a version before 0.5.0, or switching an existing installation to managed mode.** The first start in managed mode converts your database to per-user storage, and this is one-way:
->
-> - **Choose when it happens.** The conversion runs automatically and may take several minutes. If Gofer can restart without you, for example with automatic container updates, set `GOFER_PREVENT_STORAGE_CONVERSION=true` before upgrading. Managed mode then refuses to start with an explanation instead of converting, and leaves the database untouched; remove the setting when you are ready. It does not stop a conversion that was already interrupted from finishing.
-> - **Back up first.** Stop Gofer and copy the whole data directory, including the database, `secret.key` (unless you use `GOFER_SECRET_KEY`) and the `accounts` directory.
-> - **Have free disk space for a second copy.** The conversion needs about twice the database size: the original is kept as `<database>.shared` and the new databases are roughly as large, plus temporary files while it runs.
-> - **Start from the same working directory as before.** When `GOFER_DB_PATH` is relative, earlier versions stored message and attachment file paths relative to the directory Gofer was started from. The conversion resolves them from the current directory; started elsewhere, it stops and leaves the database unchanged. After the first successful start, the paths are absolute and any working directory works.
-> - **There is no way back except the retained original.** After conversion, earlier versions and personal mode cannot open the data. To return to the pre-upgrade state, stop Gofer, move away `<database>`, `<database>.users` and `<database>.layout.json`, and rename `<database>.shared` back to `<database>`. Mail, settings and accounts changed since the conversion are lost, and you need a pre-0.5.0 release to run it. Once you are sure you won't roll back, you can delete `<database>.shared` to free its space.
-> - **Switching from open or personal mode works the same way.** Your profile keeps its mailboxes and becomes a regular user, and setup creates a separate administrator account. A personal profile keeps its password and other sign-in methods. An open profile has none yet, so the setup notice in the terminal also shows a token for setting its password at `/account/enroll`.
-
-To convert into a separate file instead, stop Gofer and run `./gofer storage migrate --db data/gofer.db --to data/gofer-users.db` (repeat with `--retry` if interrupted), then set `GOFER_DB_PATH=data/gofer-users.db`.
-
-Generic IMAP/SMTP accounts need no OAuth application credentials. Gmail and Outlook currently require your own provider client ID and secret.
-
-iCloud is an IMAP/SMTP account with Apple's servers filled in. Apple doesn't let other mail apps sign in with your Apple Account password, so create an app-specific password at [account.apple.com](https://account.apple.com) under **Sign-In and Security** (this needs two-factor authentication) and enter it when adding the account. Contacts and Calendar use the same login through CardDAV and CalDAV. Changing your Apple Account password revokes app-specific passwords, so you'll need to create a new one and enter it under **Edit account**. iCloud+ custom-domain addresses should work by signing in with your @icloud.com address, but haven't been tested yet. Mailbox authorization and optional Google/Microsoft application sign-in use separate clients and callbacks.
-
-> [!NOTE]
-> I plan to add Gmail and Outlook connections that don't require you to provide your own OAuth app credentials. First, I need to research the right way to set up public OAuth applications and complete the providers' identity verification and any required app reviews. Until then, you'll need to use your own credentials as described above.
-
-Configure Calendar under **Settings → Accounts**: enable it for an account, discover calendars, and select which ones to sync. Google and Outlook use the account's existing OAuth connection; reconnect older accounts to grant Calendar access if needed. Generic accounts can connect a CalDAV server using an HTTPS URL and server credentials, which may require an app password. iCloud accounts connect to iCloud's CalDAV server with the account's app-specific password.
-
-## deployment precautions
-
-For server deployments, use personal or managed authentication, serve the application through an HTTPS reverse proxy, and configure `GOFER_ADDR` and `GOFER_BASE_URL` for your deployment. The listener binds to loopback by default. Set `GOFER_TRUSTED_PROXY_CIDRS` only for your actual proxy peers; use `GOFER_ALLOWED_CIDRS` when you need to restrict client networks.
-
-To sign in over plain HTTP on a home or office network, set `GOFER_BASE_URL` to the server's private address and `GOFER_ALLOW_INSECURE_LAN=true`. Sign-in cookies then travel unencrypted on that network, and Gofer logs a warning at startup; public addresses and host names still require HTTPS.
-
-Gofer doesn't connect to servers on private network addresses unless they are approved. If your mail, calendar, or contacts server is on your local network, approve it under Mail security: in Settings, Security for personal and open installations, or in the admin panel in managed mode.
-
-Runtime data is stored in `data/` by default. Protect the data directory, configuration, and secrets, and back them up together before upgrades. Shared databases apply schema migrations at startup, and managed mode converts them to per-user storage as described above. Going back to an older version may require restoring its matching backup, and the retained shared database does not include changes made after conversion. I recommend testing your providers and access setup before relying on Gofer for anything critical.
-
-## admin panel
-
-In managed mode, `/admin` provides user administration, invitations, security policies, and security activity. It also includes diagnostics for account sync, contacts, avatars, and provider behavior.
+Easier first-run setup, Gmail and Outlook without your own OAuth app, clearer reconnect flows, more calendar providers, more shortcuts and bulk actions. Ideas and bug reports are welcome.
 
 ## built with
 
