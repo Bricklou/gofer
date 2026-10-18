@@ -43,6 +43,8 @@ Easier first-run setup, Gmail and Outlook without your own OAuth app, clearer re
 
 ## built with
 
+I build Gofer with a lot of help from AI coding tools. I decide what goes in, review it, and use the result every day.
+
 Some of the main libraries and tools Gofer leans on, because pretending I wrote the whole mail stack from scratch would be absurd:
 
 - [templ](https://templ.guide/) for Go-based views
