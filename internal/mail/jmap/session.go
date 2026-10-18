@@ -71,10 +71,13 @@ type CoreCapability struct {
 	MaxObjectsInSet       int   `json:"maxObjectsInSet"`
 }
 
-// HTTPError is a non-2xx response from the server.
+// HTTPError is a non-2xx response from the server. Type and Limit are set
+// when the body is a JMAP problem details object.
 type HTTPError struct {
 	StatusCode int
 	Body       string
+	Type       string
+	Limit      string
 }
 
 func (e *HTTPError) Error() string {
@@ -106,8 +109,7 @@ func (c *Client) Session(ctx context.Context, sessionURL string) (*Session, erro
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		raw, _ := io.ReadAll(io.LimitReader(resp.Body, maxErrorBytes))
-		return nil, &HTTPError{StatusCode: resp.StatusCode, Body: strings.TrimSpace(string(raw))}
+		return nil, newHTTPError(resp)
 	}
 
 	var session Session

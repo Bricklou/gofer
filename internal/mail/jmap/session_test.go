@@ -102,9 +102,10 @@ func TestResolveTemplateURL(t *testing.T) {
 	}
 }
 
-// Runs against a real server only when GOFER_JMAP_TEST_URL, _USER and
-// _PASSWORD are set.
-func TestSessionLiveServer(t *testing.T) {
+// liveSession connects to a real server, and skips the test unless
+// GOFER_JMAP_TEST_URL, _USER and _PASSWORD are set.
+func liveSession(t *testing.T) (*Client, *Session) {
+	t.Helper()
 	sessionURL := os.Getenv("GOFER_JMAP_TEST_URL")
 	user := os.Getenv("GOFER_JMAP_TEST_USER")
 	password := os.Getenv("GOFER_JMAP_TEST_PASSWORD")
@@ -116,6 +117,11 @@ func TestSessionLiveServer(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Session: %v", err)
 	}
+	return client, session
+}
+
+func TestSessionLiveServer(t *testing.T) {
+	_, session := liveSession(t)
 	if session.PrimaryAccount(CapabilityMail) == "" {
 		t.Fatalf("no primary mail account in session: %+v", session)
 	}
