@@ -1,0 +1,12 @@
+.git
+.env
+.show-your-work
+data/
+dist/
+gofer
+internal_notes/
+screenshots/
+assets/css/output.css
+assets/min/
+Dockerfile
+.dockerignore

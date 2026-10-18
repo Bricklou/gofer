@@ -31,6 +31,29 @@ Gofer doesn't connect to servers on private network addresses unless they are ap
 
 Runtime data is stored in `data/` by default. Protect the data directory, configuration, and secrets, and back them up together before upgrades. Shared databases apply schema migrations at startup, and managed mode converts them to per-user storage as described in [pre-0.5.0-migration.md](./pre-0.5.0-migration.md). Going back to an older version may require restoring its matching backup, and the retained shared database does not include changes made after conversion. I recommend testing your providers and access setup before relying on Gofer for anything critical.
 
+## docker
+
+Images for amd64 and arm64 are published to `ghcr.io/cristianadrielbraun/gofer` with each release. The quickest start is the example [`compose.yaml`](../compose.yaml): set `GOFER_BASE_URL` to the address you'll open in your browser, then run
+
+```sh
+docker compose up -d
+docker compose logs gofer   # shows the first-run setup token
+```
+
+The image differs from a plain binary in a few defaults: it runs in `personal` mode, listens on all addresses inside the container on port 8090, and keeps its data in the `/data` volume. Every setting from [`.env.example`](../.env.example) can be passed as an environment variable, or from a file with `env_file`.
+
+The example publishes the port on `127.0.0.1` only, for an HTTPS reverse proxy on the same machine. That proxy reaches Gofer through the Docker network gateway, so set `GOFER_TRUSTED_PROXY_CIDRS: 172.16.0.0/12` to pass on the real client address. To reach Gofer from other machines without a proxy, publish `"8090:8090"` instead, and see the plain HTTP note above.
+
+If the setup token is lost or expired, rotate it with Gofer stopped:
+
+```sh
+docker compose stop gofer
+docker compose run --rm gofer auth setup-token rotate
+docker compose start gofer
+```
+
+Your mail, settings, and encryption keys all live in the volume. Back it up with Gofer stopped. `latest` follows each new release; pin a version such as `ghcr.io/cristianadrielbraun/gofer:0.9` if you'd rather choose when to upgrade. If you update images automatically, read the upgrade notes above first, and consider `GOFER_PREVENT_STORAGE_CONVERSION=true` in managed mode.
+
 ## admin panel
 
 In managed mode, `/admin` provides user administration, invitations, security policies, and security activity. It also includes diagnostics for account sync, contacts, avatars, and provider behavior.

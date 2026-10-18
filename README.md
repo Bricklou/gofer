@@ -28,6 +28,8 @@ It's pre-1.0, so things still change, but I use it every day with six accounts a
 
 Grab a binary from the [releases page](https://github.com/cristianadrielbraun/gofer/releases), run it, and open `http://localhost:8090`. IMAP accounts work right away. Gmail and Outlook need your own OAuth app for now (I'm working on that).
 
+Prefer Docker? There's an image at `ghcr.io/cristianadrielbraun/gofer` and an example [`compose.yaml`](./compose.yaml); see [docs/setup.md](./docs/setup.md#docker).
+
 Auth modes, accounts, upgrades, and deployment are all in [docs/setup.md](./docs/setup.md). Please keep backups before upgrading.
 
 To build from source you need Go 1.27.1+, `templ`, `tailwindcss`, and `task`:
