@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log"
 	"net/http"
 	"net/url"
 	"strings"
@@ -569,6 +570,14 @@ func (h *Handler) handleDiscoverAccountCalendars(w http.ResponseWriter, r *http.
 		}
 		statusMessage = fmt.Sprintf("Discovered %d CalDAV calendar(s). The first calendar is selected by default.", len(calendars))
 		discoverySucceeded = true
+		if r.FormValue("password") != "" || useAccountCredentials {
+			if remaining, waiting, err := h.resolveImportedLogin(ctx, userID, accountID, storage.ImportedLoginCalendar); err != nil {
+				log.Printf("account %s: turn on imported calendars: %v", accountID, err)
+			} else if waiting {
+				markImportedLoginResolved(w, storage.ImportedLoginCalendar, remaining)
+				statusMessage = fmt.Sprintf("Discovered %d CalDAV calendar(s). The calendars from your profile are selected.", len(calendars))
+			}
+		}
 	default:
 		statusMessage = "Calendar discovery is not available for this account type."
 		statusError = true

@@ -1637,6 +1637,81 @@ goferOnContent('#edit-account-dialog', function() {
   window.setTimeout(editAccountMarkSaved, 300);
   editAccountTest = newEditAccountTest();
 });
+// An account imported from a profile marks the steps that still need a
+// password with "!". A save button stays unusable until its form's marked
+// password fields are filled, and a save that brings a password clears the
+// marks for it. The account syncs each service once its password is saved.
+function reconnectMissingFields(form) {
+  if (!form) return false;
+  return Array.prototype.some.call(form.querySelectorAll('[data-reconnect-required]'), function(input) {
+    return !input.disabled && !input.value.trim();
+  });
+}
+function updateReconnectGates() {
+  var root = document.getElementById('edit-account-dialog');
+  if (!root) return;
+  root.querySelectorAll('[data-reconnect-gate]').forEach(function(button) {
+    var form = document.getElementById(button.getAttribute('data-reconnect-gate'));
+    var service = button.getAttribute('data-reconnect-gate-switch');
+    var toggle = service ? root.querySelector('[data-wizard-service-switch="' + service + '"]') : null;
+    var held = (!toggle || toggle.checked) && reconnectMissingFields(form);
+    button.classList.toggle('pointer-events-none', held);
+    button.classList.toggle('opacity-50', held);
+    if (held) {
+      button.setAttribute('aria-disabled', 'true');
+      button.title = 'Enter the password marked with ! first';
+    } else if (button.getAttribute('aria-disabled') === 'true') {
+      button.removeAttribute('aria-disabled');
+      button.removeAttribute('title');
+    }
+  });
+}
+goferOnContent('#edit-account-dialog', updateReconnectGates);
+document.addEventListener('input', function(event) {
+  if (event.target.closest && event.target.closest('#edit-account-dialog')) updateReconnectGates();
+});
+document.addEventListener('change', function(event) {
+  if (event.target.closest && event.target.closest('#edit-account-dialog')) updateReconnectGates();
+});
+document.addEventListener('submit', function(event) {
+  var form = event.target;
+  if (!form.closest || !form.closest('#edit-account-dialog') || !reconnectMissingFields(form)) return;
+  var field = Array.prototype.find.call(form.querySelectorAll('[data-reconnect-required]'), function(input) {
+    return !input.disabled && !input.value.trim();
+  });
+  event.preventDefault();
+  event.stopImmediatePropagation();
+  if (field && field.reportValidity) field.reportValidity();
+}, true);
+document.addEventListener('htmx:afterRequest', function(event) {
+  var xhr = event.detail && event.detail.xhr;
+  var login = xhr && xhr.getResponseHeader('X-Gofer-Reconnect-Resolved');
+  var root = document.getElementById('edit-account-dialog');
+  if (!login || !root) return;
+  root.querySelectorAll('[data-reconnect-mark="' + login + '"]').forEach(function(mark) { mark.remove(); });
+  root.querySelectorAll('[data-reconnect-required="' + login + '"]').forEach(function(input) {
+    input.removeAttribute('data-reconnect-required');
+    input.required = false;
+  });
+  root.querySelectorAll('[data-reconnect-gate]').forEach(function(button) {
+    var form = document.getElementById(button.getAttribute('data-reconnect-gate'));
+    if (!form || !form.querySelector('[data-reconnect-required]')) button.removeAttribute('data-reconnect-gate');
+  });
+  var note = root.querySelector('[data-edit-account-reconnect-pending]');
+  var remaining = (xhr.getResponseHeader('X-Gofer-Reconnect-Remaining') || '').split(',').filter(Boolean);
+  if (note && remaining.length === 0) {
+    note.hidden = true;
+  } else if (note) {
+    var labels = remaining.map(function(item) { return item === 'mail' ? 'Mail' : item.charAt(0).toUpperCase() + item.slice(1); });
+    var text = note.querySelector('[data-reconnect-note]');
+    var list = labels.length > 1 ? labels.slice(0, -1).join(', ') + ' and ' + labels[labels.length - 1] : labels[0];
+    if (text) text.textContent = 'Saved. ' + list + (labels.length > 1 ? ' still need their passwords' : ' still needs its password') + ', in the steps marked with !.';
+  }
+  updateReconnectGates();
+});
+document.addEventListener('htmx:afterSettle', function(event) {
+  if (event.target.closest && event.target.closest('#edit-account-dialog')) updateReconnectGates();
+});
 function editWizardGo(step, immediate) {
   if (step < 0) step = 0;
   if (step > 5) step = 5;
@@ -1663,7 +1738,13 @@ function editWizardGo(step, immediate) {
     section.dataset.active = String(steps.indexOf(String(step)) !== -1);
   });
   setWizardFooter(root, step, !!immediate);
-  if (step === 3) editAccountTest.run(false);
+  if (step === 3) {
+    if (reconnectMissingFields(document.getElementById('edit-account-form'))) {
+      editAccountTest.saveFailed('Enter the password marked with ! before testing.');
+    } else {
+      editAccountTest.run(false);
+    }
+  }
 }
 // After a passing test: save the changes, or just continue when there are
 // none, so the account isn't saved (and its sync restarted) for nothing.

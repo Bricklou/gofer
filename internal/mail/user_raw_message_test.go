@@ -161,3 +161,55 @@ func TestUserRawMessageOwn401RefreshIsBounded(t *testing.T) {
 		t.Fatal("accepted MIME fetched again")
 	}
 }
+
+// An export reads saved originals as they are and downloads the rest without
+// keeping them, so exporting doesn't store a second copy of the mailbox.
+func TestUserRawMessageForExportDoesNotKeepDownloads(t *testing.T) {
+	f := newUserGmailFixture(t)
+	if err := f.worker.Sync(t.Context(), "alice", f.ids["alice"]); err != nil {
+		t.Fatal(err)
+	}
+	id := f.messageID(t, "alice", "m1")
+	if err := f.worker.EnsureBody(t.Context(), "alice", id); err != nil {
+		t.Fatal(err)
+	}
+	fetches := f.api.count("alice", "/users/me/messages/m1", "raw")
+	raw, err := f.worker.ReadRawMessageForExport(t.Context(), "alice", id, false)
+	if err != nil || !strings.Contains(string(raw), "alice private body") {
+		t.Fatalf("saved original = %q, %v", raw, err)
+	}
+	if f.api.count("alice", "/users/me/messages/m1", "raw") != fetches {
+		t.Fatal("a saved original was downloaded again")
+	}
+
+	var rawPath string
+	f.local(t, "alice", func(db *storage.DB) error {
+		return db.Read().QueryRow(`SELECT raw_path FROM messages WHERE id=?`, id).Scan(&rawPath)
+	})
+	if err := os.Remove(rawPath); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := f.worker.ReadRawMessageForExport(t.Context(), "alice", id, false); !errors.Is(err, ErrRawMessageNotSaved) {
+		t.Fatalf("export of saved copies only = %v, want ErrRawMessageNotSaved", err)
+	}
+	raw, err = f.worker.ReadRawMessageForExport(t.Context(), "alice", id, true)
+	if err != nil || !strings.Contains(string(raw), "alice private body") {
+		t.Fatalf("downloaded original = %q, %v", raw, err)
+	}
+	if f.api.count("alice", "/users/me/messages/m1", "raw") != fetches+1 {
+		t.Fatal("missing original was not downloaded")
+	}
+	f.local(t, "alice", func(db *storage.DB) error {
+		var path string
+		if err := db.Read().QueryRow(`SELECT COALESCE(raw_path,'') FROM messages WHERE id=?`, id).Scan(&path); err != nil {
+			return err
+		}
+		if path != rawPath {
+			return errors.New("export changed the saved original's path")
+		}
+		if _, err := os.Stat(path); !os.IsNotExist(err) {
+			return errors.New("export kept its download")
+		}
+		return nil
+	})
+}

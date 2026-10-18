@@ -1,0 +1,393 @@
+package views
+
+import (
+	"fmt"
+	"strconv"
+
+	"github.com/cristianadrielbraun/gofer/components/checkbox"
+	"github.com/cristianadrielbraun/gofer/components/icon"
+	"github.com/cristianadrielbraun/gofer/components/radio"
+)
+
+// ProfileImportAccount is one account in a profile being imported. Status is
+// "new", "exists" or "unsupported".
+type ProfileImportAccount struct {
+	Ref      string
+	Email    string
+	Name     string
+	Provider string
+	Color    string
+	Status   string
+	// CanReplace is set for an account already connected the same way,
+	// whose settings the profile can replace.
+	CanReplace bool
+	// Needs are the logins the account will wait for once imported.
+	Needs []string
+}
+
+// ProfileImportContactConflict is a contact in the profile that looks like
+// one already in Gofer. ByEmail is set when they share an email address, so
+// both cannot be kept.
+type ProfileImportContactConflict struct {
+	Index          int
+	Name           string
+	Detail         string
+	ExistingName   string
+	ExistingDetail string
+	ByEmail        bool
+	Default        string
+}
+
+type ProfileImportPreviewData struct {
+	// Profile is the uploaded file, sent back with the chosen sections.
+	Profile        string
+	ExportedAt     string
+	HasPreferences bool
+	Signatures     []string
+	Contacts       int
+	Conflicts      []ProfileImportContactConflict
+	Accounts       []ProfileImportAccount
+}
+
+type ProfileImportResultData struct {
+	Accounts         []string
+	AccountsReplaced []string
+	AccountFailures  []string
+	Signatures       int
+	Contacts         int
+	ContactsReplaced int
+	ContactsSkipped  int
+	Preferences      bool
+}
+
+const profileButtonClass = "inline-flex h-8 shrink-0 items-center justify-center gap-2 whitespace-nowrap rounded-md border border-input bg-background px-3 text-xs font-medium transition-colors hover:bg-accent hover:text-accent-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50"
+
+const profilePrimaryButtonClass = "inline-flex h-8 shrink-0 items-center justify-center gap-2 whitespace-nowrap rounded-md bg-primary px-3 text-xs font-medium text-primary-foreground transition-colors hover:bg-primary/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50"
+
+templ ProfileImportUploadForm(message string) {
+	@dataDialogScroll("pb-6") {
+		<form
+			hx-post="/api/profile/import/preview"
+			hx-encoding="multipart/form-data"
+			hx-target="#profile-import-panel"
+			hx-swap="innerHTML"
+			class="space-y-1.5"
+		>
+			<label for="profile-import-file" class="block text-sm font-medium text-foreground">Profile file</label>
+			<div class="flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-3">
+				<input id="profile-import-file" type="file" name="profile" accept=".json,application/json" required class="profile-file-input block h-8 w-full min-w-0 flex-1 rounded-md border border-input bg-background p-[3px] text-xs text-foreground file:mr-3 file:h-full file:cursor-pointer file:rounded file:border-0 file:bg-primary file:px-3 file:text-xs file:font-medium file:text-primary-foreground hover:file:bg-primary/90"/>
+				<button type="submit" class={ profileButtonClass }>
+					@icon.Upload(icon.Props{Class: "size-3.5"})
+					Review import
+				</button>
+			</div>
+			if message != "" {
+				<p class="text-xs text-destructive" role="alert" data-profile-import-error>{ message }</p>
+			}
+		</form>
+	}
+}
+
+func profileImportStatusLabel(status string) string {
+	switch status {
+	case "exists":
+		return "Already connected"
+	case "unsupported":
+		return "Not available here"
+	default:
+		return "Needs reconnecting"
+	}
+}
+
+func profileImportStatusDescription(account ProfileImportAccount) string {
+	switch account.Status {
+	case "exists":
+		if account.CanReplace {
+			return "This mailbox is already in Gofer. Replacing its settings keeps its password, sign-in and mail."
+		}
+		return "This mailbox is already in Gofer, connected another way, so it is skipped."
+	case "unsupported":
+		return accountProviderName(account.Provider) + " sign-in is not set up on this installation."
+	}
+	switch {
+	case account.Provider == "gmail" || account.Provider == "outlook":
+		return "Added with sync off. Sign in again to start syncing."
+	case len(account.Needs) > 1:
+		return "Added with sync off. Enter its passwords for " + reconnectLoginLabels(account.Needs) + " to start syncing."
+	}
+	return "Added with sync off. Enter its password to start syncing."
+}
+
+templ ProfileImportPreview(data ProfileImportPreviewData) {
+	<form
+		hx-post="/api/profile/import"
+		hx-target="#profile-import-panel"
+		hx-swap="innerHTML"
+		class={ dataDialogFormClass }
+		data-profile-import-preview
+	>
+		@dataDialogScroll("space-y-5 pb-4") {
+			<textarea name="profile" hidden>{ data.Profile }</textarea>
+			if data.ExportedAt != "" {
+				<p class="text-xs text-muted-foreground">Exported { data.ExportedAt }.</p>
+			}
+			<div class="space-y-3">
+				if data.HasPreferences {
+					@profileImportSection("preferences", "Preferences", "Appearance, layout, compose, notification, sync and regional settings. They replace your current ones.", true)
+				}
+				if len(data.Signatures) > 0 {
+					@profileImportSection("signatures", profileCount(len(data.Signatures), "signature", "signatures"), profileSignatureNames(data.Signatures), true)
+				}
+				if data.Contacts > 0 {
+					@profileImportSection("contacts", profileCount(data.Contacts, "contact", "contacts"), profileContactsDescription(data), true)
+				}
+			</div>
+			if len(data.Conflicts) > 0 {
+				@profileContactConflicts(data.Conflicts)
+			}
+			if len(data.Accounts) > 0 {
+				<div class="space-y-2">
+					<p class="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Accounts</p>
+					for _, account := range data.Accounts {
+						<div class={ "flex flex-wrap items-start gap-3 rounded-lg border border-border/60 bg-background/40 p-3", templ.KV("opacity-60", account.Status != "new" && !account.CanReplace) } data-profile-import-account={ account.Email }>
+							if account.CanReplace {
+								@profileAccountSummary(account)
+								@profileConflictChoices("account_action:"+account.Ref, "skip", false, "Replace settings")
+							} else {
+								<label class="flex min-w-0 flex-1 items-start gap-3">
+									@checkbox.Checkbox(checkbox.Props{Name: "account", Value: account.Ref, Checked: account.Status == "new", Disabled: account.Status != "new"})
+									@profileAccountSummary(account)
+								</label>
+							}
+						</div>
+					}
+				</div>
+			}
+		}
+		@dataDialogFooter() {
+			<button type="button" class={ profileButtonClass } hx-get="/api/profile/import/upload" hx-target="#profile-import-panel" hx-swap="innerHTML">
+				Cancel
+			</button>
+			<button type="submit" class={ profilePrimaryButtonClass } data-profile-import-submit>
+				@icon.Upload(icon.Props{Class: "size-3.5"})
+				Import
+			</button>
+		}
+	</form>
+}
+
+func profileContactsDescription(data ProfileImportPreviewData) string {
+	if len(data.Conflicts) == 0 {
+		return "Added to your Gofer contacts."
+	}
+	return "Added to your Gofer contacts. Choose below what to do with the ones you may already have."
+}
+
+// profileConflictChoices lets the person skip something that is already in
+// Gofer, replace it, or keep both when that is possible.
+templ profileConflictChoices(name string, selected string, keepBoth bool, replaceLabel string) {
+	<span class="flex shrink-0 flex-wrap items-center gap-x-3 gap-y-1 text-xs text-foreground sm:ml-auto" role="radiogroup" data-profile-conflict-choices>
+		@profileConflictChoice(name, "skip", "Skip", selected)
+		@profileConflictChoice(name, "replace", replaceLabel, selected)
+		if keepBoth {
+			@profileConflictChoice(name, "add", "Keep both", selected)
+		}
+	</span>
+}
+
+templ profileConflictChoice(name string, value string, label string, selected string) {
+	<label class="inline-flex cursor-pointer items-center gap-1.5">
+		@radio.Radio(radio.Props{Name: name, Value: value, Checked: selected == value, Attributes: templ.Attributes{"data-profile-conflict-choice": value}})
+		<span>{ label }</span>
+	</label>
+}
+
+templ profileContactConflicts(conflicts []ProfileImportContactConflict) {
+	<div class="space-y-2" data-profile-contact-conflicts>
+		<div class="flex flex-wrap items-end justify-between gap-2">
+			<div>
+				<p class="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">{ profileConflictsHeading(len(conflicts)) }</p>
+				<p class="text-xs text-muted-foreground">Replacing a contact keeps where it syncs. Contacts that share an email address can't both be kept.</p>
+			</div>
+			<span class="flex items-center gap-2 text-xs text-muted-foreground">
+				For all:
+				<button type="button" class={ profileButtonClass } data-on-click='["setProfileConflictChoices", "$this", "skip"]'>Skip</button>
+				<button type="button" class={ profileButtonClass } data-on-click='["setProfileConflictChoices", "$this", "replace"]'>Replace</button>
+			</span>
+		</div>
+		<div class="max-h-80 space-y-2 overflow-y-auto">
+			for _, conflict := range conflicts {
+				<div class="flex flex-wrap items-center gap-3 rounded-lg border border-border/60 bg-background/40 p-3" data-profile-contact-conflict={ strconv.Itoa(conflict.Index) }>
+					<div class="grid min-w-0 flex-1 gap-2 sm:grid-cols-2">
+						<div class="min-w-0">
+							<p class="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">In the profile</p>
+							<p class="truncate text-sm font-medium text-foreground">{ conflict.Name }</p>
+							if conflict.Detail != "" {
+								<p class="truncate text-xs text-muted-foreground">{ conflict.Detail }</p>
+							}
+						</div>
+						<div class="min-w-0">
+							<p class="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">{ profileConflictExistingLabel(conflict) }</p>
+							<p class="truncate text-sm font-medium text-foreground">{ conflict.ExistingName }</p>
+							if conflict.ExistingDetail != "" {
+								<p class="truncate text-xs text-muted-foreground">{ conflict.ExistingDetail }</p>
+							}
+						</div>
+					</div>
+					@profileConflictChoices("contact_action:"+strconv.Itoa(conflict.Index), conflict.Default, !conflict.ByEmail, "Replace")
+				</div>
+			}
+		</div>
+	</div>
+}
+
+func profileConflictsHeading(n int) string {
+	if n == 1 {
+		return "1 contact may already be in Gofer"
+	}
+	return strconv.Itoa(n) + " contacts may already be in Gofer"
+}
+
+func profileConflictExistingLabel(conflict ProfileImportContactConflict) string {
+	if conflict.ByEmail {
+		return "In Gofer, same email"
+	}
+	return "In Gofer, same name"
+}
+
+templ profileAccountSummary(account ProfileImportAccount) {
+	<div class="account-color-marker size-5 shrink-0" style={ accountColorStyle(account.Color) }></div>
+	<span class="min-w-0 flex-1">
+		<span class="flex min-w-0 items-center gap-2">
+			<span class="truncate text-sm font-medium text-foreground">{ profileAccountLabel(account) }</span>
+			<span class="inline-flex shrink-0 items-center gap-1 rounded-md border border-border/70 bg-muted/35 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+				@AccountProviderIcon(account.Provider, "size-3 shrink-0")
+				{ accountProviderName(account.Provider) }
+			</span>
+		</span>
+		if account.Name != "" && account.Name != account.Email {
+			<span class="block truncate text-xs text-muted-foreground">{ account.Email }</span>
+		}
+		<span class="mt-1 block text-xs text-muted-foreground">
+			<span class="font-medium">{ profileImportStatusLabel(account.Status) }.</span>
+			{ profileImportStatusDescription(account) }
+		</span>
+	</span>
+}
+
+templ profileImportSection(name string, title string, description string, checked bool) {
+	<label class="flex items-start gap-3 rounded-lg border border-border/60 bg-background/40 p-3" data-profile-import-section={ name }>
+		@checkbox.Checkbox(checkbox.Props{Name: name, Value: "1", Checked: checked})
+		<span class="min-w-0">
+			<span class="block text-sm font-medium text-foreground">{ title }</span>
+			<span class="mt-0.5 block text-xs text-muted-foreground leading-relaxed">{ description }</span>
+		</span>
+	</label>
+}
+
+func profileCount(n int, singular, plural string) string {
+	if n == 1 {
+		return "1 " + singular
+	}
+	return strconv.Itoa(n) + " " + plural
+}
+
+func profileSignatureNames(names []string) string {
+	const shown = 4
+	if len(names) <= shown {
+		return joinWithAnd(names)
+	}
+	return joinWithAnd(append(append([]string{}, names[:shown]...), fmt.Sprintf("%d more", len(names)-shown)))
+}
+
+func joinWithAnd(items []string) string {
+	switch len(items) {
+	case 0:
+		return ""
+	case 1:
+		return items[0]
+	}
+	out := ""
+	for i, item := range items {
+		switch {
+		case i == 0:
+			out = item
+		case i == len(items)-1:
+			out += " and " + item
+		default:
+			out += ", " + item
+		}
+	}
+	return out
+}
+
+func profileAccountLabel(account ProfileImportAccount) string {
+	if account.Name != "" {
+		return account.Name
+	}
+	return account.Email
+}
+
+templ ProfileImportResult(result ProfileImportResultData) {
+	<div class={ dataDialogFormClass } data-profile-import-result>
+		@dataDialogScroll("space-y-4 pb-4") {
+			<div class="flex items-start gap-2.5">
+				@icon.CircleCheck(icon.Props{Class: "mt-0.5 size-4 shrink-0 text-emerald-600 dark:text-emerald-400"})
+				<div class="min-w-0 space-y-1 text-sm text-foreground">
+					<p class="font-medium">Profile imported.</p>
+					<ul class="space-y-0.5 text-xs text-muted-foreground">
+						if result.Preferences {
+							<li>Preferences applied. Reload Gofer to see all of them.</li>
+						}
+						if result.Signatures > 0 {
+							<li>{ profileCount(result.Signatures, "signature", "signatures") } added.</li>
+						}
+						if result.Contacts > 0 {
+							<li>{ profileCount(result.Contacts, "contact", "contacts") } added.</li>
+						}
+						if result.ContactsReplaced > 0 {
+							<li>{ profileCount(result.ContactsReplaced, "contact", "contacts") } replaced.</li>
+						}
+						if result.ContactsSkipped > 0 {
+							<li>{ profileCount(result.ContactsSkipped, "contact", "contacts") } skipped.</li>
+						}
+						if len(result.Accounts) > 0 {
+							<li>{ profileCount(len(result.Accounts), "account", "accounts") } added: { joinWithAnd(result.Accounts) }. Reconnect them in Accounts to start syncing.</li>
+						}
+						if len(result.AccountsReplaced) > 0 {
+							<li>Settings replaced for { joinWithAnd(result.AccountsReplaced) }.</li>
+						}
+					</ul>
+				</div>
+			</div>
+			if len(result.AccountFailures) > 0 {
+				<div class="flex items-start gap-2.5 rounded-lg border border-destructive/30 bg-destructive/5 p-3 text-xs text-destructive" role="alert">
+					@icon.TriangleAlert(icon.Props{Class: "mt-0.5 size-3.5 shrink-0"})
+					<p>{ profileAccountFailureMessage(result.AccountFailures) }</p>
+				</div>
+			}
+		}
+		@dataDialogFooter() {
+			<button type="button" class={ profileButtonClass } hx-get="/api/profile/import/upload" hx-target="#profile-import-panel" hx-swap="innerHTML">
+				Import another
+			</button>
+			if len(result.Accounts) > 0 {
+				<a href="/settings/accounts" class={ profilePrimaryButtonClass }>
+					Go to Accounts
+				</a>
+			} else if result.Preferences {
+				<a href="/settings/export-import" class={ profilePrimaryButtonClass }>
+					Reload
+				</a>
+			}
+		}
+	</div>
+}
+
+func profileAccountFailureMessage(emails []string) string {
+	pronoun := "them"
+	if len(emails) == 1 {
+		pronoun = "it"
+	}
+	return "Could not add " + joinWithAnd(emails) + ". Add " + pronoun + " from Accounts instead."
+}

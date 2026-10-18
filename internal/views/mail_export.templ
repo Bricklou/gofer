@@ -1,0 +1,304 @@
+package views
+
+import (
+	"fmt"
+	"strings"
+
+	"github.com/cristianadrielbraun/gofer/components/checkbox"
+	"github.com/cristianadrielbraun/gofer/components/icon"
+)
+
+type MailExportAccount struct {
+	ID       string
+	Email    string
+	Name     string
+	Provider string
+	Color    string
+	// Pending is set for an account imported from a profile that still
+	// waits for its password, so only saved copies can be exported.
+	Pending bool
+}
+
+type MailExportFolder struct {
+	ID       string
+	Path     string
+	Role     string
+	Messages int
+}
+
+type MailExportFormData struct {
+	Account MailExportAccount
+	Folders []MailExportFolder
+	Message string
+}
+
+// MailExportJob is one export in the list. State is "running", "paused",
+// "done" or "canceled".
+type MailExportJob struct {
+	ID        string
+	Account   string
+	State     string
+	Error     string
+	Folder    string
+	Processed int
+	Total     int
+	Exported  int
+	Failed    int
+	NotSaved  int
+	SavedOnly bool
+	// Waiting is set while the export waits for others to finish.
+	Waiting bool
+	Started string
+	Skipped []string
+}
+
+type MailExportPanelData struct {
+	Accounts []MailExportAccount
+	Message  string
+}
+
+// MailExportPanel lists the accounts to export, in the Export mail dialog.
+templ MailExportPanel(data MailExportPanelData) {
+	@dataDialogScroll("space-y-5 pb-6") {
+		<div class="space-y-5" data-mail-export-panel>
+			<div class="space-y-2">
+				if data.Message != "" {
+					<p class="text-xs text-destructive" role="alert" data-mail-export-error>{ data.Message }</p>
+				}
+				if len(data.Accounts) == 0 {
+					<p class="text-xs text-muted-foreground">Add a mail account to export its messages.</p>
+				}
+				for _, account := range data.Accounts {
+					<div class="flex flex-wrap items-center gap-3 rounded-lg border border-border/60 bg-background/40 p-3" data-mail-export-account={ account.Email }>
+						@mailExportAccountSummary(account)
+						<button type="button" class={ profileButtonClass } hx-get={ "/api/mail/exports/new?account=" + account.ID } hx-target="#mail-export-dialog-body" hx-swap="innerHTML">
+							@icon.Download(icon.Props{Class: "size-3.5"})
+							Export…
+						</button>
+					</div>
+				}
+			</div>
+		</div>
+	}
+}
+
+templ mailExportAccountSummary(account MailExportAccount) {
+	<div class="account-color-marker size-5 shrink-0" style={ accountColorStyle(account.Color) }></div>
+	<span class="min-w-0 flex-1">
+		<span class="flex min-w-0 items-center gap-2">
+			<span class="truncate text-sm font-medium text-foreground">
+				if account.Name != "" {
+					{ account.Name }
+				} else {
+					{ account.Email }
+				}
+			</span>
+			<span class="inline-flex shrink-0 items-center gap-1 rounded-md border border-border/70 bg-muted/35 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+				@AccountProviderIcon(account.Provider, "size-3 shrink-0")
+				{ accountProviderName(account.Provider) }
+			</span>
+		</span>
+		if account.Name != "" && account.Name != account.Email {
+			<span class="block truncate text-xs text-muted-foreground">{ account.Email }</span>
+		}
+		if account.Pending {
+			<span class="mt-1 block text-xs text-muted-foreground">Waiting for its password, so only messages saved in Gofer can be exported.</span>
+		}
+	</span>
+}
+
+templ MailExportForm(data MailExportFormData) {
+	<form
+		hx-post="/api/mail/exports"
+		hx-target="#mail-export-dialog-body"
+		hx-swap="innerHTML"
+		class={ dataDialogFormClass }
+		data-mail-export-form
+	>
+		@dataDialogScroll("space-y-4 pb-4") {
+			<input type="hidden" name="account" value={ data.Account.ID }/>
+			<div class="flex flex-wrap items-center gap-3">
+				@mailExportAccountSummary(data.Account)
+			</div>
+			if data.Message != "" {
+				<p class="text-xs text-destructive" role="alert" data-mail-export-error>{ data.Message }</p>
+			}
+			if len(data.Folders) == 0 {
+				<p class="text-xs text-muted-foreground">This account has no folders with mail yet. Once it syncs, its folders show here.</p>
+			} else {
+				<div class="space-y-2">
+					<label class="flex items-center gap-2.5 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+						@checkbox.Checkbox(checkbox.Props{Group: "mail-export-folders", GroupParent: true, Checked: true, Attributes: templ.Attributes{"aria-label": "All folders"}})
+						Folders
+					</label>
+					<div class="max-h-72 space-y-1 overflow-y-auto rounded-md border border-border/60 bg-background p-2">
+						for _, folder := range data.Folders {
+							<label class="flex items-center gap-2.5 rounded px-1.5 py-1 text-sm text-foreground hover:bg-accent/50" data-mail-export-folder={ folder.Path }>
+								@checkbox.Checkbox(checkbox.Props{Name: "folder", Value: folder.ID, Group: "mail-export-folders", Checked: mailExportFolderChecked(folder)})
+								<span class="min-w-0 flex-1 truncate">{ folder.Path }</span>
+								<span class="shrink-0 text-xs tabular-nums text-muted-foreground">{ mailExportCount(folder.Messages, "message", "messages") }</span>
+							</label>
+						}
+					</div>
+					<p class="text-xs text-muted-foreground">Spam and Trash are left out unless you choose them.</p>
+				</div>
+				<label class="flex items-start gap-2.5 text-sm text-foreground">
+					@checkbox.Checkbox(checkbox.Props{ID: "mail-export-saved-only", Name: "saved_only", Value: "1", Checked: data.Account.Pending, Disabled: data.Account.Pending})
+					<span>
+						<span class="font-medium">Only messages saved in Gofer</span>
+						<span class="block text-xs text-muted-foreground mt-0.5">Doesn't connect to the server, so it also works when the server is gone. Gofer only has the full content of some messages, so the rest are left out and counted in the summary.</span>
+					</span>
+				</label>
+				if data.Account.Pending {
+					<input type="hidden" name="saved_only" value="1"/>
+				}
+			}
+		}
+		@dataDialogFooter() {
+			<button type="button" class={ profileButtonClass } hx-get="/api/mail/exports" hx-target="#mail-export-dialog-body" hx-swap="innerHTML">Back</button>
+			if len(data.Folders) > 0 {
+				<button type="submit" class={ profilePrimaryButtonClass } data-mail-export-start>
+					@icon.Download(icon.Props{Class: "size-3.5"})
+					Start export
+				</button>
+			}
+		}
+	</form>
+}
+
+func mailExportFolderChecked(folder MailExportFolder) bool {
+	switch folder.Role {
+	case "junk", "spam", "trash":
+		return false
+	}
+	return true
+}
+
+func mailExportJobsRunning(jobs []MailExportJob) bool {
+	for _, job := range jobs {
+		if job.State == "running" {
+			return true
+		}
+	}
+	return false
+}
+
+templ MailExportJobs(jobs []MailExportJob) {
+	<div
+		id="mail-export-jobs"
+		class="space-y-2"
+		if mailExportJobsRunning(jobs) {
+			hx-get="/api/mail/exports/jobs"
+			hx-trigger="every 2s"
+			hx-swap="outerHTML"
+		}
+	>
+		if len(jobs) > 0 {
+			<p class="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Exports</p>
+			for _, job := range jobs {
+				@mailExportJobRow(job)
+			}
+			<p class="text-xs text-muted-foreground">Exports are kept on the server for a week after they finish.</p>
+		}
+	</div>
+}
+
+templ mailExportJobRow(job MailExportJob) {
+	<div class="space-y-2 rounded-lg border border-border/60 bg-background/40 p-3" data-mail-export-job={ job.ID } data-mail-export-state={ job.State }>
+		<div class="flex flex-wrap items-start gap-3">
+			<span class="min-w-0 flex-1">
+				<span class="block truncate text-sm font-medium text-foreground">{ job.Account }</span>
+				<span class="block text-xs text-muted-foreground">{ mailExportJobStatus(job) }</span>
+			</span>
+			<span class="flex shrink-0 flex-wrap gap-2">
+				switch job.State {
+					case "running":
+						<button type="button" class={ profileButtonClass } hx-post={ "/api/mail/exports/" + job.ID + "/cancel" } hx-target="#mail-export-jobs" hx-swap="outerHTML">Cancel</button>
+					case "paused":
+						<button type="button" class={ profilePrimaryButtonClass } hx-post={ "/api/mail/exports/" + job.ID + "/resume" } hx-target="#mail-export-jobs" hx-swap="outerHTML">Continue</button>
+						<button type="button" class={ profileButtonClass } hx-post={ "/api/mail/exports/" + job.ID + "/delete" } hx-target="#mail-export-jobs" hx-swap="outerHTML">Delete</button>
+					case "done":
+						<a href={ templ.SafeURL("/api/mail/exports/" + job.ID + "/download") } class={ profilePrimaryButtonClass } download data-mail-export-download>
+							@icon.Download(icon.Props{Class: "size-3.5"})
+							Download
+						</a>
+						<button type="button" class={ profileButtonClass } hx-post={ "/api/mail/exports/" + job.ID + "/delete" } hx-target="#mail-export-jobs" hx-swap="outerHTML">Delete</button>
+					default:
+						<button type="button" class={ profileButtonClass } hx-post={ "/api/mail/exports/" + job.ID + "/delete" } hx-target="#mail-export-jobs" hx-swap="outerHTML">Delete</button>
+				}
+			</span>
+		</div>
+		if job.State == "running" || job.State == "paused" {
+			<div class="h-1.5 w-full overflow-hidden rounded-full bg-secondary">
+				<div class="mail-export-progress h-full rounded-full bg-primary transition-all" style={ mailExportProgressStyle(job) }></div>
+			</div>
+		}
+		if job.Error != "" {
+			<p class="text-xs text-destructive">{ job.Error }</p>
+		}
+		if len(job.Skipped) > 0 && job.State != "running" {
+			<details class="text-xs text-muted-foreground">
+				<summary class="cursor-pointer">{ mailExportCount(job.Failed, "message", "messages") } could not be exported</summary>
+				<ul class="mt-1 list-disc space-y-0.5 pl-5">
+					for _, skipped := range job.Skipped {
+						<li>{ skipped }</li>
+					}
+				</ul>
+			</details>
+		}
+	</div>
+}
+
+func mailExportProgressStyle(job MailExportJob) templ.SafeCSS {
+	percent := 0
+	if job.Total > 0 {
+		percent = job.Processed * 100 / job.Total
+	}
+	return templ.SafeCSS(fmt.Sprintf("width: %d%%;", percent))
+}
+
+func mailExportJobStatus(job MailExportJob) string {
+	var parts []string
+	switch job.State {
+	case "running":
+		if job.Waiting {
+			parts = append(parts, "Waiting for other exports to finish")
+		} else if job.Folder != "" {
+			parts = append(parts, fmt.Sprintf("Exporting %s… %s of %s", job.Folder, mailExportNumber(job.Processed), mailExportCount(job.Total, "message", "messages")))
+		} else {
+			parts = append(parts, "Starting…")
+		}
+	case "paused":
+		parts = append(parts, fmt.Sprintf("Paused at %s of %s", mailExportNumber(job.Processed), mailExportCount(job.Total, "message", "messages")))
+	case "canceled":
+		parts = append(parts, "Canceled")
+	default:
+		parts = append(parts, mailExportCount(job.Exported, "message", "messages")+" exported")
+		if job.NotSaved > 0 {
+			parts = append(parts, fmt.Sprintf("%s left out, Gofer had only their headers", mailExportNumber(job.NotSaved)))
+		}
+		if job.Failed > 0 {
+			parts = append(parts, fmt.Sprintf("%s could not be exported", mailExportNumber(job.Failed)))
+		}
+	}
+	if job.SavedOnly {
+		parts = append(parts, "saved copies only")
+	}
+	parts = append(parts, "started "+job.Started)
+	return strings.Join(parts, " · ")
+}
+
+func mailExportNumber(n int) string {
+	s := fmt.Sprintf("%d", n)
+	for i := len(s) - 3; i > 0; i -= 3 {
+		s = s[:i] + "," + s[i:]
+	}
+	return s
+}
+
+func mailExportCount(n int, singular, plural string) string {
+	if n == 1 {
+		return "1 " + singular
+	}
+	return mailExportNumber(n) + " " + plural
+}

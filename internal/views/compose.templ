@@ -53,6 +53,7 @@ templ ComposeDialog(accounts []models.Account) {
 				}
 			</div>
 			<div id="compose-form" class="flex flex-col flex-1 min-h-0 gap-3 pt-2">
+				@ComposeDropChoice("compose-drop-choice")
 				@ComposeMobileBar()
 				<input type="hidden" name="account_id" id="compose-account-id" value={ composeDefaultAccountID(accounts) }/>
 				<input type="hidden" name="draft_id" id="compose-draft-id" value=""/>
@@ -546,6 +547,7 @@ templ ComposePane(accounts []models.Account) {
 			<div class="flex-1 overflow-y-auto">
 				<div id="compose-pane-content" class="mx-auto flex h-full flex-col px-8 py-4">
 					<div id="compose-pane-form" class="flex flex-1 min-h-0 flex-col gap-3">
+						@ComposeDropChoice("compose-pane-drop-choice")
 						<input type="hidden" name="account_id" id="compose-pane-account-id" value={ composeDefaultAccountID(accounts) }/>
 						<input type="hidden" name="draft_id" id="compose-pane-draft-id" value=""/>
 						<input type="hidden" name="compose_mode" id="compose-pane-mode" value="new"/>

@@ -272,6 +272,15 @@ func (h *Handler) RegisterUserStorageRoutes(ctx context.Context, mux *http.Serve
 	private("GET /api/accounts/{id}/deletion-status", routed.handleUserAccountDeletionStatus)
 	if option.Accounts != nil {
 		routed.registerUserSignatures(private)
+		routed.registerProfileTransferRoutes(private)
+		if option.IMAP != nil {
+			routed.StartMailExports(ctx)
+			routed.registerMailExportRoutes(private)
+			routed.StartMailImports(ctx)
+			routed.registerMailImportRoutes(private)
+			routed.StartMailTransfers(ctx)
+			routed.registerMailTransferRoutes(private)
+		}
 		private("POST /api/accounts", routed.handleUserCreateAccount)
 		private("GET /api/settings/contacts/suppressed", routed.handleUserSuppressedContactsSettings)
 		private("GET /api/accounts/{id}/edit", routed.handleUserEditAccount)

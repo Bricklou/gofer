@@ -138,6 +138,11 @@ func (h *Handler) handleUserAccountOAuthCallback(w http.ResponseWriter, r *http.
 				if err := h.userAccounts.UpdateOAuthMetadata(ctx, owner, id, req); err != nil {
 					return err
 				}
+				if !created {
+					if _, _, err := h.resolveImportedLogin(ctx, owner, id, storage.ImportedLoginSignIn); err != nil {
+						log.Printf("routed mailbox OAuth callback: turn on imported services for %s: %v", id, err)
+					}
+				}
 				failure = "oauth_sync_failed"
 				if created {
 					return h.userAccountHooks.Created(ctx, id)

@@ -559,58 +559,6 @@
   pointer-events: none;
 }
 
-.compose-drop-choice-backdrop {
-  position: fixed;
-  inset: 0;
-  z-index: 120;
-  display: grid;
-  place-items: center;
-  padding: 1rem;
-  background: color-mix(in srgb, #000 26%, transparent);
-}
-
-.compose-drop-choice {
-  display: inline-flex;
-  max-width: min(100%, 32rem);
-  align-items: center;
-  gap: 0.5rem;
-  padding: 0.6rem;
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  background: var(--popover);
-  color: var(--popover-foreground);
-  box-shadow: 0 2px 10px color-mix(in srgb, #000 10%, transparent);
-  font-size: 0.875rem;
-  animation: compose-recipient-chip-in 120ms ease-out;
-}
-
-.compose-drop-choice span {
-  padding: 0 0.35rem 0 0.2rem;
-  color: var(--muted-foreground);
-  font-weight: 550;
-  white-space: nowrap;
-}
-
-.compose-drop-choice .compose-drop-choice-limit {
-  padding-left: 0;
-  font-size: 0.72rem;
-  font-weight: 650;
-  color: color-mix(in srgb, var(--muted-foreground) 78%, var(--foreground));
-}
-
-.compose-drop-choice button {
-  border-radius: calc(var(--radius) * 0.75);
-  padding: 0.45rem 0.75rem;
-  color: var(--foreground);
-  font-weight: 600;
-  transition: background-color 140ms ease, color 140ms ease;
-}
-
-.compose-drop-choice button:hover {
-  background: var(--accent);
-  color: var(--accent-foreground);
-}
-
 .compose-close-choice {
   color: var(--popover-foreground);
 }

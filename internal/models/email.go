@@ -21,6 +21,12 @@ type Account struct {
 	ContactSyncEnabled  bool
 	ContactSyncProvider string
 	CalendarSyncEnabled bool
+	// ReconnectPending is set for an account imported from a profile that
+	// still needs its password or sign-in.
+	ReconnectPending bool
+	// ReconnectNeeds are the logins it still waits for: "mail", "contacts",
+	// "calendar", or "signin" for Gmail and Outlook.
+	ReconnectNeeds      []string
 	ContactAddressBooks []ContactAddressBook
 	CalendarSources     []AccountCalendarSource
 	Folders             []Folder

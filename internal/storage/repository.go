@@ -4566,6 +4566,7 @@ func (db *DB) GetAccounts(ctx context.Context, userID string) ([]models.Account,
 	if err := db.attachCalendarSources(ctx, userID, accounts); err != nil {
 		return nil, err
 	}
+	db.attachImportedAccountsPending(ctx, userID, accounts)
 
 	return accounts, nil
 }
@@ -4626,6 +4627,7 @@ func (db *DB) GetAccountsIncludingDeleting(ctx context.Context, userID string) (
 	if err := db.attachCalendarSources(ctx, userID, accounts); err != nil {
 		return nil, err
 	}
+	db.attachImportedAccountsPending(ctx, userID, accounts)
 
 	return accounts, nil
 }

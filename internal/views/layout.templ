@@ -79,6 +79,7 @@ templ Layout(accounts []models.Account, activeFolder string, emails []models.Ema
 			<script src={ assetver.URL("/assets/js/ui-settings.js") }></script>
 			@MailCardLayoutScript()
 			<script src={ assetver.URL("/assets/js/resize.js") }></script>
+			@AppDialogs()
 		</body>
 	</html>
 }
@@ -136,6 +137,7 @@ templ SettingsLayout(accounts []models.Account, syncSettings models.SyncSettings
 				</div>
 			</div>
 			@SettingsRuntime(accounts)
+			@AppDialogs()
 		</body>
 	</html>
 }
@@ -261,6 +263,7 @@ templ ContactsLayout(accounts []models.Account, contacts []models.Contact, selec
 			<script src={ assetver.URL("/assets/js/settings-page.js") }></script>
 			<script src={ assetver.URL("/assets/js/ui-settings.js") }></script>
 			<script src={ assetver.URL("/assets/js/resize.js") }></script>
+			@AppDialogs()
 		</body>
 	</html>
 }
@@ -349,6 +352,7 @@ templ AdminLayout(uiSettings map[string]string, userData AdminUsersData, avatarS
 			</div>
 			<script src={ assetver.URL("/assets/js/ui-settings.js") }></script>
 			<script src={ assetver.URL("/assets/js/admin.js") }></script>
+			@AppDialogs()
 		</body>
 	</html>
 }

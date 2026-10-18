@@ -48,6 +48,7 @@ templ CalendarLayout(accounts []models.Account, month CalendarMonthData, uiSetti
 			<script src={ assetver.URL("/assets/js/settings-page.js") }></script>
 			<script src={ assetver.URL("/assets/js/ui-settings.js") }></script>
 			<script src={ assetver.URL("/assets/js/resize.js") }></script>
+			@AppDialogs()
 		</body>
 	</html>
 }
@@ -162,6 +163,7 @@ templ CalendarSourceSyncIndicator(source models.AccountCalendarSource, loading b
 templ CalendarMainPane(month CalendarMonthData, uiSettings map[string]string) {
 	<section id="mail-list" class="flex w-full max-lg:!w-full lg:flex flex-col border-r border-border bg-card h-full min-w-0 overflow-hidden" style={ "width:" + mailListWidthCSS(PanelSetting(uiSettings, "calendar", "mail_list_width", "50%")) } data-panel-section="calendar" aria-busy={ strconv.FormatBool(month.Loading) }>
 		@CalendarMainContent(month)
+		@CalendarMoveConfirm()
 		<button type="button" class="mobile-compose-fab" data-on-click='["goferClickElement","[data-calendar-create-trigger]"]' aria-label="New event">
 			@icon.CalendarPlus(icon.Props{Class: "size-6"})
 		</button>

@@ -45,6 +45,17 @@ type EditAccountData struct {
 	SmtpUsername      string
 	SameSmtpAuth      bool
 	EmailSyncEnabled  bool
+	// ReconnectPending is set for an account imported from a profile that
+	// still needs its password or sign-in.
+	ReconnectPending bool
+	// ReconnectNeeds are the logins the imported account still waits for.
+	// ReconnectSMTP is set when its sending login is separate and is entered
+	// with the mail one; ReconnectContacts and ReconnectCalendar when those
+	// services come back on with it.
+	ReconnectNeeds    []string
+	ReconnectSMTP     bool
+	ReconnectContacts bool
+	ReconnectCalendar bool
 	Signatures        []Signature
 	SignatureSettings AccountSignatureSettings
 	ContactSync       ContactSyncConfig
@@ -67,6 +78,9 @@ type CreateAccountRequest struct {
 	AuthMethod        string `json:"auth_method"`
 	SmtpUsername      string `json:"smtp_username"`
 	SmtpPassword      string `json:"smtp_password"`
+	// EmailSyncDisabled creates the account with mail sync off, for accounts
+	// imported without their credentials.
+	EmailSyncDisabled bool `json:"-"`
 }
 
 type SyncSettings struct {

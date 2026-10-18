@@ -203,6 +203,13 @@ func (h *Handler) handleSaveAccountContactSync(w http.ResponseWriter, r *http.Re
 		htmlStatus(w, http.StatusInternalServerError, "Could not save contact sync settings.")
 		return
 	}
+	if cfg.Enabled && (r.FormValue("password") != "" || r.FormValue("use_account_credentials") == "1") {
+		if remaining, waiting, err := h.resolveImportedLogin(ctx, userID, accountID, storage.ImportedLoginContacts); err != nil {
+			log.Printf("account %s: turn on imported contacts: %v", accountID, err)
+		} else if waiting {
+			markImportedLoginResolved(w, storage.ImportedLoginContacts, remaining)
+		}
+	}
 	w.Header().Set("X-Gofer-Contact-Sync-Enabled", strconv.FormatBool(cfg.Enabled))
 	if !cfg.Enabled {
 		htmlStatus(w, http.StatusOK, "Contact sync is disabled for this account.")

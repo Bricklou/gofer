@@ -1,0 +1,332 @@
+package views
+
+import (
+	"fmt"
+	"strconv"
+	"strings"
+
+	"github.com/cristianadrielbraun/gofer/components/dialog"
+	"github.com/cristianadrielbraun/gofer/components/icon"
+	"github.com/cristianadrielbraun/gofer/components/radio"
+	"github.com/cristianadrielbraun/gofer/components/selectbox"
+)
+
+type MailImportAccount struct {
+	MailExportAccount
+	// Problem says why messages can't go into the account, if they can't.
+	Problem string
+}
+
+type MailImportFolder struct {
+	ID   string
+	Path string
+}
+
+// MailImportSource is a folder of messages in the upload. Target is the
+// chosen folder's ID, "new" or "skip".
+type MailImportSource struct {
+	Index    int
+	Name     string
+	Path     string
+	Messages int
+	Target   string
+	NewName  string
+}
+
+type MailImportReviewData struct {
+	ID           string
+	Files        []string
+	ExportedFrom string
+	Accounts     []MailImportAccount
+	AccountID    string
+	Folders      []MailImportFolder
+	Sources      []MailImportSource
+	Message      string
+}
+
+// MailImportJob is one import in the list. State is "review", "running",
+// "paused", "done" or "canceled".
+type MailImportJob struct {
+	ID         string
+	Title      string
+	Account    string
+	State      string
+	Error      string
+	Source     string
+	Waiting    bool
+	Processed  int
+	Total      int
+	Imported   int
+	Duplicates int
+	Failed     int
+	Started    string
+	Skipped    []string
+}
+
+templ MailImportUploadForm(message string) {
+	@dataDialogScroll("pb-6") {
+		<form
+			hx-post="/api/mail/imports"
+			hx-encoding="multipart/form-data"
+			hx-target="#mail-import-dialog-body"
+			hx-swap="innerHTML"
+			hx-disabled-elt="find button[type=submit]"
+			class="space-y-1.5"
+			data-mail-import-upload
+		>
+			<label for="mail-import-files" class="block text-sm font-medium text-foreground">Files</label>
+			<div class="flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-3">
+				<input id="mail-import-files" type="file" name="files" multiple required accept=".mbox,.mbx,.eml,.zip,application/mbox,message/rfc822,application/zip" class="profile-file-input block h-8 w-full min-w-0 flex-1 rounded-md border border-input bg-background p-[3px] text-xs text-foreground file:mr-3 file:h-full file:cursor-pointer file:rounded file:border-0 file:bg-primary file:px-3 file:text-xs file:font-medium file:text-primary-foreground hover:file:bg-primary/90"/>
+				<button type="submit" class={ profileButtonClass }>
+					@icon.Upload(icon.Props{Class: "size-3.5"})
+					Upload and review
+				</button>
+			</div>
+			<p class="text-xs text-muted-foreground" data-mail-import-upload-status>You can choose several files.</p>
+			if message != "" {
+				<p class="text-xs text-destructive" role="alert" data-mail-import-error>{ message }</p>
+			}
+		</form>
+	}
+}
+
+templ MailImportReview(data MailImportReviewData) {
+	<form
+		hx-post={ "/api/mail/imports/" + data.ID + "/start" }
+		hx-target="#mail-import-dialog-body"
+		hx-swap="innerHTML"
+		class={ dataDialogFormClass }
+		data-mail-import-review
+	>
+		@dataDialogScroll("space-y-4 pb-4") {
+			<div class="space-y-0.5">
+				<p class="text-sm font-medium text-foreground">{ strings.Join(data.Files, ", ") }</p>
+				<p class="text-xs text-muted-foreground">
+					{ mailImportSourcesSummary(data) }
+					if data.ExportedFrom != "" {
+						{ " Exported from " + data.ExportedFrom + " by Gofer." }
+					}
+				</p>
+			</div>
+			if data.Message != "" {
+				<p class="text-xs text-destructive" role="alert" data-mail-import-error>{ data.Message }</p>
+			}
+			<div class="space-y-2">
+				<p class="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Into account</p>
+				for _, account := range data.Accounts {
+					<label class={ "flex items-center gap-3 rounded-lg border border-border/60 bg-background/40 p-3", templ.KV("opacity-60", account.Problem != "") } data-mail-import-account={ account.Email }>
+						@radio.Radio(radio.Props{
+							Name:     "account",
+							Value:    account.ID,
+							Checked:  account.ID == data.AccountID,
+							Disabled: account.Problem != "",
+							Attributes: templ.Attributes{
+								"hx-get":     "/api/mail/imports/" + data.ID + "/review",
+								"hx-target":  "#mail-import-dialog-body",
+								"hx-swap":    "innerHTML",
+								"hx-trigger": "change",
+								"hx-include": "this",
+							},
+						})
+						@mailExportAccountSummary(account.MailExportAccount)
+						if account.Problem != "" {
+							<span class="shrink-0 text-xs text-muted-foreground">{ account.Problem }</span>
+						}
+					</label>
+				}
+			</div>
+			if data.AccountID != "" {
+				<div class="space-y-2">
+					<p class="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Where the messages go</p>
+					<div class="divide-y divide-border/60 rounded-md border border-border/60 bg-background">
+						for _, source := range data.Sources {
+							@mailImportSourceRow(source, data.Folders)
+						}
+					</div>
+					<p class="text-xs text-muted-foreground">Messages already in the folder are skipped, so importing the same file twice adds nothing.</p>
+				</div>
+			}
+		}
+		@dataDialogFooter() {
+			<button type="button" class={ profileButtonClass } hx-post={ "/api/mail/imports/" + data.ID + "/delete" } hx-target="#mail-import-dialog-body" hx-swap="innerHTML" hx-vals='{"panel":"1"}'>Cancel</button>
+			if data.AccountID != "" {
+				<button type="submit" class={ profilePrimaryButtonClass } data-mail-import-start>
+					@icon.Upload(icon.Props{Class: "size-3.5"})
+					Start import
+				</button>
+			}
+		}
+	</form>
+}
+
+templ mailImportSourceRow(source MailImportSource, folders []MailImportFolder) {
+	<div class="flex flex-col gap-2 p-2.5 sm:flex-row sm:items-center sm:gap-3" data-mail-import-source={ source.Name }>
+		<span class="min-w-0 flex-1">
+			<span class="block truncate text-sm text-foreground">{ source.Name }</span>
+			<span class="block text-xs text-muted-foreground">{ mailExportCount(source.Messages, "message", "messages") }</span>
+		</span>
+		<span class="flex min-w-0 flex-col gap-1.5 sm:w-64 sm:shrink-0">
+			@mailFolderTargetSelect("target:"+strconv.Itoa(source.Index), "Folder for "+source.Name, folders, source.Target, true)
+			<input
+				type="text"
+				name={ "new:" + strconv.Itoa(source.Index) }
+				value={ source.NewName }
+				placeholder="Folder name"
+				required?={ source.Target == "new" }
+				aria-label={ "New folder for " + source.Name }
+				class={ "h-8 w-full rounded-md border border-input bg-background px-2 text-xs text-foreground outline-none focus:border-ring focus:ring-2 focus:ring-ring/30", templ.KV("hidden", source.Target != "new") }
+				data-mail-import-new-name
+			/>
+		</span>
+	</div>
+}
+
+func mailImportSourcesSummary(data MailImportReviewData) string {
+	messages := 0
+	for _, source := range data.Sources {
+		messages += source.Messages
+	}
+	return mailExportCount(messages, "message", "messages") + " in " + mailExportCount(len(data.Sources), "folder", "folders") + "."
+}
+
+templ MailImportJobs(jobs []MailImportJob) {
+	<div
+		id="mail-import-jobs"
+		class="space-y-2"
+		if mailImportJobsRunning(jobs) {
+			hx-get="/api/mail/imports/jobs"
+			hx-trigger="every 2s"
+			hx-swap="outerHTML"
+		}
+	>
+		if len(jobs) > 0 {
+			<p class="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Imports</p>
+			for _, job := range jobs {
+				@mailImportJobRow(job)
+			}
+		}
+	</div>
+}
+
+func mailImportJobsRunning(jobs []MailImportJob) bool {
+	for _, job := range jobs {
+		if job.State == "running" {
+			return true
+		}
+	}
+	return false
+}
+
+templ mailImportJobRow(job MailImportJob) {
+	<div class="space-y-2 rounded-lg border border-border/60 bg-background/40 p-3" data-mail-import-job={ job.ID } data-mail-import-state={ job.State }>
+		<div class="flex flex-wrap items-start gap-3">
+			<span class="min-w-0 flex-1">
+				<span class="block truncate text-sm font-medium text-foreground">{ job.Title }</span>
+				<span class="block text-xs text-muted-foreground">{ mailImportJobStatus(job) }</span>
+			</span>
+			<span class="flex shrink-0 flex-wrap gap-2">
+				switch job.State {
+					case "review":
+						@dialog.Trigger(dialog.TriggerProps{For: "mail-import-dialog"}) {
+							<button type="button" class={ profilePrimaryButtonClass } hx-get={ "/api/mail/imports/" + job.ID + "/review" } hx-target="#mail-import-dialog-body" hx-swap="innerHTML">Review</button>
+						}
+						<button type="button" class={ profileButtonClass } hx-post={ "/api/mail/imports/" + job.ID + "/delete" } hx-target="#mail-import-jobs" hx-swap="outerHTML">Delete</button>
+					case "running":
+						<button type="button" class={ profileButtonClass } hx-post={ "/api/mail/imports/" + job.ID + "/cancel" } hx-target="#mail-import-jobs" hx-swap="outerHTML">Cancel</button>
+					case "paused":
+						<button type="button" class={ profilePrimaryButtonClass } hx-post={ "/api/mail/imports/" + job.ID + "/resume" } hx-target="#mail-import-jobs" hx-swap="outerHTML">Continue</button>
+						<button type="button" class={ profileButtonClass } hx-post={ "/api/mail/imports/" + job.ID + "/delete" } hx-target="#mail-import-jobs" hx-swap="outerHTML">Delete</button>
+					default:
+						<button type="button" class={ profileButtonClass } hx-post={ "/api/mail/imports/" + job.ID + "/delete" } hx-target="#mail-import-jobs" hx-swap="outerHTML">Remove</button>
+				}
+			</span>
+		</div>
+		if job.State == "running" || job.State == "paused" {
+			<div class="h-1.5 w-full overflow-hidden rounded-full bg-secondary">
+				<div class="h-full rounded-full bg-primary transition-all" style={ mailImportProgressStyle(job) }></div>
+			</div>
+		}
+		if job.Error != "" {
+			<p class="text-xs text-destructive">{ job.Error }</p>
+		}
+		if len(job.Skipped) > 0 && job.State != "running" {
+			<details class="text-xs text-muted-foreground">
+				<summary class="cursor-pointer">{ mailExportCount(job.Failed, "message", "messages") } could not be imported</summary>
+				<ul class="mt-1 list-disc space-y-0.5 pl-5">
+					for _, skipped := range job.Skipped {
+						<li>{ skipped }</li>
+					}
+				</ul>
+			</details>
+		}
+	</div>
+}
+
+func mailImportProgressStyle(job MailImportJob) templ.SafeCSS {
+	percent := 0
+	if job.Total > 0 {
+		percent = job.Processed * 100 / job.Total
+	}
+	return templ.SafeCSS(fmt.Sprintf("width: %d%%;", percent))
+}
+
+func mailImportJobStatus(job MailImportJob) string {
+	var parts []string
+	switch job.State {
+	case "review":
+		return "Uploaded " + job.Started + ". Choose where the messages go."
+	case "running":
+		switch {
+		case job.Waiting:
+			parts = append(parts, "Waiting for other imports to finish")
+		case job.Source != "":
+			parts = append(parts, fmt.Sprintf("Importing %s… %s of %s", job.Source, mailExportNumber(job.Processed), mailExportCount(job.Total, "message", "messages")))
+		default:
+			parts = append(parts, "Starting…")
+		}
+	case "paused":
+		parts = append(parts, fmt.Sprintf("Paused at %s of %s", mailExportNumber(job.Processed), mailExportCount(job.Total, "message", "messages")))
+	case "canceled":
+		parts = append(parts, fmt.Sprintf("Canceled after %s", mailExportCount(job.Imported, "message", "messages")))
+	default:
+		parts = append(parts, mailExportCount(job.Imported, "message", "messages")+" imported")
+		if job.Duplicates > 0 {
+			parts = append(parts, mailExportNumber(job.Duplicates)+" already there")
+		}
+		if job.Failed > 0 {
+			parts = append(parts, mailExportNumber(job.Failed)+" could not be imported")
+		}
+	}
+	if job.Account != "" {
+		parts = append(parts, "into "+job.Account)
+	}
+	parts = append(parts, "started "+job.Started)
+	return strings.Join(parts, " · ")
+}
+
+// mailFolderTargetSelect chooses where a set of messages goes: an existing
+// folder, a new one, or, with skip, nowhere.
+templ mailFolderTargetSelect(name, label string, folders []MailImportFolder, selected string, skip bool) {
+	@selectbox.SelectBox(selectbox.Props{Class: "settings-select"}) {
+		@selectbox.Trigger(selectbox.TriggerProps{Name: name, Class: "h-8 bg-background text-xs", DisableClear: true, Required: true, Attributes: templ.Attributes{"value": selected, "data-mail-import-target": "", "aria-label": label}}) {
+			@selectbox.Value(selectbox.ValueProps{Placeholder: "Choose a folder"})
+		}
+		@selectbox.Content(selectbox.ContentProps{NoSearch: len(folders) < 8, SearchPlaceholder: "Search folders", Class: "mobile-sheet"}) {
+			@selectbox.Group() {
+				for _, folder := range folders {
+					@selectbox.Item(selectbox.ItemProps{Value: folder.ID, Selected: selected == folder.ID}) {
+						{ folder.Path }
+					}
+				}
+				@selectbox.Item(selectbox.ItemProps{Value: "new", Selected: selected == "new"}) {
+					New folder…
+				}
+				if skip {
+					@selectbox.Item(selectbox.ItemProps{Value: "skip", Selected: selected == "skip"}) {
+						Don't import
+					}
+				}
+			}
+		}
+	}
+}

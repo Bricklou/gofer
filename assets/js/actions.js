@@ -34,6 +34,7 @@
     "composeExec",
     "configureCalendarCacheRequest",
     "configureCalendarSyncRequest",
+    "confirmMessagesToAccount",
     "confirmMoveDialog",
     "continueEditingDraft",
     "copyCalendarMeetLink",
@@ -105,6 +106,7 @@
     "selectMoveFolder",
     "sendCompose",
     "setActiveComposeEditor",
+    "setProfileConflictChoices",
     "showComposeSignaturePicker",
     "syncAddContactStepAfterSwap",
     "syncCalendarDescription",
@@ -245,14 +247,111 @@
     if (added && document.readyState !== "loading") scanContent()
   }).observe(document.documentElement, { childList: true, subtree: true, attributes: true, attributeFilter: attributes })
 
+  // The app asks questions in its own dialogs (AppDialogs in
+  // app_dialogs.templ), never the browser's popups. goferConfirm resolves
+  // true when confirmed; goferPrompt resolves the text entered, or null.
+  function openAppDialog(id, onClosed) {
+    var root = document.getElementById(id)
+    var content = root && root.querySelector("[data-tui-dialog-content]")
+    if (!content || !window.tui || !window.tui.dialog) return false
+    content.addEventListener("close", onClosed, { once: true })
+    window.tui.dialog.open(id)
+    return true
+  }
+
+  window.goferConfirm = function (options) {
+    options = options || {}
+    return new Promise(function (resolve) {
+      var root = document.getElementById("app-confirm-dialog")
+      if (!root) {
+        resolve(false)
+        return
+      }
+      var title = root.querySelector("[data-app-confirm-title]")
+      var message = root.querySelector("[data-app-confirm-message]")
+      var plain = root.querySelector("[data-app-confirm-accept]")
+      var danger = root.querySelector("[data-app-confirm-accept-destructive]")
+      var cancel = root.querySelector("[data-app-confirm-cancel]")
+      var accept = options.destructive ? danger : plain
+      title.textContent = options.title || "Are you sure?"
+      message.textContent = options.message || ""
+      message.hidden = !options.message
+      // Buttons set their own display, which outranks a hidden class.
+      plain.style.display = options.destructive ? "none" : ""
+      danger.style.display = options.destructive ? "" : "none"
+      accept.textContent = options.confirmLabel || (options.destructive ? "Delete" : "Continue")
+      cancel.textContent = options.cancelLabel || "Cancel"
+      var accepted = false
+      accept.onclick = function () {
+        accepted = true
+        window.tui.dialog.close("app-confirm-dialog")
+      }
+      var opened = openAppDialog("app-confirm-dialog", function () {
+        accept.onclick = null
+        resolve(accepted)
+      })
+      if (!opened) resolve(false)
+      else setTimeout(function () { accept.focus() }, 0)
+    })
+  }
+
+  window.goferPrompt = function (options) {
+    options = options || {}
+    return new Promise(function (resolve) {
+      var root = document.getElementById("app-prompt-dialog")
+      if (!root) {
+        resolve(null)
+        return
+      }
+      var form = root.querySelector("[data-app-prompt-form]")
+      var input = root.querySelector("[data-app-prompt-input]")
+      root.querySelector("[data-app-prompt-title]").textContent = options.title || ""
+      root.querySelector("[data-app-prompt-label]").textContent = options.label || ""
+      root.querySelector("[data-app-prompt-accept]").textContent = options.confirmLabel || "OK"
+      input.value = options.value || ""
+      input.placeholder = options.placeholder || ""
+      var value = null
+      form.onsubmit = function (event) {
+        event.preventDefault()
+        value = input.value
+        window.tui.dialog.close("app-prompt-dialog")
+      }
+      var opened = openAppDialog("app-prompt-dialog", function () {
+        form.onsubmit = null
+        resolve(value)
+      })
+      if (!opened) resolve(null)
+      else setTimeout(function () { input.focus(); input.select() }, 0)
+    })
+  }
+
+  // A form with data-confirm asks first. The question's first sentence is the
+  // title; data-confirm-action names the button, and data-confirm-destructive
+  // makes it red.
   document.addEventListener("submit", function (event) {
     var form = event.target
     if (!form || !form.getAttribute) return
-    var message = form.getAttribute("data-confirm")
-    if (message && !window.confirm(message)) {
-      event.preventDefault()
-      event.stopImmediatePropagation()
+    var question = form.getAttribute("data-confirm")
+    if (!question) return
+    if (form._goferConfirmed) {
+      form._goferConfirmed = false
+      return
     }
+    event.preventDefault()
+    event.stopImmediatePropagation()
+    var submitter = event.submitter && event.submitter.form === form ? event.submitter : null
+    var split = question.indexOf("? ")
+    window.goferConfirm({
+      title: split > 0 ? question.slice(0, split + 1) : question,
+      message: split > 0 ? question.slice(split + 2) : "",
+      confirmLabel: form.getAttribute("data-confirm-action") || "Continue",
+      destructive: form.hasAttribute("data-confirm-destructive"),
+    }).then(function (confirmed) {
+      if (!confirmed) return
+      form._goferConfirmed = true
+      if (submitter) form.requestSubmit(submitter)
+      else form.requestSubmit()
+    })
   }, true)
 
   // A poll marked data-poll-when-visible is skipped while the page is hidden
