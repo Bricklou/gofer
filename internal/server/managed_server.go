@@ -294,6 +294,7 @@ func RunManaged(ctx context.Context, stdout, stderr io.Writer) (err error) {
 	}
 	finished := make(chan error, 1)
 	go func() { finished <- server.Serve(listener) }()
+	openBrowserIfEnabled(app.httpConfig.BaseURL)
 	select {
 	case err := <-finished:
 		if errors.Is(err, http.ErrServerClosed) {

@@ -18,6 +18,7 @@ import (
 	"github.com/cristianadrielbraun/gofer/internal/store"
 	"github.com/cristianadrielbraun/gofer/internal/views"
 	"log"
+	"net"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -214,9 +215,13 @@ func RunShared() {
 	if _, err := setupNotice.WriteTo(os.Stderr); err != nil {
 		log.Fatalf("failed to display setup notice: %v", err)
 	}
+	listener, err := net.Listen("tcp", httpConfig.ListenAddr)
+	if err != nil {
+		log.Fatal(err)
+	}
+	openBrowserIfEnabled(httpConfig.BaseURL)
 	server := newHTTPServer(handler)
-	server.Addr = httpConfig.ListenAddr
-	log.Fatal(server.ListenAndServe())
+	log.Fatal(server.Serve(listener))
 }
 
 func loadOrGenerateVAPIDKeys(privatePath, publicPath string) (string, string) {
