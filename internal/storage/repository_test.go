@@ -868,12 +868,12 @@ func TestSyncMessagesReplaceIMAPKeywordLabels(t *testing.T) {
 		DateSent:      time.Now(),
 		IsRead:        true,
 		LabelsKnown:   true,
-		LabelProvider: LabelProviderIMAPKeyword,
+		LabelProvider: LabelProviderKeyword,
 		Labels: []LabelInput{{
 			AccountID:    "acc",
 			Name:         "Work",
 			ProviderID:   "Work",
-			ProviderType: LabelProviderIMAPKeyword,
+			ProviderType: LabelProviderKeyword,
 		}},
 	}}); err != nil {
 		t.Fatalf("UpsertSyncMessages() error = %v", err)
@@ -886,7 +886,7 @@ func TestSyncMessagesReplaceIMAPKeywordLabels(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GetEmailByIDInternal() error = %v", err)
 	}
-	if len(email.Labels) != 1 || email.Labels[0].Name != "Work" || email.Labels[0].ProviderType != LabelProviderIMAPKeyword {
+	if len(email.Labels) != 1 || email.Labels[0].Name != "Work" || email.Labels[0].ProviderType != LabelProviderKeyword {
 		t.Fatalf("labels after sync = %#v, want Work IMAP keyword", email.Labels)
 	}
 
@@ -894,7 +894,7 @@ func TestSyncMessagesReplaceIMAPKeywordLabels(t *testing.T) {
 		UID:           42,
 		IsRead:        true,
 		LabelsKnown:   true,
-		LabelProvider: LabelProviderIMAPKeyword,
+		LabelProvider: LabelProviderKeyword,
 	}}); err != nil {
 		t.Fatalf("BatchUpdateFlags() error = %v", err)
 	}
@@ -1013,10 +1013,10 @@ func TestSyncMessagesResolveIMAPKeywordAliases(t *testing.T) {
 		DateSent:      time.Now(),
 		IsRead:        true,
 		LabelsKnown:   true,
-		LabelProvider: LabelProviderIMAPKeyword,
+		LabelProvider: LabelProviderKeyword,
 		Labels: []LabelInput{
-			{Name: "$label2", ProviderID: "$label2", ProviderType: LabelProviderIMAPKeyword},
-			{Name: "$VendorSnooze", ProviderID: "$VendorSnooze", ProviderType: LabelProviderIMAPKeyword},
+			{Name: "$label2", ProviderID: "$label2", ProviderType: LabelProviderKeyword},
+			{Name: "$VendorSnooze", ProviderID: "$VendorSnooze", ProviderType: LabelProviderKeyword},
 		},
 	}}); err != nil {
 		t.Fatalf("UpsertSyncMessages() error = %v", err)
@@ -1040,7 +1040,7 @@ func TestSyncMessagesResolveIMAPKeywordAliases(t *testing.T) {
 		t.Fatalf("labels = %#v, want discovered raw vendor label", email.Labels)
 	}
 
-	providerID, ok, err := db.ResolveLabelAliasProviderID(ctx, "acc", LabelProviderIMAPKeyword, "Work")
+	providerID, ok, err := db.ResolveLabelAliasProviderID(ctx, "acc", LabelProviderKeyword, "Work")
 	if err != nil || !ok || providerID != "$label2" {
 		t.Fatalf("ResolveLabelAliasProviderID(Work) = %q, %v, %v; want $label2 true nil", providerID, ok, err)
 	}
@@ -1066,11 +1066,11 @@ func TestUpsertLabelAliasRenamesExistingIMAPKeywordLabel(t *testing.T) {
 		DateSent:      time.Now(),
 		IsRead:        true,
 		LabelsKnown:   true,
-		LabelProvider: LabelProviderIMAPKeyword,
+		LabelProvider: LabelProviderKeyword,
 		Labels: []LabelInput{{
 			Name:         "$VendorSnooze",
 			ProviderID:   "$VendorSnooze",
-			ProviderType: LabelProviderIMAPKeyword,
+			ProviderType: LabelProviderKeyword,
 		}},
 	}}); err != nil {
 		t.Fatalf("UpsertSyncMessages() error = %v", err)
@@ -1082,7 +1082,7 @@ func TestUpsertLabelAliasRenamesExistingIMAPKeywordLabel(t *testing.T) {
 
 	if err := db.UpsertLabelAlias(ctx, LabelAliasInput{
 		AccountID:    "acc",
-		ProviderType: LabelProviderIMAPKeyword,
+		ProviderType: LabelProviderKeyword,
 		ProviderID:   "$VendorSnooze",
 		DisplayName:  "Snooze",
 		Source:       "user",
@@ -1097,7 +1097,7 @@ func TestUpsertLabelAliasRenamesExistingIMAPKeywordLabel(t *testing.T) {
 		t.Fatalf("labels = %#v, want Snooze backed by vendor keyword", email.Labels)
 	}
 
-	providerID, ok, err := db.ResolveLabelAliasProviderID(ctx, "acc", LabelProviderIMAPKeyword, "Snooze")
+	providerID, ok, err := db.ResolveLabelAliasProviderID(ctx, "acc", LabelProviderKeyword, "Snooze")
 	if err != nil || !ok || providerID != "$VendorSnooze" {
 		t.Fatalf("ResolveLabelAliasProviderID(Snooze) = %q, %v, %v; want $VendorSnooze true nil", providerID, ok, err)
 	}
@@ -1123,10 +1123,10 @@ func TestSyncMessagesDeduplicateResolvedIMAPKeywordAliases(t *testing.T) {
 		DateSent:      time.Now(),
 		IsRead:        true,
 		LabelsKnown:   true,
-		LabelProvider: LabelProviderIMAPKeyword,
+		LabelProvider: LabelProviderKeyword,
 		Labels: []LabelInput{
-			{Name: "Work", ProviderID: "Work", ProviderType: LabelProviderIMAPKeyword},
-			{Name: "$label2", ProviderID: "$label2", ProviderType: LabelProviderIMAPKeyword},
+			{Name: "Work", ProviderID: "Work", ProviderType: LabelProviderKeyword},
+			{Name: "$label2", ProviderID: "$label2", ProviderType: LabelProviderKeyword},
 		},
 	}}); err != nil {
 		t.Fatalf("UpsertSyncMessages() error = %v", err)
@@ -1184,7 +1184,7 @@ func TestGetLabelAdminStatusAggregatesCoverageAndLastRun(t *testing.T) {
 		AccountID:    "acc",
 		Name:         "NonJunk",
 		ProviderID:   "NonJunk",
-		ProviderType: LabelProviderIMAPKeyword,
+		ProviderType: LabelProviderKeyword,
 	}); err != nil {
 		t.Fatalf("AddMessageLabel(NonJunk) error = %v", err)
 	}
@@ -2218,7 +2218,7 @@ func TestSidebarTagFilterMatchesAliasedIMAPKeywordLabels(t *testing.T) {
 		FromEmail: "sender@example.com",
 		DateSent:  time.Now(),
 		IsRead:    true,
-		Labels:    []LabelInput{{Name: "$label2", ProviderID: "$label2", ProviderType: LabelProviderIMAPKeyword}},
+		Labels:    []LabelInput{{Name: "$label2", ProviderID: "$label2", ProviderType: LabelProviderKeyword}},
 	}}); err != nil {
 		t.Fatalf("UpsertSyncMessages() error = %v", err)
 	}
@@ -2275,7 +2275,7 @@ func TestSidebarTagFilterMatchesLegacyRawIMAPKeywordRows(t *testing.T) {
 		Tag:             "Work",
 		TagAccountID:    "acc",
 		TagProviderID:   "$label2",
-		TagProviderType: LabelProviderIMAPKeyword,
+		TagProviderType: LabelProviderKeyword,
 	})
 	if err != nil {
 		t.Fatalf("GetEmailsRangeFilteredForUser() error = %v", err)

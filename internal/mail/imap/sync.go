@@ -13,6 +13,7 @@ import (
 	"github.com/emersion/go-imap/v2"
 	"github.com/emersion/go-imap/v2/imapclient"
 
+	"github.com/cristianadrielbraun/gofer/internal/mail/keywords"
 	"github.com/cristianadrielbraun/gofer/internal/mail/message"
 	"github.com/cristianadrielbraun/gofer/internal/storage"
 )
@@ -192,7 +193,7 @@ func (c *Client) SyncFolder(ctx context.Context, folderID, remoteName string, op
 				case imapclient.FetchItemDataFlags:
 					syncMsg.Labels = labelsFromFlags(item.Flags)
 					syncMsg.LabelsKnown = true
-					syncMsg.LabelProvider = storage.LabelProviderIMAPKeyword
+					syncMsg.LabelProvider = storage.LabelProviderKeyword
 					for _, flag := range item.Flags {
 						switch flag {
 						case imap.FlagSeen:
@@ -361,7 +362,7 @@ func (c *Client) SyncFolderIncremental(ctx context.Context, folderID, remoteName
 			case imapclient.FetchItemDataFlags:
 				syncMsg.Labels = labelsFromFlags(item.Flags)
 				syncMsg.LabelsKnown = true
-				syncMsg.LabelProvider = storage.LabelProviderIMAPKeyword
+				syncMsg.LabelProvider = storage.LabelProviderKeyword
 				for _, flag := range item.Flags {
 					switch flag {
 					case imap.FlagSeen:
@@ -806,46 +807,15 @@ func labelsFromFlags(flags []imap.Flag) []storage.LabelInput {
 }
 
 func labelInputFromFlag(flag imap.Flag) (storage.LabelInput, bool) {
-	keyword := strings.TrimSpace(string(flag))
-	if keyword == "" || isSystemOrStatusFlag(keyword) {
+	name := strings.TrimSpace(string(flag))
+	if name == "" || keywords.IsStatus(name) {
 		return storage.LabelInput{}, false
 	}
 	return storage.LabelInput{
-		Name:         keyword,
-		ProviderID:   keyword,
-		ProviderType: storage.LabelProviderIMAPKeyword,
+		Name:         name,
+		ProviderID:   name,
+		ProviderType: storage.LabelProviderKeyword,
 	}, true
-}
-
-func ValidateKeyword(keyword string) (string, error) {
-	keyword = strings.TrimSpace(keyword)
-	if keyword == "" {
-		return "", fmt.Errorf("label is required")
-	}
-	if strings.HasPrefix(keyword, "\\") {
-		return "", fmt.Errorf("label cannot be an IMAP system flag")
-	}
-	if isSystemOrStatusFlag(keyword) {
-		return "", fmt.Errorf("label %q is an IMAP status keyword", keyword)
-	}
-	for _, r := range keyword {
-		if (r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') || (r >= '0' && r <= '9') || r == '_' || r == '-' || r == '.' || r == '$' {
-			continue
-		}
-		return "", fmt.Errorf("label %q is not a portable IMAP keyword", keyword)
-	}
-	return keyword, nil
-}
-
-func isSystemOrStatusFlag(flag string) bool {
-	switch strings.ToLower(strings.TrimSpace(flag)) {
-	case "\\seen", "\\answered", "\\flagged", "\\deleted", "\\draft", "\\recent",
-		"$junk", "$notjunk", "$nonjunk", "junk", "notjunk", "nonjunk", "non-junk",
-		"$forwarded", "$mdnsent", "$phishing":
-		return true
-	default:
-		return strings.HasPrefix(flag, "\\")
-	}
 }
 
 func truncate(s string, maxLen int) string {

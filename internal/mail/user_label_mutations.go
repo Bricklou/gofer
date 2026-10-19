@@ -11,6 +11,7 @@ import (
 	"time"
 
 	mailimap "github.com/cristianadrielbraun/gofer/internal/mail/imap"
+	"github.com/cristianadrielbraun/gofer/internal/mail/keywords"
 	"github.com/cristianadrielbraun/gofer/internal/storage"
 	goimap "github.com/emersion/go-imap/v2"
 )
@@ -57,7 +58,7 @@ func (s *UserIMAP) replayLabelMutations(ctx context.Context, scope *userIMAPScop
 func labelProviderForUserAccount(provider string) (string, error) {
 	switch provider {
 	case "imap":
-		return storage.LabelProviderIMAPKeyword, nil
+		return storage.LabelProviderKeyword, nil
 	case "gmail":
 		return storage.LabelProviderGmail, nil
 	case "outlook":
@@ -113,7 +114,7 @@ func (s *UserIMAP) applyUserLabelMutation(ctx context.Context, scope *userIMAPSc
 	}
 	label := storage.LabelInput{AccountID: scope.id, Name: entry.LabelName, ProviderType: entry.ProviderType}
 	resolvedID := info.RemoteMessageID
-	if entry.ProviderType == storage.LabelProviderIMAPKeyword {
+	if entry.ProviderType == storage.LabelProviderKeyword {
 		keyword := entry.LabelName
 		if err := scope.call(ctx, func(db *storage.DB) error {
 			providerID, ok, err := db.ResolveLabelAliasProviderID(ctx, scope.id, entry.ProviderType, entry.LabelName)
@@ -129,7 +130,7 @@ func (s *UserIMAP) applyUserLabelMutation(ctx context.Context, scope *userIMAPSc
 			// ordinary label requests reject them before queuing.
 			keyword = entry.LabelName
 		} else {
-			keyword, err = mailimap.ValidateKeyword(keyword)
+			keyword, err = keywords.Validate(keyword)
 			if err != nil {
 				return err
 			}

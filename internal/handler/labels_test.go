@@ -133,12 +133,12 @@ func TestIMAPKeywordForMessageLabelUsesPredefinedProviderID(t *testing.T) {
 		DateSent:      time.Now(),
 		IsRead:        true,
 		LabelsKnown:   true,
-		LabelProvider: storage.LabelProviderIMAPKeyword,
+		LabelProvider: storage.LabelProviderKeyword,
 		Labels: []storage.LabelInput{{
 			AccountID:    "acc",
 			Name:         "Work",
 			ProviderID:   "$label2",
-			ProviderType: storage.LabelProviderIMAPKeyword,
+			ProviderType: storage.LabelProviderKeyword,
 		}},
 	}}); err != nil {
 		t.Fatalf("UpsertSyncMessages() error = %v", err)
@@ -149,11 +149,11 @@ func TestIMAPKeywordForMessageLabelUsesPredefinedProviderID(t *testing.T) {
 	}
 
 	h := &Handler{db: db}
-	keyword, err := h.imapKeywordForMessageLabel(ctx, msgID, "acc", "Work")
+	keyword, err := h.keywordForMessageLabel(ctx, msgID, "acc", "Work")
 	if err != nil {
-		t.Fatalf("imapKeywordForMessageLabel() error = %v", err)
+		t.Fatalf("keywordForMessageLabel() error = %v", err)
 	}
 	if keyword != "$label2" {
-		t.Fatalf("imapKeywordForMessageLabel() = %q, want $label2", keyword)
+		t.Fatalf("keywordForMessageLabel() = %q, want $label2", keyword)
 	}
 }

@@ -12,7 +12,7 @@ import (
 func userLabelProvider(provider string) (string, error) {
 	switch provider {
 	case "imap":
-		return LabelProviderIMAPKeyword, nil
+		return LabelProviderKeyword, nil
 	case "gmail":
 		return LabelProviderGmail, nil
 	case "outlook":
@@ -101,7 +101,7 @@ func (db *DB) QueueUserIMAPSpam(ctx context.Context, owner string, infos []Threa
 		if err != nil {
 			return err
 		}
-		if provider != LabelProviderIMAPKeyword {
+		if provider != LabelProviderKeyword {
 			return errors.New("IMAP spam action requires IMAP")
 		}
 		for _, flag := range []struct {
@@ -202,7 +202,7 @@ func (db *DB) CompleteUserLabelMutation(ctx context.Context, e LabelMutationQueu
 	if count != 1 {
 		return errors.New("label mailbox authentication changed")
 	}
-	if e.ProviderType == LabelProviderIMAPKeyword {
+	if e.ProviderType == LabelProviderKeyword {
 		if err := tx.QueryRowContext(ctx, `SELECT count(*) FROM message_folder_state mfs JOIN folders f ON f.id=mfs.folder_id WHERE mfs.message_id=? AND mfs.folder_id=? AND f.account_id=? AND f.remote_id=? AND COALESCE(mfs.remote_uid,0)=? AND COALESCE(f.uid_validity,0)=?
   AND (mfs.is_deleted=0 OR EXISTS(SELECT 1 FROM message_mutations q WHERE q.account_id=f.account_id AND q.message_id=mfs.message_id AND q.folder_id=f.id AND q.kind='move' AND q.status!='applied'))`, e.MessageID, info.FolderID, e.AccountID, info.FolderRemoteID, info.RemoteUID, validity).Scan(&count); err != nil {
 			return err
@@ -215,7 +215,7 @@ func (db *DB) CompleteUserLabelMutation(ctx context.Context, e LabelMutationQueu
 			return err
 		}
 	}
-	if e.ProviderType == LabelProviderIMAPKeyword && (e.LabelName == "$Junk" || e.LabelName == "$NotJunk") {
+	if e.ProviderType == LabelProviderKeyword && (e.LabelName == "$Junk" || e.LabelName == "$NotJunk") {
 		// Training keywords are mailbox status, not labels shown in the UI.
 		if _, err := tx.ExecContext(ctx, `DELETE FROM label_mutation_queue WHERE `+userLabelAttemptPredicate, userLabelAttemptArgs(e)...); err != nil {
 			return err

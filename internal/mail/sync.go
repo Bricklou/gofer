@@ -2131,7 +2131,7 @@ func convertFlagUpdates(imapUpdates []imap.FlagUpdate) []storage.FlagUpdate {
 			IsStarred:     u.IsStarred,
 			Labels:        u.Labels,
 			LabelsKnown:   true,
-			LabelProvider: storage.LabelProviderIMAPKeyword,
+			LabelProvider: storage.LabelProviderKeyword,
 		}
 	}
 	return updates

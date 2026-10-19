@@ -905,11 +905,16 @@ type ProviderSyncMessage struct {
 }
 
 const (
-	LabelProviderGmail       = "gmail"
-	LabelProviderOutlook     = "outlook"
-	LabelProviderJMAP        = "jmap"
-	LabelProviderIMAPKeyword = "imap_keyword"
-	LabelProviderLocal       = "local"
+	LabelProviderGmail   = "gmail"
+	LabelProviderOutlook = "outlook"
+	// LabelProviderJMAP names the JMAP sync cursors in label_sync_state. JMAP
+	// labels themselves are keywords, so they use LabelProviderKeyword.
+	LabelProviderJMAP = "jmap"
+	// LabelProviderKeyword is a label stored as a message keyword, on IMAP and
+	// JMAP accounts alike: both protocols share the server's keywords. The
+	// stored value predates JMAP support.
+	LabelProviderKeyword = "imap_keyword"
+	LabelProviderLocal   = "local"
 
 	LabelMutationAdd    = "add"
 	LabelMutationRemove = "remove"
@@ -934,12 +939,12 @@ type LabelAliasInput struct {
 	Source       string
 }
 
-var defaultIMAPKeywordAliases = []LabelAliasInput{
-	{ProviderType: LabelProviderIMAPKeyword, ProviderID: "$label1", DisplayName: "Important", Source: "default"},
-	{ProviderType: LabelProviderIMAPKeyword, ProviderID: "$label2", DisplayName: "Work", Source: "default"},
-	{ProviderType: LabelProviderIMAPKeyword, ProviderID: "$label3", DisplayName: "Personal", Source: "default"},
-	{ProviderType: LabelProviderIMAPKeyword, ProviderID: "$label4", DisplayName: "To Do", Source: "default"},
-	{ProviderType: LabelProviderIMAPKeyword, ProviderID: "$label5", DisplayName: "Later", Source: "default"},
+var defaultKeywordAliases = []LabelAliasInput{
+	{ProviderType: LabelProviderKeyword, ProviderID: "$label1", DisplayName: "Important", Source: "default"},
+	{ProviderType: LabelProviderKeyword, ProviderID: "$label2", DisplayName: "Work", Source: "default"},
+	{ProviderType: LabelProviderKeyword, ProviderID: "$label3", DisplayName: "Personal", Source: "default"},
+	{ProviderType: LabelProviderKeyword, ProviderID: "$label4", DisplayName: "To Do", Source: "default"},
+	{ProviderType: LabelProviderKeyword, ProviderID: "$label5", DisplayName: "Later", Source: "default"},
 }
 
 type ProviderLabelSyncMessage struct {
@@ -2411,7 +2416,7 @@ func (db *DB) ensureLabelTx(ctx context.Context, tx *sql.Tx, label LabelInput) (
 }
 
 func (db *DB) resolveProviderLabelAliasTx(ctx context.Context, tx *sql.Tx, label LabelInput) (LabelInput, error) {
-	if label.ProviderType != LabelProviderIMAPKeyword || strings.TrimSpace(label.ProviderID) == "" {
+	if label.ProviderType != LabelProviderKeyword || strings.TrimSpace(label.ProviderID) == "" {
 		return label, nil
 	}
 	if err := db.ensureDefaultLabelAliasesTx(ctx, tx, label.AccountID, label.ProviderType); err != nil {
@@ -2443,7 +2448,7 @@ func (db *DB) resolveProviderLabelAliasTx(ctx context.Context, tx *sql.Tx, label
 	} else if err != nil {
 		return label, err
 	} else {
-		// IMAP keywords are case-insensitive; use the selected alias's identity
+		// Keywords are case-insensitive; use the selected alias's identity
 		// so server casing cannot create a second label or lose its display name.
 		label.ProviderID = providerID
 	}
@@ -2460,10 +2465,10 @@ func (db *DB) resolveProviderLabelAliasTx(ctx context.Context, tx *sql.Tx, label
 }
 
 func (db *DB) ensureDefaultLabelAliasesTx(ctx context.Context, tx *sql.Tx, accountID, providerType string) error {
-	if strings.TrimSpace(providerType) != LabelProviderIMAPKeyword {
+	if strings.TrimSpace(providerType) != LabelProviderKeyword {
 		return nil
 	}
-	for _, input := range defaultIMAPKeywordAliases {
+	for _, input := range defaultKeywordAliases {
 		input.AccountID = accountID
 		if input.Color == "" {
 			input.Color = defaultLabelColor(input.DisplayName)
@@ -3536,7 +3541,7 @@ func labelProviderForAccountProvider(provider string) string {
 	case "outlook":
 		return LabelProviderOutlook
 	default:
-		return LabelProviderIMAPKeyword
+		return LabelProviderKeyword
 	}
 }
 
