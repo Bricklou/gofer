@@ -14,6 +14,12 @@ import (
 	"github.com/google/uuid"
 )
 
+// calendarEmailTransport reports whether calendar email may go out over
+// transport: SMTP, or JMAP for JMAP accounts.
+func calendarEmailTransport(transport string) bool {
+	return transport == OutgoingTransportSMTP || transport == OutgoingTransportJMAP
+}
+
 // The resource is derived from the original private event, never from a form.
 func calendarClaimReplyResource(claim *UserCalendarResponseClaim) (string, error) {
 	source, event := claim.snapshot.source, claim.snapshot.event
@@ -22,7 +28,9 @@ func calendarClaimReplyResource(claim *UserCalendarResponseClaim) (string, error
 		remote = event.SeriesRemoteID
 	}
 	base, err := url.Parse(source.RemoteID)
-	if err != nil || base.Scheme != "https" || base.Host == "" || base.User != nil || base.RawQuery != "" || base.Fragment != "" {
+	// Plain HTTP servers are reached only with an approved exception, which
+	// the connection itself checks.
+	if err != nil || (base.Scheme != "https" && base.Scheme != "http") || base.Host == "" || base.User != nil || base.RawQuery != "" || base.Fragment != "" {
 		return "", ErrCalendarEventChanged
 	}
 	reference, err := url.Parse(remote)
@@ -51,7 +59,7 @@ func (db *DB) QueueUserCalendarReply(ctx context.Context, claim *UserCalendarRes
 		return "", err
 	}
 	source := claim.snapshot.source
-	if job.ResourceID != resource || job.RemoteID != claim.remote || job.Version != claim.version || job.Response != claim.response || !json.Valid([]byte(job.Payload)) || input.AccountID != source.AccountID || input.Transport != OutgoingTransportSMTP || input.EnvelopeFrom == "" || len(input.EnvelopeRecipients) != 1 || input.EnvelopeRecipients[0] == "" || len(input.MIMEData) == 0 || !json.Valid(input.MessageJSON) || input.ID != "" || input.MessageID != 0 || input.DraftID != "" || input.IsScheduled || !input.SendAfter.IsZero() {
+	if job.ResourceID != resource || job.RemoteID != claim.remote || job.Version != claim.version || job.Response != claim.response || !json.Valid([]byte(job.Payload)) || input.AccountID != source.AccountID || !calendarEmailTransport(input.Transport) || input.EnvelopeFrom == "" || len(input.EnvelopeRecipients) != 1 || input.EnvelopeRecipients[0] == "" || len(input.MIMEData) == 0 || !json.Valid(input.MessageJSON) || input.ID != "" || input.MessageID != 0 || input.DraftID != "" || input.IsScheduled || !input.SendAfter.IsZero() {
 		return "", ErrCalendarEventChanged
 	}
 	job.ID, job.UserID, job.SourceID = uuid.NewString(), source.UserID, source.ID
@@ -148,7 +156,7 @@ func validateUserCalendarReplyProofTx(ctx context.Context, tx *sql.Tx, job Calen
 	if err != nil {
 		return err
 	}
-	if currentSend.ID != expected.ID || currentSend.AccountID != source.source.AccountID || currentSend.Transport != OutgoingTransportSMTP || currentSend.Status != expected.Status || currentSend.AttemptCount != expected.AttemptCount {
+	if currentSend.ID != expected.ID || currentSend.AccountID != source.source.AccountID || !calendarEmailTransport(currentSend.Transport) || currentSend.Status != expected.Status || currentSend.AttemptCount != expected.AttemptCount {
 		return ErrCalendarEventChanged
 	}
 	if event != nil {
@@ -186,7 +194,7 @@ func CalendarReplySendFingerprint(send OutgoingSend) ([32]byte, error) {
 // rather than requiring the event cache or service settings to remain unchanged
 // after SMTP may have accepted the message.
 func validateUserCalendarReplyDeliveryTx(ctx context.Context, tx *sql.Tx, job CalendarReplyJob, claim CalendarResponseClaimIdentity, expected OutgoingSend, state [32]byte, guard func(*sql.Tx, string) error) error {
-	if guard == nil || job.ID == "" || job.State != "pending" || job.UserID == "" || job.ID != expected.ID || expected.Transport != OutgoingTransportSMTP || expected.MessageID != 0 || expected.DraftID != "" || expected.IsScheduled || claim.ID == "" || claim.RemoteID != job.RemoteID || claim.Version != job.Version || claim.Response != job.Response {
+	if guard == nil || job.ID == "" || job.State != "pending" || job.UserID == "" || job.ID != expected.ID || !calendarEmailTransport(expected.Transport) || expected.MessageID != 0 || expected.DraftID != "" || expected.IsScheduled || claim.ID == "" || claim.RemoteID != job.RemoteID || claim.Version != job.Version || claim.Response != job.Response {
 		return ErrCalendarEventChanged
 	}
 	if err := guard(tx, expected.AccountID); err != nil {

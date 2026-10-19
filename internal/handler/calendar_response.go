@@ -89,7 +89,7 @@ func (h *Handler) readCalendarResponse(ctx context.Context, source storage.Calen
 		target, err := readCalDAVResponseTarget(ctx, source, event, scope, credentials.username, credentials.password, account.Email)
 		if err == nil && !target.CalDAV.ServerScheduling {
 			cfg, cfgErr := h.accountStore.GetConfig(ctx, source.AccountID)
-			if cfgErr != nil || cfg.SMTPHost == "" || cfg.SMTPPort <= 0 {
+			if cfgErr != nil || !accountSendsEmail(cfg) {
 				return calendarResponseTarget{}, calendarReplyConfigurationError("This server needs replies by email. Configure SMTP for this account before responding.")
 			}
 		}

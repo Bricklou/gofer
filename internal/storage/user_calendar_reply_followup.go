@@ -152,7 +152,7 @@ func (db *DB) ListAccountCalendarReplyFollowups(ctx context.Context, owner, acco
 // A purely local conflict notice stops Calendar retries for a known accepted
 // send. It does not release a reservation or grant authority on a new source.
 func calendarReplySentRecordTx(ctx context.Context, tx *sql.Tx, job CalendarReplyJob, send OutgoingSend, guard func(*sql.Tx, string) error) error {
-	if guard == nil || job.UserID == "" || job.ID != send.ID || job.SendStatus != OutgoingSendSent || send.Status != OutgoingSendSent || send.Transport != OutgoingTransportSMTP {
+	if guard == nil || job.UserID == "" || job.ID != send.ID || job.SendStatus != OutgoingSendSent || send.Status != OutgoingSendSent || !calendarEmailTransport(send.Transport) {
 		return ErrCalendarEventChanged
 	}
 	if err := guard(tx, send.AccountID); err != nil {

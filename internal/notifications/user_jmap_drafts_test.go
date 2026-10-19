@@ -25,6 +25,9 @@ type jmapDraftServer struct {
 	blobs  map[string]string
 	emails map[string]*jmapDraftEmail
 	nextID int
+	// login, password and identity are the account's sign-in and the address
+	// it may send from: robin@example.test with "secret" unless changed.
+	login, password, identity string
 }
 
 type jmapDraftEmail struct {
@@ -55,14 +58,14 @@ func (s *jmapDraftServer) in(mailbox string) []string {
 
 func newJMAPDraftServer(t *testing.T) *jmapDraftServer {
 	t.Helper()
-	s := &jmapDraftServer{blobs: map[string]string{}, emails: map[string]*jmapDraftEmail{}}
+	s := &jmapDraftServer{blobs: map[string]string{}, emails: map[string]*jmapDraftEmail{}, login: "robin@example.test", password: "secret", identity: "robin@example.test"}
 	s.Server = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if user, pass, ok := r.BasicAuth(); !ok || user != "robin@example.test" || pass != "secret" {
+		s.mu.Lock()
+		defer s.mu.Unlock()
+		if user, pass, ok := r.BasicAuth(); !ok || user != s.login || pass != s.password {
 			http.Error(w, "unauthorized", http.StatusUnauthorized)
 			return
 		}
-		s.mu.Lock()
-		defer s.mu.Unlock()
 		switch {
 		case r.URL.Path == "/.well-known/jmap":
 			_, _ = io.WriteString(w, `{"capabilities": {"urn:ietf:params:jmap:core": {"maxObjectsInGet": 50}, "urn:ietf:params:jmap:mail": {}, "urn:ietf:params:jmap:submission": {}},
@@ -105,7 +108,7 @@ func (s *jmapDraftServer) answer(t *testing.T, w http.ResponseWriter, r *http.Re
 			result = map[string]any{"accountId": "a1", "state": "m1", "list": []map[string]string{
 				{"id": "mb-in", "name": "Inbox", "role": "inbox"}, {"id": "mb-drafts", "name": "Drafts", "role": "drafts"}, {"id": "mb-sent", "name": "Sent", "role": "sent"}}}
 		case "Identity/get":
-			result = map[string]any{"accountId": "a1", "list": []map[string]string{{"id": "i1", "email": "robin@example.test"}}}
+			result = map[string]any{"accountId": "a1", "list": []map[string]string{{"id": "i1", "email": s.identity}}}
 		case "Email/import":
 			var emails map[string]struct {
 				BlobID     string          `json:"blobId"`

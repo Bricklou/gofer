@@ -10,6 +10,7 @@ import (
 
 	mailtransport "github.com/cristianadrielbraun/gofer/internal/mail/transport"
 	"github.com/cristianadrielbraun/gofer/internal/models"
+	"github.com/cristianadrielbraun/gofer/internal/providers"
 	"github.com/cristianadrielbraun/gofer/internal/storage"
 )
 
@@ -44,6 +45,36 @@ func (s *AccountServiceSnapshot) Identity() AccountServiceIdentity {
 // never consults shared account rows or adopts changed sending configuration.
 func (s *AccountServiceSnapshot) SMTPConfigured() bool {
 	return strings.TrimSpace(s.data.SMTPHost) != "" && s.data.SMTPPort > 0
+}
+
+// SendsEmail reports whether the account can send the email a calendar reply
+// needs: over SMTP, or over JMAP for a JMAP account signed in with a password.
+func (s *AccountServiceSnapshot) SendsEmail() bool {
+	if s.data.Provider == providers.ProviderJMAP {
+		return s.data.AuthMethod == "plain" && providers.JMAPEnabled()
+	}
+	return s.SMTPConfigured()
+}
+
+// JMAPConfig is a JMAP account's connection from the copied session URL, with
+// the central transport exceptions for its endpoint, as SMTPConfig is for SMTP.
+func (s *AccountServiceSnapshot) JMAPConfig(ctx context.Context) (*models.AccountConfig, error) {
+	if err := s.repository.checkServiceSnapshot(s); err != nil {
+		return nil, err
+	}
+	d := s.data
+	if d.Provider != providers.ProviderJMAP || d.AuthMethod != "plain" {
+		return nil, errors.New("the account does not send over JMAP")
+	}
+	if !providers.JMAPEnabled() {
+		return nil, providers.ErrJMAPDisabled
+	}
+	cfg := &models.AccountConfig{AccountID: s.id, Provider: d.Provider, ProviderAccountID: d.ProviderAccountID,
+		Username: d.Username, AuthMethod: d.AuthMethod, JMAPSessionURL: d.JMAPSessionURL}
+	if err := s.repository.base.applyJMAPTransportPolicy(ctx, cfg); err != nil {
+		return nil, err
+	}
+	return cfg, nil
 }
 
 // Read the central transport exception for the copied endpoint, without

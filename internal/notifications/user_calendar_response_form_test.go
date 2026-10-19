@@ -16,10 +16,12 @@ import (
 	"github.com/cristianadrielbraun/gofer/internal/storage"
 )
 
-func newOwnedCalendarResponseFormFixture(t *testing.T, provider string, before func(*http.Request), wrappers ...func(http.Handler) http.Handler) (*userStorageFixture, *atomic.Int32) {
+func newOwnedCalendarResponseFormFixture(t *testing.T, variant string, before func(*http.Request), wrappers ...func(http.Handler) http.Handler) (*userStorageFixture, *atomic.Int32) {
 	t.Helper()
+	// "caldav-jmap" is CalDAV on JMAP mail accounts; the calendar side is CalDAV.
+	provider := strings.TrimSuffix(variant, "-jmap")
 	calls := &atomic.Int32{}
-	f, _, server := newOwnedCalendarFixture(t, provider, func(base *ownedCalendarDiscoveryAPI) http.Handler {
+	f, _, server := newOwnedCalendarFixture(t, variant, func(base *ownedCalendarDiscoveryAPI) http.Handler {
 		var handler http.Handler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			if r.URL.Path == "/token" {
 				base.ServeHTTP(w, r)

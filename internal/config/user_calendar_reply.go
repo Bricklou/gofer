@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"strings"
 
+	"github.com/cristianadrielbraun/gofer/internal/providers"
 	"github.com/cristianadrielbraun/gofer/internal/storage"
 )
 
@@ -71,7 +72,13 @@ func (s *UserAccountStore) QueueCalendarReply(ctx context.Context, claim *UserCa
 	if err := s.checkServiceSnapshot(snapshot.service); err != nil {
 		return "", err
 	}
-	if !snapshot.service.SMTPConfigured() || !strings.EqualFold(input.EnvelopeFrom, snapshot.service.Identity().EmailAddress) {
+	// The reply goes out the way the account sends mail: JMAP accounts over
+	// JMAP, others over SMTP.
+	transport := storage.OutgoingTransportSMTP
+	if snapshot.service.Identity().Provider == providers.ProviderJMAP {
+		transport = storage.OutgoingTransportJMAP
+	}
+	if !snapshot.service.SendsEmail() || input.Transport != transport || !strings.EqualFold(input.EnvelopeFrom, snapshot.service.Identity().EmailAddress) {
 		return "", ErrAccountServicesChanged
 	}
 	// Freeze caller-owned slices before routing/cache/writer waits.
