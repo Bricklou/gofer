@@ -490,7 +490,7 @@ func (s *UserIMAP) sync(ctx context.Context, owner, id string, repair, backgroun
 				s.requestDiscovery()
 			}
 		}()
-		scope, err = s.snapshot(ctx, owner, id)
+		scope, err = s.snapshotAccount(ctx, owner, id, true)
 		if err != nil {
 			scope = nil
 			s.mu.Lock()
@@ -516,22 +516,26 @@ func (s *UserIMAP) sync(ctx context.Context, owner, id string, repair, backgroun
 			}
 		}
 		var mutationErr error
-		mutationErr = s.replayLabelMutations(ctx, scope)
-		if mutationErr != nil && scope.retryAt.After(time.Now()) {
-			queueFailed = true
-			return mutationErr
-		}
-		mutationErr = errors.Join(mutationErr, s.replayMutations(ctx, scope))
-		if queue != nil && !scope.retryAt.After(time.Now()) {
-			var providerMail *UserProviderMail
-			if scope.tokens != nil {
-				providerMail = &UserProviderMail{scope: scope, lifetime: ctx}
+		// JMAP accounts only receive for now: their changes and sending go
+		// over JMAP, which Gofer doesn't do yet.
+		if scope.config.Provider != providers.ProviderJMAP {
+			mutationErr = s.replayLabelMutations(ctx, scope)
+			if mutationErr != nil && scope.retryAt.After(time.Now()) {
+				queueFailed = true
+				return mutationErr
 			}
-			mutationErr = errors.Join(mutationErr, queue.Run(ctx, owner, id, providerMail))
-		}
-		queueFailed = mutationErr != nil
-		if mutationErr != nil && scope.retryAt.After(time.Now()) {
-			return mutationErr
+			mutationErr = errors.Join(mutationErr, s.replayMutations(ctx, scope))
+			if queue != nil && !scope.retryAt.After(time.Now()) {
+				var providerMail *UserProviderMail
+				if scope.tokens != nil {
+					providerMail = &UserProviderMail{scope: scope, lifetime: ctx}
+				}
+				mutationErr = errors.Join(mutationErr, queue.Run(ctx, owner, id, providerMail))
+			}
+			queueFailed = mutationErr != nil
+			if mutationErr != nil && scope.retryAt.After(time.Now()) {
+				return mutationErr
+			}
 		}
 		var enabled int
 		if err := scope.call(ctx, func(db *storage.DB) error {

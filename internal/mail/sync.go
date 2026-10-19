@@ -2170,7 +2170,7 @@ func (o *SyncOrchestrator) syncAccount(ctx context.Context, accountID string, in
 		return err
 	}
 	if cfg.Provider == providers.ProviderJMAP {
-		return ErrJMAPSyncUnavailable
+		return o.syncJMAPAccount(ctx, accountID, cfg)
 	}
 
 	if o.shouldUseOutlookGraphMail(cfg) {
