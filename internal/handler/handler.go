@@ -5043,7 +5043,10 @@ func (h *Handler) saveComposeDraftFromForm(ctx context.Context, r *http.Request)
 			return composeDraftSaveResult{}, &composeRequestError{status: http.StatusInternalServerError, message: "failed to save Outlook draft"}
 		}
 	case providers.ProviderJMAP:
-		// JMAP drafts stay in Gofer until they sync.
+		if err := h.saveJMAPDraft(ctx, accountID, msgID, providerDraft); err != nil {
+			log.Printf("jmap draft save account=%s message=%d: %v", accountID, msgID, err)
+			return composeDraftSaveResult{}, &composeRequestError{status: http.StatusInternalServerError, message: "failed to save JMAP draft"}
+		}
 	case providers.ProviderGmail:
 		if gmailAPIMailRuntimeEnabled() {
 			if err := h.saveGmailAPIDraft(ctx, accountID, msgID, providerDraft); err != nil {
@@ -5107,6 +5110,11 @@ func (h *Handler) handleDiscardComposeDraft(w http.ResponseWriter, r *http.Reque
 	if draftProvider != nil && strings.TrimSpace(draftProvider.AccountProvider) == providers.ProviderGmail {
 		if err := h.deleteGmailAPIDraft(ctx, accountID, draftProvider.ProviderMessageID); err != nil {
 			log.Printf("gmail draft discard account=%s draft=%s: %v", accountID, draftID, err)
+		}
+	}
+	if draftProvider != nil && strings.TrimSpace(draftProvider.AccountProvider) == providers.ProviderJMAP {
+		if err := h.deleteJMAPDraft(ctx, accountID, draftID, draftProvider.ProviderMessageID); err != nil {
+			log.Printf("jmap draft discard account=%s draft=%s: %v", accountID, draftID, err)
 		}
 	}
 	h.deleteComposeAttachmentPaths(draftPaths)

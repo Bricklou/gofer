@@ -42,7 +42,12 @@ func (h *Handler) queueIMAPDraftUpsert(ctx context.Context, accountID string, lo
 }
 
 func (h *Handler) queueIMAPDraftDelete(ctx context.Context, accountID, draftKey string, info *storage.DraftProviderInfo) error {
-	if info == nil || strings.TrimSpace(info.AccountProvider) == providers.ProviderGmail || strings.TrimSpace(info.AccountProvider) == providers.ProviderOutlook {
+	if info == nil {
+		return nil
+	}
+	switch strings.TrimSpace(info.AccountProvider) {
+	case providers.ProviderGmail, providers.ProviderOutlook, providers.ProviderJMAP:
+		// Their drafts are removed through their own APIs, not over IMAP.
 		return nil
 	}
 	if strings.TrimSpace(info.FolderRemoteName) == "" {

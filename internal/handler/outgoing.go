@@ -767,6 +767,8 @@ func (h *Handler) cleanupDeliveredDraft(ctx context.Context, send storage.Outgoi
 		deleteErr = h.deleteGmailAPIDraft(ctx, send.AccountID, draftProvider.ProviderMessageID)
 	case storage.OutgoingTransportOutlook:
 		deleteErr = h.deleteOutlookGraphDraft(ctx, send.AccountID, draftProvider.ProviderMessageID)
+	case storage.OutgoingTransportJMAP:
+		deleteErr = h.deleteJMAPDraft(ctx, send.AccountID, send.DraftID, draftProvider.ProviderMessageID)
 	}
 	if deleteErr != nil {
 		log.Printf("outgoing-send: delete provider draft account=%s draft=%s: %v", send.AccountID, send.DraftID, deleteErr)

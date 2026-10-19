@@ -152,6 +152,27 @@ func (d *JMAPDrafts) SaveDraft(ctx context.Context, id string, mime []byte) (Use
 	return UserProviderDraft{ID: saved, MessageID: saved, InternetMessageID: internetID, RevisionToken: revision}, nil
 }
 
+// ReplaceDraft stores mime as the draft's new version and removes the
+// previous one, if any, in the same request, for callers that save drafts
+// directly rather than through the queue. It returns the new draft's id. When
+// the new version was stored but the previous one could not be removed, it
+// returns the id and an error too.
+func (d *JMAPDrafts) ReplaceDraft(ctx context.Context, previousID string, mime []byte) (string, error) {
+	client, session, account, drafts, err := d.open(ctx)
+	if err != nil {
+		return "", err
+	}
+	blob, err := client.UploadBlob(ctx, session, account, jmap.ContentTypeMessage, mime)
+	if err != nil {
+		return "", err
+	}
+	var replace []string
+	if previousID != "" {
+		replace = []string{previousID}
+	}
+	return client.SaveDraft(ctx, session, account, blob, drafts, replace)
+}
+
 // DeleteDraft removes a draft if it is still the version recorded for it; one
 // already gone needs nothing more.
 func (d *JMAPDrafts) DeleteDraft(ctx context.Context, draft UserProviderDraft) error {
