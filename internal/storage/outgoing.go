@@ -39,6 +39,7 @@ const (
 	OutgoingTransportSMTP    = "smtp"
 	OutgoingTransportGmail   = "gmail"
 	OutgoingTransportOutlook = "outlook"
+	OutgoingTransportJMAP    = "jmap"
 )
 
 type OutgoingSend struct {

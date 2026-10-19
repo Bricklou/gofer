@@ -688,10 +688,13 @@ func TestManagedStorageVersionsLayoutOnlyTables(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	if layoutVersion(path) != 1 || layoutVersion(alice) != 1 {
+	// The central layout has one schema step; user databases have two, the
+	// second letting send receipts name JMAP.
+	const centralLayout, userLayout = 1, 2
+	if layoutVersion(path) != centralLayout || layoutVersion(alice) != userLayout {
 		t.Fatal("migration did not record the layout schema", layoutVersion(path), layoutVersion(alice))
 	}
-	// Layouts published before versioning adopt version 1 on startup.
+	// Layouts published before versioning adopt the current version on startup.
 	setLayoutVersion(path, 0)
 	setLayoutVersion(alice, 0)
 	s, err := openManagedStorage(t.Context(), path, 1)
@@ -699,7 +702,7 @@ func TestManagedStorageVersionsLayoutOnlyTables(t *testing.T) {
 		t.Fatal(err)
 	}
 	s.Close()
-	if layoutVersion(path) != 1 || layoutVersion(alice) != 1 {
+	if layoutVersion(path) != centralLayout || layoutVersion(alice) != userLayout {
 		t.Fatal("startup did not adopt the layout schema", layoutVersion(path), layoutVersion(alice))
 	}
 	setLayoutVersion(alice, 99)

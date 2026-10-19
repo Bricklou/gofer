@@ -1488,7 +1488,7 @@ CREATE TABLE IF NOT EXISTS outgoing_sends (
     account_id TEXT NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,
     message_id INTEGER REFERENCES messages(id) ON DELETE SET NULL,
     draft_id TEXT NOT NULL DEFAULT '',
-    transport TEXT NOT NULL CHECK (transport IN ('smtp', 'gmail', 'outlook')),
+    transport TEXT NOT NULL CHECK (transport IN ('smtp', 'gmail', 'outlook', 'jmap')),
     envelope_from TEXT NOT NULL,
     envelope_recipients TEXT NOT NULL DEFAULT '[]',
     mime_data BLOB,
@@ -1653,4 +1653,4 @@ CREATE TABLE IF NOT EXISTS calendar_invitation_messages (
 );
 
 -- Schema version marker for fresh installs
-INSERT OR REPLACE INTO schema_version (version) VALUES (116);
+INSERT OR REPLACE INTO schema_version (version) VALUES (117);

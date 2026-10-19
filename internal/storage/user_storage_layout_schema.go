@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"strings"
 )
 
 // Tables that exist only in the per-user layout are versioned with SQLite's
@@ -30,6 +31,48 @@ var userLayoutSchema = []layoutSchemaStep{
 		}
 		return ensureUserProviderDraftSchema(ctx, tx)
 	},
+	allowJMAPProviderSendReceiptsTx,
+}
+
+// allowJMAPProviderSendReceiptsTx lets mail sent over JMAP keep a send
+// receipt. The provider CHECK can only change by rebuilding the table, keeping
+// its rows; a table already created with jmap is left alone.
+func allowJMAPProviderSendReceiptsTx(ctx context.Context, tx *sql.Tx) error {
+	var definition string
+	err := tx.QueryRowContext(ctx, `SELECT sql FROM sqlite_schema WHERE type='table' AND name='gofer_provider_send_receipts'`).Scan(&definition)
+	if err == sql.ErrNoRows || (err == nil && strings.Contains(definition, "'jmap'")) {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	var rows int
+	if err := tx.QueryRowContext(ctx, `SELECT COUNT(*) FROM gofer_provider_send_receipts`).Scan(&rows); err != nil {
+		return err
+	}
+	statements := []string{
+		`DROP TABLE IF EXISTS temp.gofer_provider_send_receipts_v1`,
+		`CREATE TEMP TABLE gofer_provider_send_receipts_v1 AS SELECT * FROM gofer_provider_send_receipts`,
+		`DROP TABLE gofer_provider_send_receipts`,
+		providerSendReceiptSchema,
+	}
+	if rows > 0 {
+		statements = append(statements, `INSERT INTO gofer_provider_send_receipts SELECT * FROM temp.gofer_provider_send_receipts_v1`)
+	}
+	statements = append(statements, `DROP TABLE temp.gofer_provider_send_receipts_v1`)
+	for _, statement := range statements {
+		if _, err := tx.ExecContext(ctx, statement); err != nil {
+			return err
+		}
+	}
+	var restored int
+	if err := tx.QueryRowContext(ctx, `SELECT COUNT(*) FROM gofer_provider_send_receipts`).Scan(&restored); err != nil {
+		return err
+	}
+	if restored != rows {
+		return fmt.Errorf("rebuilding send receipts kept %d of %d rows", restored, rows)
+	}
+	return nil
 }
 
 // ensureLayoutSchema only reads the version when the database is current.

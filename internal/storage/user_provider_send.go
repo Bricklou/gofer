@@ -110,7 +110,7 @@ func (db *DB) CompleteUserProviderSentCache(ctx context.Context, send OutgoingSe
 
 const providerSendReceiptSchema = `CREATE TABLE IF NOT EXISTS gofer_provider_send_receipts (
 		send_id TEXT PRIMARY KEY REFERENCES outgoing_sends(id) ON DELETE CASCADE,
-		provider TEXT NOT NULL CHECK(provider IN ('gmail','outlook')),
+		provider TEXT NOT NULL CHECK(provider IN ('gmail','outlook','jmap')),
 		mailbox_subject TEXT NOT NULL,
 		provider_message_id TEXT NOT NULL DEFAULT ''
 	)`
