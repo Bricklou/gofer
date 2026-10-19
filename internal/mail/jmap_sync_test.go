@@ -45,6 +45,10 @@ type fakeJMAPServer struct {
 	blobs     map[string]string
 	downloads int
 	sets      int
+	// pushes, when set, offers push: each event source connection writes
+	// the StateChange JSON sent here. streams counts open connections.
+	pushes  chan string
+	streams int
 }
 
 // emailIndex finds an email; the caller holds f.mu.
@@ -123,11 +127,32 @@ func newFakeJMAPServer(t *testing.T) *fakeJMAPServer {
 		case "/.well-known/jmap":
 			f.mu.Lock()
 			max := f.maxObjectsInGet
+			events := ""
+			if f.pushes != nil {
+				events = `"eventSourceUrl": "/jmap/events?types={types}&closeafter={closeafter}&ping={ping}",`
+			}
 			f.mu.Unlock()
 			fmt.Fprintf(w, `{"capabilities": {"urn:ietf:params:jmap:core": {"maxCallsInRequest": 16, "maxObjectsInGet": %d}, "urn:ietf:params:jmap:mail": {}},
 				"accounts": {"a1": {"name": "robin@example.test"}}, "primaryAccounts": {"urn:ietf:params:jmap:mail": "a1"},
-				"username": "robin@example.test", "apiUrl": "/jmap/", "state": "s1",
-				"downloadUrl": "/jmap/download/{accountId}/{blobId}/{name}?accept={type}"}`, max)
+				"username": "robin@example.test", "apiUrl": "/jmap/", "state": "s1", %s
+				"downloadUrl": "/jmap/download/{accountId}/{blobId}/{name}?accept={type}"}`, max, events)
+		case "/jmap/events":
+			f.mu.Lock()
+			pushes := f.pushes
+			f.streams++
+			f.mu.Unlock()
+			defer func() { f.mu.Lock(); f.streams--; f.mu.Unlock() }()
+			w.Header().Set("Content-Type", "text/event-stream")
+			w.(http.Flusher).Flush()
+			for {
+				select {
+				case <-r.Context().Done():
+					return
+				case change := <-pushes:
+					fmt.Fprintf(w, "event: state\ndata: %s\n\n", change)
+					w.(http.Flusher).Flush()
+				}
+			}
 		case "/jmap/":
 			f.answer(w, r)
 		default:

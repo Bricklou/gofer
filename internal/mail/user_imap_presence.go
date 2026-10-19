@@ -113,8 +113,9 @@ func (s *UserIMAP) syncOwnerNow(owner string) {
 	s.wakeBackground()
 }
 
-// pollIntervalFor returns how soon to poll an IMAP account again: within a
-// minute when its owner is online but its Inbox is not being watched.
+// pollIntervalFor returns how soon to poll an IMAP or JMAP account again:
+// within a minute when its owner is online but its Inbox is not being watched.
+// A JMAP account's push connection counts as its Inbox watch.
 func (s *UserIMAP) pollIntervalFor(owner, account string, interval time.Duration) time.Duration {
 	s.mu.Lock()
 	defer s.mu.Unlock()

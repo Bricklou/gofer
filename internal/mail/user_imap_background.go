@@ -5,10 +5,12 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"net/url"
 	"sort"
 	"time"
 
 	"github.com/cristianadrielbraun/gofer/internal/mail/imap"
+	"github.com/cristianadrielbraun/gofer/internal/providers"
 	"github.com/cristianadrielbraun/gofer/internal/storage"
 )
 
@@ -54,7 +56,7 @@ type userIMAPWatch struct {
 	role           string
 	host           string
 	cancel         context.CancelFunc
-	watcher        *imap.IdleWatcher
+	watcher        idleWatcher
 	dirty          bool
 	suppressResync bool
 	status         IDLEFolderRuntimeStatus
@@ -354,7 +356,8 @@ func (s *UserIMAP) stopAllWatches() {
 // Copy folder/configuration data, then start watchers with no retained DB lease.
 func (s *UserIMAP) reconcileWatches(ctx context.Context, scope *userIMAPScope) error {
 	s.mu.Lock()
-	if scope.config.Provider != "imap" || scope.config.AuthMethod != "plain" {
+	jmapAccount := scope.config.Provider == providers.ProviderJMAP && providers.JMAPEnabled()
+	if (scope.config.Provider != "imap" && !jmapAccount) || scope.config.AuthMethod != "plain" {
 		s.stopWatchesLocked(scope.id)
 		s.mu.Unlock()
 		return nil
@@ -390,7 +393,9 @@ func (s *UserIMAP) reconcileWatches(ctx context.Context, scope *userIMAPScope) e
 	}
 	wanted := map[string]storage.FolderSyncInfo{}
 	for _, f := range folders {
-		if selected[f.ID] && f.RemoteID != "" {
+		// One JMAP push connection covers the whole account; it is kept as
+		// the Inbox's watch, whichever folders are chosen for IDLE.
+		if jmapAccount && f.Role == "inbox" || !jmapAccount && selected[f.ID] && f.RemoteID != "" {
 			wanted[f.ID] = f
 		}
 	}
@@ -411,6 +416,11 @@ func (s *UserIMAP) reconcileWatches(ctx context.Context, scope *userIMAPScope) e
 	// Inboxes first, so a limit costs people Sent or other folders before
 	// new mail. Repository order breaks ties.
 	host := watchHost(scope.config.IMAPHost)
+	if jmapAccount {
+		if session, err := url.Parse(scope.config.JMAPSessionURL); err == nil {
+			host = watchHost(session.Hostname())
+		}
+	}
 	ordered := make([]storage.FolderSyncInfo, 0, len(wanted))
 	for _, folder := range folders {
 		if _, ok := wanted[folder.ID]; ok && folder.Role == "inbox" {
@@ -435,14 +445,15 @@ func (s *UserIMAP) reconcileWatches(ctx context.Context, scope *userIMAPScope) e
 		}
 		watchCtx, cancel := context.WithCancel(s.ctx)
 		w := &userIMAPWatch{owner: scope.owner, remote: folder.RemoteID, role: folder.Role, host: host, cancel: cancel, status: IDLEFolderRuntimeStatus{AccountID: scope.id, FolderID: folder.ID, RemoteName: folder.RemoteID, ReasonCode: "connecting", Reason: "Connecting to real-time notifications; periodic polling is active."}}
-		w.watcher = imap.NewIdleWatcher(scope.config, scope.password, folder.RemoteID, func() {
+		onNotify := func() {
 			s.mu.Lock()
 			if s.watches[key] == w && watchCtx.Err() == nil {
 				w.dirty = true
 			}
 			s.mu.Unlock()
 			s.wakeBackground()
-		}, func(status imap.IdleWatcherStatus) {
+		}
+		onStatus := func(status imap.IdleWatcherStatus) {
 			s.mu.Lock()
 			current := s.watches[key] == w && watchCtx.Err() == nil
 			if current {
@@ -463,7 +474,12 @@ func (s *UserIMAP) reconcileWatches(ctx context.Context, scope *userIMAPScope) e
 				s.events.Publish(event)
 				s.wakeBackground()
 			}
-		})
+		}
+		if jmapAccount {
+			w.watcher = NewJMAPPushWatcher(scope.config, scope.password, onNotify, onStatus)
+		} else {
+			w.watcher = imap.NewIdleWatcher(scope.config, scope.password, folder.RemoteID, onNotify, onStatus)
+		}
 		s.watches[key] = w
 		s.idleCount++
 		s.idleByHost[host]++

@@ -1,0 +1,195 @@
+package mail
+
+import (
+	"io"
+	"net/http"
+	"net/http/httptest"
+	"sync"
+	"testing"
+	"time"
+
+	"github.com/cristianadrielbraun/gofer/internal/mail/imap"
+	"github.com/cristianadrielbraun/gofer/internal/mail/jmap"
+	"github.com/cristianadrielbraun/gofer/internal/models"
+)
+
+// pushTestServer serves a JMAP session for account a1 and hands each event
+// source connection to stream. withPush false leaves eventSourceUrl out.
+func pushTestServer(t *testing.T, withPush bool, stream func(n int, w io.Writer, flush func(), done <-chan struct{})) *httptest.Server {
+	t.Helper()
+	var mu sync.Mutex
+	connections := 0
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/.well-known/jmap":
+			events := ""
+			if withPush {
+				events = `"eventSourceUrl": "/events?types={types}&closeafter={closeafter}&ping={ping}",`
+			}
+			_, _ = io.WriteString(w, `{"capabilities": {"urn:ietf:params:jmap:core": {}, "urn:ietf:params:jmap:mail": {}},
+				"accounts": {"a1": {"name": "robin@example.test"}}, "primaryAccounts": {"urn:ietf:params:jmap:mail": "a1"},
+				`+events+` "apiUrl": "/jmap/", "state": "s1"}`)
+		case "/events":
+			mu.Lock()
+			connections++
+			n := connections
+			mu.Unlock()
+			w.Header().Set("Content-Type", "text/event-stream")
+			flusher := w.(http.Flusher)
+			flusher.Flush()
+			stream(n, w, flusher.Flush, r.Context().Done())
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	t.Cleanup(server.Close)
+	return server
+}
+
+func pushTestConfig(server *httptest.Server) *models.AccountConfig {
+	return &models.AccountConfig{AccountID: "acc-push", Provider: "jmap", JMAPSessionURL: server.URL + "/.well-known/jmap",
+		Username: "robin@example.test", JMAPAllowPlaintext: true, JMAPAllowPrivate: true}
+}
+
+// pushRecorder collects a watcher's notifications and statuses.
+type pushRecorder struct {
+	mu       sync.Mutex
+	notified int
+	statuses []imap.IdleWatcherStatus
+	changed  chan struct{}
+}
+
+func newPushRecorder() *pushRecorder { return &pushRecorder{changed: make(chan struct{}, 64)} }
+
+func (r *pushRecorder) notify() {
+	r.mu.Lock()
+	r.notified++
+	r.mu.Unlock()
+	r.changed <- struct{}{}
+}
+
+func (r *pushRecorder) status(status imap.IdleWatcherStatus) {
+	r.mu.Lock()
+	r.statuses = append(r.statuses, status)
+	r.mu.Unlock()
+	r.changed <- struct{}{}
+}
+
+// waitFor waits until ok holds for the recorder, up to five seconds.
+func (r *pushRecorder) waitFor(t *testing.T, what string, ok func(*pushRecorder) bool) {
+	t.Helper()
+	deadline := time.After(5 * time.Second)
+	for {
+		r.mu.Lock()
+		done := ok(r)
+		r.mu.Unlock()
+		if done {
+			return
+		}
+		select {
+		case <-r.changed:
+		case <-deadline:
+			t.Fatalf("timed out waiting for %s: notified %d, statuses %+v", what, r.notified, r.statuses)
+		}
+	}
+}
+
+// A push for the account's mail or mailboxes triggers a sync, one for another
+// account does not, and a dropped connection is reported and reopened.
+func TestJMAPPushWatcherNotifiesAndReconnects(t *testing.T) {
+	server := pushTestServer(t, true, func(n int, w io.Writer, flush func(), done <-chan struct{}) {
+		if n == 1 {
+			_, _ = io.WriteString(w, "event: state\ndata: {\"@type\":\"StateChange\",\"changed\":{\"a2\":{\"Email\":\"x\"}}}\n\n")
+			_, _ = io.WriteString(w, "event: state\ndata: {\"@type\":\"StateChange\",\"changed\":{\"a1\":{\"Mailbox\":\"m2\"}}}\n\n")
+			flush()
+			return // the server drops the connection
+		}
+		_, _ = io.WriteString(w, "event: state\ndata: {\"@type\":\"StateChange\",\"changed\":{\"a1\":{\"Email\":\"s9\"}}}\n\n")
+		flush()
+		<-done
+	})
+	record := newPushRecorder()
+	watcher := NewJMAPPushWatcher(pushTestConfig(server), "secret", record.notify, record.status)
+	finished := make(chan struct{})
+	go func() { watcher.Run(t.Context()); close(finished) }()
+
+	record.waitFor(t, "two notifications", func(r *pushRecorder) bool { return r.notified == 2 })
+	watcher.Close()
+	select {
+	case <-finished:
+	case <-time.After(5 * time.Second):
+		t.Fatal("Run did not return after Close")
+	}
+	record.mu.Lock()
+	defer record.mu.Unlock()
+	if record.notified != 2 || len(record.statuses) < 3 {
+		t.Fatalf("notified %d, statuses %+v", record.notified, record.statuses)
+	}
+	connected, lost, reconnected := record.statuses[0], record.statuses[1], record.statuses[2]
+	if !connected.Healthy || lost.Healthy || lost.ReasonCode != "connection_lost" || lost.RetryAt.IsZero() || !reconnected.Healthy {
+		t.Fatalf("statuses = %+v, want connected, lost, connected", record.statuses)
+	}
+}
+
+// A server without push is reported as such and not retried soon; periodic
+// sync keeps covering the account.
+func TestJMAPPushWatcherReportsMissingPush(t *testing.T) {
+	server := pushTestServer(t, false, nil)
+	record := newPushRecorder()
+	watcher := NewJMAPPushWatcher(pushTestConfig(server), "secret", record.notify, record.status)
+	finished := make(chan struct{})
+	go func() { watcher.Run(t.Context()); close(finished) }()
+	record.waitFor(t, "a status", func(r *pushRecorder) bool { return len(r.statuses) > 0 })
+	watcher.Close()
+	<-finished
+	status := record.statuses[0]
+	if status.Healthy || status.ReasonCode != "push_unsupported" || time.Until(status.RetryAt) < 25*time.Minute {
+		t.Fatalf("status = %+v, want push_unsupported retried in about 30 minutes", status)
+	}
+}
+
+// In managed mode an owner with Gofer open has their JMAP account watched
+// over one push connection: a push brings new mail in without waiting for
+// the poll, and the connection ends once they close Gofer.
+func TestUserIMAPWatchesJMAPAccountsOverPush(t *testing.T) {
+	f := newUserGmailFixture(t)
+	server := newFakeJMAPServer(t)
+	server.pushes = make(chan string, 4)
+	server.emailState = "c0"
+	server.setMailboxes(
+		jmap.Mailbox{ID: "mb-in", Name: "Inbox", Role: "inbox", MyRights: readable()},
+		jmap.Mailbox{ID: "mb-arch", Name: "Archive", Role: "archive", MyRights: readable()},
+	)
+	server.emails = []jmap.Email{testJMAPEmail("e1", "Lunch on Friday?", 2, "mb-in")}
+	useFakeJMAPAccount(t, f, server)
+	if err := f.worker.Start(UserIMAPBackgroundOptions{PollInterval: time.Hour, IdleOfflineGrace: 50 * time.Millisecond}); err != nil {
+		t.Fatal(err)
+	}
+	streams := func() int { server.mu.Lock(); defer server.mu.Unlock(); return server.streams }
+	release, err := f.worker.BeginActiveUserSession(t.Context(), "alice")
+	if err != nil {
+		t.Fatal(err)
+	}
+	waitJMAP(t, "one push connection after the first sync", func() bool { return jmapMessages(t, f)["e1"] != nil && streams() == 1 })
+
+	server.addEmail(testJMAPEmail("e2", "Garden plans", 0, "mb-in"))
+	server.pushes <- `{"@type":"StateChange","changed":{"a1":{"Email":"c1"}}}`
+	waitJMAP(t, "the pushed email", func() bool { return jmapMessages(t, f)["e2"] != nil })
+	if streams() != 1 {
+		t.Fatalf("%d push connections, want one for the whole account", streams())
+	}
+
+	release()
+	waitJMAP(t, "the push connection to end", func() bool { return streams() == 0 })
+}
+
+func waitJMAP(t *testing.T, what string, ok func() bool) {
+	t.Helper()
+	deadline := time.Now().Add(10 * time.Second)
+	for !ok() {
+		if time.Now().After(deadline) {
+			t.Fatalf("timed out waiting for %s", what)
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+}

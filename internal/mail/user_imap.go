@@ -572,7 +572,7 @@ func (s *UserIMAP) sync(ctx context.Context, owner, id string, repair, backgroun
 		if err == nil {
 			err = s.reconcileWatches(ctx, scope)
 		}
-		if scope.config.Provider == providers.ProviderIMAP && scope.config.AuthMethod == "plain" {
+		if (scope.config.Provider == providers.ProviderIMAP || scope.config.Provider == providers.ProviderJMAP) && scope.config.AuthMethod == "plain" {
 			interval = s.pollIntervalFor(owner, id, interval)
 		}
 		err = errors.Join(err, mutationErr)
