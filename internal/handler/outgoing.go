@@ -156,6 +156,8 @@ func outgoingTransportForConfig(cfg *models.AccountConfig) string {
 			return storage.OutgoingTransportGmail
 		case providers.ProviderOutlook:
 			return storage.OutgoingTransportOutlook
+		case providers.ProviderJMAP:
+			return storage.OutgoingTransportJMAP
 		}
 	}
 	return storage.OutgoingTransportSMTP
@@ -352,6 +354,8 @@ func (h *Handler) deliverOutgoingSend(parent context.Context, send storage.Outgo
 		providerMessageID, providerToken, err = h.sendGmailAPIRaw(sendCtx, cfg, send.MIMEData)
 	case storage.OutgoingTransportOutlook:
 		providerToken, err = h.sendOutlookGraphRaw(sendCtx, cfg, send.MIMEData)
+	case storage.OutgoingTransportJMAP:
+		providerMessageID, err = h.sendJMAPOutgoingRaw(sendCtx, cfg, send)
 	case storage.OutgoingTransportSMTP:
 		err = h.sendSMTPOutgoingRaw(sendCtx, cfg, send)
 	default:
@@ -379,6 +383,9 @@ func (h *Handler) deliverOutgoingSend(parent context.Context, send storage.Outgo
 	}
 	if send.Transport == storage.OutgoingTransportOutlook {
 		h.cacheOutlookSentMessageID(parent, send.AccountID, msg, providerToken)
+	}
+	if send.Transport == storage.OutgoingTransportJMAP {
+		h.cacheJMAPSentMessageID(parent, send.AccountID, msg, providerMessageID)
 	}
 	needsSentCopy := send.Transport == storage.OutgoingTransportSMTP
 	if err := h.db.CompleteOutgoingSend(parent, send.ID, msg.MessageID, needsSentCopy); err != nil {

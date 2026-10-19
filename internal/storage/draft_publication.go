@@ -17,7 +17,10 @@ type DraftPublication struct {
 	Attachments                 []AttachmentRow
 	Sync                        QueueIMAPDraftUpsertInput
 	ProviderSync                *QueueUserProviderDraftInput
-	Pending                     *QueueOutgoingSendInput
+	// LocalOnly keeps the draft in Gofer without syncing it to the server, for
+	// accounts whose drafts don't sync yet.
+	LocalOnly bool
+	Pending   *QueueOutgoingSendInput
 }
 
 func (db *DB) PublishDraft(ctx context.Context, draft DraftMessageInput, stage func(int64) (DraftPublication, error)) (int64, error) {
@@ -66,7 +69,7 @@ func (db *DB) PublishDraft(ctx context.Context, draft DraftMessageInput, stage f
 		if p.State.Provider == "outlook" {
 			p.State.RemoteID = p.State.RemoteMessageID
 		}
-	} else {
+	} else if !c.LocalOnly {
 		if c.Sync.State.AccountID != draft.AccountID || c.Sync.State.DraftKey != draft.InternetMessageID || c.Sync.State.FolderID != draft.FolderID {
 			return 0, errors.New("draft sync identity mismatch")
 		}
@@ -101,7 +104,7 @@ func (db *DB) PublishDraft(ctx context.Context, draft DraftMessageInput, stage f
 		if err := queueUserProviderDraftTx(ctx, tx, *c.ProviderSync, "upsert"); err != nil {
 			return 0, err
 		}
-	} else {
+	} else if !c.LocalOnly {
 		if _, err := queueIMAPDraftUpsertTx(ctx, tx, c.Sync); err != nil {
 			return 0, err
 		}

@@ -5042,6 +5042,8 @@ func (h *Handler) saveComposeDraftFromForm(ctx context.Context, r *http.Request)
 			log.Printf("outlook draft save account=%s message=%d: %v", accountID, msgID, err)
 			return composeDraftSaveResult{}, &composeRequestError{status: http.StatusInternalServerError, message: "failed to save Outlook draft"}
 		}
+	case providers.ProviderJMAP:
+		// JMAP drafts stay in Gofer until they sync.
 	case providers.ProviderGmail:
 		if gmailAPIMailRuntimeEnabled() {
 			if err := h.saveGmailAPIDraft(ctx, accountID, msgID, providerDraft); err != nil {

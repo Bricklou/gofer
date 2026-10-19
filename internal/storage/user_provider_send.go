@@ -20,8 +20,12 @@ func ensureUserMailDeliverySchema(ctx context.Context, db *DB) error {
 	return nil
 }
 
+// providerSendSignIn is how an account sending through its provider signs in:
+// Gmail and Outlook with OAuth, JMAP with the account's password.
+const providerSendSignIn = `(a.auth_method='oauth2' OR (o.transport='jmap' AND a.auth_method='plain'))`
+
 func checkUserSendAttempt(ctx context.Context, tx *sql.Tx, send OutgoingSend, subject string, copying bool) error {
-	if send.Transport != OutgoingTransportGmail && send.Transport != OutgoingTransportOutlook {
+	if send.Transport != OutgoingTransportGmail && send.Transport != OutgoingTransportOutlook && send.Transport != OutgoingTransportJMAP {
 		return errors.New("provider send transport is required")
 	}
 	var count int
@@ -31,7 +35,7 @@ func checkUserSendAttempt(ctx context.Context, tx *sql.Tx, send OutgoingSend, su
 	}
 	err := tx.QueryRowContext(ctx, `SELECT count(*) FROM outgoing_sends o JOIN accounts a ON a.id=o.account_id
 		WHERE o.id=? AND o.account_id=? AND o.transport=? AND o.status=?`+clause+`
-		AND a.provider=o.transport AND a.auth_method='oauth2' AND COALESCE(a.provider_account_id,'')=? AND COALESCE(a.is_deleting,0)=0`, send.ID, send.AccountID, send.Transport, status, attempt, subject).Scan(&count)
+		AND a.provider=o.transport AND `+providerSendSignIn+` AND COALESCE(a.provider_account_id,'')=? AND COALESCE(a.is_deleting,0)=0`, send.ID, send.AccountID, send.Transport, status, attempt, subject).Scan(&count)
 	if err != nil {
 		return err
 	}
@@ -68,7 +72,7 @@ func (db *DB) CompleteUserProviderSend(ctx context.Context, send OutgoingSend, s
 func (db *DB) UserProviderSendReceipt(ctx context.Context, sendID, accountID string) (string, error) {
 	var id string
 	err := db.Read().QueryRowContext(ctx, `SELECT r.provider_message_id FROM gofer_provider_send_receipts r JOIN outgoing_sends o ON o.id=r.send_id JOIN accounts a ON a.id=o.account_id
-		WHERE o.id=? AND o.account_id=? AND o.status='sent' AND r.provider=o.transport AND a.provider=r.provider AND a.auth_method='oauth2' AND a.provider_account_id=r.mailbox_subject AND COALESCE(a.is_deleting,0)=0`, sendID, accountID).Scan(&id)
+		WHERE o.id=? AND o.account_id=? AND o.status='sent' AND r.provider=o.transport AND a.provider=r.provider AND `+providerSendSignIn+` AND COALESCE(a.provider_account_id,'')=r.mailbox_subject AND COALESCE(a.is_deleting,0)=0`, sendID, accountID).Scan(&id)
 	return id, err
 }
 
