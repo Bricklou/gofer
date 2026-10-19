@@ -933,7 +933,10 @@ func (h *Handler) cardDAVConfig(ctx context.Context, userID, accountID string) (
 	if !cfg.Enabled || cfg.Provider != providers.ProviderCardDAV {
 		return cfg, "", fmt.Errorf("CardDAV is not configured for this account")
 	}
-	password, err := h.accountStore.DecryptContactSyncPassword(ctx, userID, accountID)
+	// Contacts set up with the account's own sign-in, such as those of an
+	// account imported from a profile, use the mailbox password, as in
+	// multi-user mode.
+	password, err := h.contactSyncPasswordOrAccount(ctx, userID, accountID, "")
 	if err != nil {
 		return cfg, "", err
 	}

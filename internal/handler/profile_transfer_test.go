@@ -673,3 +673,31 @@ func TestProfileJMAPAccountRoundTrip(t *testing.T) {
 		t.Fatalf("old profile plan for a new account = %+v", plan)
 	}
 }
+
+// Contacts that sign in like the account itself, as an imported account's
+// do, use the mailbox password; a password of their own still wins.
+func TestCardDAVConfigFallsBackToTheMailboxPassword(t *testing.T) {
+	h := newProfileTestHandler(t)
+	ctx := t.Context()
+	account, err := h.accountStore.CreateAccount(ctx, "default", &models.CreateAccountRequest{
+		Provider: "imap", EmailAddress: "robin@mail.example.test", IMAPHost: "imap.example.test", IMAPPort: 993, IMAPTLSMode: "tls",
+		SMTPHost: "smtp.example.test", SMTPPort: 465, SMTPTLSMode: "tls", Username: "robin", Password: "mailbox-secret", AuthMethod: "plain",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	cfg := models.ContactSyncConfig{Provider: "carddav", Enabled: true, BaseURL: "https://dav.example.test/", Username: "robin",
+		AddressBooks: []models.ContactAddressBook{{URL: "https://dav.example.test/books/main/", Default: true, Selected: true}}}
+	if err := h.accountStore.SaveContactSyncConfig(ctx, "default", account.ID, cfg, ""); err != nil {
+		t.Fatal(err)
+	}
+	if _, password, err := h.cardDAVConfig(ctx, "default", account.ID); err != nil || password != "mailbox-secret" {
+		t.Fatalf("CardDAV password = %q, %v; want the mailbox password", password, err)
+	}
+	if err := h.accountStore.SaveContactSyncConfig(ctx, "default", account.ID, cfg, "contacts-secret"); err != nil {
+		t.Fatal(err)
+	}
+	if _, password, err := h.cardDAVConfig(ctx, "default", account.ID); err != nil || password != "contacts-secret" {
+		t.Fatalf("CardDAV password = %q, %v; want the contacts password", password, err)
+	}
+}
