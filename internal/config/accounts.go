@@ -7,6 +7,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"net/url"
 	"slices"
 	"strings"
 
@@ -82,16 +83,16 @@ func (s *AccountStore) GetConfig(ctx context.Context, accountID string) (*models
 		`SELECT provider, provider_account_id,
 		        imap_host, imap_port, imap_tls_mode,
 		        smtp_host, smtp_port, smtp_tls_mode,
-		        username, auth_method, smtp_username
+		        username, auth_method, smtp_username, jmap_session_url
 		 FROM accounts WHERE id = ? AND COALESCE(is_deleting, 0) = 0`, accountID,
 	).Scan(&cfg.Provider, &cfg.ProviderAccountID,
 		&cfg.IMAPHost, &cfg.IMAPPort, &cfg.IMAPTLSMode,
 		&cfg.SMTPHost, &cfg.SMTPPort, &cfg.SMTPTLSMode,
-		&cfg.Username, &cfg.AuthMethod, &cfg.SmtpUsername)
+		&cfg.Username, &cfg.AuthMethod, &cfg.SmtpUsername, &cfg.JMAPSessionURL)
 	if err != nil {
 		return nil, fmt.Errorf("query account config: %w", err)
 	}
-	if !accountProviderUsesGraphMail(cfg.Provider) {
+	if accountProviderKeepsMailTransports(cfg.Provider) {
 		cfg.IMAPAllowPlaintext, err = s.policyDB.IsPlaintextTransportAllowed(ctx, "imap", cfg.IMAPHost, cfg.IMAPPort)
 		if err != nil {
 			return nil, fmt.Errorf("account %s: check IMAP security exception: %w", accountID, err)
@@ -131,12 +132,12 @@ func (s *AccountStore) GetEditData(ctx context.Context, accountID string) (*mode
 		`SELECT provider, provider_account_id, email_address, display_name,
 		        imap_host, imap_port, imap_tls_mode,
 		        smtp_host, smtp_port, smtp_tls_mode, COALESCE(email_sync_enabled, 1),
-		        username, auth_method, COALESCE(smtp_username, '')
+		        username, auth_method, COALESCE(smtp_username, ''), jmap_session_url
 		 FROM accounts WHERE id = ? AND COALESCE(is_deleting, 0) = 0`, accountID,
 	).Scan(&data.Provider, &data.ProviderAccountID, &data.EmailAddress, &data.DisplayName,
 		&data.IMAPHost, &data.IMAPPort, &data.IMAPTLSMode,
 		&data.SMTPHost, &data.SMTPPort, &data.SMTPTLSMode, &emailSyncEnabled,
-		&data.Username, &data.AuthMethod, &data.SmtpUsername)
+		&data.Username, &data.AuthMethod, &data.SmtpUsername, &data.JMAPSessionURL)
 	if err != nil {
 		return nil, fmt.Errorf("query account edit data: %w", err)
 	}
@@ -545,8 +546,42 @@ func accountProviderUsesGraphMail(provider string) bool {
 	return strings.EqualFold(strings.TrimSpace(provider), "outlook")
 }
 
+func accountProviderUsesJMAP(provider string) bool {
+	return strings.EqualFold(strings.TrimSpace(provider), "jmap")
+}
+
+// accountProviderKeepsMailTransports reports whether the account keeps IMAP
+// and SMTP settings: not Outlook, which uses only Graph, or JMAP. Gmail keeps
+// them although its mail goes through the Gmail API, for the IMAP fallback.
+func accountProviderKeepsMailTransports(provider string) bool {
+	return !accountProviderUsesGraphMail(provider) && !accountProviderUsesJMAP(provider)
+}
+
+// normalizeJMAPSessionURL accepts an absolute http or https URL without
+// embedded credentials, since the password is stored separately.
+func normalizeJMAPSessionURL(raw string) (string, error) {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return "", errors.New("JMAP session URL is required")
+	}
+	parsed, err := url.Parse(raw)
+	if err != nil {
+		return "", fmt.Errorf("JMAP session URL is invalid: %w", err)
+	}
+	if parsed.Scheme != "https" && parsed.Scheme != "http" {
+		return "", errors.New("JMAP session URL must start with https:// or http://")
+	}
+	if parsed.Host == "" {
+		return "", errors.New("JMAP session URL has no server")
+	}
+	if parsed.User != nil {
+		return "", errors.New("JMAP session URL must not contain a username or password")
+	}
+	return parsed.String(), nil
+}
+
 func (s *AccountStore) normalizeAccountMailTLSModes(ctx context.Context, req *models.CreateAccountRequest, fillDefaults bool) error {
-	if accountProviderUsesGraphMail(req.Provider) {
+	if !accountProviderKeepsMailTransports(req.Provider) {
 		return nil
 	}
 	if fillDefaults && strings.TrimSpace(req.IMAPTLSMode) == "" {
@@ -611,6 +646,22 @@ func (s *AccountStore) prepareAccountCreation(ctx context.Context, req *models.C
 		req.SmtpUsername = ""
 		req.SmtpPassword = ""
 		req.AuthMethod = "oauth2"
+	} else if accountProviderUsesJMAP(req.Provider) {
+		sessionURL, err := normalizeJMAPSessionURL(req.JMAPSessionURL)
+		if err != nil {
+			return err
+		}
+		req.JMAPSessionURL = sessionURL
+		// The username and password log in to JMAP; nothing goes over IMAP or SMTP.
+		req.IMAPHost = ""
+		req.IMAPPort = 0
+		req.IMAPTLSMode = ""
+		req.SMTPHost = ""
+		req.SMTPPort = 0
+		req.SMTPTLSMode = ""
+		req.SmtpUsername = ""
+		req.SmtpPassword = ""
+		req.AuthMethod = "plain"
 	} else {
 		if req.IMAPPort == 0 {
 			req.IMAPPort = 993
@@ -621,6 +672,9 @@ func (s *AccountStore) prepareAccountCreation(ctx context.Context, req *models.C
 		if req.AuthMethod == "" {
 			req.AuthMethod = "plain"
 		}
+	}
+	if !accountProviderUsesJMAP(req.Provider) {
+		req.JMAPSessionURL = ""
 	}
 	if err := s.normalizeAccountMailTLSModes(ctx, req, true); err != nil {
 		return err
@@ -658,14 +712,14 @@ func (s *AccountStore) createAccountWithID(ctx context.Context, userID, id strin
 		  imap_host, imap_port, imap_tls_mode,
 		  smtp_host, smtp_port, smtp_tls_mode,
 		  username, encrypted_password, auth_method,
-		  smtp_username, encrypted_smtp_password, email_sync_enabled)
-		 SELECT ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?`
+		  smtp_username, encrypted_smtp_password, jmap_session_url, email_sync_enabled)
+		 SELECT ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?`
 	args := []any{
 		id, userID, req.Provider, req.ProviderAccountID, req.EmailAddress, req.DisplayName, color, initials,
 		req.IMAPHost, req.IMAPPort, req.IMAPTLSMode,
 		req.SMTPHost, req.SMTPPort, req.SMTPTLSMode,
 		req.Username, encrypted, req.AuthMethod,
-		req.SmtpUsername, encryptedSmtpPw, boolInt(!req.EmailSyncDisabled)}
+		req.SmtpUsername, encryptedSmtpPw, req.JMAPSessionURL, boolInt(!req.EmailSyncDisabled)}
 	if !purgeDeleting {
 		// The single local writer makes this check/insert atomic for concurrent
 		// UUID reservations. The same email may belong to different user stores.
@@ -730,6 +784,25 @@ func (s *AccountStore) updateAccount(ctx context.Context, accountID, userID stri
 			"username = ?", "smtp_username = ?", "auth_method = ?",
 		)
 		args = append(args, "", 0, "", "", 0, "", "", "", "oauth2")
+	} else if accountProviderUsesJMAP(req.Provider) {
+		setClauses = append(setClauses,
+			"imap_host = ?", "imap_port = ?", "imap_tls_mode = ?",
+			"smtp_host = ?", "smtp_port = ?", "smtp_tls_mode = ?",
+			"smtp_username = ?", "encrypted_smtp_password = ?", "auth_method = ?",
+		)
+		args = append(args, "", 0, "", "", 0, "", "", nil, "plain")
+		if req.JMAPSessionURL != "" {
+			sessionURL, err := normalizeJMAPSessionURL(req.JMAPSessionURL)
+			if err != nil {
+				return err
+			}
+			setClauses = append(setClauses, "jmap_session_url = ?")
+			args = append(args, sessionURL)
+		}
+		if req.Username != "" {
+			setClauses = append(setClauses, "username = ?")
+			args = append(args, req.Username)
+		}
 	} else {
 		if req.IMAPHost != "" {
 			setClauses = append(setClauses, "imap_host = ?")
@@ -768,7 +841,7 @@ func (s *AccountStore) updateAccount(ctx context.Context, accountID, userID stri
 			args = append(args, req.SmtpUsername)
 		}
 	}
-	if req.Password != "" || (!accountProviderUsesGraphMail(req.Provider) && req.SmtpPassword != "") {
+	if req.Password != "" || (accountProviderKeepsMailTransports(req.Provider) && req.SmtpPassword != "") {
 		owner, err := s.accountOwner(ctx, accountID, userID)
 		if err != nil {
 			return err
@@ -783,7 +856,7 @@ func (s *AccountStore) updateAccount(ctx context.Context, accountID, userID stri
 		setClauses = append(setClauses, "encrypted_password = ?")
 		args = append(args, encrypted)
 	}
-	if !accountProviderUsesGraphMail(req.Provider) && req.SmtpPassword != "" {
+	if accountProviderKeepsMailTransports(req.Provider) && req.SmtpPassword != "" {
 		encrypted, err := s.encryptPassword(userID, accountID, passwordKindSMTP, req.SmtpPassword)
 		if err != nil {
 			return fmt.Errorf("encrypt smtp password: %w", err)

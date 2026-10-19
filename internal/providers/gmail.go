@@ -6,6 +6,7 @@ const (
 	ProviderIMAP    = "imap"
 	ProviderGmail   = "gmail"
 	ProviderOutlook = "outlook"
+	ProviderJMAP    = "jmap"
 	ProviderCardDAV = "carddav"
 	OAuthGoogle     = "google"
 	OAuthMicrosoft  = "microsoft"

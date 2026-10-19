@@ -638,3 +638,102 @@ func TestCreateAccountReportsAnAlreadyConnectedMailbox(t *testing.T) {
 		t.Fatalf("second CreateAccount() error = %v, want ErrMailboxExists", err)
 	}
 }
+
+func TestJMAPAccountKeepsSessionURLAndPasswordWithoutMailTransports(t *testing.T) {
+	ctx := context.Background()
+	db, store := newAccountStoreTestStore(t)
+	seedAccountStoreTestUser(t, ctx, db)
+
+	account, err := store.CreateAccount(ctx, "default", &models.CreateAccountRequest{
+		Provider:       "jmap",
+		EmailAddress:   "robin@example.test",
+		DisplayName:    "Robin Vale",
+		JMAPSessionURL: " https://mail.example.test/.well-known/jmap ",
+		IMAPHost:       "imap.example.test",
+		SMTPHost:       "smtp.example.test",
+		Username:       "robin@example.test",
+		Password:       "first-secret",
+		SmtpUsername:   "robin-smtp",
+		SmtpPassword:   "smtp-secret",
+	})
+	if err != nil {
+		t.Fatalf("CreateAccount() error = %v", err)
+	}
+
+	cfg, err := store.GetConfig(ctx, account.ID)
+	if err != nil {
+		t.Fatalf("GetConfig() error = %v", err)
+	}
+	if cfg.Provider != "jmap" || cfg.JMAPSessionURL != "https://mail.example.test/.well-known/jmap" || cfg.Username != "robin@example.test" || cfg.AuthMethod != "plain" {
+		t.Fatalf("config = %+v", cfg)
+	}
+	if cfg.IMAPHost != "" || cfg.IMAPPort != 0 || cfg.SMTPHost != "" || cfg.SMTPPort != 0 || cfg.SmtpUsername != "" {
+		t.Fatalf("JMAP account kept mail transport settings: %+v", cfg)
+	}
+	if password, err := store.DecryptPassword(ctx, account.ID); err != nil || password != "first-secret" {
+		t.Fatalf("DecryptPassword() = %q, %v", password, err)
+	}
+	if smtpPassword, err := store.DecryptSmtpPassword(ctx, account.ID); err != nil || smtpPassword != "" {
+		t.Fatalf("JMAP account SMTP password = %q, %v; want none", smtpPassword, err)
+	}
+
+	if err := store.UpdateAccount(ctx, account.ID, &models.CreateAccountRequest{
+		Provider:       "jmap",
+		JMAPSessionURL: "http://192.168.1.20:8080/.well-known/jmap",
+		Password:       "second-secret",
+	}); err != nil {
+		t.Fatalf("UpdateAccount() error = %v", err)
+	}
+	data, err := store.GetEditData(ctx, account.ID)
+	if err != nil {
+		t.Fatalf("GetEditData() error = %v", err)
+	}
+	if data.JMAPSessionURL != "http://192.168.1.20:8080/.well-known/jmap" || data.Username != "robin@example.test" {
+		t.Fatalf("edit data = url %q user %q", data.JMAPSessionURL, data.Username)
+	}
+	if password, err := store.DecryptPassword(ctx, account.ID); err != nil || password != "second-secret" {
+		t.Fatalf("DecryptPassword() after update = %q, %v", password, err)
+	}
+}
+
+func TestJMAPAccountRejectsInvalidSessionURLs(t *testing.T) {
+	ctx := context.Background()
+	db, store := newAccountStoreTestStore(t)
+	seedAccountStoreTestUser(t, ctx, db)
+
+	for _, sessionURL := range []string{
+		"",
+		"mail.example.test/.well-known/jmap",
+		"ftp://mail.example.test/jmap",
+		"https:///jmap",
+		"https://robin:secret@mail.example.test/.well-known/jmap",
+	} {
+		_, err := store.CreateAccount(ctx, "default", &models.CreateAccountRequest{
+			Provider:       "jmap",
+			EmailAddress:   "robin@example.test",
+			JMAPSessionURL: sessionURL,
+			Username:       "robin@example.test",
+			Password:       "secret",
+		})
+		if err == nil || !strings.Contains(err.Error(), "JMAP session URL") {
+			t.Errorf("session URL %q: err = %v, want a JMAP session URL error", sessionURL, err)
+		}
+	}
+}
+
+func TestNonJMAPAccountDropsSessionURL(t *testing.T) {
+	ctx := context.Background()
+	db, store := newAccountStoreTestStore(t)
+	seedAccountStoreTestUser(t, ctx, db)
+
+	req := secureAccountStoreTestRequest("sam@example.test")
+	req.JMAPSessionURL = "https://mail.example.test/.well-known/jmap"
+	account, err := store.CreateAccount(ctx, "default", req)
+	if err != nil {
+		t.Fatalf("CreateAccount() error = %v", err)
+	}
+	var sessionURL string
+	if err := db.Read().QueryRowContext(ctx, `SELECT jmap_session_url FROM accounts WHERE id = ?`, account.ID).Scan(&sessionURL); err != nil || sessionURL != "" {
+		t.Fatalf("IMAP account session URL = %q, %v", sessionURL, err)
+	}
+}

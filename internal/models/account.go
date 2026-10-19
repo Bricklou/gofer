@@ -19,6 +19,9 @@ type AccountConfig struct {
 	Username           string
 	AuthMethod         string
 	SmtpUsername       string
+	// JMAPSessionURL is where a JMAP account's session is fetched from; it is
+	// empty for every other provider.
+	JMAPSessionURL string
 }
 
 type ConnectionTestResult struct {
@@ -43,6 +46,7 @@ type EditAccountData struct {
 	Username          string
 	AuthMethod        string
 	SmtpUsername      string
+	JMAPSessionURL    string
 	SameSmtpAuth      bool
 	EmailSyncEnabled  bool
 	// ReconnectPending is set for an account imported from a profile that
@@ -78,6 +82,7 @@ type CreateAccountRequest struct {
 	AuthMethod        string `json:"auth_method"`
 	SmtpUsername      string `json:"smtp_username"`
 	SmtpPassword      string `json:"smtp_password"`
+	JMAPSessionURL    string `json:"jmap_session_url"`
 	// EmailSyncDisabled creates the account with mail sync off, for accounts
 	// imported without their credentials.
 	EmailSyncDisabled bool `json:"-"`
