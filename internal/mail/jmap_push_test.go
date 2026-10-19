@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/cristianadrielbraun/gofer/internal/config"
 	"github.com/cristianadrielbraun/gofer/internal/mail/imap"
 	"github.com/cristianadrielbraun/gofer/internal/mail/jmap"
 	"github.com/cristianadrielbraun/gofer/internal/models"
@@ -95,7 +96,8 @@ func (r *pushRecorder) waitFor(t *testing.T, what string, ok func(*pushRecorder)
 }
 
 // A push for the account's mail or mailboxes triggers a sync, one for another
-// account does not, and a dropped connection is reported and reopened.
+// account does not, and a dropped connection is reported and reopened, with
+// a sync for what changed while it was down.
 func TestJMAPPushWatcherNotifiesAndReconnects(t *testing.T) {
 	server := pushTestServer(t, true, func(n int, w io.Writer, flush func(), done <-chan struct{}) {
 		if n == 1 {
@@ -113,7 +115,8 @@ func TestJMAPPushWatcherNotifiesAndReconnects(t *testing.T) {
 	finished := make(chan struct{})
 	go func() { watcher.Run(t.Context()); close(finished) }()
 
-	record.waitFor(t, "two notifications", func(r *pushRecorder) bool { return r.notified == 2 })
+	// The Mailbox push, the reconnection and the Email push.
+	record.waitFor(t, "three notifications", func(r *pushRecorder) bool { return r.notified == 3 })
 	watcher.Close()
 	select {
 	case <-finished:
@@ -122,7 +125,7 @@ func TestJMAPPushWatcherNotifiesAndReconnects(t *testing.T) {
 	}
 	record.mu.Lock()
 	defer record.mu.Unlock()
-	if record.notified != 2 || len(record.statuses) < 3 {
+	if record.notified != 3 || len(record.statuses) < 3 {
 		t.Fatalf("notified %d, statuses %+v", record.notified, record.statuses)
 	}
 	connected, lost, reconnected := record.statuses[0], record.statuses[1], record.statuses[2]
@@ -192,4 +195,70 @@ func waitJMAP(t *testing.T, what string, ok func() bool) {
 		}
 		time.Sleep(20 * time.Millisecond)
 	}
+}
+
+// In shared mode a JMAP account is watched over push once its first sync is
+// done. A push that comes while the account is already syncing is not lost:
+// the account syncs again once that sync ends.
+func TestSyncOrchestratorWatchesJMAPAccountsOverPush(t *testing.T) {
+	t.Setenv("GOFER_JMAP_EXPERIMENT", "true")
+	ctx := t.Context()
+	server := newFakeJMAPServer(t)
+	server.pushes = make(chan string, 4)
+	server.emailState = "c0"
+	server.setMailboxes(jmap.Mailbox{ID: "mb-in", Name: "Inbox", Role: "inbox", MyRights: readable()})
+	server.emails = []jmap.Email{testJMAPEmail("e1", "Lunch on Friday?", 2, "mb-in")}
+	db := newLabelSyncTestDB(t)
+	endpoint, err := jmap.ParseEndpoint(server.URL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := db.AddPlaintextTransportException(ctx, "http", endpoint.Host, endpoint.Port, "default"); err != nil {
+		t.Fatal(err)
+	}
+	if err := db.AddPrivateTargetException(ctx, "http", endpoint.Host, endpoint.Port, "default"); err != nil {
+		t.Fatal(err)
+	}
+	accounts, err := config.NewAccountStore(db, []byte("0123456789abcdef0123456789abcdef"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	account, err := accounts.CreateAccount(ctx, "default", &models.CreateAccountRequest{
+		Provider: "jmap", EmailAddress: "robin@example.test", JMAPSessionURL: server.URL + "/.well-known/jmap",
+		Username: "robin@example.test", Password: "secret",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	orchestrator := NewSyncOrchestrator(db, accounts, nil, nil)
+	orchestrator.StartAccount(ctx, account.ID)
+	t.Cleanup(func() { orchestrator.StopAccount(account.ID) })
+	stored := func(emailID string) bool {
+		var n int
+		_ = db.Read().QueryRow(`SELECT COUNT(*) FROM messages WHERE account_id=? AND remote_message_id=?`, account.ID, emailID).Scan(&n)
+		return n > 0
+	}
+	streams := func() int { server.mu.Lock(); defer server.mu.Unlock(); return server.streams }
+	waitJMAP(t, "the first sync and a push connection", func() bool { return stored("e1") && streams() == 1 })
+
+	server.addEmail(testJMAPEmail("e2", "Garden plans", 1, "mb-in"))
+	server.pushes <- `{"@type":"StateChange","changed":{"a1":{"Email":"c1"}}}`
+	waitJMAP(t, "the pushed email", func() bool { return stored("e2") })
+
+	// Another sync is running when the next push comes in. The push's own
+	// sync may still be finishing, so take the next turn.
+	var finish func()
+	waitJMAP(t, "a turn to sync", func() bool {
+		var ok bool
+		_, finish, ok = orchestrator.beginAccountSync(ctx, account.ID, accountSyncManual)
+		return ok
+	})
+	server.addEmail(testJMAPEmail("e3", "New invoice", 0, "mb-in"))
+	server.pushes <- `{"@type":"StateChange","changed":{"a1":{"Email":"c2"}}}`
+	time.Sleep(200 * time.Millisecond)
+	if stored("e3") {
+		t.Fatal("synced while another sync was running")
+	}
+	finish()
+	waitJMAP(t, "the email pushed during the other sync", func() bool { return stored("e3") })
 }

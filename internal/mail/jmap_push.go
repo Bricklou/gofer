@@ -74,12 +74,18 @@ func (w *JMAPPushWatcher) Run(ctx context.Context) {
 	w.mu.Unlock()
 
 	backoff := jmapPushInitialBackoff
+	reconnecting := false
 	for ctx.Err() == nil {
 		connected := false
 		err := w.watch(ctx, func() {
 			connected = true
 			w.onStatus(imap.IdleWatcherStatus{Healthy: true})
+			if reconnecting {
+				// Changes made while disconnected were never pushed.
+				w.onNotify()
+			}
 		})
+		reconnecting = true
 		if ctx.Err() != nil {
 			return
 		}
