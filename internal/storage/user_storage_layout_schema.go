@@ -32,6 +32,7 @@ var userLayoutSchema = []layoutSchemaStep{
 		return ensureUserProviderDraftSchema(ctx, tx)
 	},
 	allowJMAPProviderSendReceiptsTx,
+	allowJMAPProviderDraftsTx,
 }
 
 // allowJMAPProviderSendReceiptsTx lets mail sent over JMAP keep a send
@@ -71,6 +72,66 @@ func allowJMAPProviderSendReceiptsTx(ctx context.Context, tx *sql.Tx) error {
 	}
 	if restored != rows {
 		return fmt.Errorf("rebuilding send receipts kept %d of %d rows", restored, rows)
+	}
+	return nil
+}
+
+// allowJMAPProviderDraftsTx lets drafts of JMAP accounts sync through the
+// provider draft queue. The provider CHECK on the states table can only
+// change by rebuilding it. Its operations reference it with ON DELETE
+// CASCADE, so both are set aside first and restored with their ids; tables
+// already created with jmap are left alone.
+func allowJMAPProviderDraftsTx(ctx context.Context, tx *sql.Tx) error {
+	var definition string
+	err := tx.QueryRowContext(ctx, `SELECT sql FROM sqlite_schema WHERE type='table' AND name='gofer_provider_draft_states'`).Scan(&definition)
+	if err == sql.ErrNoRows || (err == nil && strings.Contains(definition, "'jmap'")) {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	tables := []string{"gofer_provider_draft_states", "gofer_provider_draft_operations"}
+	counts := map[string]int{}
+	for _, table := range tables {
+		var rows int
+		if err := tx.QueryRowContext(ctx, `SELECT COUNT(*) FROM `+table).Scan(&rows); err != nil {
+			return err
+		}
+		counts[table] = rows
+		for _, statement := range []string{
+			`DROP TABLE IF EXISTS temp.` + table + `_v2`,
+			`CREATE TEMP TABLE ` + table + `_v2 AS SELECT * FROM ` + table,
+		} {
+			if _, err := tx.ExecContext(ctx, statement); err != nil {
+				return err
+			}
+		}
+	}
+	// Operations first, so dropping the states cascades to nothing.
+	for _, statement := range []string{`DROP TABLE gofer_provider_draft_operations`, `DROP TABLE gofer_provider_draft_states`} {
+		if _, err := tx.ExecContext(ctx, statement); err != nil {
+			return err
+		}
+	}
+	if err := ensureUserProviderDraftSchema(ctx, tx); err != nil {
+		return err
+	}
+	for _, table := range tables {
+		if counts[table] > 0 {
+			if _, err := tx.ExecContext(ctx, `INSERT INTO `+table+` SELECT * FROM temp.`+table+`_v2`); err != nil {
+				return err
+			}
+		}
+		if _, err := tx.ExecContext(ctx, `DROP TABLE temp.`+table+`_v2`); err != nil {
+			return err
+		}
+		var restored int
+		if err := tx.QueryRowContext(ctx, `SELECT COUNT(*) FROM `+table).Scan(&restored); err != nil {
+			return err
+		}
+		if restored != counts[table] {
+			return fmt.Errorf("rebuilding %s kept %d of %d rows", table, restored, counts[table])
+		}
 	}
 	return nil
 }

@@ -31,11 +31,15 @@ type QueueUserProviderDraftInput struct {
 	MessageDate   time.Time
 }
 
+// providerDraftSignIn is how an account whose drafts sync through its provider
+// signs in: Gmail and Outlook with OAuth, JMAP with the account's password.
+const providerDraftSignIn = `(a.auth_method='oauth2' OR (a.provider='jmap' AND a.auth_method='plain'))`
+
 func ensureUserProviderDraftSchema(ctx context.Context, tx *sql.Tx) error {
 	for _, q := range []string{
 		`CREATE TABLE IF NOT EXISTS gofer_provider_draft_states (
 		 account_id TEXT NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,
-		 draft_key TEXT NOT NULL, provider TEXT NOT NULL CHECK(provider IN ('gmail','outlook')),
+		 draft_key TEXT NOT NULL, provider TEXT NOT NULL CHECK(provider IN ('gmail','outlook','jmap')),
 		 mailbox_subject TEXT NOT NULL, local_message_id INTEGER REFERENCES messages(id) ON DELETE SET NULL,
 		 folder_id TEXT NOT NULL, local_revision TEXT NOT NULL DEFAULT '',
 		 remote_id TEXT NOT NULL DEFAULT '', remote_message_id TEXT NOT NULL DEFAULT '',remote_revision TEXT NOT NULL DEFAULT '',
@@ -59,11 +63,11 @@ func ensureUserProviderDraftSchema(ctx context.Context, tx *sql.Tx) error {
 
 func queueUserProviderDraftTx(ctx context.Context, tx *sql.Tx, input QueueUserProviderDraftInput, kind string) error {
 	s := input.State
-	if s.AccountID == "" || s.DraftKey == "" || s.FolderID == "" || (s.Provider != "gmail" && s.Provider != "outlook") || (kind == "upsert" && (input.RevisionToken == "" || len(input.MIMEData) == 0)) {
+	if s.AccountID == "" || s.DraftKey == "" || s.FolderID == "" || (s.Provider != "gmail" && s.Provider != "outlook" && s.Provider != "jmap") || (kind == "upsert" && (input.RevisionToken == "" || len(input.MIMEData) == 0)) {
 		return errors.New("provider draft payload is incomplete")
 	}
 	var active bool
-	if err := tx.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM accounts a JOIN users u ON u.id=a.user_id WHERE a.id=? AND a.provider=? AND a.auth_method='oauth2' AND COALESCE(a.provider_account_id,'')=? AND COALESCE(a.is_deleting,0)=0 AND u.status='active')`, s.AccountID, s.Provider, s.MailboxSubject).Scan(&active); err != nil {
+	if err := tx.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM accounts a JOIN users u ON u.id=a.user_id WHERE a.id=? AND a.provider=? AND `+providerDraftSignIn+` AND COALESCE(a.provider_account_id,'')=? AND COALESCE(a.is_deleting,0)=0 AND u.status='active')`, s.AccountID, s.Provider, s.MailboxSubject).Scan(&active); err != nil {
 		return err
 	}
 	if !active {
@@ -132,7 +136,7 @@ func (db *DB) ClaimUserProviderDraft(ctx context.Context, accountID string, now 
 	defer tx.Rollback()
 	op, err := scanUserProviderDraft(tx.QueryRowContext(ctx, userProviderDraftSelect+` WHERE o.account_id=? AND o.status IN ('pending','failed','ambiguous') AND julianday(replace(o.next_attempt_at,' +0000 UTC',''))<=julianday(?)
 	 AND NOT EXISTS(SELECT 1 FROM gofer_provider_draft_operations older WHERE older.account_id=o.account_id AND older.draft_key=o.draft_key AND older.id<o.id)
-	 AND EXISTS(SELECT 1 FROM accounts a JOIN users u ON u.id=a.user_id WHERE a.id=s.account_id AND a.provider=s.provider AND a.auth_method='oauth2' AND COALESCE(a.provider_account_id,'')=s.mailbox_subject AND COALESCE(a.is_deleting,0)=0 AND u.status='active') ORDER BY o.id LIMIT 1`, accountID, formatDBTime(now)))
+	 AND EXISTS(SELECT 1 FROM accounts a JOIN users u ON u.id=a.user_id WHERE a.id=s.account_id AND a.provider=s.provider AND `+providerDraftSignIn+` AND COALESCE(a.provider_account_id,'')=s.mailbox_subject AND COALESCE(a.is_deleting,0)=0 AND u.status='active') ORDER BY o.id LIMIT 1`, accountID, formatDBTime(now)))
 	if err == sql.ErrNoRows {
 		return nil, nil
 	}
@@ -153,7 +157,7 @@ func (db *DB) ClaimUserProviderDraft(ctx context.Context, accountID string, now 
 func checkUserProviderDraftAttempt(ctx context.Context, tx *sql.Tx, op UserProviderDraftOperation) error {
 	var valid bool
 	err := tx.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM gofer_provider_draft_operations o JOIN gofer_provider_draft_states s ON s.account_id=o.account_id AND s.draft_key=o.draft_key JOIN accounts a ON a.id=s.account_id JOIN users u ON u.id=a.user_id
-	 WHERE o.id=? AND o.account_id=? AND o.draft_key=? AND o.kind=? AND o.revision_token=? AND o.status='syncing' AND o.attempt_count=? AND s.provider=? AND s.mailbox_subject=? AND a.provider=s.provider AND a.auth_method='oauth2' AND COALESCE(a.provider_account_id,'')=s.mailbox_subject AND COALESCE(a.is_deleting,0)=0 AND u.status='active')`, op.ID, op.State.AccountID, op.State.DraftKey, op.Kind, op.RevisionToken, op.AttemptCount, op.State.Provider, op.State.MailboxSubject).Scan(&valid)
+	 WHERE o.id=? AND o.account_id=? AND o.draft_key=? AND o.kind=? AND o.revision_token=? AND o.status='syncing' AND o.attempt_count=? AND s.provider=? AND s.mailbox_subject=? AND a.provider=s.provider AND `+providerDraftSignIn+` AND COALESCE(a.provider_account_id,'')=s.mailbox_subject AND COALESCE(a.is_deleting,0)=0 AND u.status='active')`, op.ID, op.State.AccountID, op.State.DraftKey, op.Kind, op.RevisionToken, op.AttemptCount, op.State.Provider, op.State.MailboxSubject).Scan(&valid)
 	if err != nil {
 		return err
 	}
@@ -292,7 +296,7 @@ func (db *DB) NextUserProviderDraftAttempt(ctx context.Context, accountID string
 	}
 	var next sqliteNullTime
 	err := db.Read().QueryRowContext(ctx, `SELECT o.next_attempt_at FROM gofer_provider_draft_operations o JOIN gofer_provider_draft_states s ON s.account_id=o.account_id AND s.draft_key=o.draft_key JOIN accounts a ON a.id=s.account_id
-	 WHERE o.account_id=? AND o.status IN ('pending','syncing','failed','ambiguous') AND a.provider=s.provider AND a.auth_method='oauth2' AND COALESCE(a.provider_account_id,'')=s.mailbox_subject AND COALESCE(a.is_deleting,0)=0
+	 WHERE o.account_id=? AND o.status IN ('pending','syncing','failed','ambiguous') AND a.provider=s.provider AND `+providerDraftSignIn+` AND COALESCE(a.provider_account_id,'')=s.mailbox_subject AND COALESCE(a.is_deleting,0)=0
 	 AND NOT EXISTS(SELECT 1 FROM gofer_provider_draft_operations earlier WHERE earlier.account_id=o.account_id AND earlier.draft_key=o.draft_key AND earlier.id<o.id)
 	 ORDER BY julianday(replace(o.next_attempt_at,' +0000 UTC','')) LIMIT 1`, accountID).Scan(&next)
 	if err == sql.ErrNoRows {

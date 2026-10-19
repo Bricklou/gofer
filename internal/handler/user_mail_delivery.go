@@ -29,6 +29,9 @@ type userMailDeliveryScope struct {
 	cfg                    *models.AccountConfig
 	password, smtpPassword string
 	providerMail           *mail.UserProviderMail
+	// drafts syncs the account's drafts when they go through a provider:
+	// Gmail and Outlook through providerMail, JMAP with its own client.
+	drafts mail.ProviderDrafts
 }
 
 func (s *userMailDeliveryScope) call(ctx context.Context, fn func(*storage.DB) error) error {
@@ -48,6 +51,9 @@ func (s *userMailDeliveryScope) call(ctx context.Context, fn func(*storage.DB) e
 
 func (q *userMailDelivery) Run(ctx context.Context, owner, id string, providerMail *mail.UserProviderMail) error {
 	s := &userMailDeliveryScope{runner: q, owner: owner, id: id, providerMail: providerMail}
+	if providerMail != nil {
+		s.drafts = providerMail
+	}
 	hasWork := false
 	err := q.h.userAccounts.WithAccountForUser(ctx, owner, id, func(accounts *config.AccountStore, db *storage.DB) error {
 		next, err := db.NextAccountMailQueueAttempt(ctx, id)
@@ -83,6 +89,7 @@ func (q *userMailDelivery) Run(ctx context.Context, owner, id string, providerMa
 			if err != nil {
 				return err
 			}
+			s.drafts = mail.NewJMAPDrafts(s.cfg, s.password)
 		} else if s.cfg.AuthMethod != "oauth2" || (s.cfg.Provider != "gmail" && s.cfg.Provider != "outlook") || providerMail == nil {
 			return errors.New("routed mail delivery provider is unavailable")
 		}
@@ -394,9 +401,6 @@ func (s *userMailDeliveryScope) providerCoolingDown() bool {
 }
 
 func (s *userMailDeliveryScope) draft(ctx context.Context) (bool, error) {
-	if s.cfg.Provider == providers.ProviderJMAP {
-		return false, nil // Drafts stay in Gofer until JMAP drafts are synced.
-	}
 	if s.cfg.Provider != "imap" {
 		return s.providerDraft(ctx)
 	}

@@ -688,9 +688,9 @@ func TestManagedStorageVersionsLayoutOnlyTables(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	// The central layout has one schema step; user databases have two, the
-	// second letting send receipts name JMAP.
-	const centralLayout, userLayout = 1, 2
+	// The central layout has one schema step; user databases have three, the
+	// later ones letting send receipts and provider drafts name JMAP.
+	const centralLayout, userLayout = 1, 3
 	if layoutVersion(path) != centralLayout || layoutVersion(alice) != userLayout {
 		t.Fatal("migration did not record the layout schema", layoutVersion(path), layoutVersion(alice))
 	}

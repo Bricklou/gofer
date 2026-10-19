@@ -193,9 +193,7 @@ func (h *Handler) saveUserComposeDraft(ctx context.Context, r *http.Request) (co
 		if err != nil {
 			return c, err
 		}
-		if account.Provider == "jmap" {
-			c.LocalOnly = true // JMAP drafts stay in Gofer until they sync.
-		} else if account.Provider == "imap" {
+		if account.Provider == "imap" {
 			c.Sync = storage.QueueIMAPDraftUpsertInput{State: storage.IMAPDraftState{AccountID: accountID, DraftKey: draftID, FolderID: folder, FolderRemoteName: remote}, RevisionToken: revision, MIMEData: raw, MessageDate: msg.Date}
 		} else {
 			c.ProviderSync = &storage.QueueUserProviderDraftInput{State: storage.UserProviderDraftState{AccountID: accountID, DraftKey: draftID, FolderID: folder, Provider: cfg.Provider, MailboxSubject: cfg.ProviderAccountID}, RevisionToken: revision, MIMEData: raw, MessageDate: msg.Date}
