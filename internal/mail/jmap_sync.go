@@ -22,6 +22,9 @@ func (o *SyncOrchestrator) syncJMAPAccount(ctx context.Context, accountID string
 	if err != nil {
 		return err
 	}
+	// Label changes that failed earlier go first, so the sync below reads
+	// them back from the server.
+	o.replayJMAPLabelMutationQueue(ctx, accountID, cfg, password)
 	client, err := newJMAPAccountClient(cfg, password)
 	if err != nil {
 		return err
@@ -59,6 +62,59 @@ func (o *SyncOrchestrator) syncJMAPAccount(ctx context.Context, accountID string
 		return err
 	}
 	return repo.MarkLabelSyncSuccess(ctx, accountID, storage.LabelProviderJMAP, jmapMailboxScope, mailboxes.State, false)
+}
+
+// replayJMAPLabelMutationQueue retries the account's queued label changes,
+// recording each outcome as the IMAP replay does.
+func (o *SyncOrchestrator) replayJMAPLabelMutationQueue(ctx context.Context, accountID string, cfg *models.AccountConfig, password string) {
+	if o.db == nil {
+		return
+	}
+	entries, err := o.db.ListDueLabelMutations(ctx, accountID, storage.LabelProviderKeyword, providerLabelMutationReplayLimit)
+	if err != nil {
+		log.Printf("jmap label mutation queue list account=%s: %v", accountID, err)
+		return
+	}
+	for _, entry := range entries {
+		if err := o.applyQueuedJMAPLabelMutation(ctx, cfg, password, entry); err != nil {
+			log.Printf("jmap label mutation replay account=%s message=%d label=%q op=%s: %v", entry.AccountID, entry.MessageID, entry.LabelName, entry.Operation, err)
+			if markErr := o.db.MarkLabelMutationError(ctx, entry.ID, entry.Attempts, err); markErr != nil {
+				log.Printf("jmap label mutation queue mark error id=%d: %v", entry.ID, markErr)
+			}
+			continue
+		}
+		if err := o.db.MarkLabelMutationSuccess(ctx, entry.ID); err != nil {
+			log.Printf("jmap label mutation queue mark success id=%d: %v", entry.ID, err)
+		}
+	}
+}
+
+func (o *SyncOrchestrator) applyQueuedJMAPLabelMutation(ctx context.Context, cfg *models.AccountConfig, password string, entry storage.LabelMutationQueueEntry) error {
+	info, err := o.queuedMessageMutationInfo(ctx, entry)
+	if err != nil || info == nil {
+		return err
+	}
+	keyword, err := o.keywordForAccountLabel(ctx, entry.AccountID, entry.LabelName)
+	if err != nil {
+		return err
+	}
+	add := entry.Operation == storage.LabelMutationAdd
+	if !add && entry.Operation != storage.LabelMutationRemove {
+		return fmt.Errorf("unsupported label mutation operation %q", entry.Operation)
+	}
+	if _, err := SetJMAPKeyword(ctx, cfg, password, info.RemoteMessageID, keyword, add); err != nil {
+		return err
+	}
+	if add {
+		if _, err := o.db.AddMessageLabel(ctx, entry.MessageID, entry.AccountID, storage.LabelInput{
+			AccountID: entry.AccountID, Name: entry.LabelName, ProviderID: keyword, ProviderType: storage.LabelProviderKeyword,
+		}); err != nil {
+			return err
+		}
+	} else if err := o.db.RemoveMessageLabelForProvider(ctx, entry.MessageID, entry.AccountID, storage.LabelProviderKeyword, keyword, keyword); err != nil {
+		return err
+	}
+	return o.db.RemoveMessageLabelForProvider(ctx, entry.MessageID, entry.AccountID, storage.LabelProviderLocal, "", entry.LabelName)
 }
 
 // jmapMaxChanges is how many changed emails one Email/changes call returns.

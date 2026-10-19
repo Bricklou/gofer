@@ -8221,7 +8221,7 @@ func adminLabelProviderLabel(provider string) string {
 	case "outlook":
 		return "Outlook categories"
 	case "imap_keyword":
-		return "IMAP keywords"
+		return "Keywords"
 	case "local":
 		return "Local labels"
 	case "":

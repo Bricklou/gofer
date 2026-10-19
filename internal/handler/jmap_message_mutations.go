@@ -44,3 +44,39 @@ func (h *Handler) applyJMAPMessageMutation(ctx context.Context, mutation storage
 	}
 	return nil
 }
+
+// setJMAPMessageKeyword adds or removes a keyword label on a JMAP email. The
+// label name maps to its keyword as on IMAP: through the account's aliases,
+// or for a removal, the keyword the email's label was synced with.
+func (h *Handler) setJMAPMessageKeyword(ctx context.Context, messageID int64, info storage.MessageMutationInfo, labelName string, add bool) (storage.LabelInput, error) {
+	if !providers.JMAPEnabled() {
+		return storage.LabelInput{}, providers.ErrJMAPDisabled
+	}
+	var keyword string
+	var err error
+	if add {
+		keyword, err = h.keywordForAccountLabel(ctx, info.AccountID, labelName)
+	} else {
+		keyword, err = h.keywordForMessageLabel(ctx, messageID, info.AccountID, labelName)
+	}
+	if err != nil {
+		return storage.LabelInput{}, err
+	}
+	cfg, err := h.accountStore.GetConfig(ctx, info.AccountID)
+	if err != nil {
+		return storage.LabelInput{}, err
+	}
+	password, err := h.accountStore.DecryptPassword(ctx, info.AccountID)
+	if err != nil {
+		return storage.LabelInput{}, err
+	}
+	if _, err := mail.SetJMAPKeyword(ctx, cfg, password, info.RemoteMessageID, keyword, add); err != nil {
+		return storage.LabelInput{}, err
+	}
+	return storage.LabelInput{
+		AccountID:    info.AccountID,
+		Name:         labelName,
+		ProviderID:   keyword,
+		ProviderType: storage.LabelProviderKeyword,
+	}, nil
+}

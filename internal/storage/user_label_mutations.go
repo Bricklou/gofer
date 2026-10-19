@@ -11,7 +11,7 @@ import (
 
 func userLabelProvider(provider string) (string, error) {
 	switch provider {
-	case "imap":
+	case "imap", "jmap":
 		return LabelProviderKeyword, nil
 	case "gmail":
 		return LabelProviderGmail, nil
@@ -193,7 +193,7 @@ func (db *DB) CompleteUserLabelMutation(ctx context.Context, e LabelMutationQueu
 		return errors.New("label message or mailbox identity changed")
 	}
 	auth := "oauth2"
-	if info.AccountProvider == "imap" {
+	if info.AccountProvider == "imap" || info.AccountProvider == "jmap" {
 		auth = "plain"
 	}
 	if err := tx.QueryRowContext(ctx, `SELECT count(*) FROM accounts WHERE id=? AND auth_method=?`, e.AccountID, auth).Scan(&count); err != nil {
@@ -202,7 +202,7 @@ func (db *DB) CompleteUserLabelMutation(ctx context.Context, e LabelMutationQueu
 	if count != 1 {
 		return errors.New("label mailbox authentication changed")
 	}
-	if e.ProviderType == LabelProviderKeyword {
+	if e.ProviderType == LabelProviderKeyword && info.AccountProvider == "imap" {
 		if err := tx.QueryRowContext(ctx, `SELECT count(*) FROM message_folder_state mfs JOIN folders f ON f.id=mfs.folder_id WHERE mfs.message_id=? AND mfs.folder_id=? AND f.account_id=? AND f.remote_id=? AND COALESCE(mfs.remote_uid,0)=? AND COALESCE(f.uid_validity,0)=?
   AND (mfs.is_deleted=0 OR EXISTS(SELECT 1 FROM message_mutations q WHERE q.account_id=f.account_id AND q.message_id=mfs.message_id AND q.folder_id=f.id AND q.kind='move' AND q.status!='applied'))`, e.MessageID, info.FolderID, e.AccountID, info.FolderRemoteID, info.RemoteUID, validity).Scan(&count); err != nil {
 			return err

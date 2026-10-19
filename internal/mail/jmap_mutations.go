@@ -4,6 +4,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"maps"
+	"strings"
 
 	"github.com/cristianadrielbraun/gofer/internal/mail/jmap"
 	"github.com/cristianadrielbraun/gofer/internal/models"
@@ -29,18 +31,11 @@ func ApplyJMAPMutation(ctx context.Context, cfg *models.AccountConfig, password 
 	if m.EmailID == "" {
 		return false, errors.New("JMAP email identity is unavailable")
 	}
-	client, err := newJMAPAccountClient(cfg, password)
+	client, session, account, err := openJMAPMail(ctx, cfg, password)
 	if err != nil {
 		return false, err
 	}
-	session, err := client.Session(ctx, cfg.JMAPSessionURL)
-	if err != nil {
-		return false, fmt.Errorf("JMAP session: %w", err)
-	}
-	args := jmap.EmailSet{AccountID: session.PrimaryAccount(jmap.CapabilityMail)}
-	if args.AccountID == "" {
-		return false, errors.New("the JMAP server offers no mail account for this login")
-	}
+	args := jmap.EmailSet{AccountID: account}
 	switch m.Kind {
 	case storage.MessageMutationRead:
 		args.Update = map[string]jmap.PatchObject{m.EmailID: jmap.KeywordPatch(jmap.KeywordSeen, m.TargetValue)}
@@ -71,6 +66,67 @@ func ApplyJMAPMutation(ctx context.Context, cfg *models.AccountConfig, password 
 		return true, nil
 	}
 	return false, &failure
+}
+
+// openJMAPMail opens the account's JMAP session and gives its mail account.
+func openJMAPMail(ctx context.Context, cfg *models.AccountConfig, password string) (*jmap.Client, *jmap.Session, string, error) {
+	client, err := newJMAPAccountClient(cfg, password)
+	if err != nil {
+		return nil, nil, "", err
+	}
+	session, err := client.Session(ctx, cfg.JMAPSessionURL)
+	if err != nil {
+		return nil, nil, "", fmt.Errorf("JMAP session: %w", err)
+	}
+	account := session.PrimaryAccount(jmap.CapabilityMail)
+	if account == "" {
+		return nil, nil, "", errors.New("the JMAP server offers no mail account for this login")
+	}
+	return client, session, account, nil
+}
+
+// SetJMAPKeyword adds a keyword label to a JMAP email, or removes it. Servers
+// may match keywords exactly, so a removal reads the email's keywords first
+// and clears the keyword in every casing the email carries. It reports gone
+// when the server no longer has the email, which needs no retry.
+func SetJMAPKeyword(ctx context.Context, cfg *models.AccountConfig, password, emailID, keyword string, add bool) (gone bool, err error) {
+	if emailID == "" {
+		return false, errors.New("JMAP email identity is unavailable")
+	}
+	client, session, account, err := openJMAPMail(ctx, cfg, password)
+	if err != nil {
+		return false, err
+	}
+	patch := jmap.KeywordPatch(keyword, true)
+	if !add {
+		current, err := client.GetEmails(ctx, session, account, []string{emailID}, []string{"keywords"})
+		if err != nil {
+			return false, err
+		}
+		if len(current.List) == 0 {
+			return true, nil
+		}
+		patch = jmap.PatchObject{}
+		for name, on := range current.List[0].Keywords {
+			if on && strings.EqualFold(name, keyword) {
+				maps.Copy(patch, jmap.KeywordPatch(name, false))
+			}
+		}
+		if len(patch) == 0 {
+			return false, nil
+		}
+	}
+	result, err := client.SetEmails(ctx, session, jmap.EmailSet{AccountID: account, Update: map[string]jmap.PatchObject{emailID: patch}})
+	if err != nil {
+		return false, err
+	}
+	if failure, failed := result.NotUpdated[emailID]; failed {
+		if failure.Type == "notFound" {
+			return true, nil
+		}
+		return false, &failure
+	}
+	return false, nil
 }
 
 // applyJMAPMutation replays one queued change of a JMAP account in a routed

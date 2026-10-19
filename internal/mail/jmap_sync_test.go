@@ -646,6 +646,63 @@ func TestSyncStoresJMAPKeywordsAsLabels(t *testing.T) {
 	}
 }
 
+// Label changes queued in Gofer reach the server as keywords on the next
+// sync: an alias like Work becomes $label2, and removing a label clears the
+// keyword in the casing the server has.
+func TestSyncReplaysJMAPLabelChanges(t *testing.T) {
+	f := newUserGmailFixture(t)
+	server := newFakeJMAPServer(t)
+	server.emailState = "c0"
+	server.setMailboxes(jmap.Mailbox{ID: "mb-in", Name: "Inbox", Role: "inbox", MyRights: readable()})
+	tagged := testJMAPEmail("e1", "Garden plans", 1, "mb-in")
+	tagged.Keywords = map[string]bool{"Client": true}
+	server.emails = []jmap.Email{tagged, testJMAPEmail("e2", "Lunch on Friday?", 2, "mb-in")}
+	useFakeJMAPAccount(t, f, server)
+	if err := f.worker.Sync(t.Context(), "alice", f.ids["alice"]); err != nil {
+		t.Fatalf("first Sync() error = %v", err)
+	}
+	queue := func(emailID, name, operation string) {
+		t.Helper()
+		f.local(t, "alice", func(db *storage.DB) error {
+			var id int64
+			if err := db.Read().QueryRow(`SELECT id FROM messages WHERE account_id=? AND remote_message_id=?`, f.ids["alice"], emailID).Scan(&id); err != nil {
+				return err
+			}
+			info, err := db.GetMessageMutationInfoForUser(t.Context(), id, "alice")
+			if err != nil {
+				return err
+			}
+			return db.QueueUserLabels(t.Context(), "alice", []storage.ThreadMessageMutationInfo{{MessageID: id, MessageMutationInfo: *info}}, name, operation)
+		})
+	}
+	queue("e1", "Work", storage.LabelMutationAdd)
+	queue("e1", "client", storage.LabelMutationRemove)
+	queue("e2", "Projects", storage.LabelMutationAdd)
+
+	if err := f.worker.Sync(t.Context(), "alice", f.ids["alice"]); err != nil {
+		t.Fatalf("Sync() replaying labels error = %v", err)
+	}
+	if e1, _ := server.email("e1"); len(e1.Keywords) != 1 || !e1.Keywords["$label2"] {
+		t.Fatalf("e1 keywords on the server = %v, want only $label2", e1.Keywords)
+	}
+	if e2, _ := server.email("e2"); len(e2.Keywords) != 1 || !e2.Keywords["Projects"] {
+		t.Fatalf("e2 keywords on the server = %v", e2.Keywords)
+	}
+	if got := jmapLabels(t, f, "e1"); got != "Work" {
+		t.Fatalf("e1 labels = %q", got)
+	}
+	if got := jmapLabels(t, f, "e2"); got != "Projects" {
+		t.Fatalf("e2 labels = %q", got)
+	}
+	var pending int
+	f.local(t, "alice", func(db *storage.DB) error {
+		return db.Read().QueryRow(`SELECT COUNT(*) FROM label_mutation_queue`).Scan(&pending)
+	})
+	if pending != 0 {
+		t.Fatalf("%d label changes still queued", pending)
+	}
+}
+
 // jmapLabels lists the names of an email's labels, sorted and joined by commas.
 func jmapLabels(t *testing.T, f *userGmailFixture, emailID string) string {
 	t.Helper()

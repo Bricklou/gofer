@@ -516,11 +516,11 @@ func (s *UserIMAP) sync(ctx context.Context, owner, id string, repair, backgroun
 			}
 		}
 		var mutationErr error
-		// JMAP accounts replay their message changes and send their queued
-		// mail, but labels don't go over JMAP yet.
+		// JMAP accounts replay their label and message changes and send their
+		// queued mail, without the IMAP and OAuth retry gates.
 		jmapAccount := scope.config.Provider == providers.ProviderJMAP
 		if jmapAccount {
-			mutationErr = s.replayMutations(ctx, scope)
+			mutationErr = errors.Join(s.replayLabelMutations(ctx, scope), s.replayMutations(ctx, scope))
 			if queue != nil {
 				mutationErr = errors.Join(mutationErr, queue.Run(ctx, owner, id, nil))
 			}

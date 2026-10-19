@@ -305,6 +305,8 @@ func (h *Handler) applyMessageLabelRemote(ctx context.Context, messageID int64, 
 		return h.applyGmailMessageLabel(ctx, messageID, info, labelName)
 	case providers.ProviderOutlook:
 		return h.applyOutlookMessageLabel(ctx, messageID, info, labelName)
+	case providers.ProviderJMAP:
+		return h.setJMAPMessageKeyword(ctx, messageID, info, labelName, true)
 	default:
 		return h.applyIMAPMessageKeyword(ctx, info, labelName)
 	}
@@ -316,6 +318,8 @@ func (h *Handler) removeMessageLabelRemote(ctx context.Context, messageID int64,
 		return h.removeGmailMessageLabel(ctx, messageID, info, labelName)
 	case providers.ProviderOutlook:
 		return h.removeOutlookMessageLabel(ctx, messageID, info, labelName)
+	case providers.ProviderJMAP:
+		return h.setJMAPMessageKeyword(ctx, messageID, info, labelName, false)
 	default:
 		return h.removeIMAPMessageKeyword(ctx, messageID, info, labelName)
 	}
