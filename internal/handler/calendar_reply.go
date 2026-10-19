@@ -52,6 +52,20 @@ func calendarEmailTransport(provider string) string {
 	return storage.OutgoingTransportSMTP
 }
 
+// calendarSourceEmailTransport is how the account a calendar belongs to sends
+// calendar email, in either storage mode.
+func (h *Handler) calendarSourceEmailTransport(ctx context.Context, source storage.CalendarSource) string {
+	if p, owned := ctx.Value(userCalendarProviderKey{}).(*userCalendarRequest); owned {
+		return p.service().EmailTransport()
+	}
+	if h.accountStore != nil {
+		if cfg, err := h.accountStore.GetConfig(ctx, source.AccountID); err == nil {
+			return calendarEmailTransport(cfg.Provider)
+		}
+	}
+	return storage.OutgoingTransportSMTP
+}
+
 func calendarReplyResource(event storage.CalendarEvent) string {
 	if event.SeriesRemoteID != "" {
 		return event.SeriesRemoteID

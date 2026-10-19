@@ -58,15 +58,24 @@ func (h *Handler) retryUserCalendarReply(ctx context.Context, control *config.Us
 			calendarReplyAddress(target.CalDAV.Selected.Props.Get("ORGANIZER").Value) != payload.Organizer || !strings.EqualFold(send.EnvelopeFrom, payload.SelfEmail) || len(send.EnvelopeRecipients) != 1 || send.EnvelopeRecipients[0] != payload.Organizer {
 			return storage.ErrCalendarEventChanged
 		}
-		cfg, err := p.service().SMTPConfig(operation)
-		if err != nil {
-			return err
-		}
-		if cfg.AuthMethod != "plain" {
-			return calendarReplyConfigurationError("Queued Calendar replies require this account's SMTP credentials.")
-		}
-		if _, err := p.service().SMTPPassword(); err != nil {
-			return err
+		if p.service().EmailTransport() == storage.OutgoingTransportJMAP {
+			if _, err := p.service().JMAPConfig(operation); err != nil {
+				return err
+			}
+			if _, err := p.service().MailboxPassword(); err != nil {
+				return err
+			}
+		} else {
+			cfg, err := p.service().SMTPConfig(operation)
+			if err != nil {
+				return err
+			}
+			if cfg.AuthMethod != "plain" {
+				return calendarReplyConfigurationError("Queued Calendar replies require this account's SMTP credentials.")
+			}
+			if _, err := p.service().SMTPPassword(); err != nil {
+				return err
+			}
 		}
 		if err := p.validate(operation); err != nil {
 			return err

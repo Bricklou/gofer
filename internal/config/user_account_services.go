@@ -56,6 +56,21 @@ func (s *AccountServiceSnapshot) SendsEmail() bool {
 	return s.SMTPConfigured()
 }
 
+// EmailTransport is how the account sends calendar email: JMAP accounts over
+// JMAP, others over SMTP.
+func (s *AccountServiceSnapshot) EmailTransport() string {
+	if s.data.Provider == providers.ProviderJMAP {
+		return storage.OutgoingTransportJMAP
+	}
+	return storage.OutgoingTransportSMTP
+}
+
+// passwordMailbox reports whether the account is an IMAP or JMAP mailbox
+// signed in with a password, the accounts whose calendars come from CalDAV.
+func (s *AccountServiceSnapshot) passwordMailbox() bool {
+	return (s.data.Provider == providers.ProviderIMAP || s.data.Provider == providers.ProviderJMAP) && s.data.AuthMethod == "plain"
+}
+
 // JMAPConfig is a JMAP account's connection from the copied session URL, with
 // the central transport exceptions for its endpoint, as SMTPConfig is for SMTP.
 func (s *AccountServiceSnapshot) JMAPConfig(ctx context.Context) (*models.AccountConfig, error) {

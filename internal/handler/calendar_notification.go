@@ -143,7 +143,8 @@ func (h *Handler) queueCalendarNotification(ctx context.Context, source storage.
 	for _, guest := range guests {
 		msg.To = append(msg.To, &mail.Address{Name: guest.Name, Address: guest.Email})
 	}
-	raw, err := buildOutgoingMIME(storage.OutgoingTransportSMTP, msg)
+	transport := h.calendarSourceEmailTransport(ctx, source)
+	raw, err := buildOutgoingMIME(transport, msg)
 	if err != nil {
 		return err
 	}
@@ -151,7 +152,7 @@ func (h *Handler) queueCalendarNotification(ctx context.Context, source storage.
 	if err != nil {
 		return err
 	}
-	_, err = h.db.QueueOutgoingSend(ctx, storage.QueueOutgoingSendInput{ID: id, AccountID: source.AccountID, Transport: storage.OutgoingTransportSMTP, EnvelopeFrom: account.Email, EnvelopeRecipients: recipients, MIMEData: raw, MessageJSON: snapshot})
+	_, err = h.db.QueueOutgoingSend(ctx, storage.QueueOutgoingSendInput{ID: id, AccountID: source.AccountID, Transport: transport, EnvelopeFrom: account.Email, EnvelopeRecipients: recipients, MIMEData: raw, MessageJSON: snapshot})
 	return err
 }
 

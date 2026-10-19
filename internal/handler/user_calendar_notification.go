@@ -106,7 +106,8 @@ func (p *userCalendarRequest) queueNotification(ctx context.Context, source stor
 	for _, guest := range guests {
 		msg.To = append(msg.To, &netmail.Address{Name: guest.Name, Address: guest.Email})
 	}
-	raw, err := buildOutgoingMIME(storage.OutgoingTransportSMTP, msg)
+	transport := p.service().EmailTransport()
+	raw, err := buildOutgoingMIME(transport, msg)
 	if err != nil {
 		return err
 	}
@@ -123,6 +124,6 @@ func (p *userCalendarRequest) queueNotification(ctx context.Context, source stor
 		}
 		events = append(events, p.event)
 	}
-	_, err = p.h.userAccounts.QueueCalendarNotification(ctx, selected, storage.QueueOutgoingSendInput{ID: id, AccountID: source.AccountID, Transport: storage.OutgoingTransportSMTP, EnvelopeFrom: msg.FromEmail, EnvelopeRecipients: recipients, MIMEData: raw, MessageJSON: payload}, events...)
+	_, err = p.h.userAccounts.QueueCalendarNotification(ctx, selected, storage.QueueOutgoingSendInput{ID: id, AccountID: source.AccountID, Transport: transport, EnvelopeFrom: msg.FromEmail, EnvelopeRecipients: recipients, MIMEData: raw, MessageJSON: payload}, events...)
 	return err
 }

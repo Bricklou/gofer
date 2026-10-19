@@ -75,7 +75,7 @@ func (s *userMailDeliveryScope) deliverCalendarReply(ctx context.Context, claime
 			}
 			service := authority.Event().Service()
 			if service.Identity().Provider == providers.ProviderJMAP {
-				result, err = sendCalendarReplyOverJMAP(operation, service, func() error { return h.userAccounts.ValidateCalendarReply(operation, authority) }, send)
+				result, err = sendCalendarEmailOverJMAP(operation, service, func() error { return h.userAccounts.ValidateCalendarReply(operation, authority) }, send)
 				return err
 			}
 			cfg, err := service.SMTPConfig(operation)
@@ -143,11 +143,12 @@ func (s *userMailDeliveryScope) deliverCalendarReply(ctx context.Context, claime
 	return true, err
 }
 
-// sendCalendarReplyOverJMAP sends a queued reply from a JMAP account, after
-// validate confirms the invitation still stands. A reply the server refused or
-// never received is not sent and may be retried if retrying can help; any
-// other failure may follow the server accepting it, so it is ambiguous.
-func sendCalendarReplyOverJMAP(ctx context.Context, service *config.AccountServiceSnapshot, validate func() error, send storage.OutgoingSend) (models.SendResult, error) {
+// sendCalendarEmailOverJMAP sends a queued calendar reply or invitation from a
+// JMAP account, after validate confirms it still stands. Email the server
+// refused or never received is not sent and may be retried if retrying can
+// help; any other failure may follow the server accepting it, so it is
+// ambiguous.
+func sendCalendarEmailOverJMAP(ctx context.Context, service *config.AccountServiceSnapshot, validate func() error, send storage.OutgoingSend) (models.SendResult, error) {
 	cfg, err := service.JMAPConfig(ctx)
 	if err != nil {
 		return models.SendFailed, err

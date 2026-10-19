@@ -44,7 +44,7 @@ func (h *Handler) calendarMeetingAgent(ctx context.Context, source storage.Calen
 		return "", "", "", calendarUpdateUnsupported("Automatic scheduling is no longer available; refresh this account before changing the meeting.")
 	}
 	if p, owned := ctx.Value(userCalendarProviderKey{}).(*userCalendarRequest); owned {
-		if !p.service().SMTPConfigured() {
+		if !p.service().SendsEmail() {
 			return "", "", "", calendarReplyConfigurationError("This calendar server needs invitations by email. Configure SMTP for this account first.")
 		}
 		return "CLIENT", organizer, account.Name, nil
@@ -53,7 +53,7 @@ func (h *Handler) calendarMeetingAgent(ctx context.Context, source storage.Calen
 		return "", "", "", fmt.Errorf("configure SMTP before inviting guests")
 	}
 	cfg, err := h.accountStore.GetConfig(ctx, source.AccountID)
-	if err != nil || cfg.SMTPHost == "" || cfg.SMTPPort <= 0 {
+	if err != nil || !accountSendsEmail(cfg) {
 		return "", "", "", calendarReplyConfigurationError("This calendar server needs invitations by email. Configure SMTP for this account first.")
 	}
 	return "CLIENT", organizer, account.Name, nil

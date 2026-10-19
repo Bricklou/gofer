@@ -56,12 +56,16 @@ func (s *userMailDeliveryScope) deliverCalendarNotification(ctx context.Context,
 				return err
 			}
 			service := delivery.Source().Service()
+			if service.EmailTransport() == storage.OutgoingTransportJMAP {
+				result, err = sendCalendarEmailOverJMAP(operation, service, func() error { return h.userAccounts.ValidateCalendarNotification(operation, delivery) }, send)
+				return err
+			}
 			cfg, err := service.SMTPConfig(operation)
 			if err != nil {
 				return err
 			}
-			// CalDAV is configured only for IMAP accounts. Gmail/Graph RSVP
-			// uses its native Calendar provider instead of this SMTP queue.
+			// CalDAV is configured only for IMAP and JMAP accounts. Gmail/Graph
+			// RSVP uses its native Calendar provider instead of this queue.
 			if cfg.AuthMethod != "plain" {
 				return errors.New("queued Calendar SMTP OAuth authority is unavailable")
 			}

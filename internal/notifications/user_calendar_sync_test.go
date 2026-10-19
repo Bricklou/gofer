@@ -192,10 +192,12 @@ func (a *ownedCalendarSyncAPI) ServeHTTP(w http.ResponseWriter, r *http.Request)
 func newOwnedCalendarSyncFixture(t *testing.T, provider string) (*userStorageFixture, *ownedCalendarSyncAPI) {
 	return newOwnedCalendarSyncFixtureServices(t, provider, nil)
 }
-func newOwnedCalendarSyncFixtureServices(t *testing.T, provider string, calendarOptions *handler.UserCalendarSyncOptions) (*userStorageFixture, *ownedCalendarSyncAPI) {
+func newOwnedCalendarSyncFixtureServices(t *testing.T, variant string, calendarOptions *handler.UserCalendarSyncOptions) (*userStorageFixture, *ownedCalendarSyncAPI) {
 	t.Helper()
+	// "caldav-jmap" is CalDAV on JMAP mail accounts; the calendar side is CalDAV.
+	provider := strings.TrimSuffix(variant, "-jmap")
 	var api *ownedCalendarSyncAPI
-	f, _, server := newOwnedCalendarFixtureServices(t, provider, func(base *ownedCalendarDiscoveryAPI) http.Handler {
+	f, _, server := newOwnedCalendarFixtureServices(t, variant, func(base *ownedCalendarDiscoveryAPI) http.Handler {
 		api = &ownedCalendarSyncAPI{base: base, calls: map[string]int{}, entered: make(chan struct{}), release: make(chan struct{})}
 		return api
 	}, calendarOptions)

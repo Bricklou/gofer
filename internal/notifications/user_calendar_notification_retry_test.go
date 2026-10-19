@@ -233,3 +233,45 @@ func TestUserCalendarNotificationRetryHTTPRenderingReleasesStore(t *testing.T) {
 		t.Fatal("render owner", writer.Code, writer.Body.String())
 	}
 }
+
+// A JMAP account's meeting invitations are queued to go out over JMAP, the
+// way the account sends mail, and an invitation queued for SMTP is refused.
+func TestUserCalendarNotificationQueuesJMAPAccountsOverJMAP(t *testing.T) {
+	f, _ := newOwnedCalendarSyncFixture(t, "caldav-jmap")
+	owner := "alice"
+	if err := f.routing.WithUser(t.Context(), owner, func(db *storage.DB) error {
+		_, err := db.Write().Exec(`UPDATE accounts SET email_sync_enabled=0; UPDATE calendar_events SET ical_uid=?,organizer_email=?,response_status='organizer' WHERE id='same-event'`, owner+"-meeting", owner+"@example.com")
+		return err
+	}); err != nil {
+		t.Fatal(err)
+	}
+	source, err := f.accountStore.SnapshotCalendarSource(t.Context(), owner, "same-source")
+	if err != nil {
+		t.Fatal(err)
+	}
+	event, err := f.accountStore.SnapshotCalendarEvent(t.Context(), owner, "same-event")
+	if err != nil {
+		t.Fatal(err)
+	}
+	ics := "BEGIN:VCALENDAR\r\nVERSION:2.0\r\nPRODID:-//Gofer//Fixture//EN\r\nMETHOD:REQUEST\r\nBEGIN:VEVENT\r\nUID:alice-meeting\r\nDTSTAMP:20261003T090000Z\r\nDTSTART:20261003T100000Z\r\nDTEND:20261003T110000Z\r\nSUMMARY:Planning\r\nORGANIZER:mailto:alice@example.com\r\nATTENDEE:mailto:sam@example.test\r\nEND:VEVENT\r\nEND:VCALENDAR\r\n"
+	queue := func(id, transport string) error {
+		payload, err := json.Marshal(map[string]any{"message_id": "<" + id + "@example.com>", "date": time.Now().UTC(), "from_email": "alice@example.com", "calendar_notification": map[string]any{"UserID": owner, "SourceID": "same-source", "ResourceID": event.Event().RemoteID, "Method": "REQUEST", "Calendar": ics, "ExpectedCalendar": strings.Replace(ics, "METHOD:REQUEST\r\n", "", 1)}})
+		if err != nil {
+			t.Fatal(err)
+		}
+		_, err = f.accountStore.QueueCalendarNotification(t.Context(), source, storage.QueueOutgoingSendInput{ID: id, AccountID: f.accounts[owner].ID, Transport: transport, EnvelopeFrom: "alice@example.com", EnvelopeRecipients: []string{"sam@example.test"}, MIMEData: []byte("invitation MIME"), MessageJSON: payload})
+		return err
+	}
+	if err := queue("over-smtp", storage.OutgoingTransportSMTP); err == nil {
+		t.Fatal("a JMAP account queued an invitation for SMTP")
+	}
+	if err := queue("over-jmap", storage.OutgoingTransportJMAP); err != nil {
+		t.Fatalf("queue invitation over JMAP: %v", err)
+	}
+	var transport string
+	if err := f.routing.WithUser(t.Context(), owner, func(db *storage.DB) error {
+		return db.Read().QueryRow(`SELECT transport FROM outgoing_sends WHERE id='over-jmap'`).Scan(&transport)
+	}); err != nil || transport != storage.OutgoingTransportJMAP {
+		t.Fatalf("queued invitation transport = %q, %v", transport, err)
+	}
+}
