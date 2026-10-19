@@ -2125,6 +2125,9 @@ func (h *Handler) fetchBodyRemote(ctx context.Context, msgID int64, info *storag
 	var graphErr error
 	var gmailErr error
 	var tooLarge *message.TooLargeError
+	if bodyData, attempted, err := h.fetchJMAPMessageMIME(ctx, msgID); attempted {
+		return bodyData, err
+	}
 	if bodyData, attempted, err := h.fetchOutlookGraphMessageMIME(ctx, msgID); attempted {
 		if err == nil || errors.As(err, &tooLarge) {
 			return bodyData, err

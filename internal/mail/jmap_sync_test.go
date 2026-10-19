@@ -2,15 +2,19 @@ package mail
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"sort"
+	"strings"
 	"sync"
 	"testing"
 	"time"
 
 	"github.com/cristianadrielbraun/gofer/internal/mail/jmap"
+	"github.com/cristianadrielbraun/gofer/internal/mail/message"
 	"github.com/cristianadrielbraun/gofer/internal/models"
 	"github.com/cristianadrielbraun/gofer/internal/storage"
 )
@@ -37,6 +41,9 @@ type fakeJMAPServer struct {
 	oneChangePerCall bool
 	// forgetBefore makes states older than this change number unknown.
 	forgetBefore int
+	// blobs holds raw messages by blob id; downloads counts their downloads.
+	blobs     map[string]string
+	downloads int
 }
 
 type fakeJMAPChange struct {
@@ -86,7 +93,7 @@ func (f *fakeJMAPServer) deleteEmail(id string, logged bool) {
 
 func newFakeJMAPServer(t *testing.T) *fakeJMAPServer {
 	t.Helper()
-	f := &fakeJMAPServer{emailState: "es1", maxObjectsInGet: 500}
+	f := &fakeJMAPServer{emailState: "es1", maxObjectsInGet: 500, blobs: map[string]string{}}
 	f.Server = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if user, pass, ok := r.BasicAuth(); !ok || user != "robin@example.test" || pass != "secret" {
 			http.Error(w, "unauthorized", http.StatusUnauthorized)
@@ -99,10 +106,23 @@ func newFakeJMAPServer(t *testing.T) *fakeJMAPServer {
 			f.mu.Unlock()
 			fmt.Fprintf(w, `{"capabilities": {"urn:ietf:params:jmap:core": {"maxCallsInRequest": 16, "maxObjectsInGet": %d}, "urn:ietf:params:jmap:mail": {}},
 				"accounts": {"a1": {"name": "robin@example.test"}}, "primaryAccounts": {"urn:ietf:params:jmap:mail": "a1"},
-				"username": "robin@example.test", "apiUrl": "/jmap/", "state": "s1"}`, max)
+				"username": "robin@example.test", "apiUrl": "/jmap/", "state": "s1",
+				"downloadUrl": "/jmap/download/{accountId}/{blobId}/{name}?accept={type}"}`, max)
 		case "/jmap/":
 			f.answer(w, r)
 		default:
+			var account, blob string
+			if n, _ := fmt.Sscanf(r.URL.Path, "/jmap/download/%2s/%s", &account, &blob); n == 2 {
+				blob = strings.SplitN(blob, "/", 2)[0]
+				f.mu.Lock()
+				raw, ok := f.blobs[blob]
+				f.downloads++
+				f.mu.Unlock()
+				if ok {
+					_, _ = io.WriteString(w, raw)
+					return
+				}
+			}
 			http.NotFound(w, r)
 		}
 	}))
@@ -522,5 +542,53 @@ func TestSyncAppliesJMAPEmailChanges(t *testing.T) {
 	messages = jmapMessages(t, f)
 	if messages["e4"] != nil || messages["e1"] == nil || messages["e2"] == nil {
 		t.Fatalf("after importing again: %v", messages)
+	}
+}
+
+// Opening a JMAP email downloads its original message by blob and stores the
+// parsed body like any other; an email over the download limit is refused
+// from its size, before downloading anything.
+func TestEnsureBodyDownloadsJMAPMessages(t *testing.T) {
+	f := newUserGmailFixture(t)
+	server := newFakeJMAPServer(t)
+	server.setMailboxes(jmap.Mailbox{ID: "mb-in", Name: "Inbox", Role: "inbox", MyRights: readable()})
+	small := testJMAPEmail("e1", "Lunch on Friday?", 1, "mb-in")
+	small.Size = 180
+	large := testJMAPEmail("e2", "Holiday photos", 2, "mb-in")
+	large.Size = 50 << 20
+	server.emails = []jmap.Email{small, large}
+	server.blobs["blob-e1"] = "From: Sam Ortiz <sam@example.test>\r\nTo: robin@example.test\r\nSubject: Lunch on Friday?\r\n" +
+		"Message-ID: <e1@example.test>\r\nContent-Type: text/plain; charset=utf-8\r\n\r\nAre you free around noon on Friday?\r\n"
+	useFakeJMAPAccount(t, f, server)
+	if err := f.worker.Sync(t.Context(), "alice", f.ids["alice"]); err != nil {
+		t.Fatal(err)
+	}
+	localID := func(providerID string) int64 {
+		var id int64
+		f.local(t, "alice", func(db *storage.DB) error {
+			return db.Read().QueryRow(`SELECT id FROM messages WHERE account_id=? AND remote_message_id=?`, f.ids["alice"], providerID).Scan(&id)
+		})
+		return id
+	}
+
+	if err := f.worker.EnsureBody(t.Context(), "alice", localID("e1")); err != nil {
+		t.Fatalf("EnsureBody() error = %v", err)
+	}
+	var textPath string
+	f.local(t, "alice", func(db *storage.DB) error {
+		return db.Read().QueryRow(`SELECT COALESCE(body_text_path,'') FROM messages WHERE id=?`, localID("e1")).Scan(&textPath)
+	})
+	if textPath == "" {
+		t.Fatal("no body stored for the opened JMAP email")
+	}
+
+	downloads := server.downloads
+	err := f.worker.EnsureBody(t.Context(), "alice", localID("e2"))
+	var tooLarge *message.TooLargeError
+	if !errors.As(err, &tooLarge) {
+		t.Fatalf("EnsureBody() of a large email = %v, want TooLargeError", err)
+	}
+	if server.downloads != downloads {
+		t.Fatal("downloaded an email already known to be too large")
 	}
 }

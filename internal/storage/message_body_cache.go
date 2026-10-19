@@ -38,16 +38,23 @@ func (db *DB) SaveMessageBodyCache(ctx context.Context, id int64, accountID stri
 		if provider == "" {
 			provider = "gmail"
 		} // Compatibility with the original Gmail cache contract.
-		if provider != "gmail" && provider != "outlook" {
+		if provider != "gmail" && provider != "outlook" && provider != "jmap" {
 			return fmt.Errorf("unsupported provider body identity")
 		}
-		if c.ProviderAccountID == "" {
+		// OAuth providers are also bound to the provider's account; a JMAP
+		// account signs in with a password and has no provider account id.
+		signIn := `a.auth_method='oauth2' AND a.provider_account_id=?`
+		args := []any{id, accountID, c.ProviderMessageID, provider, c.ProviderAccountID}
+		if provider == "jmap" {
+			signIn = `a.auth_method='plain'`
+			args = args[:4]
+		} else if c.ProviderAccountID == "" {
 			return fmt.Errorf("provider account identity required")
 		}
 		if err := tx.QueryRowContext(ctx, `SELECT COUNT(*) FROM messages m JOIN accounts a ON a.id=m.account_id
-		 WHERE m.id=? AND m.account_id=? AND m.remote_message_id=? AND a.provider=? AND a.auth_method='oauth2'
-		 AND a.provider_account_id=? AND COALESCE(a.is_deleting,0)=0
-		 AND EXISTS(SELECT 1 FROM message_folder_state ms JOIN folders f ON f.id=ms.folder_id WHERE ms.message_id=m.id AND ms.is_deleted=0 AND f.account_id=a.id)`+db.userProviderDraftProtectionSQL("m"), id, accountID, c.ProviderMessageID, provider, c.ProviderAccountID).Scan(&matches); err != nil {
+		 WHERE m.id=? AND m.account_id=? AND m.remote_message_id=? AND a.provider=? AND `+signIn+`
+		 AND COALESCE(a.is_deleting,0)=0
+		 AND EXISTS(SELECT 1 FROM message_folder_state ms JOIN folders f ON f.id=ms.folder_id WHERE ms.message_id=m.id AND ms.is_deleted=0 AND f.account_id=a.id)`+db.userProviderDraftProtectionSQL("m"), args...).Scan(&matches); err != nil {
 			return err
 		}
 	} else {

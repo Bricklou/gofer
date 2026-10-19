@@ -687,7 +687,7 @@ func (s *UserIMAP) ensureBody(ctx context.Context, owner string, msgID int64, mo
 			if provider == nil || provider.AccountID != id {
 				return sql.ErrNoRows
 			}
-			if provider.AccountProvider == providers.ProviderGmail || provider.AccountProvider == providers.ProviderOutlook {
+			if provider.AccountProvider == providers.ProviderGmail || provider.AccountProvider == providers.ProviderOutlook || provider.AccountProvider == providers.ProviderJMAP {
 				providerID = provider.RemoteMessageID
 				if providerID == "" {
 					return errors.New("provider message identity is unavailable")
@@ -706,7 +706,7 @@ func (s *UserIMAP) ensureBody(ctx context.Context, owner string, msgID int64, mo
 		if err != nil || fetched {
 			return err
 		}
-		scope, err := s.snapshot(ctx, owner, id)
+		scope, err := s.snapshotAccount(ctx, owner, id, true)
 		if err != nil {
 			return err
 		}
@@ -728,6 +728,11 @@ func (s *UserIMAP) ensureBody(ctx context.Context, owner string, msgID int64, mo
 				}
 			} else if scope.config.Provider == providers.ProviderGmail {
 				raw, err = s.fetchGmailRaw(ctx, scope, providerID)
+				if err != nil {
+					return err
+				}
+			} else if scope.config.Provider == providers.ProviderJMAP {
+				raw, err = FetchJMAPRawMessage(ctx, scope.config, scope.password, providerID)
 				if err != nil {
 					return err
 				}
@@ -770,14 +775,14 @@ func (s *UserIMAP) ensureBody(ctx context.Context, owner string, msgID int64, mo
 		}
 		cache, err := prepareUserIMAPBody(ctx, candidate, id, msgID, parsed)
 		cache.FetchInfo, cache.UIDValidity = info, validity
-		if scope.config.Provider == providers.ProviderGmail || scope.config.Provider == providers.ProviderOutlook {
+		if userIMAPProviderBody(scope.config.Provider) {
 			cache.ProviderMessageID, cache.ProviderAccountID, cache.ProviderType = providerID, scope.config.ProviderAccountID, scope.config.Provider
 		}
 		if err != nil {
 			return err
 		}
 		err = scope.call(ctx, func(db *storage.DB) error {
-			if scope.config.Provider == providers.ProviderGmail || scope.config.Provider == providers.ProviderOutlook {
+			if userIMAPProviderBody(scope.config.Provider) {
 				return db.SaveMessageBodyCache(ctx, msgID, id, cache)
 			}
 			current, err := db.GetMessageFetchInfoForUser(ctx, msgID, owner)
@@ -876,3 +881,9 @@ func (s *UserIMAP) SetCredentials(credentials *mailauth.UserCredentials) error {
 
 func (s *UserIMAP) Accounts() *config.UserAccountStore { return s.accounts }
 func (s *UserIMAP) Events() *EventBus                  { return s.events }
+
+// userIMAPProviderBody reports whether an account's bodies come from its
+// provider's API by message id rather than from an IMAP folder and UID.
+func userIMAPProviderBody(provider string) bool {
+	return provider == providers.ProviderGmail || provider == providers.ProviderOutlook || provider == providers.ProviderJMAP
+}
