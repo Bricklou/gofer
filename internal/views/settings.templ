@@ -1008,7 +1008,7 @@ templ SettingsSyncTab(settings models.SyncSettings, uiSettings map[string]string
 					<div class="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
 						<div class="min-w-0">
 							<h3 class="text-sm font-semibold text-muted-foreground uppercase tracking-wider mb-1">Sync Frequency</h3>
-							<p class="text-xs text-muted-foreground leading-relaxed">Controls how often polled folders are checked for changes.</p>
+							<p class="text-xs text-muted-foreground leading-relaxed">Controls how often folders and accounts are checked for changes.</p>
 						</div>
 						<div class="w-full sm:w-40 shrink-0">
 							@selectbox.SelectBox(selectbox.Props{Class: "settings-select"}) {
@@ -1036,9 +1036,9 @@ templ SettingsSyncTab(settings models.SyncSettings, uiSettings map[string]string
 							<div>
 								<h3 class="text-sm font-semibold text-muted-foreground uppercase tracking-wider mb-1">Account Sync Mode</h3>
 								if syncSettingsHasConfigurableFolderModes(settings) {
-									<p class="text-xs text-muted-foreground leading-relaxed">IMAP folders can use real-time push notifications or periodic polling. Gmail uses Gmail API history checks, and Outlook uses Microsoft Graph delta sync.</p>
+									<p class="text-xs text-muted-foreground leading-relaxed">IMAP folders can use real-time notifications or periodic checks. Gmail, Outlook and JMAP sync the whole account.</p>
 								} else {
-									<p class="text-xs text-muted-foreground leading-relaxed">Provider-native sync uses Gmail API history checks or Microsoft Graph delta sync, so per-folder IMAP IDLE is not configurable.</p>
+									<p class="text-xs text-muted-foreground leading-relaxed">These accounts sync the whole mailbox. Individual folders do not need a separate sync mode.</p>
 								}
 							</div>
 							if syncSettingsHasConfigurableFolderModes(settings) {
@@ -1586,6 +1586,12 @@ type accountConnectionTestService struct {
 
 func accountConnectionTestServices(account models.Account) []accountConnectionTestService {
 	switch strings.ToLower(strings.TrimSpace(account.Provider)) {
+	case providers.ProviderJMAP:
+		return []accountConnectionTestService{{
+			ID:          "jmap",
+			Label:       "JMAP",
+			Description: "Checking JMAP mail access...",
+		}}
 	case "gmail":
 		return []accountConnectionTestService{{
 			ID:          "gmail",
@@ -3196,7 +3202,8 @@ templ UnencryptedTransportWarning(id string, active bool) {
 }
 
 func accountEditUsesProviderAPI(provider string) bool {
-	return syncSettingsAccountUsesProviderAPI(provider)
+	provider = strings.ToLower(strings.TrimSpace(provider))
+	return provider == providers.ProviderGmail || provider == providers.ProviderOutlook
 }
 
 func providerAPIMailTransportLabel(provider string) string {
@@ -4218,7 +4225,7 @@ func syncSettingsHasConfigurableFolderModes(settings models.SyncSettings) bool {
 
 func syncSettingsAccountUsesProviderAPI(provider string) bool {
 	switch strings.ToLower(strings.TrimSpace(provider)) {
-	case "gmail", "outlook":
+	case "gmail", "outlook", providers.ProviderJMAP:
 		return true
 	default:
 		return false
@@ -4226,6 +4233,9 @@ func syncSettingsAccountUsesProviderAPI(provider string) bool {
 }
 
 func syncSettingsProviderAPITitle(provider string) string {
+	if strings.EqualFold(strings.TrimSpace(provider), providers.ProviderJMAP) {
+		return "JMAP sync"
+	}
 	if strings.EqualFold(strings.TrimSpace(provider), "outlook") {
 		return "Outlook Graph sync"
 	}
@@ -4233,6 +4243,9 @@ func syncSettingsProviderAPITitle(provider string) string {
 }
 
 func syncSettingsProviderAPIDescription(provider string) string {
+	if strings.EqualFold(strings.TrimSpace(provider), providers.ProviderJMAP) {
+		return "JMAP uses real-time updates when the server supports them, with scheduled checks for the whole account."
+	}
 	if strings.EqualFold(strings.TrimSpace(provider), "outlook") {
 		return "Outlook sync uses Microsoft Graph delta changes instead of per-folder IMAP IDLE. The scheduled interval remains a whole-account background check."
 	}

@@ -896,11 +896,6 @@ function syncAddContactStepAfterSwap() {
 function maybeGoAddContacts() {
   if (!addAccountCreated()) return;
   syncAddContactStep();
-  var root = document.getElementById('add-account-dialog');
-  if (root && root.dataset.mailService === 'jmap') {
-    addAccountTest.saved('Account created. JMAP mail sync isn\'t available yet, so its mail won\'t appear until it is. You can close this window, or continue to set up this account\'s contacts and calendar.');
-    return;
-  }
   addAccountTest.saved('Account created. Mail is syncing now. You can close this window, or continue to set up this account\'s contacts and calendar.');
 }
 function syncWizardServiceContent(root) {
