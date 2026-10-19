@@ -382,7 +382,7 @@ func calendarCreateICS(draft calendar.EventDraft) (string, error) {
 
 func createCalDAVCalendarEvent(ctx context.Context, source storage.CalendarSource, username, password string, draft calendar.EventDraft) (calendar.RemoteEvent, error) {
 	base, err := url.Parse(source.RemoteID)
-	if err != nil || base.Scheme != "https" || base.Host == "" || base.User != nil || base.RawQuery != "" || base.Fragment != "" {
+	if err != nil || !calDAVURLScheme(base.Scheme) || base.Host == "" || base.User != nil || base.RawQuery != "" || base.Fragment != "" {
 		return calendar.RemoteEvent{}, calendarCreateProviderError{http.StatusBadRequest}
 	}
 	base.Path = strings.TrimRight(base.Path, "/") + "/" + draft.RequestID + ".ics"
@@ -392,7 +392,7 @@ func createCalDAVCalendarEvent(ctx context.Context, source storage.CalendarSourc
 	if err != nil {
 		return calendar.RemoteEvent{}, err
 	}
-	client := &http.Client{Transport: davHTTPTransport, Timeout: 30 * time.Second,
+	client := &http.Client{Transport: calDAVHTTPTransport, Timeout: 30 * time.Second,
 		CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
 	req, err := newCardDAVRequest(ctx, http.MethodPut, endpoint, username, password, strings.NewReader(body))
 	if err != nil {

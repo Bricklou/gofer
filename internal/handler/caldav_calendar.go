@@ -25,8 +25,8 @@ func normalizeCalDAVBaseURL(raw string) (string, error) {
 		raw = "https://" + raw
 	}
 	parsed, err := url.Parse(raw)
-	if err != nil || parsed.Host == "" || parsed.Scheme != "https" {
-		return "", fmt.Errorf("enter a valid https CalDAV server URL to protect the mailbox credentials")
+	if err != nil || parsed.Host == "" || !calDAVURLScheme(parsed.Scheme) {
+		return "", fmt.Errorf("enter a valid CalDAV server URL starting with https://, or http:// for a server an administrator approved")
 	}
 	if parsed.User != nil || parsed.RawQuery != "" {
 		return "", fmt.Errorf("do not include credentials or query parameters in the CalDAV server URL")
@@ -416,7 +416,7 @@ func calDAVPropfind(ctx context.Context, endpoint, username, password, depth, bo
 	req.Header.Set("Depth", depth)
 	req.Header.Set("Content-Type", `application/xml; charset="utf-8"`)
 	client := &http.Client{
-		Transport: davHTTPTransport,
+		Transport: calDAVHTTPTransport,
 		Timeout:   cardDAVDiscoveryHTTPTimeout,
 		CheckRedirect: func(req *http.Request, via []*http.Request) error {
 			if err := calendarDiscoveryDAVGuard(ctx); err != nil {

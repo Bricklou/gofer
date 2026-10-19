@@ -239,6 +239,12 @@ func newOwnedCalendarFixture(t *testing.T, provider string, wrap func(*ownedCale
 }
 func newOwnedCalendarFixtureServices(t *testing.T, provider string, wrap func(*ownedCalendarDiscoveryAPI) http.Handler, calendarOptions *handler.UserCalendarSyncOptions) (*userStorageFixture, *ownedCalendarDiscoveryAPI, *httptest.Server) {
 	t.Helper()
+	// "caldav-jmap" is CalDAV on JMAP mail accounts instead of IMAP ones.
+	jmapAccounts := provider == "caldav-jmap"
+	if jmapAccounts {
+		t.Setenv("GOFER_JMAP_EXPERIMENT", "true")
+		provider = "caldav"
+	}
 	api := &ownedCalendarDiscoveryAPI{provider: provider, calls: map[string]int{}, entered: make(chan struct{}), release: make(chan struct{})}
 	var providerHandler http.Handler = api
 	if wrap != nil {
@@ -275,6 +281,11 @@ func newOwnedCalendarFixtureServices(t *testing.T, provider string, wrap func(*o
 			}
 		}
 		if err := f.accountStore.WithAccountForUser(t.Context(), owner, f.accounts[owner].ID, func(local *config.AccountStore, db *storage.DB) error {
+			if jmapAccounts {
+				if _, err := db.Write().Exec(`UPDATE accounts SET provider='jmap',jmap_session_url='https://jmap.provider.test/.well-known/jmap',imap_host='',smtp_host='' WHERE id=?`, f.accounts[owner].ID); err != nil {
+					return err
+				}
+			}
 			if provider == "caldav" {
 				if err := local.SaveCalDAVConfig(t.Context(), owner, f.accounts[owner].ID, server.URL+"/users/"+owner+"/dav", owner, owner+"-calendar-secret", false); err != nil {
 					return err
@@ -297,9 +308,10 @@ func calendarDiscoveryRequest(f *userStorageFixture, owner string) *httptest.Res
 }
 
 func TestUserCalendarDiscoveryHTTPProvidersScopedRefreshAndOwnedPublication(t *testing.T) {
-	for _, provider := range []string{"gmail", "outlook", "caldav"} {
-		t.Run(provider, func(t *testing.T) {
-			f, api, _ := newOwnedCalendarDiscoveryFixture(t, provider)
+	for _, variant := range []string{"gmail", "outlook", "caldav", "caldav-jmap"} {
+		t.Run(variant, func(t *testing.T) {
+			provider := strings.TrimSuffix(variant, "-jmap")
+			f, api, _ := newOwnedCalendarDiscoveryFixture(t, variant)
 			api.rejectOld = provider != "caldav"
 			for _, owner := range []string{"alice", "bob"} {
 				response := calendarDiscoveryRequest(f, owner)

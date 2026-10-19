@@ -155,7 +155,7 @@ func deleteCalDAVCalendarEventScope(ctx context.Context, source storage.Calendar
 	if !strings.HasPrefix(resource.Path, collectionPath) || strings.HasSuffix(resource.Path, "/") || path.Clean(resource.Path) != resource.Path {
 		return calendarUpdateUnsupported("Only an event resource inside this calendar can be deleted.")
 	}
-	client := calendarDeleteClient(davHTTPTransport)
+	client := calendarDeleteClient(calDAVHTTPTransport)
 	current, headers, err := calendarUpdateCalDAVGet(ctx, client, endpoint, username, password)
 	if err != nil {
 		return calendarDeletePreflightError{err}

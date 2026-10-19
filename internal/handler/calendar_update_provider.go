@@ -630,8 +630,8 @@ func updateOutlookCalendarEventScope(ctx context.Context, token, remoteCalendarI
 func calendarUpdateCalDAVEndpoint(source storage.CalendarSource, existing storage.CalendarEvent) (string, error) {
 	for _, raw := range []string{source.RemoteID, existing.RemoteID} {
 		parsed, err := url.Parse(raw)
-		if err != nil || parsed.Scheme != "https" || parsed.Host == "" || parsed.User != nil || parsed.RawQuery != "" || parsed.ForceQuery || strings.Contains(raw, "#") {
-			return "", calendarUpdateUnsupported("The calendar event does not have a safe HTTPS resource URL.")
+		if err != nil || !calDAVURLScheme(parsed.Scheme) || parsed.Host == "" || parsed.User != nil || parsed.RawQuery != "" || parsed.ForceQuery || strings.Contains(raw, "#") {
+			return "", calendarUpdateUnsupported("The calendar event does not have a safe resource URL.")
 		}
 	}
 	if _, err := resolveCalDAVHref(source.RemoteID, existing.RemoteID); err != nil {
@@ -756,7 +756,7 @@ func updateCalDAVCalendarEventScope(ctx context.Context, source storage.Calendar
 	if err != nil {
 		return calendar.RemoteEvent{}, err
 	}
-	client := &http.Client{Transport: davHTTPTransport, Timeout: 30 * time.Second,
+	client := &http.Client{Transport: calDAVHTTPTransport, Timeout: 30 * time.Second,
 		CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
 	current, headers, err := calendarUpdateCalDAVGet(ctx, client, endpoint, username, password)
 	if err != nil {

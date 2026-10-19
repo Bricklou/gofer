@@ -119,7 +119,7 @@ func (p *userCalendarRequest) providerEndpoint(req *http.Request) error {
 		base, err := url.Parse(source.RemoteID)
 		configured, _, _ := p.service().CalDAVSettings()
 		trusted, parseErr := url.Parse(configured)
-		if err != nil || parseErr != nil || base.Scheme != "https" || base.RawQuery != "" || !calendarProviderSameOrigin(trusted, base) || !calendarProviderSameOrigin(base, u) || strings.ContainsAny(u.Path, "\\\x00\r\n") {
+		if err != nil || parseErr != nil || !calDAVURLScheme(base.Scheme) || base.RawQuery != "" || !calendarProviderSameOrigin(trusted, base) || !calendarProviderSameOrigin(base, u) || strings.ContainsAny(u.Path, "\\\x00\r\n") {
 			return denied
 		}
 		clean := path.Clean(u.Path)

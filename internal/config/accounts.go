@@ -210,7 +210,8 @@ func (s *AccountStore) GetCalendarSyncConfig(ctx context.Context, userID, accoun
 	if err != nil {
 		return cfg, err
 	}
-	if cfg.Provider == "imap" {
+	if cfg.Provider == "imap" || cfg.Provider == "jmap" {
+		// Their calendars come from a CalDAV server.
 		var hasPassword, useAccountCredentials int
 		err := s.db.Read().QueryRowContext(ctx, `
 			SELECT base_url, username, encrypted_password IS NOT NULL, use_account_credentials
@@ -310,7 +311,7 @@ func (s *AccountStore) saveCalDAVConfigTx(ctx context.Context, tx *sql.Tx, userI
 		INSERT INTO account_caldav_configs (account_id, user_id, base_url, username, encrypted_password, use_account_credentials)
 		SELECT id, user_id, ?, ?, ?, ?
 		FROM accounts
-		WHERE id = ? AND user_id = ? AND provider = 'imap' AND COALESCE(is_deleting, 0) = 0 AND 1 = 1
+		WHERE id = ? AND user_id = ? AND provider IN ('imap', 'jmap') AND COALESCE(is_deleting, 0) = 0 AND 1 = 1
 		ON CONFLICT(account_id) DO UPDATE SET
 			user_id = excluded.user_id,
 			base_url = excluded.base_url,

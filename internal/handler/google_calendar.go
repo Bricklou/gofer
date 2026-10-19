@@ -485,7 +485,7 @@ func (h *Handler) handleDiscoverAccountCalendars(w http.ResponseWriter, r *http.
 		}
 		statusMessage = fmt.Sprintf("Discovered %d Microsoft calendar source(s). The primary calendar is selected by default.", count)
 		discoverySucceeded = true
-	case providers.ProviderIMAP:
+	case providers.ProviderIMAP, providers.ProviderJMAP:
 		if err := r.ParseForm(); err != nil {
 			statusMessage = "Calendar discovery failed: the CalDAV server URL could not be read."
 			statusError = true

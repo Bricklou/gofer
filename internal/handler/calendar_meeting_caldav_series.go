@@ -276,7 +276,7 @@ func (h *Handler) updateCalDAVMeetingOccurrence(ctx context.Context, source stor
 	if err != nil {
 		return fail(err)
 	}
-	client := calendarDeleteClient(davHTTPTransport)
+	client := calendarDeleteClient(calDAVHTTPTransport)
 	current, headers, err := calendarUpdateCalDAVGet(ctx, client, endpoint, credentials.username, credentials.password)
 	if err != nil {
 		return fail(err)

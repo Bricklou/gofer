@@ -203,6 +203,13 @@ func New(db *storage.DB, accountStore *config.AccountStore, syncer *mail.SyncOrc
 		providerAvatarHTTPClient: &http.Client{Timeout: 15 * time.Second, Transport: netguard.NewHTTPTransport(nil)},
 	}
 	setDAVPrivateTargetPolicy(privateTargetAllowed(db))
+	setDAVPlaintextPolicy(func(ctx context.Context, host string, port int) bool {
+		allowed, err := db.IsPlaintextTransportAllowed(ctx, "http", host, port)
+		if err != nil {
+			log.Printf("check HTTP plaintext exception for %s:%d: %v", host, port, err)
+		}
+		return err == nil && allowed
+	})
 	db.SetContactActivityHook(func(event storage.ContactActivityNotification) {
 		if h.syncer == nil {
 			return
