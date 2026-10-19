@@ -26,6 +26,7 @@ func accountRequestFromForm(r *http.Request) models.CreateAccountRequest {
 		SMTPHost: r.FormValue("smtp_host"), SMTPPort: atoiDefault(r.FormValue("smtp_port"), 465), SMTPTLSMode: r.FormValue("smtp_tls_mode"),
 		Username: r.FormValue("username"), Password: r.FormValue("password"), AuthMethod: r.FormValue("auth_method"),
 		SmtpUsername: r.FormValue("smtp_username"), SmtpPassword: r.FormValue("smtp_password"),
+		JMAPSessionURL: r.FormValue("jmap_session_url"),
 	}
 	if r.FormValue("mail_service") == providers.MailServiceICloud {
 		providers.ApplyICloud(&req)

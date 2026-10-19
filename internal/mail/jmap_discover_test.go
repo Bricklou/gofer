@@ -14,6 +14,7 @@ import (
 
 	"github.com/cristianadrielbraun/gofer/internal/mail/autodiscover"
 	"github.com/cristianadrielbraun/gofer/internal/mail/jmap"
+	"github.com/cristianadrielbraun/gofer/internal/models"
 )
 
 // jmapMailServer answers session requests for robin@example.test; withMail
@@ -133,4 +134,45 @@ func TestDiscoverJMAPSessionLiveServer(t *testing.T) {
 		t.Fatalf("DiscoverJMAPSession: %v", err)
 	}
 	t.Logf("candidates=%v found=%s mail account=%s", candidates, found, session.PrimaryAccount(jmap.CapabilityMail))
+}
+
+// In managed mode the account's connection test signs in to its saved JMAP
+// session URL, within the instance's exceptions for that server.
+func TestUserTestAccountChecksJMAPSession(t *testing.T) {
+	f := newUserGmailFixture(t)
+	server := jmapMailServer(t, true, nil)
+	sessionURL := server.URL + "/.well-known/jmap"
+	if err := f.worker.accounts.UpdateAccount(t.Context(), "alice", f.ids["alice"], &models.CreateAccountRequest{
+		Provider: "jmap", JMAPSessionURL: sessionURL, Username: "robin@example.test", Password: "secret",
+	}); err != nil {
+		t.Fatal(err)
+	}
+	test := func() models.ConnectionTestResult {
+		t.Helper()
+		results, err := f.worker.TestAccount(t.Context(), "alice", f.ids["alice"])
+		if err != nil || len(results) != 1 || results[0].Service != "jmap" {
+			t.Fatalf("TestAccount = %+v, %v", results, err)
+		}
+		return results[0]
+	}
+	if result := test(); result.Success || !strings.Contains(result.Error, "HTTP plaintext exception") {
+		t.Fatalf("without exceptions: %+v", result)
+	}
+	endpoint, err := jmap.ParseEndpoint(sessionURL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := f.system.AddPlaintextTransportException(t.Context(), "http", endpoint.Host, endpoint.Port, "administrator"); err != nil {
+		t.Fatal(err)
+	}
+	if err := f.system.AddPrivateTargetException(t.Context(), "http", endpoint.Host, endpoint.Port, "administrator"); err != nil {
+		t.Fatal(err)
+	}
+	if result := test(); !result.Success || !strings.Contains(result.Message, "mail account a1") {
+		t.Fatalf("with exceptions: %+v", result)
+	}
+	// Other workers still refuse JMAP until it has its own sync.
+	if err := f.worker.Sync(t.Context(), "alice", f.ids["alice"]); err == nil {
+		t.Fatal("IMAP sync ran for a JMAP account")
+	}
 }

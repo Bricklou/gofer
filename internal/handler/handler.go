@@ -3217,6 +3217,16 @@ func (h *Handler) handleTestAccount(w http.ResponseWriter, r *http.Request) {
 	case providers.ProviderOutlook:
 		h.writeConnectionTestResults(w, r, h.testOutlookGraphMail(r.Context(), accountID), accountID)
 		return
+	case providers.ProviderJMAP:
+		password, err := h.accountStore.DecryptPassword(r.Context(), accountID)
+		if err != nil {
+			http.Error(w, fmt.Sprintf("get credentials: %v", err), http.StatusInternalServerError)
+			return
+		}
+		ctx, cancel := context.WithTimeout(r.Context(), 2*time.Minute)
+		defer cancel()
+		h.writeConnectionTestResults(w, r, []models.ConnectionTestResult{mail.JMAPConnectionTestResult(ctx, cfg, password)}, accountID)
+		return
 	}
 
 	password, err := h.resolvePassword(r.Context(), cfg, accountID)

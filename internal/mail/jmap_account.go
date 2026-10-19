@@ -75,3 +75,38 @@ func closeRequestBody(req *http.Request) {
 		_ = req.Body.Close()
 	}
 }
+
+// TestJMAPConnection fetches a JMAP account's session and checks that it
+// offers a mail account, which it returns.
+func TestJMAPConnection(ctx context.Context, cfg *models.AccountConfig, password string) (string, error) {
+	client, err := newJMAPAccountClient(cfg, password)
+	if err != nil {
+		return "", err
+	}
+	session, err := client.Session(ctx, cfg.JMAPSessionURL)
+	var httpErr *jmap.HTTPError
+	if errors.As(err, &httpErr) && (httpErr.StatusCode == http.StatusUnauthorized || httpErr.StatusCode == http.StatusForbidden) {
+		return "", ErrJMAPLoginRejected
+	}
+	if err != nil {
+		return "", err
+	}
+	accountID := session.PrimaryAccount(jmap.CapabilityMail)
+	if accountID == "" {
+		return "", errors.New("the JMAP server offers no mail account for this login")
+	}
+	return accountID, nil
+}
+
+// JMAPConnectionTestResult is TestJMAPConnection as a connection test result.
+func JMAPConnectionTestResult(ctx context.Context, cfg *models.AccountConfig, password string) models.ConnectionTestResult {
+	result := models.ConnectionTestResult{Service: "jmap", Message: cfg.JMAPSessionURL}
+	accountID, err := TestJMAPConnection(ctx, cfg, password)
+	if err != nil {
+		result.Error = err.Error()
+		return result
+	}
+	result.Success = true
+	result.Message = fmt.Sprintf("Connected to %s (mail account %s)", cfg.JMAPSessionURL, accountID)
+	return result
+}
