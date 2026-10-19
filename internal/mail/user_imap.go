@@ -128,6 +128,9 @@ func (s *UserIMAP) SupportsAccount(cfg *models.AccountConfig) bool {
 	if cfg.Provider == providers.ProviderIMAP && cfg.AuthMethod == "plain" {
 		return true
 	}
+	if cfg.Provider == providers.ProviderJMAP {
+		return cfg.AuthMethod == "plain" && providers.JMAPEnabled()
+	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	return (cfg.Provider == providers.ProviderGmail || cfg.Provider == providers.ProviderOutlook) && cfg.AuthMethod == "oauth2" && s.credentials != nil

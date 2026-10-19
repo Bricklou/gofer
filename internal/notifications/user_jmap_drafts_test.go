@@ -109,6 +109,9 @@ func (s *jmapDraftServer) answer(t *testing.T, w http.ResponseWriter, r *http.Re
 				{"id": "mb-in", "name": "Inbox", "role": "inbox"}, {"id": "mb-drafts", "name": "Drafts", "role": "drafts"}, {"id": "mb-sent", "name": "Sent", "role": "sent"}}}
 		case "Identity/get":
 			result = map[string]any{"accountId": "a1", "list": []map[string]string{{"id": "i1", "email": s.identity}}}
+		case "Email/changes":
+			result = map[string]any{"accountId": "a1", "oldState": "s1", "newState": "s1", "hasMoreChanges": false,
+				"created": []string{}, "updated": []string{}, "destroyed": []string{}}
 		case "Email/import":
 			var emails map[string]struct {
 				BlobID     string          `json:"blobId"`
