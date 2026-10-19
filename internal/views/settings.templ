@@ -1817,7 +1817,11 @@ func accountDisplayProvider(account models.Account) string {
 // editAccountSkipsSending reports whether an account sends with the same
 // connection its mail sync uses, so its edit wizard has no sending step.
 func editAccountSkipsSending(data models.EditAccountData) bool {
-	return accountEditUsesProviderAPI(data.Provider) || editAccountIsICloud(data)
+	return accountEditUsesProviderAPI(data.Provider) || editAccountIsICloud(data) || editAccountIsJMAP(data)
+}
+
+func editAccountIsJMAP(data models.EditAccountData) bool {
+	return data.Provider == providers.ProviderJMAP
 }
 
 // editAccountIsICloud reports whether the account being edited is on iCloud
@@ -2803,6 +2807,8 @@ templ AccountWizardEditSidebar(data models.EditAccountData) {
 			@AccountWizardProviderAPIEmailSection("editWizardGo", data.AccountID, data.Provider, emailEnabled, true)
 		} else if editAccountIsICloud(data) {
 			@AccountWizardICloudEmailSection("editWizardGo", data.AccountID, emailEnabled, false, true, "Test and save")
+		} else if editAccountIsJMAP(data) {
+			@AccountWizardJMAPEmailSection("editWizardGo", data.AccountID, emailEnabled, true)
 		} else {
 			@AccountWizardEmailSection("editWizardGo", data.AccountID, emailEnabled, false, true, "Test and save")
 		}
@@ -2900,6 +2906,25 @@ templ AccountWizardICloudEmailSection(goFn string, accountID string, enabled boo
 			@AccountWizardSubStep(goFn, 0, "1.a", "Account details", "Name and email", false, true)
 			@AccountWizardSubStep(goFn, 1, "1.b", "Mail sync", "App-specific password", false, false)
 			@AccountWizardSubStep(goFn, 3, "1.c", finalStep, "Check the connection", false, false)
+		</div>
+	</div>
+}
+
+// AccountWizardJMAPEmailSection lists the mail steps of a JMAP account,
+// which has a server and login but no separate sending settings.
+templ AccountWizardJMAPEmailSection(goFn string, accountID string, enabled bool, persist bool) {
+	<div class="account-wizard-section" data-wizard-section-steps="0,1,2,3" data-active="true">
+		<div class="account-wizard-section-heading">
+			<button type="button" data-account-wizard-action={ goFn } data-account-wizard-target-step="0" class="account-wizard-section-title">
+				<span class="account-wizard-index">1</span>
+				<span class="min-w-0"><span class="block text-sm font-semibold">Email</span><span class="block text-xs text-muted-foreground">Send and receive</span></span>
+			</button>
+			@AccountWizardSectionSwitch(goFn, accountID, "email", enabled, false, persist, false, nil)
+		</div>
+		<div class="account-wizard-substeps">
+			@AccountWizardSubStep(goFn, 0, "1.a", "Account details", "Name and email", false, true)
+			@AccountWizardSubStep(goFn, 1, "1.b", "Server and login", "JMAP", false, false)
+			@AccountWizardSubStep(goFn, 3, "1.c", "Test and save", "Find the server and sign in", false, false)
 		</div>
 	</div>
 }
@@ -3054,6 +3079,53 @@ templ ProviderAPIMailPanel(provider string) {
 // ICloudSignInPanel asks for an iCloud account's login. Apple lets other mail
 // apps sign in only with an app-specific password, and the servers are
 // always Apple's, so there are no server settings.
+// JMAPSignInPanel edits a JMAP account's server and login. The server field
+// takes the saved session URL, another one, or just a host or nothing, which
+// the test and saving find the session URL from.
+templ JMAPSignInPanel(sessionURL string, username string, passwordPlaceholder string, passwordRequired bool) {
+	<h4 class="account-wizard-sticky-header text-sm font-semibold text-foreground flex items-center gap-2">
+		@icon.Server(icon.Props{Class: "size-4 text-muted-foreground"})
+		Server
+		<span class="text-xs font-normal text-muted-foreground">(JMAP)</span>
+	</h4>
+	<div>
+		<label class="text-xs font-medium text-muted-foreground mb-1.5 block">Server address or session URL</label>
+		@input.Input(input.Props{
+			Name:        "jmap_session_url",
+			Type:        input.TypeText,
+			Value:       sessionURL,
+			Placeholder: "mail.example.com",
+		})
+		<p class="mt-1.5 text-[11px] leading-relaxed text-muted-foreground">To move the account to another server, enter its address or session URL; leave it blank to find the server from the email address. Testing fills in the session URL found.</p>
+	</div>
+	<hr class="my-4 border-border"/>
+	<h4 class="text-sm font-semibold text-foreground flex items-center gap-2 mb-4">
+		@icon.Key(icon.Props{Class: "size-4 text-muted-foreground"})
+		Login
+	</h4>
+	<div class="grid grid-cols-2 gap-3">
+		<div class="col-span-2">
+			<label class="text-xs font-medium text-muted-foreground mb-1.5 block">Username</label>
+			@input.Input(input.Props{
+				Name:        "username",
+				Type:        input.TypeText,
+				Value:       username,
+				Placeholder: "Same as the email address",
+			})
+		</div>
+		<div class="col-span-2">
+			<label class="text-xs font-medium text-muted-foreground mb-1.5 block">Password</label>
+			@input.Input(input.Props{
+				Name:        "password",
+				Type:        input.TypePassword,
+				Placeholder: passwordPlaceholder,
+				Required:    passwordRequired,
+				Attributes:  reconnectRequiredAttrs(reconnectMail, passwordRequired),
+			})
+		</div>
+	</div>
+}
+
 templ ICloudSignInPanel(username string, passwordPlaceholder string, passwordRequired bool) {
 	<h4 class="account-wizard-sticky-header text-sm font-semibold text-foreground flex items-center gap-2">
 		@icon.MailCheck(icon.Props{Class: "size-4 text-muted-foreground"})
@@ -3216,6 +3288,8 @@ templ EditAccountDialog(data models.EditAccountData) {
 								@ProviderAPIMailPanel(data.Provider)
 							} else if editAccountIsICloud(data) {
 								@ICloudSignInPanel(data.Username, editAccountPasswordPlaceholder(data), editAccountNeeds(data, reconnectMail))
+							} else if editAccountIsJMAP(data) {
+								@JMAPSignInPanel(data.JMAPSessionURL, data.Username, editAccountPasswordPlaceholder(data), editAccountNeeds(data, reconnectMail))
 							} else {
 								<h4 class="account-wizard-sticky-header text-sm font-semibold text-foreground flex items-center gap-2">
 									@icon.Inbox(icon.Props{Class: "size-4 text-muted-foreground"})
@@ -3542,7 +3616,7 @@ templ EditAccountWizardFooter(data models.EditAccountData) {
 }
 
 func editAccountTestsTypedSettings(data models.EditAccountData) bool {
-	return data.Provider == "imap" && data.AuthMethod == "plain"
+	return (data.Provider == "imap" || editAccountIsJMAP(data)) && data.AuthMethod == "plain"
 }
 
 // editAccountTestURL tests the typed settings of accounts that sign in with a
@@ -3556,6 +3630,9 @@ func editAccountTestURL(data models.EditAccountData) string {
 }
 
 func editAccountTestDescription(data models.EditAccountData) string {
+	if editAccountIsJMAP(data) {
+		return "Gofer finds your JMAP server and signs in with the settings you entered. Nothing changes until you save."
+	}
 	if editAccountTestsTypedSettings(data) {
 		return "Gofer signs in to both servers with the settings you entered. Nothing changes until you save."
 	}

@@ -2825,6 +2825,12 @@ func (h *Handler) handleUpdateAccount(w http.ResponseWriter, r *http.Request) {
 			views.AccountFormError("Email address is required").Render(r.Context(), w)
 			return
 		}
+	} else if req.Provider == providers.ProviderJMAP {
+		if err := h.resolveJMAPAccountChanges(r, accountID, &req); err != nil {
+			w.Header().Set("Content-Type", "text/html")
+			views.AccountFormError(err.Error()).Render(r.Context(), w)
+			return
+		}
 	} else if req.EmailAddress == "" || req.IMAPHost == "" || req.SMTPHost == "" || req.Username == "" {
 		w.Header().Set("Content-Type", "text/html")
 		views.AccountFormError("All required fields must be filled in").Render(r.Context(), w)

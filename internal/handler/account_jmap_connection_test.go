@@ -12,6 +12,7 @@ import (
 	"sync/atomic"
 	"testing"
 
+	"github.com/cristianadrielbraun/gofer/internal/mail"
 	"github.com/cristianadrielbraun/gofer/internal/models"
 	"github.com/cristianadrielbraun/gofer/internal/providers"
 )
@@ -199,5 +200,52 @@ func TestPrepareJMAPAccountForCreation(t *testing.T) {
 	r, req = jmapCreateRequest(form)
 	if err := h.prepareJMAPAccount(r, &req); !errors.Is(err, providers.ErrJMAPDisabled) {
 		t.Fatalf("with the flag off: %v", err)
+	}
+}
+
+// Saving an edited JMAP account keeps a session URL as entered, and finds it
+// again from a host or the email, using the saved password when the
+// password field was left blank.
+func TestResolveJMAPAccountChanges(t *testing.T) {
+	t.Setenv("GOFER_JMAP_EXPERIMENT", "true")
+	h, db := newAccountOwnershipTestHandler(t)
+	var hits atomic.Int32
+	server, host, port := jmapSessionTestServer(t, "saved-secret", &hits)
+	if err := db.AddPlaintextTransportException(t.Context(), "http", host, port, "administrator"); err != nil {
+		t.Fatal(err)
+	}
+	if err := db.AddPrivateTargetException(t.Context(), "http", host, port, "administrator"); err != nil {
+		t.Fatal(err)
+	}
+	account, err := h.accountStore.CreateAccount(t.Context(), "owner", &models.CreateAccountRequest{
+		Provider: "jmap", EmailAddress: "lena@example.test", JMAPSessionURL: "https://old.example.test/.well-known/jmap",
+		Username: "lena@example.test", Password: "saved-secret",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	resolve := func(form url.Values) (models.CreateAccountRequest, error) {
+		req := httptest.NewRequest(http.MethodPost, "/api/accounts/"+account.ID+"/edit", strings.NewReader(form.Encode()))
+		req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+		req.SetPathValue("id", account.ID)
+		req = ownerRequest(req)
+		_ = req.ParseForm()
+		changes := accountRequestFromForm(req)
+		return changes, h.resolveJMAPAccountChanges(req, account.ID, &changes)
+	}
+
+	changes, err := resolve(url.Values{"provider": {"jmap"}, "email_address": {"lena@example.test"}, "jmap_session_url": {"https://new.example.test/jmap/session"}})
+	if err != nil || changes.JMAPSessionURL != "https://new.example.test/jmap/session" || hits.Load() != 0 {
+		t.Fatalf("entered URL: %v, url %q, %d requests", err, changes.JMAPSessionURL, hits.Load())
+	}
+
+	changes, err = resolve(url.Values{"provider": {"jmap"}, "email_address": {"lena@example.test"}, "jmap_session_url": {net.JoinHostPort(host, strconv.Itoa(port))}})
+	if err != nil || changes.JMAPSessionURL != server.URL+"/.well-known/jmap" || changes.Username != "lena@example.test" {
+		t.Fatalf("host with the saved password: %v, url %q user %q", err, changes.JMAPSessionURL, changes.Username)
+	}
+
+	_, err = resolve(url.Values{"provider": {"jmap"}, "email_address": {"lena@example.test"}, "jmap_session_url": {net.JoinHostPort(host, strconv.Itoa(port))}, "password": {"typed-but-wrong"}})
+	if !errors.Is(err, mail.ErrJMAPLoginRejected) {
+		t.Fatalf("typed wrong password: %v", err)
 	}
 }

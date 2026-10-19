@@ -195,11 +195,16 @@ func (h *Handler) handleUserUpdateAccount(w http.ResponseWriter, r *http.Request
 		_ = views.AccountChangesSaved().Render(r.Context(), w)
 		return
 	}
-	if req.Provider != "imap" || req.Provider != existing.Provider || req.AuthMethod != "plain" || existing.AuthMethod != "plain" {
+	if (req.Provider != "imap" && req.Provider != providers.ProviderJMAP) || req.Provider != existing.Provider || req.AuthMethod != "plain" || existing.AuthMethod != "plain" {
 		http.Error(w, "this account connection method is not available yet", http.StatusNotImplemented)
 		return
 	}
-	if req.EmailAddress == "" || req.IMAPHost == "" || req.SMTPHost == "" || req.Username == "" {
+	if req.Provider == providers.ProviderJMAP {
+		if err := h.resolveJMAPAccountChanges(r, id, &req); err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+	} else if req.EmailAddress == "" || req.IMAPHost == "" || req.SMTPHost == "" || req.Username == "" {
 		http.Error(w, "all required fields must be filled in", http.StatusBadRequest)
 		return
 	}

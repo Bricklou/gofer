@@ -1647,6 +1647,13 @@ function newEditAccountTest() {
       var typed = results && results.dataset.testTyped === 'true';
       return { url: results ? results.dataset.testUrl : '', body: typed ? key : '' };
     },
+    // A JMAP account's test reports the session URL it found; saving then
+    // stores that instead of looking for the server again.
+    onResponse: function(response) {
+      var found = response.headers.get('X-Gofer-JMAP-Session-URL');
+      var field = found && document.querySelector('#edit-account-form input[name="jmap_session_url"]');
+      if (field) field.value = found;
+    },
     onState: function() {
       var label = document.querySelector('#edit-wizard-footer [data-edit-account-save-label]');
       if (label) label.textContent = editAccountChanged() ? 'Save changes' : 'Continue';

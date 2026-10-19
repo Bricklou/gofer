@@ -223,6 +223,48 @@ func (h *Handler) prepareJMAPAccount(r *http.Request, req *models.CreateAccountR
 	return nil
 }
 
+// resolveJMAPAccountChanges checks the edited settings of a JMAP account. The
+// server field keeps a session URL as entered; a host, or nothing, is looked
+// up with the typed password, or the saved one when it was left blank.
+func (h *Handler) resolveJMAPAccountChanges(r *http.Request, accountID string, req *models.CreateAccountRequest) error {
+	if !providers.JMAPEnabled() {
+		return providers.ErrJMAPDisabled
+	}
+	if req.EmailAddress == "" {
+		return errors.New("Email address is required")
+	}
+	if req.Username == "" {
+		req.Username = req.EmailAddress
+	}
+	server := strings.TrimSpace(req.JMAPSessionURL)
+	if strings.Contains(server, "://") {
+		return nil
+	}
+	password := req.Password
+	if password == "" {
+		saved, _, found, err := h.savedAccountPasswords(r, accountID)
+		if err != nil {
+			return err
+		}
+		if !found {
+			return errors.New("account not found")
+		}
+		password = saved
+	}
+	ctx, cancel := context.WithTimeout(r.Context(), 2*time.Minute)
+	defer cancel()
+	candidates, err := mailautodiscover.JMAPSessionCandidates(ctx, req.EmailAddress, server, nil)
+	if err != nil {
+		return err
+	}
+	sessionURL, _, err := mail.DiscoverJMAPSession(ctx, candidates, req.Username, password, h.jmapEndpointPolicy)
+	if err != nil {
+		return err
+	}
+	req.JMAPSessionURL = sessionURL
+	return nil
+}
+
 // jmapEndpointPolicy reads the mail security exceptions for one JMAP
 // endpoint, as they apply when a saved account connects.
 func (h *Handler) jmapEndpointPolicy(ctx context.Context, endpoint jmap.Endpoint) (allowPlaintext, allowPrivate bool, err error) {
