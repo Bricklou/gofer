@@ -52,6 +52,18 @@ func migrateV115ToV116(db *sql.DB) error {
 				return err
 			}
 		}
+		// Before this version, changes to JMAP accounts' emails were queued as
+		// IMAP ones, which can never apply; give them their own type.
+		accounts, err := tableExistsTx(tx, "accounts")
+		if err != nil {
+			return err
+		}
+		if accounts && queued > 0 {
+			if _, err := tx.Exec(`UPDATE message_mutations SET provider_type = 'jmap', status = CASE WHEN status = 'failed' THEN 'pending' ELSE status END,
+				next_attempt_at = CURRENT_TIMESTAMP WHERE provider_type = 'imap' AND account_id IN (SELECT id FROM accounts WHERE provider = 'jmap')`); err != nil {
+				return err
+			}
+		}
 	}
 	if err := markSchemaVersion(tx, 116); err != nil {
 		return err

@@ -117,6 +117,9 @@ func (s *UserIMAP) applyMutation(ctx context.Context, scope *userIMAPScope, muta
 	if scope.config.Provider == "gmail" || scope.config.Provider == "outlook" {
 		return s.applyProviderMutation(ctx, scope, mutation, *info)
 	}
+	if scope.config.Provider == "jmap" {
+		return s.applyJMAPMutation(ctx, scope, mutation, *info)
+	}
 	if info.AccountID != scope.id || mutation.AccountID != scope.id || info.AccountProvider != "imap" || mutation.ProviderType != storage.MessageMutationProviderIMAP {
 		return errors.New("queued mutation account or provider changed")
 	}

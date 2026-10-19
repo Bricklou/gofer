@@ -44,6 +44,26 @@ type fakeJMAPServer struct {
 	// blobs holds raw messages by blob id; downloads counts their downloads.
 	blobs     map[string]string
 	downloads int
+	sets      int
+}
+
+// emailIndex finds an email; the caller holds f.mu.
+func (f *fakeJMAPServer) emailIndex(id string) int {
+	for i, email := range f.emails {
+		if email.ID == id {
+			return i
+		}
+	}
+	return -1
+}
+
+func (f *fakeJMAPServer) email(id string) (jmap.Email, bool) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if i := f.emailIndex(id); i >= 0 {
+		return f.emails[i], true
+	}
+	return jmap.Email{}, false
 }
 
 type fakeJMAPChange struct {
@@ -207,6 +227,53 @@ func (f *fakeJMAPServer) answer(w http.ResponseWriter, r *http.Request) {
 			}
 			queryIDs[callID] = ids
 			responses = append(responses, []any{name, map[string]any{"accountId": "a1", "queryState": "q1", "position": start, "ids": ids, "limit": limit}, callID})
+		case "Email/set":
+			var update map[string]map[string]any
+			var destroy []string
+			_ = json.Unmarshal(args["update"], &update)
+			_ = json.Unmarshal(args["destroy"], &destroy)
+			oldState := f.emailState
+			updated, notUpdated := map[string]any{}, map[string]any{}
+			for id, patch := range update {
+				index := f.emailIndex(id)
+				if index < 0 {
+					notUpdated[id] = map[string]string{"type": "notFound"}
+					continue
+				}
+				email := &f.emails[index]
+				for path, value := range patch {
+					set := value != nil
+					if keyword, ok := strings.CutPrefix(path, "keywords/"); ok {
+						if set {
+							email.Keywords[keyword] = true
+						} else {
+							delete(email.Keywords, keyword)
+						}
+					} else if mailbox, ok := strings.CutPrefix(path, "mailboxIds/"); ok {
+						if set {
+							email.MailboxIDs[mailbox] = true
+						} else {
+							delete(email.MailboxIDs, mailbox)
+						}
+					}
+				}
+				updated[id] = nil
+				f.logChange(fakeJMAPChange{updated: id})
+			}
+			destroyed, notDestroyed := []string{}, map[string]any{}
+			for _, id := range destroy {
+				index := f.emailIndex(id)
+				if index < 0 {
+					notDestroyed[id] = map[string]string{"type": "notFound"}
+					continue
+				}
+				f.emails = append(f.emails[:index], f.emails[index+1:]...)
+				destroyed = append(destroyed, id)
+				f.logChange(fakeJMAPChange{destroyed: id})
+			}
+			f.sets++
+			responses = append(responses, []any{name, map[string]any{"accountId": "a1", "oldState": oldState, "newState": f.emailState,
+				"updated": updated, "notUpdated": notUpdated, "destroyed": destroyed, "notDestroyed": notDestroyed}, callID})
 		case "Email/changes":
 			var since string
 			_ = json.Unmarshal(args["sinceState"], &since)
@@ -590,5 +657,88 @@ func TestEnsureBodyDownloadsJMAPMessages(t *testing.T) {
 	}
 	if server.downloads != downloads {
 		t.Fatal("downloaded an email already known to be too large")
+	}
+}
+
+// Changes made in Gofer reach the server on the next sync: read and starred
+// set keywords, a move swaps mailboxes, a permanent delete destroys the email,
+// and deleting an email the server already lost simply completes.
+func TestSyncReplaysJMAPMessageChanges(t *testing.T) {
+	f := newUserGmailFixture(t)
+	server := newFakeJMAPServer(t)
+	server.emailState = "c0"
+	server.setMailboxes(
+		jmap.Mailbox{ID: "mb-in", Name: "Inbox", Role: "inbox", MyRights: readable()},
+		jmap.Mailbox{ID: "mb-arch", Name: "Archive", Role: "archive", MyRights: readable()},
+	)
+	server.emails = []jmap.Email{
+		testJMAPEmail("e1", "Lunch on Friday?", 1, "mb-in"),
+		testJMAPEmail("e2", "Garden plans", 2, "mb-in"),
+		testJMAPEmail("e3", "Old receipt", 3, "mb-in"),
+		testJMAPEmail("e4", "Expired coupon", 4, "mb-in"),
+	}
+	useFakeJMAPAccount(t, f, server)
+	if err := f.worker.Sync(t.Context(), "alice", f.ids["alice"]); err != nil {
+		t.Fatalf("first Sync() error = %v", err)
+	}
+	account := f.ids["alice"]
+	inbox, archive := jmapLocalFolderID(account, "mb-in"), jmapLocalFolderID(account, "mb-arch")
+	local := func(providerID string) int64 {
+		var id int64
+		f.local(t, "alice", func(db *storage.DB) error {
+			return db.Read().QueryRow(`SELECT id FROM messages WHERE account_id=? AND remote_message_id=?`, account, providerID).Scan(&id)
+		})
+		return id
+	}
+	server.deleteEmail("e4", true)
+	f.local(t, "alice", func(db *storage.DB) error {
+		ctx := t.Context()
+		return errors.Join(
+			db.SetMessageReadAndQueue(ctx, local("e1"), true),
+			db.SetMessageStarredAndQueue(ctx, local("e1"), true),
+			db.MoveMessageAndQueue(ctx, local("e2"), inbox, archive),
+			db.PermanentlyDeleteMessageAndQueue(ctx, local("e3"), inbox),
+			db.PermanentlyDeleteMessageAndQueue(ctx, local("e4"), inbox),
+		)
+	})
+	var queued []string
+	f.local(t, "alice", func(db *storage.DB) error {
+		rows, err := db.Read().Query(`SELECT DISTINCT provider_type FROM message_mutations`)
+		if err != nil {
+			return err
+		}
+		defer rows.Close()
+		for rows.Next() {
+			var provider string
+			_ = rows.Scan(&provider)
+			queued = append(queued, provider)
+		}
+		return rows.Err()
+	})
+	if len(queued) != 1 || queued[0] != "jmap" {
+		t.Fatalf("queued provider types = %v, want [jmap]", queued)
+	}
+
+	if err := f.worker.Sync(t.Context(), "alice", f.ids["alice"]); err != nil {
+		t.Fatalf("Sync() replaying changes error = %v", err)
+	}
+	if e1, _ := server.email("e1"); !e1.Keywords["$seen"] || !e1.Keywords["$flagged"] {
+		t.Fatalf("e1 on the server = %v", e1.Keywords)
+	}
+	if e2, _ := server.email("e2"); !e2.MailboxIDs["mb-arch"] || e2.MailboxIDs["mb-in"] {
+		t.Fatalf("e2 on the server = %v", e2.MailboxIDs)
+	}
+	if _, ok := server.email("e3"); ok {
+		t.Fatal("e3 still on the server after a permanent delete")
+	}
+	var pending int
+	f.local(t, "alice", func(db *storage.DB) error {
+		return db.Read().QueryRow(`SELECT COUNT(*) FROM message_mutations WHERE status != 'applied'`).Scan(&pending)
+	})
+	if pending != 0 {
+		t.Fatalf("%d changes still queued after replay", pending)
+	}
+	if m := jmapMessages(t, f)["e2"]; m == nil || !m.Folders["mb-arch"] || m.Folders["mb-in"] {
+		t.Fatalf("e2 in Gofer after the move = %+v", m)
 	}
 }

@@ -481,6 +481,8 @@ func messageMutationProviderType(provider string) string {
 		return MessageMutationProviderGmail
 	case MessageMutationProviderOutlook:
 		return MessageMutationProviderOutlook
+	case MessageMutationProviderJMAP:
+		return MessageMutationProviderJMAP
 	default:
 		return MessageMutationProviderIMAP
 	}

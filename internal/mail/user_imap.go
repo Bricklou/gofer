@@ -516,9 +516,13 @@ func (s *UserIMAP) sync(ctx context.Context, owner, id string, repair, backgroun
 			}
 		}
 		var mutationErr error
-		// JMAP accounts only receive for now: their changes and sending go
-		// over JMAP, which Gofer doesn't do yet.
-		if scope.config.Provider != providers.ProviderJMAP {
+		// JMAP accounts replay their message changes, but labels and sending
+		// don't go over JMAP yet.
+		jmapAccount := scope.config.Provider == providers.ProviderJMAP
+		if jmapAccount {
+			mutationErr = s.replayMutations(ctx, scope)
+			queueFailed = mutationErr != nil
+		} else {
 			mutationErr = s.replayLabelMutations(ctx, scope)
 			if mutationErr != nil && scope.retryAt.After(time.Now()) {
 				queueFailed = true

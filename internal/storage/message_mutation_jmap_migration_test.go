@@ -16,12 +16,13 @@ func TestMigrateV116KeepsQueuedMutationsAndAllowsJMAP(t *testing.T) {
 	defer db.Close()
 	old := strings.Replace(messageMutationsTableSQL, "'imap', 'jmap'", "'imap'", 1)
 	if _, err := db.Write().Exec(`INSERT INTO users(id,username,username_normalized) VALUES('owner','owner','owner');
-INSERT INTO accounts(id,user_id,provider,email_address) VALUES('account','owner','imap','robin@example.test');
-INSERT INTO messages(id,account_id,from_email) VALUES(1,'account','sam@example.test');
+INSERT INTO accounts(id,user_id,provider,email_address) VALUES('account','owner','imap','robin@example.test'),('jmap-account','owner','jmap','sam@example.test');
+INSERT INTO messages(id,account_id,from_email) VALUES(1,'account','sam@example.test'),(2,'jmap-account','robin@example.test');
 DROP TABLE message_mutations;
 ` + old + `;
 INSERT INTO message_mutations(id,account_id,message_id,folder_id,provider_type,kind,target_value,status,attempt_count,last_error)
- VALUES('queued','account',1,'inbox','imap','read',1,'failed',2,'server busy');
+ VALUES('queued','account',1,'inbox','imap','read',1,'failed',2,'server busy'),
+ ('misfiled','jmap-account',2,'jmap-inbox','imap','read',1,'failed',5,'message provider changed from imap');
 DELETE FROM schema_version; INSERT INTO schema_version(version) VALUES(115);`); err != nil {
 		t.Fatal(err)
 	}
@@ -41,6 +42,15 @@ DELETE FROM schema_version; INSERT INTO schema_version(version) VALUES(115);`); 
 	}
 	if kind != "read" || status != "failed" || attempts != 2 || lastError != "server busy" {
 		t.Fatalf("queued mutation = %s %s %d %q", kind, status, attempts, lastError)
+	}
+	// A JMAP account's change queued as IMAP before 116 becomes a JMAP one,
+	// ready to try again; the IMAP account's change is untouched.
+	var provider string
+	if err := db.Read().QueryRow(`SELECT provider_type, status FROM message_mutations WHERE id='misfiled'`).Scan(&provider, &status); err != nil || provider != "jmap" || status != "pending" {
+		t.Fatalf("misfiled JMAP change = %s %s, %v", provider, status, err)
+	}
+	if err := db.Read().QueryRow(`SELECT provider_type FROM message_mutations WHERE id='queued'`).Scan(&provider); err != nil || provider != "imap" {
+		t.Fatalf("IMAP change provider = %s, %v", provider, err)
 	}
 	if _, err := db.Write().Exec(insertJMAP, "jmap-after", "b"); err != nil {
 		t.Fatalf("JMAP mutation after migration: %v", err)
