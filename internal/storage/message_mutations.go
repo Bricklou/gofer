@@ -21,6 +21,7 @@ const (
 	MessageMutationProviderGmail   = "gmail"
 	MessageMutationProviderOutlook = "outlook"
 	MessageMutationProviderIMAP    = "imap"
+	MessageMutationProviderJMAP    = "jmap"
 )
 
 const (

@@ -277,7 +277,7 @@ CREATE TABLE IF NOT EXISTS message_mutations (
     account_id TEXT NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,
     message_id INTEGER NOT NULL REFERENCES messages(id) ON DELETE CASCADE,
     folder_id TEXT NOT NULL DEFAULT '',
-    provider_type TEXT NOT NULL CHECK (provider_type IN ('gmail', 'outlook', 'imap')),
+    provider_type TEXT NOT NULL CHECK (provider_type IN ('gmail', 'outlook', 'imap', 'jmap')),
     kind TEXT NOT NULL CHECK (kind IN ('read', 'starred', 'move', 'delete')),
     target_value INTEGER NOT NULL CHECK (target_value IN (0, 1)),
     destination_folder_id TEXT NOT NULL DEFAULT '',
@@ -1653,4 +1653,4 @@ CREATE TABLE IF NOT EXISTS calendar_invitation_messages (
 );
 
 -- Schema version marker for fresh installs
-INSERT OR REPLACE INTO schema_version (version) VALUES (115);
+INSERT OR REPLACE INTO schema_version (version) VALUES (116);
