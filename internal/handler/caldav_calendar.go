@@ -7,6 +7,7 @@ import (
 	"io"
 	"net"
 	"net/http"
+	"net/netip"
 	"net/url"
 	"strconv"
 	"strings"
@@ -58,6 +59,20 @@ func calDAVAutodiscoveryCandidates(ctx context.Context, serverURLs []string, ide
 	seenDomains := make(map[string]bool)
 	for _, identity := range identities {
 		domain := calDAVDiscoveryDomain(identity)
+		if ip, err := netip.ParseAddr(domain); err == nil {
+			// Literal addresses are direct candidates, never DNS names. Keep
+			// an explicit URL's scheme, port and path when one was supplied.
+			if _, err := netip.ParseAddr(strings.Trim(strings.TrimSpace(identity), "[]")); err != nil && !strings.Contains(identity, "@") {
+				addCandidate(identity)
+			} else {
+				host := ip.String()
+				if ip.Is6() {
+					host = "[" + host + "]"
+				}
+				addCandidate((&url.URL{Scheme: "https", Host: host}).String())
+			}
+			continue
+		}
 		for _, discoveryDomain := range calDAVDiscoveryDomains(domain) {
 			key := strings.ToLower(discoveryDomain)
 			if discoveryDomain == "" || seenDomains[key] {
@@ -115,6 +130,9 @@ func calDAVDiscoveryDomain(candidate string) string {
 	if candidate == "" {
 		return ""
 	}
+	if ip, err := netip.ParseAddr(strings.Trim(candidate, "[]")); err == nil {
+		return ip.String()
+	}
 	if strings.Contains(candidate, "@") && !strings.Contains(candidate, "://") {
 		parts := strings.Split(candidate, "@")
 		return strings.ToLower(strings.Trim(strings.TrimSpace(parts[len(parts)-1]), "."))
@@ -132,6 +150,9 @@ func calDAVDiscoveryDomain(candidate string) string {
 func calDAVDiscoveryDomains(domain string) []string {
 	domain = strings.ToLower(strings.Trim(strings.TrimSpace(domain), "."))
 	if domain == "" {
+		return nil
+	}
+	if _, err := netip.ParseAddr(domain); err == nil {
 		return nil
 	}
 	domains := []string{domain}

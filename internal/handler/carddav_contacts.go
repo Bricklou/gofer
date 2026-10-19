@@ -12,6 +12,7 @@ import (
 	"log"
 	"net"
 	"net/http"
+	"net/netip"
 	"net/url"
 	"path"
 	"strconv"
@@ -1355,6 +1356,9 @@ func cardDAVDiscoveryDomains(domain string) []string {
 	if domain == "" {
 		return nil
 	}
+	if _, err := netip.ParseAddr(domain); err == nil {
+		return nil
+	}
 	domains := []string{domain}
 	parts := strings.Split(domain, ".")
 	if len(parts) > 2 {
@@ -1370,6 +1374,9 @@ func cardDAVDiscoveryDomain(candidate string) string {
 	candidate = strings.TrimSpace(candidate)
 	if candidate == "" {
 		return ""
+	}
+	if ip, err := netip.ParseAddr(strings.Trim(candidate, "[]")); err == nil {
+		return ip.String()
 	}
 	if strings.Contains(candidate, "@") && !strings.Contains(candidate, "://") {
 		parts := strings.Split(candidate, "@")
