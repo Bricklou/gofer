@@ -29,6 +29,59 @@ type fakeJMAPServer struct {
 	// when the anchor email was deleted between two pages.
 	loseAnchorOnce bool
 	queries        int
+	// changeLog records each change made through addEmail, updateEmail and
+	// deleteEmail; its states are "c1", "c2"... Email/changes answers from it.
+	changeLog []fakeJMAPChange
+	// oneChangePerCall makes Email/changes return one logged change at a time,
+	// with hasMoreChanges while more remain.
+	oneChangePerCall bool
+	// forgetBefore makes states older than this change number unknown.
+	forgetBefore int
+}
+
+type fakeJMAPChange struct {
+	created, updated, destroyed string
+}
+
+func (f *fakeJMAPServer) logChange(change fakeJMAPChange) {
+	f.changeLog = append(f.changeLog, change)
+	f.emailState = fmt.Sprintf("c%d", len(f.changeLog))
+}
+
+func (f *fakeJMAPServer) addEmail(email jmap.Email) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.emails = append(f.emails, email)
+	f.logChange(fakeJMAPChange{created: email.ID})
+}
+
+func (f *fakeJMAPServer) updateEmail(id string, change func(*jmap.Email)) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	for i := range f.emails {
+		if f.emails[i].ID == id {
+			change(&f.emails[i])
+		}
+	}
+	f.logChange(fakeJMAPChange{updated: id})
+}
+
+func (f *fakeJMAPServer) deleteEmail(id string, logged bool) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	kept := f.emails[:0]
+	for _, email := range f.emails {
+		if email.ID != id {
+			kept = append(kept, email)
+		}
+	}
+	f.emails = kept
+	if logged {
+		f.logChange(fakeJMAPChange{destroyed: id})
+	} else {
+		// The state still moves on; only the change itself is not kept.
+		f.emailState = fmt.Sprintf("c%d", len(f.changeLog)+100)
+	}
 }
 
 func newFakeJMAPServer(t *testing.T) *fakeJMAPServer {
@@ -87,15 +140,20 @@ func (f *fakeJMAPServer) answer(w http.ResponseWriter, r *http.Request) {
 			} else {
 				_ = json.Unmarshal(args["ids"], &ids)
 			}
-			list := []jmap.Email{}
+			list, notFound := []jmap.Email{}, []string{}
 			for _, id := range ids {
+				found := false
 				for _, email := range f.emails {
 					if email.ID == id {
 						list = append(list, email)
+						found = true
 					}
 				}
+				if !found {
+					notFound = append(notFound, id)
+				}
 			}
-			responses = append(responses, []any{name, map[string]any{"accountId": "a1", "state": f.emailState, "list": list, "notFound": []string{}}, callID})
+			responses = append(responses, []any{name, map[string]any{"accountId": "a1", "state": f.emailState, "list": list, "notFound": notFound}, callID})
 		case "Email/query":
 			f.queries++
 			var anchor string
@@ -129,6 +187,32 @@ func (f *fakeJMAPServer) answer(w http.ResponseWriter, r *http.Request) {
 			}
 			queryIDs[callID] = ids
 			responses = append(responses, []any{name, map[string]any{"accountId": "a1", "queryState": "q1", "position": start, "ids": ids, "limit": limit}, callID})
+		case "Email/changes":
+			var since string
+			_ = json.Unmarshal(args["sinceState"], &since)
+			if since == f.emailState {
+				responses = append(responses, []any{name, map[string]any{"accountId": "a1", "oldState": since, "newState": since, "hasMoreChanges": false, "created": []string{}, "updated": []string{}, "destroyed": []string{}}, callID})
+				continue
+			}
+			var from int
+			if _, err := fmt.Sscanf(since, "c%d", &from); err != nil || from < f.forgetBefore {
+				responses = append(responses, []any{"error", map[string]any{"type": "cannotCalculateChanges"}, callID})
+				continue
+			}
+			to := len(f.changeLog)
+			if f.oneChangePerCall && from+1 < to {
+				to = from + 1
+			}
+			created, updated, destroyed := []string{}, []string{}, []string{}
+			for _, change := range f.changeLog[from:to] {
+				for list, id := range map[*[]string]string{&created: change.created, &updated: change.updated, &destroyed: change.destroyed} {
+					if id != "" {
+						*list = append(*list, id)
+					}
+				}
+			}
+			responses = append(responses, []any{name, map[string]any{"accountId": "a1", "oldState": since, "newState": fmt.Sprintf("c%d", to),
+				"hasMoreChanges": to < len(f.changeLog), "created": created, "updated": updated, "destroyed": destroyed}, callID})
 		default:
 			responses = append(responses, []any{"error", map[string]any{"type": "unknownMethod"}, callID})
 		}
@@ -369,5 +453,74 @@ func TestSyncImportsJMAPEmails(t *testing.T) {
 	}
 	if server.queries != queries {
 		t.Fatal("imported again although a cursor was saved")
+	}
+}
+
+// Later syncs apply the changes since the saved cursor, chunk by chunk,
+// without querying the whole account again: read and flag changes, moves,
+// deletions and new mail.
+func TestSyncAppliesJMAPEmailChanges(t *testing.T) {
+	f := newUserGmailFixture(t)
+	server := newFakeJMAPServer(t)
+	server.emailState = "c0"
+	server.setMailboxes(
+		jmap.Mailbox{ID: "mb-in", Name: "Inbox", Role: "inbox", MyRights: readable()},
+		jmap.Mailbox{ID: "mb-arch", Name: "Archive", Role: "archive", MyRights: readable()},
+	)
+	server.emails = []jmap.Email{
+		testJMAPEmail("e1", "Lunch on Friday?", 1, "mb-in"),
+		testJMAPEmail("e2", "Garden plans", 2, "mb-in"),
+		testJMAPEmail("e3", "Old receipt", 3, "mb-arch"),
+	}
+	useFakeJMAPAccount(t, f, server)
+	if err := f.worker.Sync(t.Context(), "alice", f.ids["alice"]); err != nil {
+		t.Fatalf("first Sync() error = %v", err)
+	}
+	if got := jmapCursor(t, f, jmapEmailScope); got != "c0" {
+		t.Fatalf("cursor after import = %q", got)
+	}
+
+	server.oneChangePerCall = true
+	server.updateEmail("e1", func(e *jmap.Email) { e.Keywords = map[string]bool{"$seen": true, "$flagged": true} })
+	server.updateEmail("e2", func(e *jmap.Email) { e.MailboxIDs = map[string]bool{"mb-arch": true} })
+	server.deleteEmail("e3", true)
+	server.addEmail(testJMAPEmail("e4", "New invoice", 0, "mb-in"))
+	queries := server.queries
+	if err := f.worker.Sync(t.Context(), "alice", f.ids["alice"]); err != nil {
+		t.Fatalf("Sync() with changes error = %v", err)
+	}
+	if server.queries != queries {
+		t.Fatal("applying changes queried the whole account")
+	}
+	messages := jmapMessages(t, f)
+	if m := messages["e1"]; m == nil || !m.Read || !m.Flagged {
+		t.Fatalf("e1 after read and flag = %+v", m)
+	}
+	if m := messages["e2"]; m == nil || !m.Folders["mb-arch"] || m.Folders["mb-in"] {
+		t.Fatalf("e2 after move = %+v", m)
+	}
+	if messages["e3"] != nil {
+		t.Fatalf("e3 still shown after deletion: %+v", messages["e3"])
+	}
+	if m := messages["e4"]; m == nil || m.Read || !m.Folders["mb-in"] {
+		t.Fatalf("new e4 = %+v", m)
+	}
+	if got := jmapCursor(t, f, jmapEmailScope); got != "c4" {
+		t.Fatalf("cursor after changes = %q, want c4", got)
+	}
+
+	// When the server forgets the saved state, everything is imported again,
+	// and a message deleted meanwhile disappears.
+	server.deleteEmail("e4", false)
+	server.forgetBefore = 10
+	if err := f.worker.Sync(t.Context(), "alice", f.ids["alice"]); err != nil {
+		t.Fatalf("Sync() after a forgotten state error = %v", err)
+	}
+	if server.queries == queries {
+		t.Fatal("did not import again after cannotCalculateChanges")
+	}
+	messages = jmapMessages(t, f)
+	if messages["e4"] != nil || messages["e1"] == nil || messages["e2"] == nil {
+		t.Fatalf("after importing again: %v", messages)
 	}
 }

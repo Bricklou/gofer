@@ -45,11 +45,95 @@ func (o *SyncOrchestrator) syncJMAPAccount(ctx context.Context, accountID string
 	if err != nil {
 		return err
 	}
-	if emailCursor.Cursor != "" {
-		// Changes since the saved states come in the next step of JMAP sync.
-		return nil
+	if emailCursor.Cursor == "" {
+		return o.importJMAPEmails(ctx, accountID, client, session, mailAccount, mailboxes)
 	}
-	return o.importJMAPEmails(ctx, accountID, client, session, mailAccount, mailboxes)
+	err = o.syncJMAPEmailChanges(ctx, accountID, client, session, mailAccount, mailboxes, emailCursor.Cursor)
+	if jmap.IsCannotCalculateChanges(err) {
+		// The server no longer knows the saved state: import everything again.
+		log.Printf("jmap sync %s: changes since %q are no longer available, importing again", accountID, emailCursor.Cursor)
+		return o.importJMAPEmails(ctx, accountID, client, session, mailAccount, mailboxes)
+	}
+	if err != nil {
+		return err
+	}
+	return repo.MarkLabelSyncSuccess(ctx, accountID, storage.LabelProviderJMAP, jmapMailboxScope, mailboxes.State, false)
+}
+
+// jmapMaxChanges is how many changed emails one Email/changes call returns.
+const jmapMaxChanges = 500
+
+// syncJMAPEmailChanges applies the emails created, updated and destroyed
+// since the saved Email state. Each chunk is stored before its new state is
+// saved, so an interrupted sync resumes from the last chunk stored. Created
+// and updated emails are fetched as summaries, without bodies, and stored
+// like imported ones, which also moves them between folders; an email no
+// longer in any known mailbox, or gone, is removed from its folders.
+func (o *SyncOrchestrator) syncJMAPEmailChanges(ctx context.Context, accountID string, client *jmap.Client, session *jmap.Session, mailAccount string, mailboxes *jmap.GetResponse[jmap.Mailbox], since string) error {
+	folders := make(map[string]string, len(mailboxes.List))
+	for _, mailbox := range mailboxes.List {
+		folders[mailbox.ID] = jmapLocalFolderID(accountID, mailbox.ID)
+	}
+	batch := jmapImportPage
+	if max := session.Core.MaxObjectsInGet; max > 0 && max < batch {
+		batch = max
+	}
+	repo := o.outlookRepository()
+	touched := map[string]bool{}
+	for {
+		changes, err := client.GetEmailChanges(ctx, session, mailAccount, since, jmapMaxChanges)
+		if err != nil {
+			return err
+		}
+		gone := append([]string(nil), changes.Destroyed...)
+		changed := append(append([]string(nil), changes.Created...), changes.Updated...)
+		for start := 0; start < len(changed); start += batch {
+			end := min(start+batch, len(changed))
+			got, err := client.GetEmails(ctx, session, mailAccount, changed[start:end], jmap.EmailSummaryProperties)
+			if err != nil {
+				return err
+			}
+			// Changed and then deleted before this request.
+			gone = append(gone, got.NotFound...)
+			var rows []storage.ProviderSyncMessage
+			for _, email := range got.List {
+				emailRows := jmapEmailToProviderSyncs(accountID, email, folders)
+				if len(emailRows) == 0 {
+					gone = append(gone, email.ID)
+					continue
+				}
+				for _, row := range emailRows {
+					rows = append(rows, row)
+					touched[row.FolderID] = true
+				}
+			}
+			if len(rows) > 0 {
+				if _, err := repo.UpsertProviderSyncMessages(ctx, rows); err != nil {
+					return err
+				}
+			}
+		}
+		for _, id := range gone {
+			folderIDs, err := repo.MarkProviderMessageDeleted(ctx, accountID, id)
+			if err != nil {
+				return err
+			}
+			for _, folderID := range folderIDs {
+				touched[folderID] = true
+			}
+		}
+		if err := repo.MarkLabelSyncSuccess(ctx, accountID, storage.LabelProviderJMAP, jmapEmailScope, changes.NewState, false); err != nil {
+			return err
+		}
+		if !changes.HasMoreChanges || changes.NewState == since {
+			break
+		}
+		since = changes.NewState
+	}
+	for folderID := range touched {
+		o.publishEvent(Event{Type: EventSyncComplete, AccountID: accountID, FolderID: folderID, Payload: map[string]any{"status": "complete", "provider": "jmap"}})
+	}
+	return nil
 }
 
 const (
@@ -60,8 +144,9 @@ const (
 	jmapImportPage = 100
 )
 
-// importJMAPEmails stores every email of the account, newest first, then
-// saves the Email and Mailbox states as the account's sync cursors. The Email
+// importJMAPEmails stores every email of the account, newest first, removes
+// from each folder the messages the server no longer has in it, then saves the
+// Email and Mailbox states as the account's sync cursors. The Email
 // state is read before the first page, so mail that arrives during the import
 // is caught by the changes since it. An interrupted import saves no cursor
 // and simply runs again; storing an email twice only updates it.
@@ -80,6 +165,7 @@ func (o *SyncOrchestrator) importJMAPEmails(ctx context.Context, accountID strin
 	}
 	repo := o.outlookRepository()
 	touched := map[string]bool{}
+	seen := map[string]map[string]bool{}
 	anchor := ""
 	for {
 		query := jmap.EmailQuery{
@@ -104,6 +190,10 @@ func (o *SyncOrchestrator) importJMAPEmails(ctx context.Context, accountID strin
 			for _, row := range jmapEmailToProviderSyncs(accountID, email, folders) {
 				rows = append(rows, row)
 				touched[row.FolderID] = true
+				if seen[row.FolderID] == nil {
+					seen[row.FolderID] = map[string]bool{}
+				}
+				seen[row.FolderID][row.ProviderMessageID] = true
 			}
 		}
 		if len(rows) > 0 {
@@ -121,6 +211,18 @@ func (o *SyncOrchestrator) importJMAPEmails(ctx context.Context, accountID strin
 			break
 		}
 		anchor = page.IDs[len(page.IDs)-1]
+	}
+	// After a new import of a known account, as when the server could no
+	// longer give the changes since its cursor, messages deleted meanwhile are
+	// still stored.
+	for _, folderID := range folders {
+		removed, err := repo.MarkProviderMessagesMissingFromFolder(ctx, accountID, folderID, seen[folderID])
+		if err != nil {
+			return err
+		}
+		if removed > 0 {
+			touched[folderID] = true
+		}
 	}
 	if err := repo.MarkLabelSyncSuccess(ctx, accountID, storage.LabelProviderJMAP, jmapEmailScope, before.State, true); err != nil {
 		return err
