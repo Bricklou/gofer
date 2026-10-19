@@ -1,0 +1,220 @@
+package jmap
+
+import (
+	"bytes"
+	"context"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"io"
+	"net/http"
+	"strings"
+)
+
+// UploadBlob uploads data to the session's uploadUrl and returns its blob id.
+// Data over the server's upload limit is refused before sending.
+func (c *Client) UploadBlob(ctx context.Context, session *Session, accountID, contentType string, data []byte) (string, error) {
+	if session == nil || session.UploadURL == "" {
+		return "", errors.New("jmap: session has no uploadUrl")
+	}
+	if limit := session.Core.MaxSizeUpload; limit > 0 && int64(len(data)) > limit {
+		return "", fmt.Errorf("jmap: %d bytes exceed the server's upload limit of %d", len(data), limit)
+	}
+	endpoint := expandTemplate(session.UploadURL, map[string]string{"accountId": accountID})
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, bytes.NewReader(data))
+	if err != nil {
+		return "", err
+	}
+	req.Header.Set("Content-Type", contentType)
+	req.Header.Set("Accept", "application/json")
+	if c.Auth != nil {
+		c.Auth(req)
+	}
+	resp, err := c.httpClient().Do(req)
+	if err != nil {
+		return "", err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return "", newHTTPError(resp)
+	}
+	var uploaded struct {
+		BlobID string `json:"blobId"`
+	}
+	if err := json.NewDecoder(io.LimitReader(resp.Body, maxErrorBytes)).Decode(&uploaded); err != nil {
+		return "", fmt.Errorf("jmap: decode upload: %w", err)
+	}
+	if uploaded.BlobID == "" {
+		return "", errors.New("jmap: upload returned no blob id")
+	}
+	return uploaded.BlobID, nil
+}
+
+// Identity is an address the account may send from (RFC 8621 section 6). An
+// email of "*@example.test" allows any address at that domain.
+type Identity struct {
+	ID    string `json:"id"`
+	Name  string `json:"name"`
+	Email string `json:"email"`
+}
+
+// GetIdentities runs Identity/get for every identity of the account.
+func (c *Client) GetIdentities(ctx context.Context, session *Session, accountID string) (*GetResponse[Identity], error) {
+	args := struct {
+		AccountID string   `json:"accountId"`
+		IDs       []string `json:"ids"`
+	}{AccountID: accountID}
+	responses, err := c.Call(ctx, session, []string{CapabilityMail, CapabilitySubmission},
+		Invocation{Name: "Identity/get", Args: args, CallID: "0"})
+	if err != nil {
+		return nil, err
+	}
+	var result GetResponse[Identity]
+	if err := responses.Get("0", &result); err != nil {
+		return nil, fmt.Errorf("Identity/get: %w", err)
+	}
+	return &result, nil
+}
+
+// MatchIdentity picks the identity to send from address with: one with that
+// exact address, or else one covering its whole domain.
+func MatchIdentity(identities []Identity, address string) (Identity, bool) {
+	address = strings.ToLower(strings.TrimSpace(address))
+	at := strings.LastIndex(address, "@")
+	if address == "" || at < 0 {
+		return Identity{}, false
+	}
+	for _, identity := range identities {
+		if strings.ToLower(strings.TrimSpace(identity.Email)) == address {
+			return identity, true
+		}
+	}
+	for _, identity := range identities {
+		if strings.ToLower(strings.TrimSpace(identity.Email)) == "*"+address[at:] {
+			return identity, true
+		}
+	}
+	return Identity{}, false
+}
+
+// Envelope is the SMTP envelope of a submission: who it is from and who
+// receives it, including Bcc recipients the message headers leave out.
+type Envelope struct {
+	MailFrom string
+	RcptTo   []string
+}
+
+func (e Envelope) MarshalJSON() ([]byte, error) {
+	type address struct {
+		Email string `json:"email"`
+	}
+	rcpt := make([]address, len(e.RcptTo))
+	for i, to := range e.RcptTo {
+		rcpt[i] = address{Email: to}
+	}
+	return json.Marshal(struct {
+		MailFrom address   `json:"mailFrom"`
+		RcptTo   []address `json:"rcptTo"`
+	}{address{Email: e.MailFrom}, rcpt})
+}
+
+// Outgoing is one message to send: the uploaded original, who sends it, to
+// whom, and where it waits (Drafts) and ends up once sent (Sent).
+type Outgoing struct {
+	BlobID     string
+	IdentityID string
+	Envelope   Envelope
+	DraftsID   string
+	SentID     string
+}
+
+// Sent is a message the server accepted for delivery.
+type Sent struct {
+	EmailID      string
+	SubmissionID string
+}
+
+// SubmissionError is the server refusing a message: importing it as an email
+// or submitting it for delivery. Nothing was sent.
+type SubmissionError struct {
+	Step string
+	SetError
+}
+
+func (e *SubmissionError) Error() string {
+	return "jmap: " + e.Step + ": " + e.SetError.Error()
+}
+
+// SendEmail sends an uploaded message in one request: Email/import stores it
+// in Drafts, and EmailSubmission/set submits it, moving it to Sent, read and
+// no longer a draft, once the server accepts it. If the submission is refused,
+// the imported email is removed again, so retries don't pile up drafts. A
+// *SubmissionError means nothing was sent; any other error may come after the
+// server accepted the message.
+func (c *Client) SendEmail(ctx context.Context, session *Session, accountID string, out Outgoing) (*Sent, error) {
+	if out.BlobID == "" || out.IdentityID == "" || out.DraftsID == "" {
+		return nil, errors.New("jmap: sending needs a blob, an identity and a Drafts mailbox")
+	}
+	importArgs := map[string]any{
+		"accountId": accountID,
+		"emails": map[string]any{"draft": map[string]any{
+			"blobId":     out.BlobID,
+			"mailboxIds": map[string]bool{out.DraftsID: true},
+			"keywords":   map[string]bool{KeywordDraft: true, KeywordSeen: true},
+		}},
+	}
+	sentPatch := PatchObject{"keywords/" + escapePointer(KeywordDraft): nil}
+	if out.SentID != "" && out.SentID != out.DraftsID {
+		sentPatch = PatchObject{
+			"mailboxIds/" + escapePointer(out.DraftsID): nil,
+			"mailboxIds/" + escapePointer(out.SentID):   true,
+			"keywords/" + escapePointer(KeywordDraft):   nil,
+		}
+	}
+	submitArgs := map[string]any{
+		"accountId": accountID,
+		"create": map[string]any{"send": map[string]any{
+			"emailId":    "#draft",
+			"identityId": out.IdentityID,
+			"envelope":   out.Envelope,
+		}},
+		"onSuccessUpdateEmail": map[string]PatchObject{"#send": sentPatch},
+	}
+	responses, err := c.Call(ctx, session, []string{CapabilityMail, CapabilitySubmission},
+		Invocation{Name: "Email/import", Args: importArgs, CallID: "0"},
+		Invocation{Name: "EmailSubmission/set", Args: submitArgs, CallID: "1"},
+	)
+	if err != nil {
+		return nil, err
+	}
+	var imported struct {
+		Created    map[string]struct{ ID string } `json:"created"`
+		NotCreated map[string]SetError            `json:"notCreated"`
+	}
+	if err := responses.Get("0", &imported); err != nil {
+		return nil, fmt.Errorf("Email/import: %w", err)
+	}
+	if failure, ok := imported.NotCreated["draft"]; ok {
+		return nil, &SubmissionError{Step: "import", SetError: failure}
+	}
+	emailID := imported.Created["draft"].ID
+	var submitted struct {
+		Created    map[string]struct{ ID string } `json:"created"`
+		NotCreated map[string]SetError            `json:"notCreated"`
+	}
+	if err := responses.Get("1", &submitted); err != nil {
+		return nil, fmt.Errorf("EmailSubmission/set: %w", err)
+	}
+	if failure, ok := submitted.NotCreated["send"]; ok {
+		if emailID != "" {
+			// Best effort: the refusal is what matters, not the cleanup.
+			_, _ = c.SetEmails(ctx, session, EmailSet{AccountID: accountID, Destroy: []string{emailID}})
+		}
+		return nil, &SubmissionError{Step: "submission", SetError: failure}
+	}
+	submission := submitted.Created["send"].ID
+	if submission == "" {
+		return nil, errors.New("jmap: the server did not confirm the submission")
+	}
+	return &Sent{EmailID: emailID, SubmissionID: submission}, nil
+}
