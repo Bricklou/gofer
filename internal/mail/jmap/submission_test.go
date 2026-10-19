@@ -34,7 +34,7 @@ func TestUploadBlob(t *testing.T) {
 		t.Fatalf("request = %s %s %q", gotPath, gotType, gotBody)
 	}
 	gotPath = ""
-	if _, err := client.UploadBlob(context.Background(), session, "a1", ContentTypeMessage, make([]byte, 21)); err == nil || gotPath != "" {
+	if _, err := client.UploadBlob(context.Background(), session, "a1", ContentTypeMessage, make([]byte, 21)); !errors.Is(err, ErrUploadTooLarge) || gotPath != "" {
 		t.Fatalf("upload over the limit = %v (sent: %v)", err, gotPath != "")
 	}
 }

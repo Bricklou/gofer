@@ -11,6 +11,9 @@ import (
 	"strings"
 )
 
+// ErrUploadTooLarge is data over the server's upload limit.
+var ErrUploadTooLarge = errors.New("jmap: too large to upload")
+
 // UploadBlob uploads data to the session's uploadUrl and returns its blob id.
 // Data over the server's upload limit is refused before sending.
 func (c *Client) UploadBlob(ctx context.Context, session *Session, accountID, contentType string, data []byte) (string, error) {
@@ -18,7 +21,7 @@ func (c *Client) UploadBlob(ctx context.Context, session *Session, accountID, co
 		return "", errors.New("jmap: session has no uploadUrl")
 	}
 	if limit := session.Core.MaxSizeUpload; limit > 0 && int64(len(data)) > limit {
-		return "", fmt.Errorf("jmap: %d bytes exceed the server's upload limit of %d", len(data), limit)
+		return "", fmt.Errorf("%w: %d bytes exceed the server's upload limit of %d", ErrUploadTooLarge, len(data), limit)
 	}
 	endpoint := expandTemplate(session.UploadURL, map[string]string{"accountId": accountID})
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, bytes.NewReader(data))

@@ -21,8 +21,11 @@ import (
 	"time"
 
 	"github.com/cristianadrielbraun/gofer/internal/config"
+	"github.com/cristianadrielbraun/gofer/internal/mail"
 	imapclient "github.com/cristianadrielbraun/gofer/internal/mail/imap"
+	"github.com/cristianadrielbraun/gofer/internal/mail/jmap"
 	"github.com/cristianadrielbraun/gofer/internal/models"
+	"github.com/cristianadrielbraun/gofer/internal/providers"
 	"github.com/cristianadrielbraun/gofer/internal/storage"
 	goimap "github.com/emersion/go-imap/v2"
 )
@@ -699,7 +702,8 @@ func (h *Handler) importMailEML(job *mailImportJob, source *mailImportSource, ha
 func mailImportFinalError(err error) bool {
 	var statusErr *goimap.Error
 	var apiErr *mailImportAPIError
-	return errors.Is(err, errOutlookImportDraft) || errors.As(err, &statusErr) || (errors.As(err, &apiErr) && apiErr.Status >= 400 && apiErr.Status < 500 && apiErr.Status != http.StatusTooManyRequests && apiErr.Status != http.StatusUnauthorized)
+	var jmapErr *jmap.ImportError
+	return errors.Is(err, errOutlookImportDraft) || errors.As(err, &statusErr) || errors.As(err, &jmapErr) || (errors.As(err, &apiErr) && apiErr.Status >= 400 && apiErr.Status < 500 && apiErr.Status != http.StatusTooManyRequests && apiErr.Status != http.StatusUnauthorized)
 }
 
 // mailImportWriter uploads messages into an account's folders.
@@ -742,8 +746,39 @@ func (h *Handler) mailAccountWriter(ctx context.Context, owner, accountID string
 		return &gmailImportWriter{mailImportCaller{token: h.mailImportToken(owner, accountID)}}, nil
 	case "outlook":
 		return &outlookImportWriter{mailImportCaller{token: h.mailImportToken(owner, accountID)}}, nil
+	case providers.ProviderJMAP:
+		return &jmapImportWriter{mail.NewJMAPImport(cfg, password)}, nil
 	}
 	return &imapImportWriter{cfg: cfg, password: password}, nil
+}
+
+// jmapImportWriter uploads messages to a JMAP account, into mailboxes named
+// by id.
+type jmapImportWriter struct {
+	imports *mail.JMAPImport
+}
+
+func (w *jmapImportWriter) close() {}
+
+func (w *jmapImportWriter) ensureFolder(ctx context.Context, name string) (string, error) {
+	return w.imports.EnsureMailbox(ctx, name)
+}
+
+func (w *jmapImportWriter) upload(ctx context.Context, mailboxID string, msg mailImportMessage) error {
+	var keywords []string
+	if msg.Read {
+		keywords = append(keywords, jmap.KeywordSeen)
+	}
+	if msg.Flagged {
+		keywords = append(keywords, jmap.KeywordFlagged)
+	}
+	if msg.Answered {
+		keywords = append(keywords, jmap.KeywordAnswered)
+	}
+	if msg.Draft {
+		keywords = append(keywords, jmap.KeywordDraft)
+	}
+	return w.imports.Import(ctx, mailboxID, msg.Raw, keywords, msg.Date)
 }
 
 type imapImportWriter struct {
