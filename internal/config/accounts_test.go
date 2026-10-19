@@ -737,3 +737,45 @@ func TestNonJMAPAccountDropsSessionURL(t *testing.T) {
 		t.Fatalf("IMAP account session URL = %q, %v", sessionURL, err)
 	}
 }
+
+func TestJMAPAccountConfigReadsExceptionsForTheSessionServer(t *testing.T) {
+	ctx := context.Background()
+	db, store := newAccountStoreTestStore(t)
+	seedAccountStoreTestUser(t, ctx, db)
+
+	account, err := store.CreateAccount(ctx, "default", &models.CreateAccountRequest{
+		Provider:       "jmap",
+		EmailAddress:   "robin@example.test",
+		JMAPSessionURL: "http://192.168.1.20:8080/.well-known/jmap",
+		Username:       "robin@example.test",
+		Password:       "secret",
+	})
+	if err != nil {
+		t.Fatalf("CreateAccount() error = %v", err)
+	}
+	cfg, err := store.GetConfig(ctx, account.ID)
+	if err != nil || cfg.JMAPAllowPlaintext || cfg.JMAPAllowPrivate {
+		t.Fatalf("without exceptions: plaintext %v private %v err %v", cfg.JMAPAllowPlaintext, cfg.JMAPAllowPrivate, err)
+	}
+
+	// Exceptions for another port or protocol approve nothing.
+	if err := db.AddPlaintextTransportException(ctx, "http", "192.168.1.20", 8081, "admin"); err != nil {
+		t.Fatal(err)
+	}
+	if err := db.AddPrivateTargetException(ctx, "https", "192.168.1.20", 8080, "admin"); err != nil {
+		t.Fatal(err)
+	}
+	if cfg, err = store.GetConfig(ctx, account.ID); err != nil || cfg.JMAPAllowPlaintext || cfg.JMAPAllowPrivate {
+		t.Fatalf("with unrelated exceptions: plaintext %v private %v err %v", cfg.JMAPAllowPlaintext, cfg.JMAPAllowPrivate, err)
+	}
+
+	if err := db.AddPlaintextTransportException(ctx, "http", "192.168.1.20", 8080, "admin"); err != nil {
+		t.Fatal(err)
+	}
+	if err := db.AddPrivateTargetException(ctx, "http", "192.168.1.20", 8080, "admin"); err != nil {
+		t.Fatal(err)
+	}
+	if cfg, err = store.GetConfig(ctx, account.ID); err != nil || !cfg.JMAPAllowPlaintext || !cfg.JMAPAllowPrivate {
+		t.Fatalf("with exceptions: plaintext %v private %v err %v", cfg.JMAPAllowPlaintext, cfg.JMAPAllowPrivate, err)
+	}
+}

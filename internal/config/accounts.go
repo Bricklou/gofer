@@ -11,6 +11,7 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/cristianadrielbraun/gofer/internal/mail/jmap"
 	mailtransport "github.com/cristianadrielbraun/gofer/internal/mail/transport"
 	"github.com/cristianadrielbraun/gofer/internal/models"
 	"github.com/cristianadrielbraun/gofer/internal/storage"
@@ -121,7 +122,32 @@ func (s *AccountStore) GetConfig(ctx context.Context, accountID string) (*models
 			return nil, fmt.Errorf("account %s: check SMTP private target exception: %w", accountID, err)
 		}
 	}
+	if accountProviderUsesJMAP(cfg.Provider) {
+		if err := s.applyJMAPTransportPolicy(ctx, &cfg); err != nil {
+			return nil, fmt.Errorf("account %s: %w", accountID, err)
+		}
+	}
 	return &cfg, nil
+}
+
+// applyJMAPTransportPolicy reads the exceptions for the session URL's server.
+// They approve only that exact scheme, host and port.
+func (s *AccountStore) applyJMAPTransportPolicy(ctx context.Context, cfg *models.AccountConfig) error {
+	endpoint, err := jmap.ParseEndpoint(cfg.JMAPSessionURL)
+	if err != nil {
+		return fmt.Errorf("JMAP session URL: %w", err)
+	}
+	if endpoint.Scheme == "http" {
+		cfg.JMAPAllowPlaintext, err = s.policyDB.IsPlaintextTransportAllowed(ctx, "http", endpoint.Host, endpoint.Port)
+		if err != nil {
+			return fmt.Errorf("check JMAP plaintext exception: %w", err)
+		}
+	}
+	cfg.JMAPAllowPrivate, err = s.policyDB.IsPrivateTargetAllowed(ctx, endpoint.Scheme, endpoint.Host, endpoint.Port)
+	if err != nil {
+		return fmt.Errorf("check JMAP private target exception: %w", err)
+	}
+	return nil
 }
 
 func (s *AccountStore) GetEditData(ctx context.Context, accountID string) (*models.EditAccountData, error) {

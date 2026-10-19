@@ -22,6 +22,10 @@ type AccountConfig struct {
 	// JMAPSessionURL is where a JMAP account's session is fetched from; it is
 	// empty for every other provider.
 	JMAPSessionURL string
+	// JMAPAllowPlaintext and JMAPAllowPrivate are set when an administrator
+	// approved plain HTTP or a private address for the session URL's server.
+	JMAPAllowPlaintext bool
+	JMAPAllowPrivate   bool
 }
 
 type ConnectionTestResult struct {
