@@ -150,3 +150,69 @@ func TestMigrateV67ExpandsPrivateTargetExceptions(t *testing.T) {
 		t.Fatalf("private target after migration = %v, %v; want true", allowed, err)
 	}
 }
+
+func TestPlaintextTransportExceptionAcceptsHTTP(t *testing.T) {
+	ctx := context.Background()
+	db, err := New(filepath.Join(t.TempDir(), "gofer.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	if err := db.AddPlaintextTransportException(ctx, "HTTP", "JMAP.Lab.Test.", 8080, "admin"); err != nil {
+		t.Fatalf("AddPlaintextTransportException(http) error = %v", err)
+	}
+	if allowed, err := db.IsPlaintextTransportAllowed(ctx, "http", "jmap.lab.test", 8080); err != nil || !allowed {
+		t.Fatalf("IsPlaintextTransportAllowed(http) = %v, %v; want true", allowed, err)
+	}
+	if allowed, err := db.IsPlaintextTransportAllowed(ctx, "imap", "jmap.lab.test", 8080); err != nil || allowed {
+		t.Fatalf("HTTP exception allowed IMAP = %v, %v", allowed, err)
+	}
+	if err := db.AddPlaintextTransportException(ctx, "https", "jmap.lab.test", 8443, "admin"); err == nil {
+		t.Fatal("plaintext exception accepted https")
+	}
+}
+
+// Exceptions made before schema 115 survive the table rebuild, and the
+// rebuilt table accepts HTTP plaintext exceptions.
+func TestMigrateV115KeepsExceptionsAndAllowsHTTPPlaintext(t *testing.T) {
+	ctx := context.Background()
+	db, err := New(filepath.Join(t.TempDir(), "gofer.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	if _, err := db.Write().Exec(`DROP TABLE mail_security_exceptions;
+CREATE TABLE mail_security_exceptions (
+	id TEXT PRIMARY KEY,
+	kind TEXT NOT NULL CHECK (kind IN ('http_discovery', 'plaintext_transport', 'private_target')),
+	protocol TEXT NOT NULL DEFAULT '',
+	host TEXT NOT NULL CHECK (host <> ''),
+	port INTEGER NOT NULL DEFAULT 0,
+	created_by TEXT NOT NULL DEFAULT '',
+	created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+	CHECK (
+		(kind = 'http_discovery' AND protocol = '' AND port = 0)
+		OR
+		(kind = 'plaintext_transport' AND protocol IN ('imap', 'smtp') AND port BETWEEN 1 AND 65535)
+		OR
+		(kind = 'private_target' AND protocol IN ('http', 'https', 'imap', 'smtp') AND port BETWEEN 1 AND 65535)
+	),
+	UNIQUE(kind, protocol, host, port)
+);
+INSERT INTO mail_security_exceptions (id, kind, protocol, host, port, created_by) VALUES ('old-imap', 'plaintext_transport', 'imap', 'mail.lab.test', 143, 'admin');
+DELETE FROM schema_version; INSERT INTO schema_version(version) VALUES(114);`); err != nil {
+		t.Fatal(err)
+	}
+	if err := db.AddPlaintextTransportException(ctx, "http", "jmap.lab.test", 8080, "admin"); err == nil {
+		t.Fatal("old table accepted an HTTP plaintext exception")
+	}
+	if err := migrateV114ToV115(db.Write()); err != nil {
+		t.Fatal(err)
+	}
+	if allowed, err := db.IsPlaintextTransportAllowed(ctx, "imap", "mail.lab.test", 143); err != nil || !allowed {
+		t.Fatalf("old exception after migration = %v, %v", allowed, err)
+	}
+	if err := db.AddPlaintextTransportException(ctx, "http", "jmap.lab.test", 8080, "admin"); err != nil {
+		t.Fatalf("HTTP plaintext exception after migration: %v", err)
+	}
+}

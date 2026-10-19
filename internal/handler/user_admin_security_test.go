@@ -327,3 +327,27 @@ func TestOwnedAdminSecurityShutdownPreventsPolicyMutation(t *testing.T) {
 		t.Fatal("shutdown changed central policy", allowed, err)
 	}
 }
+
+func TestOwnedAdminSecurityAddsHTTPPlaintextException(t *testing.T) {
+	f := newOwnedAdminDiagnosticFixture(t)
+	if _, err := f.system.Write().Exec(`UPDATE sessions SET step_up_at=CURRENT_TIMESTAMP,step_up_method='totp' WHERE user_id='administrator'`); err != nil {
+		t.Fatal(err)
+	}
+	page := f.request("/admin/security")
+	if page.Code != 200 {
+		t.Fatal(page.Code, page.Body.String())
+	}
+	post := ownedSecurityPost(t, f, page.Body.String(), "/admin/security/plaintext", url.Values{"protocol": {"http"}, "host": {"jmap.lab.test"}, "port": {"8080"}, "acknowledge": {"yes"}})
+	if post.Code != 303 || strings.Contains(post.Header().Get("Location"), "error=") {
+		t.Fatal("add HTTP plaintext exception", post.Code, post.Header())
+	}
+	if allowed, err := f.system.IsPlaintextTransportAllowed(t.Context(), "http", "jmap.lab.test", 8080); err != nil || !allowed {
+		t.Fatalf("HTTP plaintext allowed = %v, %v", allowed, err)
+	}
+
+	page = f.request("/admin/security")
+	post = ownedSecurityPost(t, f, page.Body.String(), "/admin/security/plaintext", url.Values{"protocol": {"ftp"}, "host": {"jmap.lab.test"}, "port": {"21"}, "acknowledge": {"yes"}})
+	if post.Code != 303 || !strings.Contains(post.Header().Get("Location"), "error=") {
+		t.Fatal("unknown protocol accepted", post.Code, post.Header())
+	}
+}

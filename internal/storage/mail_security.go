@@ -38,8 +38,8 @@ func (db *DB) AddHTTPDiscoveryException(ctx context.Context, domain, createdBy s
 func (db *DB) AddPlaintextTransportException(ctx context.Context, protocol, host string, port int, createdBy string) error {
 	protocol = strings.ToLower(strings.TrimSpace(protocol))
 	host = normalizeMailSecurityHost(host)
-	if protocol != "imap" && protocol != "smtp" {
-		return fmt.Errorf("protocol must be IMAP or SMTP")
+	if protocol != "http" && protocol != "imap" && protocol != "smtp" {
+		return fmt.Errorf("protocol must be HTTP, IMAP, or SMTP")
 	}
 	if host == "" {
 		return fmt.Errorf("server host is required")

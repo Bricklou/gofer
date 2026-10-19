@@ -1571,7 +1571,7 @@ CREATE TABLE IF NOT EXISTS mail_security_exceptions (
     CHECK (
         (kind = 'http_discovery' AND protocol = '' AND port = 0)
         OR
-        (kind = 'plaintext_transport' AND protocol IN ('imap', 'smtp') AND port BETWEEN 1 AND 65535)
+        (kind = 'plaintext_transport' AND protocol IN ('http', 'imap', 'smtp') AND port BETWEEN 1 AND 65535)
         OR
         (kind = 'private_target' AND protocol IN ('http', 'https', 'imap', 'smtp') AND port BETWEEN 1 AND 65535)
     ),
@@ -1653,4 +1653,4 @@ CREATE TABLE IF NOT EXISTS calendar_invitation_messages (
 );
 
 -- Schema version marker for fresh installs
-INSERT OR REPLACE INTO schema_version (version) VALUES (114);
+INSERT OR REPLACE INTO schema_version (version) VALUES (115);
