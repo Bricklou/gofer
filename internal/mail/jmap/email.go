@@ -2,6 +2,7 @@ package jmap
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"time"
 )
@@ -65,12 +66,23 @@ type Comparator struct {
 }
 
 type EmailQuery struct {
-	AccountID      string       `json:"accountId"`
-	Filter         *EmailFilter `json:"filter,omitempty"`
-	Sort           []Comparator `json:"sort,omitempty"`
-	Position       int          `json:"position,omitempty"`
-	Limit          int          `json:"limit,omitempty"`
-	CalculateTotal bool         `json:"calculateTotal,omitempty"`
+	AccountID string       `json:"accountId"`
+	Filter    *EmailFilter `json:"filter,omitempty"`
+	Sort      []Comparator `json:"sort,omitempty"`
+	Position  int          `json:"position,omitempty"`
+	// Anchor starts the page at that email (plus AnchorOffset) instead of at
+	// Position, so emails added or removed earlier in the results while paging
+	// cannot shift a page past one.
+	Anchor         string `json:"anchor,omitempty"`
+	AnchorOffset   int    `json:"anchorOffset,omitempty"`
+	Limit          int    `json:"limit,omitempty"`
+	CalculateTotal bool   `json:"calculateTotal,omitempty"`
+}
+
+// IsAnchorNotFound reports whether a query's anchor email no longer exists.
+func IsAnchorNotFound(err error) bool {
+	var methodErr *MethodError
+	return errors.As(err, &methodErr) && methodErr.Type == "anchorNotFound"
 }
 
 // QueryResponse is the standard /query result (RFC 8620 section 5.5).

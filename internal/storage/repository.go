@@ -907,6 +907,7 @@ type ProviderSyncMessage struct {
 const (
 	LabelProviderGmail       = "gmail"
 	LabelProviderOutlook     = "outlook"
+	LabelProviderJMAP        = "jmap"
 	LabelProviderIMAPKeyword = "imap_keyword"
 	LabelProviderLocal       = "local"
 

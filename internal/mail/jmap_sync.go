@@ -37,7 +37,176 @@ func (o *SyncOrchestrator) syncJMAPAccount(ctx context.Context, accountID string
 	if err != nil {
 		return err
 	}
-	return o.syncJMAPFolders(ctx, accountID, mailboxes.List)
+	if err := o.syncJMAPFolders(ctx, accountID, mailboxes.List); err != nil {
+		return err
+	}
+	repo := o.outlookRepository()
+	emailCursor, err := repo.GetLabelSyncState(ctx, accountID, storage.LabelProviderJMAP, jmapEmailScope)
+	if err != nil {
+		return err
+	}
+	if emailCursor.Cursor != "" {
+		// Changes since the saved states come in the next step of JMAP sync.
+		return nil
+	}
+	return o.importJMAPEmails(ctx, accountID, client, session, mailAccount, mailboxes)
+}
+
+const (
+	jmapEmailScope   = "email"
+	jmapMailboxScope = "mailbox"
+	// jmapImportPage is how many emails one import request fetches, within the
+	// server's own limit.
+	jmapImportPage = 100
+)
+
+// importJMAPEmails stores every email of the account, newest first, then
+// saves the Email and Mailbox states as the account's sync cursors. The Email
+// state is read before the first page, so mail that arrives during the import
+// is caught by the changes since it. An interrupted import saves no cursor
+// and simply runs again; storing an email twice only updates it.
+func (o *SyncOrchestrator) importJMAPEmails(ctx context.Context, accountID string, client *jmap.Client, session *jmap.Session, mailAccount string, mailboxes *jmap.GetResponse[jmap.Mailbox]) error {
+	before, err := client.GetEmails(ctx, session, mailAccount, []string{}, nil)
+	if err != nil {
+		return err
+	}
+	folders := make(map[string]string, len(mailboxes.List))
+	for _, mailbox := range mailboxes.List {
+		folders[mailbox.ID] = jmapLocalFolderID(accountID, mailbox.ID)
+	}
+	limit := jmapImportPage
+	if max := session.Core.MaxObjectsInGet; max > 0 && max < limit {
+		limit = max
+	}
+	repo := o.outlookRepository()
+	touched := map[string]bool{}
+	anchor := ""
+	for {
+		query := jmap.EmailQuery{
+			AccountID: mailAccount,
+			Sort:      []jmap.Comparator{{Property: "receivedAt", IsAscending: false}},
+			Limit:     limit,
+		}
+		if anchor != "" {
+			query.Anchor, query.AnchorOffset = anchor, 1
+		}
+		page, emails, err := client.QueryAndGetEmails(ctx, session, query, jmap.EmailSummaryProperties)
+		if jmap.IsAnchorNotFound(err) {
+			// The email the page started from was deleted; start over.
+			anchor = ""
+			continue
+		}
+		if err != nil {
+			return err
+		}
+		var rows []storage.ProviderSyncMessage
+		for _, email := range emails.List {
+			for _, row := range jmapEmailToProviderSyncs(accountID, email, folders) {
+				rows = append(rows, row)
+				touched[row.FolderID] = true
+			}
+		}
+		if len(rows) > 0 {
+			if _, err := repo.UpsertProviderSyncMessages(ctx, rows); err != nil {
+				return err
+			}
+		}
+		// A server may cap the page below the limit asked for; a page shorter
+		// than its own limit is the last one.
+		pageLimit := limit
+		if page.Limit > 0 && page.Limit < pageLimit {
+			pageLimit = page.Limit
+		}
+		if len(page.IDs) == 0 || len(page.IDs) < pageLimit {
+			break
+		}
+		anchor = page.IDs[len(page.IDs)-1]
+	}
+	if err := repo.MarkLabelSyncSuccess(ctx, accountID, storage.LabelProviderJMAP, jmapEmailScope, before.State, true); err != nil {
+		return err
+	}
+	if err := repo.MarkLabelSyncSuccess(ctx, accountID, storage.LabelProviderJMAP, jmapMailboxScope, mailboxes.State, true); err != nil {
+		return err
+	}
+	for folderID := range touched {
+		o.publishEvent(Event{Type: EventSyncComplete, AccountID: accountID, FolderID: folderID, Payload: map[string]any{"status": "complete", "provider": "jmap"}})
+	}
+	return nil
+}
+
+// jmapEmailToProviderSyncs gives one row per known mailbox the email is in,
+// which together set the folders the email shows in. Keywords carry the read,
+// flagged and draft states.
+func jmapEmailToProviderSyncs(accountID string, email jmap.Email, folders map[string]string) []storage.ProviderSyncMessage {
+	id := strings.TrimSpace(email.ID)
+	if id == "" {
+		return nil
+	}
+	internetMessageID := ""
+	if len(email.MessageID) > 0 {
+		internetMessageID = "<" + strings.Trim(email.MessageID[0], "<>") + ">"
+	}
+	var fromName, fromEmail string
+	if len(email.From) > 0 {
+		fromName, fromEmail = email.From[0].Name, email.From[0].Email
+	}
+	flagged := email.Keywords[jmap.KeywordFlagged]
+	base := storage.ProviderSyncMessage{
+		AccountID:         accountID,
+		ProviderMessageID: id,
+		InternetMessageID: internetMessageID,
+		ProviderThreadID:  strings.TrimSpace(email.ThreadID),
+		InReplyTo:         jmapMessageIDList(email.InReplyTo),
+		References:        jmapMessageIDList(email.References),
+		Subject:           strings.TrimSpace(email.Subject),
+		FromName:          fromName,
+		FromEmail:         fromEmail,
+		DateSent:          email.SentAt,
+		DateReceived:      email.ReceivedAt,
+		Snippet:           strings.TrimSpace(email.Preview),
+		IsRead:            email.Keywords[jmap.KeywordSeen],
+		IsStarred:         flagged,
+		IsFlagged:         flagged,
+		IsDraft:           email.Keywords[jmap.KeywordDraft],
+		HasAttachments:    email.HasAttachment,
+		SizeBytes:         email.Size,
+		ToRecipients:      jmapRecipients(email.To),
+		CCRecipients:      jmapRecipients(email.CC),
+		BCCRecipients:     jmapRecipients(email.BCC),
+	}
+	var rows []storage.ProviderSyncMessage
+	for mailboxID, in := range email.MailboxIDs {
+		folderID, known := folders[mailboxID]
+		if !in || !known {
+			continue
+		}
+		row := base
+		row.FolderID = folderID
+		rows = append(rows, row)
+	}
+	sort.Slice(rows, func(i, j int) bool { return rows[i].FolderID < rows[j].FolderID })
+	return rows
+}
+
+// jmapMessageIDList writes JMAP's bare message ids as a header value.
+func jmapMessageIDList(ids []string) string {
+	out := make([]string, 0, len(ids))
+	for _, id := range ids {
+		if id = strings.Trim(strings.TrimSpace(id), "<>"); id != "" {
+			out = append(out, "<"+id+">")
+		}
+	}
+	return strings.Join(out, " ")
+}
+
+func jmapRecipients(addresses []jmap.EmailAddress) []storage.Recipient {
+	out := make([]storage.Recipient, 0, len(addresses))
+	for _, address := range addresses {
+		if strings.TrimSpace(address.Email) != "" {
+			out = append(out, storage.Recipient{Name: address.Name, Email: address.Email})
+		}
+	}
+	return out
 }
 
 // syncJMAPFolders stores the account's mailboxes as folders. A mailbox keeps
