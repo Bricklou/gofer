@@ -32,15 +32,19 @@ func davPrivateTargetAllowed(ctx context.Context, protocol, host string, port in
 	return policy != nil && *policy != nil && (*policy)(ctx, protocol, host, port)
 }
 
-// calDAVHTTPTransport carries every CalDAV request. Requests go out over
-// HTTPS, or over plain HTTP only to a host and port an administrator approved
-// with an HTTP plaintext exception, as JMAP servers do. The check runs on each
-// request, so it covers redirects as well.
-var calDAVHTTPTransport http.RoundTripper = calDAVPlaintextGuard{}
+// calDAVHTTPTransport and cardDAVHTTPTransport carry every CalDAV and
+// CardDAV request. Requests go out over HTTPS, or over plain HTTP only to a
+// host and port an administrator approved with an HTTP plaintext exception,
+// as JMAP servers do. The check runs on each request, so it covers redirects
+// as well.
+var (
+	calDAVHTTPTransport  http.RoundTripper = davPlaintextGuard{service: "CalDAV"}
+	cardDAVHTTPTransport http.RoundTripper = davPlaintextGuard{service: "CardDAV"}
+)
 
 var davPlaintextPolicy atomic.Pointer[func(context.Context, string, int) bool]
 
-// setDAVPlaintextPolicy points CalDAV's plain HTTP check at the instance's
+// setDAVPlaintextPolicy points the DAV plain HTTP check at the instance's
 // mail security exceptions, once, when the handler is built.
 func setDAVPlaintextPolicy(allowed func(ctx context.Context, host string, port int) bool) {
 	davPlaintextPolicy.Store(&allowed)
@@ -57,19 +61,20 @@ func calDAVURLScheme(scheme string) bool {
 	return strings.EqualFold(scheme, "https") || strings.EqualFold(scheme, "http")
 }
 
-type calDAVPlaintextGuard struct{}
+// davPlaintextGuard refuses plain HTTP to a DAV server nobody approved.
+type davPlaintextGuard struct{ service string }
 
-func (calDAVPlaintextGuard) RoundTrip(req *http.Request) (*http.Response, error) {
+func (g davPlaintextGuard) RoundTrip(req *http.Request) (*http.Response, error) {
 	switch strings.ToLower(req.URL.Scheme) {
 	case "https":
 	case "http":
 		host := req.URL.Hostname()
 		port, _ := strconv.Atoi(davURLPort(req.URL))
 		if !davPlaintextAllowed(req.Context(), host, port) {
-			return nil, fmt.Errorf("Gofer won't connect to CalDAV server %s without encryption; an administrator can add an HTTP plaintext exception for %s:%d under Mail security", req.URL.Host, host, port)
+			return nil, fmt.Errorf("Gofer won't connect to %s server %s without encryption; an administrator can add an HTTP plaintext exception for %s:%d under Mail security", g.service, req.URL.Host, host, port)
 		}
 	default:
-		return nil, fmt.Errorf("CalDAV does not support %q URLs", req.URL.Scheme)
+		return nil, fmt.Errorf("%s does not support %q URLs", g.service, req.URL.Scheme)
 	}
 	return davHTTPTransport.RoundTrip(req)
 }

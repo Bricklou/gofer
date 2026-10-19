@@ -3,6 +3,7 @@ package storage
 import (
 	"context"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/cristianadrielbraun/gofer/internal/models"
@@ -225,6 +226,8 @@ func TestMailSecurityExceptionUsedBy(t *testing.T) {
 	jmapTLS := DiagnosticTransportAccount{JMAPSessionURL: "https://jmap.lab.test/.well-known/jmap"}
 	// An IMAP account on the same host and port as an HTTP exception.
 	imapOnHTTPPort := DiagnosticTransportAccount{IMAPHost: "jmap.lab.test", IMAPPort: 8080, IMAPTLSMode: "tls"}
+	// An IMAP account whose contacts and calendars sync over DAV.
+	davPlain := DiagnosticTransportAccount{IMAPHost: "mail.lab.test", IMAPPort: 993, CardDAVURL: "http://dav.lab.test:5232/", CalDAVURL: "https://cal.lab.test/dav/"}
 	plaintext := func(protocol, host string, port int) models.MailSecurityException {
 		return models.MailSecurityException{Kind: models.MailSecurityExceptionPlaintextTransport, Protocol: protocol, Host: host, Port: port}
 	}
@@ -246,6 +249,9 @@ func TestMailSecurityExceptionUsedBy(t *testing.T) {
 		{"private HTTPS default port", private("https", "jmap.lab.test", 443), jmapTLS, true},
 		{"plaintext HTTP for an HTTPS URL", plaintext("http", "jmap.lab.test", 443), jmapTLS, false},
 		{"HTTPS target is not IMAP", private("https", "jmap.lab.test", 8080), imapOnHTTPPort, false},
+		{"plaintext HTTP CardDAV", plaintext("http", "dav.lab.test", 5232), davPlain, true},
+		{"private HTTPS CalDAV", private("https", "cal.lab.test", 443), davPlain, true},
+		{"plaintext HTTP for an HTTPS CalDAV URL", plaintext("http", "cal.lab.test", 443), davPlain, false},
 		{"HTTP discovery uses no account", models.MailSecurityException{Kind: models.MailSecurityExceptionHTTPDiscovery, Host: "jmap.lab.test"}, jmapPlain, false},
 	}
 	for _, tc := range cases {
@@ -255,7 +261,7 @@ func TestMailSecurityExceptionUsedBy(t *testing.T) {
 	}
 }
 
-func TestMailSecurityExceptionsListJMAPAccounts(t *testing.T) {
+func TestMailSecurityExceptionsListHTTPAccounts(t *testing.T) {
 	ctx := context.Background()
 	db, err := New(filepath.Join(t.TempDir(), "gofer.db"))
 	if err != nil {
@@ -265,7 +271,9 @@ func TestMailSecurityExceptionsListJMAPAccounts(t *testing.T) {
 	if _, err := db.Write().ExecContext(ctx, `INSERT INTO users(id,username,username_normalized) VALUES('owner','owner','owner');
 INSERT INTO accounts(id,user_id,provider,email_address,imap_host,imap_port,jmap_session_url) VALUES
  ('jmap','owner','jmap','robin@example.test','',0,'http://jmap.lab.test:8080/.well-known/jmap'),
- ('imap','owner','imap','sam@example.test','jmap.lab.test',8080,'')`); err != nil {
+ ('imap','owner','imap','sam@example.test','jmap.lab.test',8080,''),
+ ('dav','owner','imap','lena@example.test','mail.lab.test',993,'');
+INSERT INTO account_contact_sync_configs(account_id,user_id,provider,enabled,base_url) VALUES('dav','owner','carddav',1,'http://jmap.lab.test:8080/dav/');`); err != nil {
 		t.Fatal(err)
 	}
 	if err := db.AddPlaintextTransportException(ctx, "http", "jmap.lab.test", 8080, "admin"); err != nil {
@@ -285,8 +293,8 @@ INSERT INTO accounts(id,user_id,provider,email_address,imap_host,imap_port,jmap_
 		}
 		switch item.Protocol {
 		case "http":
-			if len(ids) != 1 || ids[0] != "jmap" {
-				t.Errorf("HTTP plaintext exception accounts = %v, want [jmap]", ids)
+			if strings.Join(ids, ",") != "dav,jmap" {
+				t.Errorf("HTTP plaintext exception accounts = %v, want the CardDAV and JMAP accounts", ids)
 			}
 		case "https":
 			if len(ids) != 0 {

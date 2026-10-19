@@ -971,7 +971,7 @@ func cardDAVAddressBookQuery(ctx context.Context, cfg models.ContactSyncConfig, 
 	}
 	req.Header.Set("Depth", "1")
 	req.Header.Set("Content-Type", `application/xml; charset="utf-8"`)
-	resp, err := (&http.Client{Transport: davHTTPTransport, Timeout: 30 * time.Second}).Do(req)
+	resp, err := (&http.Client{Transport: cardDAVHTTPTransport, Timeout: 30 * time.Second}).Do(req)
 	if err != nil {
 		return nil, "", err
 	}
@@ -1003,7 +1003,7 @@ func cardDAVAddressBookEmailQuery(ctx context.Context, cfg models.ContactSyncCon
 	}
 	req.Header.Set("Depth", "1")
 	req.Header.Set("Content-Type", `application/xml; charset="utf-8"`)
-	resp, err := (&http.Client{Transport: davHTTPTransport, Timeout: 30 * time.Second}).Do(req)
+	resp, err := (&http.Client{Transport: cardDAVHTTPTransport, Timeout: 30 * time.Second}).Do(req)
 	if err != nil {
 		return nil, err
 	}
@@ -1032,7 +1032,7 @@ func cardDAVSyncCollection(ctx context.Context, cfg models.ContactSyncConfig, pa
 	}
 	req.Header.Set("Depth", "1")
 	req.Header.Set("Content-Type", `application/xml; charset="utf-8"`)
-	resp, err := (&http.Client{Transport: davHTTPTransport, Timeout: 30 * time.Second}).Do(req)
+	resp, err := (&http.Client{Transport: cardDAVHTTPTransport, Timeout: 30 * time.Second}).Do(req)
 	if err != nil {
 		return cardDAVSyncResult{}, err
 	}
@@ -1091,7 +1091,7 @@ func cardDAVAddressBookMultiget(ctx context.Context, cfg models.ContactSyncConfi
 	}
 	req.Header.Set("Depth", "0")
 	req.Header.Set("Content-Type", `application/xml; charset="utf-8"`)
-	resp, err := (&http.Client{Transport: davHTTPTransport, Timeout: 30 * time.Second}).Do(req)
+	resp, err := (&http.Client{Transport: cardDAVHTTPTransport, Timeout: 30 * time.Second}).Do(req)
 	if err != nil {
 		return nil, err
 	}
@@ -1130,7 +1130,7 @@ func testCardDAVAddressBook(ctx context.Context, cfg models.ContactSyncConfig, p
 	}
 	req.Header.Set("Depth", "0")
 	req.Header.Set("Content-Type", `application/xml; charset="utf-8"`)
-	resp, err := (&http.Client{Transport: davHTTPTransport, Timeout: cardDAVDiscoveryHTTPTimeout}).Do(req)
+	resp, err := (&http.Client{Transport: cardDAVHTTPTransport, Timeout: cardDAVDiscoveryHTTPTimeout}).Do(req)
 	if err != nil {
 		return err
 	}
@@ -1534,7 +1534,7 @@ func cardDAVPropfind(ctx context.Context, endpoint, username, password, depth, b
 	}
 	req.Header.Set("Depth", depth)
 	req.Header.Set("Content-Type", `application/xml; charset="utf-8"`)
-	resp, err := (&http.Client{Transport: davHTTPTransport, Timeout: cardDAVDiscoveryHTTPTimeout}).Do(req)
+	resp, err := (&http.Client{Transport: cardDAVHTTPTransport, Timeout: cardDAVDiscoveryHTTPTimeout}).Do(req)
 	if err != nil {
 		return davMultiStatus{}, err
 	}
@@ -1689,7 +1689,7 @@ func cardDAVPut(ctx context.Context, cfg models.ContactSyncConfig, password, rem
 	} else {
 		req.Header.Set("If-None-Match", "*")
 	}
-	resp, err := (&http.Client{Transport: davHTTPTransport, Timeout: 30 * time.Second}).Do(req)
+	resp, err := (&http.Client{Transport: cardDAVHTTPTransport, Timeout: 30 * time.Second}).Do(req)
 	if err != nil {
 		return "", err
 	}
@@ -1712,7 +1712,7 @@ func cardDAVDelete(ctx context.Context, cfg models.ContactSyncConfig, password, 
 	if strings.TrimSpace(etag) != "" {
 		req.Header.Set("If-Match", etag)
 	}
-	resp, err := (&http.Client{Transport: davHTTPTransport, Timeout: 30 * time.Second}).Do(req)
+	resp, err := (&http.Client{Transport: cardDAVHTTPTransport, Timeout: 30 * time.Second}).Do(req)
 	if err != nil {
 		return err
 	}

@@ -212,11 +212,16 @@ func MailSecurityExceptionUsedBy(item models.MailSecurityException, account Diag
 	case "smtp":
 		return account.SMTPHost == item.Host && account.SMTPPort == item.Port && (private || account.SMTPTLSMode == "plaintext")
 	case "http", "https":
-		if account.JMAPSessionURL == "" {
-			return false
+		// The JMAP server, and the CardDAV and CalDAV servers, go over HTTP.
+		for _, address := range []string{account.JMAPSessionURL, account.CardDAVURL, account.CalDAVURL} {
+			if address == "" {
+				continue
+			}
+			endpoint, err := jmap.ParseEndpoint(address)
+			if err == nil && endpoint.Scheme == item.Protocol && endpoint.Host == item.Host && endpoint.Port == item.Port {
+				return true
+			}
 		}
-		endpoint, err := jmap.ParseEndpoint(account.JMAPSessionURL)
-		return err == nil && endpoint.Scheme == item.Protocol && endpoint.Host == item.Host && endpoint.Port == item.Port
 	}
 	return false
 }

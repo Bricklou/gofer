@@ -465,8 +465,12 @@ func newCardDAVDeleteTestStore(t *testing.T) (*storage.DB, *config.AccountStore)
 }
 
 // allowLocalDAVServers lets a test reach its local fake DAV server, which
-// outbound requests would otherwise refuse as a private address.
+// outbound requests would otherwise refuse as a private address and, being
+// plain HTTP, as unapproved.
 func allowLocalDAVServers(t *testing.T) {
 	t.Helper()
 	t.Cleanup(netguard.UseTransportForTests(http.DefaultTransport))
+	previous := davPlaintextPolicy.Load()
+	setDAVPlaintextPolicy(func(context.Context, string, int) bool { return true })
+	t.Cleanup(func() { davPlaintextPolicy.Store(previous) })
 }
