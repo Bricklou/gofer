@@ -346,9 +346,8 @@ func (s *UserIMAP) snapshot(ctx context.Context, owner, id string) (*userIMAPSco
 	return s.snapshotAccount(ctx, owner, id, false)
 }
 
-// snapshotAccount is snapshot that can also accept a JMAP account. Only the
-// connection test asks for that: no worker can sync JMAP yet, so every other
-// caller keeps refusing it.
+// snapshotAccount also accepts JMAP when the caller uses its native transport.
+// Callers that only support IMAP or provider OAuth keep refusing JMAP.
 func (s *UserIMAP) snapshotAccount(ctx context.Context, owner, id string, allowJMAP bool) (*userIMAPScope, error) {
 	r := &userIMAPScope{accounts: s.accounts, owner: owner, id: id, pollInterval: s.defaultPollInterval()}
 	s.mu.Lock()

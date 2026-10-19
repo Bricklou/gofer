@@ -9,6 +9,7 @@ import (
 	"github.com/cristianadrielbraun/gofer/internal/config"
 	"github.com/cristianadrielbraun/gofer/internal/mail/imap"
 	"github.com/cristianadrielbraun/gofer/internal/mailauth"
+	"github.com/cristianadrielbraun/gofer/internal/providers"
 	"github.com/cristianadrielbraun/gofer/internal/storage"
 	"github.com/cristianadrielbraun/gofer/internal/store"
 )
@@ -158,11 +159,11 @@ func (s *UserIMAP) readRawMessage(ctx context.Context, owner string, id int64, d
 			return ErrRawMessageNotSaved
 		}
 		if len(raw) == 0 {
-			scope, err := s.snapshot(operation, owner, account)
+			scope, err := s.snapshotAccount(operation, owner, account, true)
 			if err != nil {
 				return err
 			}
-			if scope.config.Provider != info.Provider || scope.config.ProviderAccountID != info.Subject || scope.config.AuthMethod != info.AuthMethod {
+			if scope.config.Provider != info.Provider || scope.config.ProviderAccountID != info.Subject || scope.config.AuthMethod != info.AuthMethod || scope.config.JMAPSessionURL != info.JMAPSessionURL {
 				return storage.ErrMessageMutationSuperseded
 			}
 			if err := validate(); err != nil {
@@ -202,6 +203,11 @@ func (s *UserIMAP) readRawMessage(ctx context.Context, owner string, id int64, d
 						raw, err = read()
 					}
 				}
+			} else if info.Provider == providers.ProviderJMAP && info.AuthMethod == "plain" {
+				if !providers.JMAPEnabled() {
+					return providers.ErrJMAPDisabled
+				}
+				raw, err = FetchJMAPRawMessage(operation, scope.config, scope.password, info.RemoteID)
 			} else if info.Provider == "imap" && info.AuthMethod == "plain" {
 				if info.RemoteUID == 0 || info.UIDValidity == 0 || info.FolderRemoteID == "" {
 					return errors.New("message has no verified IMAP raw identity")

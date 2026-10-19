@@ -63,6 +63,7 @@ func TestUserRawMessagePublicationRejectsWriterWaitChanges(t *testing.T) {
 		`UPDATE accounts SET provider_account_id='changed'`,
 		`UPDATE accounts SET imap_host='changed'`,
 		`UPDATE accounts SET imap_port=995`,
+		`UPDATE accounts SET jmap_session_url='https://changed.example.test/.well-known/jmap'`,
 		`UPDATE accounts SET encrypted_password=X'01'`,
 		`UPDATE accounts SET is_deleting=1`,
 		`UPDATE users SET status='disabled'`,

@@ -45,6 +45,9 @@ type fakeJMAPServer struct {
 	blobs     map[string]string
 	downloads int
 	sets      int
+	// Optional download barrier for testing account changes during HTTP waits.
+	downloadStarted chan<- struct{}
+	downloadRelease <-chan struct{}
 	// pushes, when set, offers push: each event source connection writes
 	// the StateChange JSON sent here. streams counts open connections.
 	pushes  chan string
@@ -162,7 +165,21 @@ func newFakeJMAPServer(t *testing.T) *fakeJMAPServer {
 				f.mu.Lock()
 				raw, ok := f.blobs[blob]
 				f.downloads++
+				started, release := f.downloadStarted, f.downloadRelease
 				f.mu.Unlock()
+				if started != nil {
+					select {
+					case started <- struct{}{}:
+					default:
+					}
+				}
+				if release != nil {
+					select {
+					case <-release:
+					case <-r.Context().Done():
+						return
+					}
+				}
 				if ok {
 					_, _ = io.WriteString(w, raw)
 					return
