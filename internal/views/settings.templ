@@ -1868,6 +1868,14 @@ templ AccountProviderIcon(provider string, class string) {
 			<title>iCloud</title>
 			<path d="M13.762 4.29a6.51 6.51 0 0 0-5.669 3.332 3.571 3.571 0 0 0-1.558-.36 3.571 3.571 0 0 0-3.516 3A4.918 4.918 0 0 0 0 14.796a4.918 4.918 0 0 0 4.92 4.914 4.93 4.93 0 0 0 .617-.045h14.42c2.305-.272 4.041-2.258 4.043-4.589v-.009a4.594 4.594 0 0 0-3.727-4.508 6.51 6.51 0 0 0-6.511-6.27z"/>
 		</svg>
+	} else if strings.TrimSpace(provider) == providers.ProviderJMAP {
+		<svg class={ class } role="img" viewBox="0 0 69 80" xmlns="http://www.w3.org/2000/svg" fill="currentColor">
+			<title>JMAP</title>
+			<path d="M64.2488 46.6806L61.3055 43.7394C61.0952 43.5294 60.7168 43.5294 60.4645 43.7394L55.8393 48.3613C55.6291 48.5714 55.6291 48.9495 55.8393 49.2016L58.7826 52.1428L54.0312 56.8907H68.9581V41.9747L64.2068 46.7226L64.2488 46.6806Z"/>
+			<path d="M69 64.5798H61.2633V69.4958C61.2633 71.0504 60.0018 72.2689 58.4881 72.2689H10.5119C8.95612 72.2689 7.73675 71.0084 7.73675 69.4958V56.6806C7.73675 55.3361 8.24132 54.0756 9.20841 53.1512L30.1901 32.1848C31.2834 31.0924 32.755 30.3781 34.2687 30.2941C35.9506 30.21 37.5484 30.8403 38.7258 32.0168L42.8885 36.1764C43.0987 36.3865 43.4771 36.3865 43.7294 36.1764L48.3547 31.5546C48.5649 31.3445 48.5649 30.9663 48.3547 30.7142L44.4022 26.7647C41.8793 24.2437 38.5576 22.689 35.0256 22.563C31.1993 22.4369 27.5411 23.8655 24.8501 26.5546L3.74223 47.7311C1.34552 50.126 0 53.3193 0 56.7226V69.5378C0 75.3361 4.70932 80.042 10.5119 80.042H58.4881C64.2907 80.042 69 75.3361 69 69.5378V64.6218V64.5798Z"/>
+			<path d="M4.75137 33.3193L7.6947 36.2605C7.90494 36.4706 8.28336 36.4706 8.53565 36.2605L13.1609 31.6387C13.3711 31.4286 13.3711 31.0504 13.1609 30.7983L10.2175 27.8572L14.9689 23.1093H0V38.0252L4.75137 33.2773V33.3193Z"/>
+			<path d="M0 15.4202H7.73675V10.5042C7.73675 8.94958 8.99817 7.73109 10.5119 7.73109H58.4881C60.0439 7.73109 61.2633 8.9916 61.2633 10.5042V23.3193C61.2633 24.6639 60.7587 25.9244 59.7916 26.8487L38.8099 47.8151C37.7166 48.9076 36.245 49.6219 34.7313 49.7059C33.0494 49.7899 31.4516 49.1597 30.2742 47.9832L26.1115 43.8235C25.9013 43.6134 25.5229 43.6134 25.2706 43.8235L20.6453 48.4454C20.4351 48.6555 20.4351 49.0336 20.6453 49.2857L24.5978 53.2353C27.1207 55.7563 30.4424 57.3109 33.9744 57.437C37.8007 57.563 41.4589 56.1345 44.1499 53.4454L65.2578 32.3529C67.6545 29.958 69 26.7647 69 23.3613V10.5462C69 4.70588 64.2907 0 58.4881 0H10.5119C4.70932 0 0 4.70588 0 10.5042V15.4202Z"/>
+		</svg>
 	} else {
 		@icon.Mail(icon.Props{Class: class})
 	}
@@ -2281,6 +2289,18 @@ templ ChooseAccountTypeDialog() {
 					</div>
 					<svg class="size-4 text-muted-foreground group-hover:text-foreground transition-colors" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
 				</button>
+				if providers.JMAPEnabled() {
+					<button type="button" data-on-click='["openAddAccountWizard","jmap"]' class="w-full group flex items-center gap-4 p-4 rounded-lg border border-border hover:border-primary/50 hover:bg-accent/50 transition-all duration-200 text-left">
+						<div class="flex items-center justify-center w-10 h-10 rounded-lg bg-accent text-muted-foreground group-hover:text-foreground transition-colors">
+							@AccountProviderIcon(providers.ProviderJMAP, "size-5")
+						</div>
+						<div class="flex-1 min-w-0">
+							<div class="text-sm font-medium text-foreground">JMAP <span class="ml-1 rounded border border-border px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Experimental</span></div>
+							<div class="text-xs text-muted-foreground mt-0.5">Modern mail servers such as Stalwart</div>
+						</div>
+						<svg class="size-4 text-muted-foreground group-hover:text-foreground transition-colors" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+					</button>
+				}
 			</div>
 		}
 	}
@@ -2399,6 +2419,7 @@ templ AddAccountDialog() {
 				@dialog.Title() {
 					<span data-add-mode="generic">Add Account</span>
 					<span data-add-mode="icloud">Add iCloud Account</span>
+					<span data-add-mode="jmap">Add JMAP Account</span>
 				}
 				@dialog.Description() {
 					Connect mail first, then optionally configure contacts and calendar.
@@ -2441,8 +2462,9 @@ templ AddAccountDialog() {
 				.account-wizard-card-footer[data-switching="true"] { opacity:0; pointer-events:none; }
 				.account-wizard-card-footer > [data-wizard-footer-step] { display:none !important; }
 				.account-wizard-card-footer > [data-wizard-footer-step][data-active="true"] { display:flex !important; }
-				#add-account-dialog:not([data-mail-service="icloud"]) [data-add-mode="icloud"],
-				#add-account-dialog[data-mail-service="icloud"] [data-add-mode="generic"] { display:none !important; }
+				#add-account-dialog:not([data-mail-service]) [data-add-mode]:not([data-add-mode~="generic"]),
+				#add-account-dialog[data-mail-service="icloud"] [data-add-mode]:not([data-add-mode~="icloud"]),
+				#add-account-dialog[data-mail-service="jmap"] [data-add-mode]:not([data-add-mode~="jmap"]) { display:none !important; }
 			</style>
 			<div class="account-wizard-shell grid gap-4 pt-2 md:grid-cols-[14.5rem_minmax(0,1fr)]">
 		@AccountWizardAddSidebar()
@@ -2512,6 +2534,28 @@ templ AddAccountDialog() {
 									@ICloudAppPasswordNotice("iCloud Mail syncs and sends with an app-specific password, not your Apple Account password. Create one at account.apple.com under Sign-In and Security, then paste it here.")
 								</div>
 							</div>
+							<div data-add-mode="jmap">
+								<h4 class="account-wizard-sticky-header text-sm font-semibold text-foreground flex items-center gap-2">
+									@icon.Server(icon.Props{Class: "size-4 text-muted-foreground"})
+									Server
+									<span class="text-xs font-normal text-muted-foreground">(JMAP)</span>
+								</h4>
+								<div>
+									<label class="text-xs font-medium text-muted-foreground mb-1.5 block">Server address <span class="font-normal">(optional)</span></label>
+									@input.Input(input.Props{
+										Name:        "jmap_server",
+										Type:        input.TypeText,
+										Placeholder: "mail.example.com",
+									})
+									<p class="mt-1.5 text-[11px] leading-relaxed text-muted-foreground">Leave blank to find the server from your email address. You can also paste the JMAP session URL from your provider's instructions.</p>
+								</div>
+								<input type="hidden" name="jmap_session_url" value=""/>
+								<hr class="my-4 border-border"/>
+								<h4 class="text-sm font-semibold text-foreground flex items-center gap-2 mb-4">
+									@icon.Key(icon.Props{Class: "size-4 text-muted-foreground"})
+									Login
+								</h4>
+							</div>
 							<div data-add-mode="generic">
 							<h4 class="account-wizard-sticky-header text-sm font-semibold text-foreground flex items-center gap-2">
 								@icon.Inbox(icon.Props{Class: "size-4 text-muted-foreground"})
@@ -2563,7 +2607,7 @@ templ AddAccountDialog() {
 							</div>
 							<div class="grid grid-cols-2 gap-3">
 								<div class="col-span-2">
-									<label class="text-xs font-medium text-muted-foreground mb-1.5 block"><span data-add-mode="generic">Username</span><span data-add-mode="icloud">Apple Account email</span></label>
+									<label class="text-xs font-medium text-muted-foreground mb-1.5 block"><span data-add-mode="generic jmap">Username</span><span data-add-mode="icloud">Apple Account email</span></label>
 									@input.Input(input.Props{
 										Name:        "username",
 										Type:        input.TypeText,
@@ -2571,9 +2615,10 @@ templ AddAccountDialog() {
 										Required:    true,
 									})
 									<p data-add-mode="icloud" class="mt-1.5 text-[11px] leading-relaxed text-muted-foreground">Leave blank to use the email address. For a custom domain, enter your Apple Account's @icloud.com address.</p>
+										<p data-add-mode="jmap" class="mt-1.5 text-[11px] leading-relaxed text-muted-foreground">Leave blank to use the email address.</p>
 								</div>
 								<div class="col-span-2">
-									<label class="text-xs font-medium text-muted-foreground mb-1.5 block"><span data-add-mode="generic">Password</span><span data-add-mode="icloud">App-specific password</span></label>
+									<label class="text-xs font-medium text-muted-foreground mb-1.5 block"><span data-add-mode="generic jmap">Password</span><span data-add-mode="icloud">App-specific password</span></label>
 									@input.Input(input.Props{
 										Name:        "password",
 										Type:        input.TypePassword,
@@ -2708,7 +2753,7 @@ templ AddAccountDialog() {
 										@icon.PlugZap(icon.Props{Class: "size-4 text-muted-foreground"})
 										Test and create
 									</h4>
-									<p class="text-xs leading-relaxed text-muted-foreground">Gofer signs in to both servers with the settings you entered. Nothing is saved until you create the account.</p>
+									<p class="text-xs leading-relaxed text-muted-foreground"><span data-add-mode="generic icloud">Gofer signs in to both servers with the settings you entered.</span><span data-add-mode="jmap">Gofer finds your JMAP server and signs in.</span> Nothing is saved until you create the account.</p>
 									<div id="add-account-test-results" data-add-account-test-results aria-live="polite" class="mt-4 space-y-3"></div>
 								</div>
 							</div>
@@ -2815,26 +2860,27 @@ templ AccountWizardAddEmailSection() {
 			@AccountWizardSectionSwitch("wizardGo", "", "email", true, true, false, false, nil)
 		</div>
 		<div class="account-wizard-substeps">
-			@AccountWizardAddSubStep(0, "1.a", "1.a", "Account details", "Name and email", "Account details", "Name and email", true)
-			@AccountWizardAddSubStep(1, "1.b", "1.b", "Incoming", "IMAP settings", "Mail sync", "App-specific password", false)
-			@AccountWizardAddSubStep(2, "1.c", "", "Outgoing", "SMTP settings", "", "", false)
-			@AccountWizardAddSubStep(3, "1.d", "1.c", "Test and create", "Check the connection", "Test and create", "Check the connection", false)
+			@AccountWizardAddSubStep(0, "1.a", "1.a", "Account details", "Name and email", "Account details", "Name and email", "Account details", "Name and email", true)
+			@AccountWizardAddSubStep(1, "1.b", "1.b", "Incoming", "IMAP settings", "Mail sync", "App-specific password", "Server and login", "JMAP", false)
+			@AccountWizardAddSubStep(2, "1.c", "", "Outgoing", "SMTP settings", "", "", "", "", false)
+			@AccountWizardAddSubStep(3, "1.d", "1.c", "Test and create", "Check the connection", "Test and create", "Check the connection", "Test and create", "Find the server and sign in", false)
 		</div>
 	</div>
 }
 
 // AccountWizardAddSubStep is one of the add wizard's mail steps. One with no
-// iCloud index is left out for iCloud, which sends with its mail sync login.
-templ AccountWizardAddSubStep(step int, index string, iCloudIndex string, title string, description string, iCloudTitle string, iCloudDescription string, active bool) {
+// iCloud index is left out for iCloud and JMAP, which send with their mail
+// sync login.
+templ AccountWizardAddSubStep(step int, index string, iCloudIndex string, title string, description string, iCloudTitle string, iCloudDescription string, jmapTitle string, jmapDescription string, active bool) {
 	<button type="button" data-on-click={ onAction("wizardGo", step) } data-account-wizard-action="wizardGo" data-account-wizard-target-step={ strconv.Itoa(step) } class="account-wizard-step" data-account-wizard-step={ strconv.Itoa(step) } data-active={ strconv.FormatBool(active) }
 		if iCloudIndex == "" {
 			data-add-mode="generic"
 		}
 	>
-		<span class="account-wizard-index"><span data-add-mode="generic">{ index }</span><span data-add-mode="icloud">{ iCloudIndex }</span></span>
+		<span class="account-wizard-index"><span data-add-mode="generic">{ index }</span><span data-add-mode="icloud jmap">{ iCloudIndex }</span></span>
 		<span class="min-w-0">
-			<span class="block text-xs font-semibold"><span data-add-mode="generic">{ title }</span><span data-add-mode="icloud">{ iCloudTitle }</span></span>
-			<span class="block text-[11px] text-muted-foreground"><span data-add-mode="generic">{ description }</span><span data-add-mode="icloud">{ iCloudDescription }</span></span>
+			<span class="block text-xs font-semibold"><span data-add-mode="generic">{ title }</span><span data-add-mode="icloud">{ iCloudTitle }</span><span data-add-mode="jmap">{ jmapTitle }</span></span>
+			<span class="block text-[11px] text-muted-foreground"><span data-add-mode="generic">{ description }</span><span data-add-mode="icloud">{ iCloudDescription }</span><span data-add-mode="jmap">{ jmapDescription }</span></span>
 		</span>
 	</button>
 }

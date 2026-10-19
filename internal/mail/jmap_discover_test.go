@@ -173,7 +173,22 @@ func TestUserTestAccountChecksJMAPSession(t *testing.T) {
 		t.Fatalf("with exceptions: %+v", result)
 	}
 	// Other workers still refuse JMAP until it has its own sync.
-	if err := f.worker.Sync(t.Context(), "alice", f.ids["alice"]); err == nil {
-		t.Fatal("IMAP sync ran for a JMAP account")
+	if err := f.worker.Sync(t.Context(), "alice", f.ids["alice"]); !errors.Is(err, ErrJMAPSyncUnavailable) {
+		t.Fatalf("Sync() error = %v, want ErrJMAPSyncUnavailable", err)
+	}
+}
+
+// Until JMAP has its own sync, the IMAP sync refuses JMAP accounts with a
+// clear reason instead of trying an empty IMAP server.
+func TestSyncRefusesJMAPAccounts(t *testing.T) {
+	t.Setenv("GOFER_JMAP_EXPERIMENT", "true")
+	f := newUserGmailFixture(t)
+	if err := f.worker.accounts.UpdateAccount(t.Context(), "alice", f.ids["alice"], &models.CreateAccountRequest{
+		Provider: "jmap", JMAPSessionURL: "https://mail.example.test/.well-known/jmap", Username: "robin@example.test",
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if err := f.worker.Sync(t.Context(), "alice", f.ids["alice"]); !errors.Is(err, ErrJMAPSyncUnavailable) {
+		t.Fatalf("Sync() error = %v, want ErrJMAPSyncUnavailable", err)
 	}
 }

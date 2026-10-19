@@ -28,8 +28,11 @@ func accountRequestFromForm(r *http.Request) models.CreateAccountRequest {
 		SmtpUsername: r.FormValue("smtp_username"), SmtpPassword: r.FormValue("smtp_password"),
 		JMAPSessionURL: r.FormValue("jmap_session_url"),
 	}
-	if r.FormValue("mail_service") == providers.MailServiceICloud {
+	switch r.FormValue("mail_service") {
+	case providers.MailServiceICloud:
 		providers.ApplyICloud(&req)
+	case providers.ProviderJMAP:
+		req.Provider = providers.ProviderJMAP
 	}
 	return req
 }
@@ -119,12 +122,17 @@ func (h *Handler) handleUserCreateAccount(w http.ResponseWriter, r *http.Request
 		return
 	}
 	req := accountRequestFromForm(r)
-	if req.EmailAddress == "" || req.IMAPHost == "" || req.SMTPHost == "" || req.Username == "" || req.Password == "" {
+	if req.Provider == providers.ProviderJMAP {
+		if err := h.prepareJMAPAccount(r, &req); err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+	} else if req.EmailAddress == "" || req.IMAPHost == "" || req.SMTPHost == "" || req.Username == "" || req.Password == "" {
 		http.Error(w, "all required fields must be filled in", http.StatusBadRequest)
 		return
 	}
 	// OAuth mailboxes must come through the session-bound authorization callback.
-	if (req.Provider != "" && req.Provider != "imap") || (req.AuthMethod != "" && req.AuthMethod != "plain") {
+	if (req.Provider != "" && req.Provider != "imap" && req.Provider != providers.ProviderJMAP) || (req.AuthMethod != "" && req.AuthMethod != "plain") {
 		http.Error(w, "this account connection method is not available yet", http.StatusNotImplemented)
 		return
 	}

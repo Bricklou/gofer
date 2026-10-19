@@ -2,6 +2,7 @@ package handler
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net/http"
 	"strings"
@@ -190,6 +191,36 @@ func (h *Handler) writeJMAPAccountTest(ctx context.Context, w http.ResponseWrite
 		result.Error = err.Error()
 	}
 	writeAccountTestResults(w, r, []models.ConnectionTestResult{result})
+}
+
+// prepareJMAPAccount checks a new JMAP account's form and fills in its session
+// URL. The wizard sends the URL its connection test found; without one, as
+// when the test was skipped, discovery runs here as it does in the test.
+func (h *Handler) prepareJMAPAccount(r *http.Request, req *models.CreateAccountRequest) error {
+	if !providers.JMAPEnabled() {
+		return providers.ErrJMAPDisabled
+	}
+	if req.Username == "" {
+		req.Username = req.EmailAddress
+	}
+	if req.EmailAddress == "" || req.Password == "" {
+		return errors.New("All required fields must be filled in")
+	}
+	if strings.TrimSpace(req.JMAPSessionURL) != "" {
+		return nil
+	}
+	ctx, cancel := context.WithTimeout(r.Context(), 2*time.Minute)
+	defer cancel()
+	candidates, err := mailautodiscover.JMAPSessionCandidates(ctx, req.EmailAddress, strings.TrimSpace(r.FormValue("jmap_server")), nil)
+	if err != nil {
+		return err
+	}
+	sessionURL, _, err := mail.DiscoverJMAPSession(ctx, candidates, req.Username, req.Password, h.jmapEndpointPolicy)
+	if err != nil {
+		return err
+	}
+	req.JMAPSessionURL = sessionURL
+	return nil
 }
 
 // jmapEndpointPolicy reads the mail security exceptions for one JMAP

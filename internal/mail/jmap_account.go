@@ -14,6 +14,10 @@ import (
 
 const jmapMaxRedirects = 5
 
+// ErrJMAPSyncUnavailable stops the IMAP sync from running a JMAP account,
+// which cannot sync until JMAP has its own sync.
+var ErrJMAPSyncUnavailable = errors.New("JMAP mail sync isn't available yet")
+
 // newJMAPAccountClient builds the JMAP client for an account. The exceptions
 // in cfg approve plain HTTP or a private address only for the session URL's
 // exact scheme, host and port; any other server the session, an API URL or a

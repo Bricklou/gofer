@@ -696,6 +696,9 @@ func (o *SyncOrchestrator) startIDLEWatchers(ctx context.Context, accountID stri
 		log.Printf("idle %s: skipping IMAP IDLE for Graph-first Outlook sync", accountID)
 		return
 	}
+	if cfg.Provider == providers.ProviderJMAP {
+		return
+	}
 	if o.shouldUseGmailAPIMail(cfg) {
 		log.Printf("idle %s: skipping IMAP IDLE for Gmail API-first sync", accountID)
 		return
@@ -2165,6 +2168,9 @@ func (o *SyncOrchestrator) syncAccount(ctx context.Context, accountID string, in
 	cfg, err := o.imapAccountConfig(ctx, accountID)
 	if err != nil {
 		return err
+	}
+	if cfg.Provider == providers.ProviderJMAP {
+		return ErrJMAPSyncUnavailable
 	}
 
 	if o.shouldUseOutlookGraphMail(cfg) {

@@ -368,6 +368,8 @@ func (s *UserIMAP) snapshotAccount(ctx context.Context, owner, id string, allowJ
 			r.tokens = credentials.Account(owner, id)
 		} else if allowJMAP && r.config.Provider == providers.ProviderJMAP && r.config.AuthMethod == "plain" {
 			// Signs in with its stored password, like plain IMAP.
+		} else if r.config.Provider == providers.ProviderJMAP {
+			return ErrJMAPSyncUnavailable
 		} else if r.config.Provider != providers.ProviderIMAP || r.config.AuthMethod != "plain" {
 			return errors.New("routed worker supports plain IMAP and configured Gmail/Outlook OAuth accounts only")
 		}

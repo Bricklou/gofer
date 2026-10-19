@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"errors"
 	"io"
 	"net"
 	"net/http"
@@ -12,6 +13,7 @@ import (
 	"testing"
 
 	"github.com/cristianadrielbraun/gofer/internal/models"
+	"github.com/cristianadrielbraun/gofer/internal/providers"
 )
 
 // jmapSessionTestServer answers session requests for lena@example.test with
@@ -143,5 +145,59 @@ func TestJMAPConnectionTestsNeedTheExperimentFlag(t *testing.T) {
 	rec := postNewAccountTest(h, jmapAccountTestForm("mail.example.test", "secret"))
 	if rec.Code != http.StatusBadRequest || !strings.Contains(rec.Body.String(), "GOFER_JMAP_EXPERIMENT") {
 		t.Fatalf("new account test with the flag off = %d %s", rec.Code, rec.Body.String())
+	}
+}
+
+func jmapCreateRequest(form url.Values) (*http.Request, models.CreateAccountRequest) {
+	req := httptest.NewRequest(http.MethodPost, "/api/accounts", strings.NewReader(form.Encode()))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	_ = req.ParseForm()
+	return req, accountRequestFromForm(req)
+}
+
+// Creating a JMAP account keeps the session URL the wizard's test found, and
+// discovers it when the test was skipped.
+func TestPrepareJMAPAccountForCreation(t *testing.T) {
+	t.Setenv("GOFER_JMAP_EXPERIMENT", "true")
+	h, db := newAccountOwnershipTestHandler(t)
+	var hits atomic.Int32
+	server, host, port := jmapSessionTestServer(t, "secret", &hits)
+	if err := db.AddPlaintextTransportException(t.Context(), "http", host, port, "administrator"); err != nil {
+		t.Fatal(err)
+	}
+	if err := db.AddPrivateTargetException(t.Context(), "http", host, port, "administrator"); err != nil {
+		t.Fatal(err)
+	}
+	form := url.Values{"mail_service": {"jmap"}, "email_address": {"lena@example.test"}, "password": {"secret"}, "jmap_server": {net.JoinHostPort(host, strconv.Itoa(port))}}
+
+	r, req := jmapCreateRequest(form)
+	if req.Provider != "jmap" {
+		t.Fatalf("mail_service jmap gave provider %q", req.Provider)
+	}
+	if err := h.prepareJMAPAccount(r, &req); err != nil {
+		t.Fatalf("prepareJMAPAccount (discovering): %v", err)
+	}
+	if req.Username != "lena@example.test" || req.JMAPSessionURL != server.URL+"/.well-known/jmap" {
+		t.Fatalf("discovered request = user %q url %q", req.Username, req.JMAPSessionURL)
+	}
+
+	hits.Store(0)
+	form.Set("jmap_session_url", "http://other.example.test/.well-known/jmap")
+	r, req = jmapCreateRequest(form)
+	if err := h.prepareJMAPAccount(r, &req); err != nil || req.JMAPSessionURL != "http://other.example.test/.well-known/jmap" || hits.Load() != 0 {
+		t.Fatalf("with a tested URL: %v, url %q, %d requests", err, req.JMAPSessionURL, hits.Load())
+	}
+
+	form.Del("password")
+	r, req = jmapCreateRequest(form)
+	if err := h.prepareJMAPAccount(r, &req); err == nil {
+		t.Fatal("accepted a JMAP account without a password")
+	}
+
+	t.Setenv("GOFER_JMAP_EXPERIMENT", "")
+	form.Set("password", "secret")
+	r, req = jmapCreateRequest(form)
+	if err := h.prepareJMAPAccount(r, &req); !errors.Is(err, providers.ErrJMAPDisabled) {
+		t.Fatalf("with the flag off: %v", err)
 	}
 }

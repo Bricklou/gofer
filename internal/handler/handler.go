@@ -2726,7 +2726,13 @@ func (h *Handler) handleCreateAccount(w http.ResponseWriter, r *http.Request) {
 
 	req := accountRequestFromForm(r)
 
-	if req.EmailAddress == "" || req.IMAPHost == "" || req.SMTPHost == "" || req.Username == "" {
+	if req.Provider == providers.ProviderJMAP {
+		if err := h.prepareJMAPAccount(r, &req); err != nil {
+			w.Header().Set("Content-Type", "text/html")
+			views.AccountFormError(err.Error()).Render(r.Context(), w)
+			return
+		}
+	} else if req.EmailAddress == "" || req.IMAPHost == "" || req.SMTPHost == "" || req.Username == "" {
 		w.Header().Set("Content-Type", "application/html")
 		views.AccountFormError("All required fields must be filled in").Render(r.Context(), w)
 		return
