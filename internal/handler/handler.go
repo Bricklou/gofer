@@ -5420,6 +5420,11 @@ func (h *Handler) handleDeleteDraft(w http.ResponseWriter, r *http.Request) {
 			log.Printf("gmail draft delete account=%s draft=%s: %v", email.AccountID, email.InternetMessageID, err)
 		}
 	}
+	if draftProvider != nil && strings.TrimSpace(draftProvider.AccountProvider) == providers.ProviderJMAP {
+		if err := h.deleteJMAPDraft(r.Context(), email.AccountID, email.InternetMessageID, draftProvider.ProviderMessageID); err != nil {
+			log.Printf("jmap draft delete account=%s draft=%s: %v", email.AccountID, email.InternetMessageID, err)
+		}
+	}
 	h.deleteComposeAttachmentPaths(draftPaths)
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]string{"status": "discarded"})
