@@ -78,6 +78,7 @@ type profileAccount struct {
 	SMTPTLSMode       string                    `json:"smtp_tls_mode,omitempty"`
 	Username          string                    `json:"username,omitempty"`
 	SMTPUsername      string                    `json:"smtp_username,omitempty"`
+	JMAPSessionURL    string                    `json:"jmap_session_url,omitempty"`
 	EmailSync         bool                      `json:"email_sync"`
 	Contacts          *profileContactSync       `json:"contacts,omitempty"`
 	Calendar          *profileCalendarSync      `json:"calendar,omitempty"`
@@ -261,6 +262,7 @@ func exportProfileAccount(ctx context.Context, store *config.AccountStore, db *s
 		SMTPTLSMode:       data.SMTPTLSMode,
 		Username:          data.Username,
 		SMTPUsername:      data.SmtpUsername,
+		JMAPSessionURL:    data.JMAPSessionURL,
 		EmailSync:         data.EmailSyncEnabled,
 	}
 
@@ -366,6 +368,8 @@ func (h *Handler) profileProviderAvailable(provider string) bool {
 	switch provider {
 	case providers.ProviderIMAP:
 		return true
+	case providers.ProviderJMAP:
+		return providers.JMAPEnabled()
 	case providers.ProviderGmail:
 		if h.userAccounts != nil {
 			return h.userCredentials != nil && h.userCredentials.HasGoogleOAuth()
@@ -419,8 +423,11 @@ func (h *Handler) profileAccountPlans(file *profileFile, existing map[string]pro
 		current, connected := existing[strings.ToLower(strings.TrimSpace(account.EmailAddress))]
 		switch {
 		case connected:
-			plans[account.Ref] = profileAccountPlan{Status: profileImportExists, ExistingID: current.ID, CanReplace: current.Provider == account.Provider}
-		case !h.profileProviderAvailable(account.Provider):
+			canReplace := current.Provider == account.Provider && !(account.Provider == providers.ProviderJMAP && strings.TrimSpace(account.JMAPSessionURL) == "")
+			plans[account.Ref] = profileAccountPlan{Status: profileImportExists, ExistingID: current.ID, CanReplace: canReplace}
+		case !h.profileProviderAvailable(account.Provider),
+			// Profiles exported before JMAP support left out the server.
+			account.Provider == providers.ProviderJMAP && strings.TrimSpace(account.JMAPSessionURL) == "":
 			plans[account.Ref] = profileAccountPlan{Status: profileImportUnsupported}
 		default:
 			plans[account.Ref] = profileAccountPlan{Status: profileImportNew}
@@ -654,7 +661,7 @@ func importProfileSignatures(ctx context.Context, db *storage.DB, owner string, 
 }
 
 func profileCalendarProvider(provider string) string {
-	if provider == providers.ProviderIMAP {
+	if provider == providers.ProviderIMAP || provider == providers.ProviderJMAP {
 		return storage.CalendarSourceProviderCalDAV
 	}
 	return provider
@@ -677,9 +684,10 @@ func (h *Handler) importProfileAccount(ctx context.Context, owner string, accoun
 		Username:          account.Username,
 		AuthMethod:        account.AuthMethod,
 		SmtpUsername:      account.SMTPUsername,
+		JMAPSessionURL:    account.JMAPSessionURL,
 		EmailSyncDisabled: true,
 	}
-	if req.Provider == providers.ProviderIMAP {
+	if req.Provider == providers.ProviderIMAP || req.Provider == providers.ProviderJMAP {
 		req.AuthMethod = "plain"
 	} else {
 		req.AuthMethod = "oauth2"
@@ -796,7 +804,7 @@ func importProfileAccountServices(ctx context.Context, store *config.AccountStor
 	if calendar == nil {
 		return nil
 	}
-	if account.Provider == providers.ProviderIMAP && strings.TrimSpace(calendar.CalDAVBaseURL) != "" {
+	if (account.Provider == providers.ProviderIMAP || account.Provider == providers.ProviderJMAP) && strings.TrimSpace(calendar.CalDAVBaseURL) != "" {
 		if err := store.SaveCalDAVConfig(ctx, owner, id, calendar.CalDAVBaseURL, calendar.CalDAVUsername, "", calendar.CalDAVUseAccountCredentials); err != nil {
 			return err
 		}
@@ -1140,6 +1148,10 @@ func (h *Handler) replaceProfileAccount(ctx context.Context, owner, id string, a
 			IMAPHost: account.IMAPHost, IMAPPort: account.IMAPPort, IMAPTLSMode: account.IMAPTLSMode,
 			SMTPHost: account.SMTPHost, SMTPPort: account.SMTPPort, SMTPTLSMode: account.SMTPTLSMode,
 			Username: account.Username, SmtpUsername: account.SMTPUsername,
+		}
+		if account.Provider == providers.ProviderJMAP {
+			req = models.CreateAccountRequest{Provider: providers.ProviderJMAP, DisplayName: name, AuthMethod: "plain",
+				JMAPSessionURL: account.JMAPSessionURL, Username: account.Username}
 		}
 		var err error
 		if h.userAccounts != nil {

@@ -604,3 +604,72 @@ func TestProfileImportGmailWaitsForSignIn(t *testing.T) {
 		t.Fatalf("needs = %v", pending.Missing())
 	}
 }
+
+// A JMAP account travels with its session URL and CalDAV setup, and comes
+// back as a JMAP account waiting for its password. A profile from before
+// JMAP support, without the session URL, neither adds nor replaces one.
+func TestProfileJMAPAccountRoundTrip(t *testing.T) {
+	t.Setenv("GOFER_JMAP_EXPERIMENT", "true")
+	ctx := t.Context()
+	const sessionURL = "https://jmap.example.test/.well-known/jmap"
+	source := newProfileTestHandler(t)
+	created, err := source.accountStore.CreateAccount(ctx, "default", &models.CreateAccountRequest{
+		Provider: "jmap", EmailAddress: "sam@jmap.example.test", DisplayName: "Sam Rivera",
+		JMAPSessionURL: sessionURL, Username: "sam@jmap.example.test", Password: "jmap-secret-value", AuthMethod: "plain",
+	})
+	if err != nil {
+		t.Fatalf("create JMAP account: %v", err)
+	}
+	if err := source.accountStore.SaveCalDAVConfig(ctx, "default", created.ID, "https://jmap.example.test/dav/cal/", "", "", true); err != nil {
+		t.Fatalf("save CalDAV: %v", err)
+	}
+	data := exportProfileForTest(t, source, false)
+	if strings.Contains(string(data), "jmap-secret-value") || !strings.Contains(string(data), `"jmap_session_url":"`+sessionURL+`"`) {
+		t.Fatalf("exported profile = %s", data)
+	}
+
+	target := newProfileTestHandler(t)
+	file, err := parseProfile(data)
+	if err != nil {
+		t.Fatal(err)
+	}
+	options := profileImportOptions{Accounts: map[string]bool{file.Accounts[0].Ref: true}}
+	result, err := target.importProfile(ctx, "default", file, options)
+	if err != nil || !slices.Equal(result.Accounts, []string{"sam@jmap.example.test"}) || len(result.AccountFailures) != 0 {
+		t.Fatalf("import = %+v, %v", result, err)
+	}
+	accounts, err := target.db.GetAccounts(ctx, "default")
+	if err != nil || len(accounts) != 1 || !accounts[0].ReconnectPending || accounts[0].EmailSyncEnabled {
+		t.Fatalf("imported accounts = %+v, %v", accounts, err)
+	}
+	id := accounts[0].ID
+	cfg, err := target.accountStore.GetConfig(ctx, id)
+	if err != nil || cfg.Provider != "jmap" || cfg.AuthMethod != "plain" || cfg.JMAPSessionURL != sessionURL || cfg.Username != "sam@jmap.example.test" {
+		t.Fatalf("imported account config = %+v, %v", cfg, err)
+	}
+	if calendar, err := target.accountStore.GetCalendarSyncConfig(ctx, "default", id); err != nil || calendar.CalDAVBaseURL != "https://jmap.example.test/dav/cal/" {
+		t.Fatalf("imported CalDAV = %+v, %v", calendar, err)
+	}
+
+	// Replacing the account from the profile keeps it a JMAP account.
+	if err := target.replaceProfileAccount(ctx, "default", id, file.Accounts[0], nil); err != nil {
+		t.Fatalf("replace: %v", err)
+	}
+	if cfg, err := target.accountStore.GetConfig(ctx, id); err != nil || cfg.Provider != "jmap" || cfg.JMAPSessionURL != sessionURL {
+		t.Fatalf("replaced account config = %+v, %v", cfg, err)
+	}
+
+	old := *file
+	old.Accounts = []profileAccount{file.Accounts[0]}
+	old.Accounts[0].JMAPSessionURL = ""
+	existing, err := target.profileExistingAccounts(ctx, "default")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if plan := target.profileAccountPlans(&old, existing)[old.Accounts[0].Ref]; plan.Status != profileImportExists || plan.CanReplace {
+		t.Fatalf("old profile plan for a connected account = %+v", plan)
+	}
+	if plan := target.profileAccountPlans(&old, nil)[old.Accounts[0].Ref]; plan.Status != profileImportUnsupported {
+		t.Fatalf("old profile plan for a new account = %+v", plan)
+	}
+}
