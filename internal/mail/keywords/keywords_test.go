@@ -21,3 +21,16 @@ func TestValidateAllowsProviderKeywordIDs(t *testing.T) {
 		t.Fatal("Validate($Junk) error = nil, want status keyword rejection")
 	}
 }
+
+func TestIsStatusCoversJMAPSpellings(t *testing.T) {
+	for _, status := range []string{"\\Seen", "$seen", "$Flagged", "$draft", "$answered", "$Junk"} {
+		if !IsStatus(status) {
+			t.Errorf("IsStatus(%q) = false", status)
+		}
+	}
+	for _, label := range []string{"$label1", "Client", "$VendorFlag"} {
+		if IsStatus(label) {
+			t.Errorf("IsStatus(%q) = true", label)
+		}
+	}
+}

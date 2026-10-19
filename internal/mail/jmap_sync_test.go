@@ -612,6 +612,63 @@ func TestSyncAppliesJMAPEmailChanges(t *testing.T) {
 	}
 }
 
+// Keywords other than status ones are labels, named through the same aliases
+// as IMAP keywords, and a later change on the server adds or removes them.
+func TestSyncStoresJMAPKeywordsAsLabels(t *testing.T) {
+	f := newUserGmailFixture(t)
+	server := newFakeJMAPServer(t)
+	server.emailState = "c0"
+	server.setMailboxes(jmap.Mailbox{ID: "mb-in", Name: "Inbox", Role: "inbox", MyRights: readable()})
+	tagged := testJMAPEmail("e1", "Garden plans", 1, "mb-in")
+	tagged.Keywords = map[string]bool{"$seen": true, "$label2": true, "Client": true, "client": true, "$forwarded": true, "Unset": false}
+	server.emails = []jmap.Email{tagged, testJMAPEmail("e2", "Lunch on Friday?", 2, "mb-in")}
+	useFakeJMAPAccount(t, f, server)
+	if err := f.worker.Sync(t.Context(), "alice", f.ids["alice"]); err != nil {
+		t.Fatalf("Sync() error = %v", err)
+	}
+	if got := jmapLabels(t, f, "e1"); got != "Client,Work" {
+		t.Fatalf("e1 labels = %q, want Client and $label2 shown as Work", got)
+	}
+	if got := jmapLabels(t, f, "e2"); got != "" {
+		t.Fatalf("e2 labels = %q, want none", got)
+	}
+
+	server.updateEmail("e1", func(e *jmap.Email) { e.Keywords = map[string]bool{"$seen": true, "Client": true} })
+	server.updateEmail("e2", func(e *jmap.Email) { e.Keywords = map[string]bool{"Receipts": true} })
+	if err := f.worker.Sync(t.Context(), "alice", f.ids["alice"]); err != nil {
+		t.Fatalf("Sync() with changes error = %v", err)
+	}
+	if got := jmapLabels(t, f, "e1"); got != "Client" {
+		t.Fatalf("e1 labels after removing Work = %q", got)
+	}
+	if got := jmapLabels(t, f, "e2"); got != "Receipts" {
+		t.Fatalf("e2 labels after tagging = %q", got)
+	}
+}
+
+// jmapLabels lists the names of an email's labels, sorted and joined by commas.
+func jmapLabels(t *testing.T, f *userGmailFixture, emailID string) string {
+	t.Helper()
+	var names []string
+	f.local(t, "alice", func(db *storage.DB) error {
+		rows, err := db.Read().Query(`SELECT l.name FROM messages m JOIN message_labels ml ON ml.message_id = m.id
+			JOIN labels l ON l.id = ml.label_id WHERE m.account_id = ? AND m.remote_message_id = ? ORDER BY l.name`, f.ids["alice"], emailID)
+		if err != nil {
+			return err
+		}
+		defer rows.Close()
+		for rows.Next() {
+			var name string
+			if err := rows.Scan(&name); err != nil {
+				return err
+			}
+			names = append(names, name)
+		}
+		return rows.Err()
+	})
+	return strings.Join(names, ",")
+}
+
 // Opening a JMAP email downloads its original message by blob and stores the
 // parsed body like any other; an email over the download limit is refused
 // from its size, before downloading anything.

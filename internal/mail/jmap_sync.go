@@ -10,6 +10,7 @@ import (
 
 	"github.com/cristianadrielbraun/gofer/internal/mail/imap"
 	"github.com/cristianadrielbraun/gofer/internal/mail/jmap"
+	"github.com/cristianadrielbraun/gofer/internal/mail/keywords"
 	"github.com/cristianadrielbraun/gofer/internal/models"
 	"github.com/cristianadrielbraun/gofer/internal/storage"
 )
@@ -238,7 +239,7 @@ func (o *SyncOrchestrator) importJMAPEmails(ctx context.Context, accountID strin
 
 // jmapEmailToProviderSyncs gives one row per known mailbox the email is in,
 // which together set the folders the email shows in. Keywords carry the read,
-// flagged and draft states.
+// flagged and draft states, and every other keyword is a label.
 func jmapEmailToProviderSyncs(accountID string, email jmap.Email, folders map[string]string) []storage.ProviderSyncMessage {
 	id := strings.TrimSpace(email.ID)
 	if id == "" {
@@ -275,6 +276,9 @@ func jmapEmailToProviderSyncs(accountID string, email jmap.Email, folders map[st
 		ToRecipients:      jmapRecipients(email.To),
 		CCRecipients:      jmapRecipients(email.CC),
 		BCCRecipients:     jmapRecipients(email.BCC),
+		Labels:            jmapKeywordLabels(email.Keywords),
+		LabelsKnown:       true,
+		LabelProvider:     storage.LabelProviderKeyword,
 	}
 	var rows []storage.ProviderSyncMessage
 	for mailboxID, in := range email.MailboxIDs {
@@ -288,6 +292,29 @@ func jmapEmailToProviderSyncs(accountID string, email jmap.Email, folders map[st
 	}
 	sort.Slice(rows, func(i, j int) bool { return rows[i].FolderID < rows[j].FolderID })
 	return rows
+}
+
+// jmapKeywordLabels gives the email's keywords that are labels rather than
+// status, in a stable order. They are the same keywords IMAP clients see, so
+// they go through the same aliases as IMAP keyword labels. Keywords differing
+// only in case are one label, as in IMAP.
+func jmapKeywordLabels(set map[string]bool) []storage.LabelInput {
+	names := make([]string, 0, len(set))
+	for name, on := range set {
+		if name = strings.TrimSpace(name); on && name != "" && !keywords.IsStatus(name) {
+			names = append(names, name)
+		}
+	}
+	sort.Strings(names)
+	var labels []storage.LabelInput
+	seen := map[string]bool{}
+	for _, name := range names {
+		if key := strings.ToLower(name); !seen[key] {
+			seen[key] = true
+			labels = append(labels, storage.LabelInput{Name: name, ProviderID: name, ProviderType: storage.LabelProviderKeyword})
+		}
+	}
+	return labels
 }
 
 // jmapMessageIDList writes JMAP's bare message ids as a header value.

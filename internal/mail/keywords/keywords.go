@@ -31,10 +31,13 @@ func Validate(keyword string) (string, error) {
 }
 
 // IsStatus reports whether keyword is a system flag or a keyword that marks
-// a message's status rather than labelling it.
+// a message's status rather than labelling it. JMAP spells IMAP's \Seen,
+// \Flagged, \Draft and \Answered flags as $seen, $flagged, $draft and
+// $answered.
 func IsStatus(keyword string) bool {
 	switch strings.ToLower(strings.TrimSpace(keyword)) {
 	case "\\seen", "\\answered", "\\flagged", "\\deleted", "\\draft", "\\recent",
+		"$seen", "$answered", "$flagged", "$draft",
 		"$junk", "$notjunk", "$nonjunk", "junk", "notjunk", "nonjunk", "non-junk",
 		"$forwarded", "$mdnsent", "$phishing":
 		return true
