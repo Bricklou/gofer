@@ -14808,7 +14808,7 @@ func CalendarSyncSettingsPanel(data models.EditAccountData, message string, isEr
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-		} else if data.Provider == "imap" {
+		} else if data.Provider == "imap" || editAccountIsJMAP(data) {
 			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 911, "<form id=\"")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
@@ -15132,7 +15132,7 @@ func CalendarSyncSettingsPanel(data models.EditAccountData, message string, isEr
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-		} else if data.Provider == "gmail" || data.Provider == "outlook" || data.Provider == "imap" {
+		} else if data.Provider == "gmail" || data.Provider == "outlook" || data.Provider == "imap" || editAccountIsJMAP(data) {
 			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 946, "<div class=\"rounded-lg border border-border bg-background/50 p-3 text-xs leading-relaxed text-muted-foreground\"><p class=\"font-semibold text-foreground\">No calendars discovered yet</p><p class=\"mt-0.5\">Run discovery above. This account will appear in Calendar once at least one source is selected.</p></div>")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
