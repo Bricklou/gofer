@@ -3218,6 +3218,10 @@ func (h *Handler) handleTestAccount(w http.ResponseWriter, r *http.Request) {
 		h.writeConnectionTestResults(w, r, h.testOutlookGraphMail(r.Context(), accountID), accountID)
 		return
 	case providers.ProviderJMAP:
+		if !providers.JMAPEnabled() {
+			h.writeConnectionTestResults(w, r, []models.ConnectionTestResult{{Service: "jmap", Error: providers.ErrJMAPDisabled.Error()}}, accountID)
+			return
+		}
 		password, err := h.accountStore.DecryptPassword(r.Context(), accountID)
 		if err != nil {
 			http.Error(w, fmt.Sprintf("get credentials: %v", err), http.StatusInternalServerError)

@@ -74,6 +74,10 @@ func parseTypedAccountTest(w http.ResponseWriter, r *http.Request) (models.Creat
 	}
 	req := accountRequestFromForm(r)
 	if req.Provider == providers.ProviderJMAP {
+		if !providers.JMAPEnabled() {
+			http.Error(w, providers.ErrJMAPDisabled.Error(), http.StatusBadRequest)
+			return req, false
+		}
 		if req.EmailAddress == "" {
 			http.Error(w, "all required fields must be filled in", http.StatusBadRequest)
 			return req, false

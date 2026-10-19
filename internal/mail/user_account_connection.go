@@ -76,7 +76,9 @@ func (s *UserIMAP) TestAccount(ctx context.Context, owner, id string) ([]models.
 			}
 			results = append(results, result)
 		}
-		if scope.config.Provider == providers.ProviderJMAP {
+		if scope.config.Provider == providers.ProviderJMAP && !providers.JMAPEnabled() {
+			results = append(results, models.ConnectionTestResult{Service: "jmap", Error: providers.ErrJMAPDisabled.Error()})
+		} else if scope.config.Provider == providers.ProviderJMAP {
 			probe("jmap", scope.config.JMAPSessionURL, "", func() error {
 				accountID, err := TestJMAPConnection(ctx, scope.config, scope.password)
 				if err == nil {

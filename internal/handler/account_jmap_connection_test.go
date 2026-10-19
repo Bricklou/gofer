@@ -45,6 +45,7 @@ func jmapAccountTestForm(server, password string) url.Values {
 // reports the session URL to save, and contacts plain HTTP only once an
 // administrator approved it. Nothing is saved.
 func TestNewJMAPAccountConnectionTestDiscoversTheSession(t *testing.T) {
+	t.Setenv("GOFER_JMAP_EXPERIMENT", "true")
 	h, db := newAccountOwnershipTestHandler(t)
 	var hits atomic.Int32
 	server, host, port := jmapSessionTestServer(t, "secret", &hits)
@@ -87,6 +88,7 @@ func TestNewJMAPAccountConnectionTestDiscoversTheSession(t *testing.T) {
 // the account's test button and from the edit wizard with the password left
 // blank.
 func TestSavedJMAPAccountConnectionTests(t *testing.T) {
+	t.Setenv("GOFER_JMAP_EXPERIMENT", "true")
 	h, db := newAccountOwnershipTestHandler(t)
 	var hits atomic.Int32
 	server, host, port := jmapSessionTestServer(t, "saved-secret", &hits)
@@ -132,5 +134,14 @@ func TestSavedJMAPAccountConnectionTests(t *testing.T) {
 	}
 	if rec := edit(false); rec.Code != http.StatusNotFound {
 		t.Fatalf("another person's account edit test = %d, want 404", rec.Code)
+	}
+}
+
+func TestJMAPConnectionTestsNeedTheExperimentFlag(t *testing.T) {
+	h, _ := newAccountOwnershipTestHandler(t)
+	t.Setenv("GOFER_JMAP_EXPERIMENT", "")
+	rec := postNewAccountTest(h, jmapAccountTestForm("mail.example.test", "secret"))
+	if rec.Code != http.StatusBadRequest || !strings.Contains(rec.Body.String(), "GOFER_JMAP_EXPERIMENT") {
+		t.Fatalf("new account test with the flag off = %d %s", rec.Code, rec.Body.String())
 	}
 }

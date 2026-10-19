@@ -14,6 +14,7 @@ import (
 	"github.com/cristianadrielbraun/gofer/internal/mail/jmap"
 	mailtransport "github.com/cristianadrielbraun/gofer/internal/mail/transport"
 	"github.com/cristianadrielbraun/gofer/internal/models"
+	"github.com/cristianadrielbraun/gofer/internal/providers"
 	"github.com/cristianadrielbraun/gofer/internal/storage"
 	"github.com/google/uuid"
 )
@@ -673,6 +674,9 @@ func (s *AccountStore) prepareAccountCreation(ctx context.Context, req *models.C
 		req.SmtpPassword = ""
 		req.AuthMethod = "oauth2"
 	} else if accountProviderUsesJMAP(req.Provider) {
+		if !providers.JMAPEnabled() {
+			return providers.ErrJMAPDisabled
+		}
 		sessionURL, err := normalizeJMAPSessionURL(req.JMAPSessionURL)
 		if err != nil {
 			return err
@@ -811,6 +815,9 @@ func (s *AccountStore) updateAccount(ctx context.Context, accountID, userID stri
 		)
 		args = append(args, "", 0, "", "", 0, "", "", "", "oauth2")
 	} else if accountProviderUsesJMAP(req.Provider) {
+		if !providers.JMAPEnabled() {
+			return providers.ErrJMAPDisabled
+		}
 		setClauses = append(setClauses,
 			"imap_host = ?", "imap_port = ?", "imap_tls_mode = ?",
 			"smtp_host = ?", "smtp_port = ?", "smtp_tls_mode = ?",
