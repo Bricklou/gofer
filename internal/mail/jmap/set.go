@@ -40,6 +40,8 @@ type SetError struct {
 	Type        string   `json:"type"`
 	Description string   `json:"description"`
 	Properties  []string `json:"properties"`
+	// ExistingID is the object already there, on an alreadyExists error.
+	ExistingID string `json:"existingId"`
 }
 
 func (e *SetError) Error() string {
