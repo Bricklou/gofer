@@ -351,3 +351,36 @@ func TestOwnedAdminSecurityAddsHTTPPlaintextException(t *testing.T) {
 		t.Fatal("unknown protocol accepted", post.Code, post.Header())
 	}
 }
+
+// In managed mode the exception list reads each user's accounts; a JMAP
+// account is listed under the HTTP exception for its session URL's server,
+// and an HTTPS exception on the same host and port matches no IMAP account.
+func TestOwnedAdminSecurityListsJMAPAccounts(t *testing.T) {
+	f := newOwnedAdminDiagnosticFixture(t)
+	if _, err := f.system.Write().Exec(`UPDATE users SET status='active' WHERE id='bob'`); err != nil {
+		t.Fatal(err)
+	}
+	if err := f.h.userAccounts.UpdateAccount(t.Context(), "alice", f.accounts["alice"].ID, &models.CreateAccountRequest{Provider: "jmap", EmailAddress: "robin@example.test", JMAPSessionURL: "http://jmap.lab.test:8080/.well-known/jmap", Username: "robin@example.test"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := f.h.userAccounts.UpdateAccount(t.Context(), "bob", f.accounts["bob"].ID, &models.CreateAccountRequest{Provider: "imap", EmailAddress: "sam@example.test", IMAPHost: "jmap.lab.test", IMAPPort: 8443, IMAPTLSMode: "tls", Username: "sam", AuthMethod: "plain"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := f.system.AddPlaintextTransportException(t.Context(), "http", "jmap.lab.test", 8080, "administrator"); err != nil {
+		t.Fatal(err)
+	}
+	if err := f.system.AddPrivateTargetException(t.Context(), "https", "jmap.lab.test", 8443, "administrator"); err != nil {
+		t.Fatal(err)
+	}
+	page := f.request("/admin/security")
+	if page.Code != 200 {
+		t.Fatal(page.Code, page.Body.String())
+	}
+	body := page.Body.String()
+	if !strings.Contains(body, "robin@example.test") {
+		t.Error("JMAP account missing from its HTTP exception")
+	}
+	if strings.Contains(body, "sam@example.test") {
+		t.Error("IMAP account listed under an HTTPS exception")
+	}
+}

@@ -4,6 +4,8 @@ import (
 	"context"
 	"path/filepath"
 	"testing"
+
+	"github.com/cristianadrielbraun/gofer/internal/models"
 )
 
 func TestMailSecurityExceptionsAreExactAndTrackAffectedAccounts(t *testing.T) {
@@ -214,5 +216,82 @@ DELETE FROM schema_version; INSERT INTO schema_version(version) VALUES(114);`); 
 	}
 	if err := db.AddPlaintextTransportException(ctx, "http", "jmap.lab.test", 8080, "admin"); err != nil {
 		t.Fatalf("HTTP plaintext exception after migration: %v", err)
+	}
+}
+
+func TestMailSecurityExceptionUsedBy(t *testing.T) {
+	imapPlain := DiagnosticTransportAccount{IMAPHost: "mail.lab.test", IMAPPort: 143, IMAPTLSMode: "plaintext", SMTPHost: "mail.lab.test", SMTPPort: 465, SMTPTLSMode: "tls"}
+	jmapPlain := DiagnosticTransportAccount{JMAPSessionURL: "http://JMAP.lab.test:8080/.well-known/jmap"}
+	jmapTLS := DiagnosticTransportAccount{JMAPSessionURL: "https://jmap.lab.test/.well-known/jmap"}
+	// An IMAP account on the same host and port as an HTTP exception.
+	imapOnHTTPPort := DiagnosticTransportAccount{IMAPHost: "jmap.lab.test", IMAPPort: 8080, IMAPTLSMode: "tls"}
+	plaintext := func(protocol, host string, port int) models.MailSecurityException {
+		return models.MailSecurityException{Kind: models.MailSecurityExceptionPlaintextTransport, Protocol: protocol, Host: host, Port: port}
+	}
+	private := func(protocol, host string, port int) models.MailSecurityException {
+		return models.MailSecurityException{Kind: models.MailSecurityExceptionPrivateTarget, Protocol: protocol, Host: host, Port: port}
+	}
+	cases := []struct {
+		name    string
+		item    models.MailSecurityException
+		account DiagnosticTransportAccount
+		want    bool
+	}{
+		{"plaintext IMAP", plaintext("imap", "mail.lab.test", 143), imapPlain, true},
+		{"plaintext SMTP over TLS", plaintext("smtp", "mail.lab.test", 465), imapPlain, false},
+		{"private SMTP over TLS", private("smtp", "mail.lab.test", 465), imapPlain, true},
+		{"plaintext HTTP JMAP", plaintext("http", "jmap.lab.test", 8080), jmapPlain, true},
+		{"private HTTP JMAP", private("http", "jmap.lab.test", 8080), jmapPlain, true},
+		{"private HTTPS for an HTTP URL", private("https", "jmap.lab.test", 8080), jmapPlain, false},
+		{"private HTTPS default port", private("https", "jmap.lab.test", 443), jmapTLS, true},
+		{"plaintext HTTP for an HTTPS URL", plaintext("http", "jmap.lab.test", 443), jmapTLS, false},
+		{"HTTPS target is not IMAP", private("https", "jmap.lab.test", 8080), imapOnHTTPPort, false},
+		{"HTTP discovery uses no account", models.MailSecurityException{Kind: models.MailSecurityExceptionHTTPDiscovery, Host: "jmap.lab.test"}, jmapPlain, false},
+	}
+	for _, tc := range cases {
+		if got := MailSecurityExceptionUsedBy(tc.item, tc.account); got != tc.want {
+			t.Errorf("%s: got %v, want %v", tc.name, got, tc.want)
+		}
+	}
+}
+
+func TestMailSecurityExceptionsListJMAPAccounts(t *testing.T) {
+	ctx := context.Background()
+	db, err := New(filepath.Join(t.TempDir(), "gofer.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	if _, err := db.Write().ExecContext(ctx, `INSERT INTO users(id,username,username_normalized) VALUES('owner','owner','owner');
+INSERT INTO accounts(id,user_id,provider,email_address,imap_host,imap_port,jmap_session_url) VALUES
+ ('jmap','owner','jmap','robin@example.test','',0,'http://jmap.lab.test:8080/.well-known/jmap'),
+ ('imap','owner','imap','sam@example.test','jmap.lab.test',8080,'')`); err != nil {
+		t.Fatal(err)
+	}
+	if err := db.AddPlaintextTransportException(ctx, "http", "jmap.lab.test", 8080, "admin"); err != nil {
+		t.Fatal(err)
+	}
+	if err := db.AddPrivateTargetException(ctx, "https", "jmap.lab.test", 8080, "admin"); err != nil {
+		t.Fatal(err)
+	}
+	items, err := db.ListMailSecurityExceptions(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, item := range items {
+		var ids []string
+		for _, account := range item.Accounts {
+			ids = append(ids, account.ID)
+		}
+		switch item.Protocol {
+		case "http":
+			if len(ids) != 1 || ids[0] != "jmap" {
+				t.Errorf("HTTP plaintext exception accounts = %v, want [jmap]", ids)
+			}
+		case "https":
+			if len(ids) != 0 {
+				t.Errorf("HTTPS private target accounts = %v, want none", ids)
+			}
+		}
 	}
 }

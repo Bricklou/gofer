@@ -32,6 +32,7 @@ type DiagnosticTransportAccount struct {
 	ID, Email                                    string
 	IMAPHost, IMAPTLSMode, SMTPHost, SMTPTLSMode string
 	IMAPPort, SMTPPort                           int
+	JMAPSessionURL                               string
 }
 
 type UserDiagnostics struct {
@@ -112,10 +113,18 @@ func (r *AccountRouting) ReadUserDiagnostics(ctx context.Context, actor Diagnost
 }
 
 func (db *DB) listDiagnosticTransports(ctx context.Context, owner string) ([]DiagnosticTransportAccount, error) {
+	return db.listTransportAccounts(ctx, `AND user_id=?`, owner)
+}
+
+// listTransportAccounts reads how accounts connect, for matching them with
+// mail security exceptions.
+func (db *DB) listTransportAccounts(ctx context.Context, filter string, args ...any) ([]DiagnosticTransportAccount, error) {
 	rows, err := db.Read().QueryContext(ctx, `SELECT id,email_address,
  lower(trim(COALESCE(imap_host,''))),COALESCE(imap_port,0),lower(trim(COALESCE(imap_tls_mode,''))),
- lower(trim(COALESCE(smtp_host,''))),COALESCE(smtp_port,0),lower(trim(COALESCE(smtp_tls_mode,'')))
- FROM accounts WHERE user_id=? AND COALESCE(is_deleting,0)=0`, owner)
+ lower(trim(COALESCE(smtp_host,''))),COALESCE(smtp_port,0),lower(trim(COALESCE(smtp_tls_mode,''))),
+ COALESCE(jmap_session_url,'')
+ FROM accounts WHERE COALESCE(is_deleting,0)=0 `+filter+`
+ ORDER BY email_address COLLATE NOCASE`, args...)
 	if err != nil {
 		return nil, err
 	}
@@ -123,7 +132,7 @@ func (db *DB) listDiagnosticTransports(ctx context.Context, owner string) ([]Dia
 	var result []DiagnosticTransportAccount
 	for rows.Next() {
 		var account DiagnosticTransportAccount
-		if err := rows.Scan(&account.ID, &account.Email, &account.IMAPHost, &account.IMAPPort, &account.IMAPTLSMode, &account.SMTPHost, &account.SMTPPort, &account.SMTPTLSMode); err != nil {
+		if err := rows.Scan(&account.ID, &account.Email, &account.IMAPHost, &account.IMAPPort, &account.IMAPTLSMode, &account.SMTPHost, &account.SMTPPort, &account.SMTPTLSMode, &account.JMAPSessionURL); err != nil {
 			return nil, err
 		}
 		result = append(result, account)

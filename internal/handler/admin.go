@@ -276,9 +276,7 @@ func (h *Handler) handleAddPrivateTargetException(w http.ResponseWriter, r *http
 		redirectAdminSecurity(w, r, "", "Could not add the private target exception.")
 		return
 	}
-	if protocol == "imap" || protocol == "smtp" {
-		h.restartAccountsUsingException(r.Context(), models.MailSecurityExceptionPrivateTarget, protocol, host, port)
-	}
+	h.restartAccountsUsingException(r.Context(), models.MailSecurityExceptionPrivateTarget, protocol, host, port)
 	redirectAdminSecurity(w, r, strings.ToUpper(protocol)+" private target is now allowed for "+host+":"+strconv.Itoa(port)+".", "")
 }
 
