@@ -164,7 +164,7 @@ func (h *Handler) handleSaveAccountContactSync(w http.ResponseWriter, r *http.Re
 	cfg.Enabled = cfg.BaseURL != "" || len(cfg.AddressBooks) > 0 || cfg.Username != "" || password != ""
 	if cfg.Enabled {
 		if cfg.Username == "" || r.FormValue("use_account_credentials") == "1" {
-			accountEmail, accountUsername, _, _, err := h.contactSyncAccountIdentity(ctx, userID, accountID)
+			accountEmail, accountUsername, _, _, _, err := h.contactSyncAccountIdentity(ctx, userID, accountID)
 			if err != nil {
 				htmlStatus(w, http.StatusBadRequest, "Account is required.")
 				return
@@ -416,7 +416,7 @@ func (h *Handler) handleDiscoverAccountContactSync(w http.ResponseWriter, r *htt
 		baseURL = strings.TrimSpace(r.FormValue("addressbook_url"))
 	}
 	username := strings.TrimSpace(r.FormValue("username"))
-	accountEmail, accountUsername, imapHost, smtpHost, err := h.contactSyncAccountIdentity(ctx, userID, accountID)
+	accountEmail, accountUsername, imapHost, smtpHost, jmapSessionURL, err := h.contactSyncAccountIdentity(ctx, userID, accountID)
 	if err != nil {
 		writeJSONError(w, http.StatusBadRequest, "account is required")
 		return
@@ -430,7 +430,7 @@ func (h *Handler) handleDiscoverAccountContactSync(w http.ResponseWriter, r *htt
 	autodiscover := r.FormValue("autodiscover") == "1"
 	candidates := contactSyncDiscoveryCandidates(baseURL)
 	if autodiscover {
-		candidates = contactSyncDiscoveryCandidates(baseURL, imapHost, smtpHost, username, accountEmail)
+		candidates = contactSyncDiscoveryCandidates(baseURL, jmapServerAddress(jmapSessionURL), imapHost, smtpHost, username, accountEmail)
 	} else if len(candidates) == 0 {
 		writeJSONError(w, http.StatusBadRequest, "enter a CardDAV base URL, or use Attempt URL autodiscover")
 		return
@@ -487,13 +487,13 @@ func (h *Handler) streamCardDAVDiscovery(w http.ResponseWriter, ctx context.Cont
 	writeEvent(map[string]any{"type": "done", "address_books": books})
 }
 
-func (h *Handler) contactSyncAccountIdentity(ctx context.Context, userID, accountID string) (string, string, string, string, error) {
-	var email, username, imapHost, smtpHost string
+func (h *Handler) contactSyncAccountIdentity(ctx context.Context, userID, accountID string) (string, string, string, string, string, error) {
+	var email, username, imapHost, smtpHost, jmapSessionURL string
 	err := h.db.Read().QueryRowContext(ctx, `
-		SELECT email_address, username, imap_host, smtp_host
+		SELECT email_address, username, imap_host, smtp_host, COALESCE(jmap_session_url, '')
 		FROM accounts
-		WHERE id = ? AND user_id = ? AND COALESCE(is_deleting, 0) = 0`, accountID, userID).Scan(&email, &username, &imapHost, &smtpHost)
-	return strings.TrimSpace(email), strings.TrimSpace(username), strings.TrimSpace(imapHost), strings.TrimSpace(smtpHost), err
+		WHERE id = ? AND user_id = ? AND COALESCE(is_deleting, 0) = 0`, accountID, userID).Scan(&email, &username, &imapHost, &smtpHost, &jmapSessionURL)
+	return strings.TrimSpace(email), strings.TrimSpace(username), strings.TrimSpace(imapHost), strings.TrimSpace(smtpHost), strings.TrimSpace(jmapSessionURL), err
 }
 
 func contactSyncDiscoveryCandidates(values ...string) []string {

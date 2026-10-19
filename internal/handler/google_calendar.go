@@ -546,7 +546,7 @@ func (h *Handler) handleDiscoverAccountCalendars(w http.ResponseWriter, r *http.
 		var calendars []storage.CalendarSource
 		var discoverErr error
 		if autodiscover {
-			candidates := calDAVAutodiscoveryCandidates(discoveryCtx, baseURL, data.EmailAddress, data.IMAPHost, data.SMTPHost)
+			candidates := calDAVAutodiscoveryCandidates(discoveryCtx, []string{baseURL, jmapServerAddress(data.JMAPSessionURL)}, data.EmailAddress, data.IMAPHost, data.SMTPHost)
 			calendars, normalizedBaseURL, discoverErr = discoverCalDAVCalendarsCandidates(discoveryCtx, candidates, username, password, userID, accountID)
 		} else {
 			calendars, discoverErr = discoverCalDAVCalendars(discoveryCtx, normalizedBaseURL, username, password, userID, accountID)

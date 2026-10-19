@@ -79,6 +79,17 @@ func (g davPlaintextGuard) RoundTrip(req *http.Request) (*http.Response, error) 
 	return davHTTPTransport.RoundTrip(req)
 }
 
+// jmapServerAddress is a JMAP account's server address, its scheme, host and
+// port, from the session URL. DAV discovery tries it when no address was
+// entered: many JMAP servers serve CardDAV and CalDAV on the same address.
+func jmapServerAddress(sessionURL string) string {
+	u, err := url.Parse(strings.TrimSpace(sessionURL))
+	if err != nil || u.Host == "" || (!strings.EqualFold(u.Scheme, "https") && !strings.EqualFold(u.Scheme, "http")) {
+		return ""
+	}
+	return strings.ToLower(u.Scheme + "://" + u.Host)
+}
+
 // validPushEndpoint accepts the HTTPS address of a browser's push service.
 // The browser supplies it, so it is delivered to only through netguard as
 // well; this refuses anything that isn't a plain HTTPS URL to begin with.

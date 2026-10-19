@@ -190,7 +190,7 @@ func (h *Handler) handleUserDiscoverAccountContactSync(w http.ResponseWriter, r 
 		autodiscover := r.FormValue("autodiscover") == "1"
 		candidates := contactSyncDiscoveryCandidates(baseURL)
 		if autodiscover {
-			candidates = contactSyncDiscoveryCandidates(baseURL, identity.IMAPHost, identity.SMTPHost, username, identity.EmailAddress)
+			candidates = contactSyncDiscoveryCandidates(baseURL, jmapServerAddress(identity.JMAPSessionURL), identity.IMAPHost, identity.SMTPHost, username, identity.EmailAddress)
 		} else if len(candidates) == 0 {
 			writeJSONError(w, http.StatusBadRequest, "enter a CardDAV base URL, or use Attempt URL autodiscover")
 			return nil

@@ -35,7 +35,9 @@ func normalizeCalDAVBaseURL(raw string) (string, error) {
 	return parsed.String(), nil
 }
 
-func calDAVAutodiscoveryCandidates(ctx context.Context, preferredURL string, identities ...string) []string {
+// calDAVAutodiscoveryCandidates lists the addresses to try: the given server
+// addresses first, in order, then guesses from the identities' domains.
+func calDAVAutodiscoveryCandidates(ctx context.Context, serverURLs []string, identities ...string) []string {
 	candidates := make([]string, 0, 16)
 	seenCandidates := make(map[string]bool)
 	addCandidate := func(raw string) {
@@ -46,7 +48,11 @@ func calDAVAutodiscoveryCandidates(ctx context.Context, preferredURL string, ide
 		seenCandidates[strings.ToLower(normalized)] = true
 		candidates = append(candidates, normalized)
 	}
-	addCandidate(preferredURL)
+	for _, server := range serverURLs {
+		if strings.TrimSpace(server) != "" {
+			addCandidate(server)
+		}
+	}
 
 	domains := make([]string, 0, len(identities)*2)
 	seenDomains := make(map[string]bool)

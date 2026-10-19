@@ -338,7 +338,7 @@ func (p *userCalendarRequest) discoverDAV(ctx context.Context, r *http.Request) 
 	ctx = context.WithValue(ctx, calendarDiscoveryDAVGuardKey{}, calendarDiscoveryDAVCallbacks{ready: p.ready, failure: p.recordRetry})
 	var sources []storage.CalendarSource
 	if autodiscover {
-		candidates := calDAVAutodiscoveryCandidates(ctx, baseURL, identity.EmailAddress, identity.IMAPHost, identity.SMTPHost)
+		candidates := calDAVAutodiscoveryCandidates(ctx, []string{baseURL, jmapServerAddress(identity.JMAPSessionURL)}, identity.EmailAddress, identity.IMAPHost, identity.SMTPHost)
 		sources, baseURL, err = discoverCalDAVCalendarsCandidates(ctx, candidates, username, password, service.OwnerID(), service.AccountID())
 	} else {
 		baseURL, err = normalizeCalDAVBaseURL(baseURL)

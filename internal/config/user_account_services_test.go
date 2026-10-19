@@ -664,3 +664,29 @@ func TestUserAccountServicesValidateCopiedSetupIsReadOnlyAndBound(t *testing.T) 
 		t.Fatal("stale setup validated", err)
 	}
 }
+
+// A JMAP account's service snapshot carries its session URL, which DAV
+// discovery guesses from, and a changed session URL changes the account's
+// connection identity.
+func TestUserAccountServicesCopyJMAPSessionURL(t *testing.T) {
+	_, routing, accounts, owners := newServiceAccountFixture(t)
+	id := owners["alice"].ID
+	setSession := func(sessionURL string) {
+		t.Helper()
+		if err := routing.WithUser(t.Context(), "alice", func(db *storage.DB) error {
+			_, err := db.Write().Exec(`UPDATE accounts SET provider='jmap',jmap_session_url=? WHERE id=?`, sessionURL, id)
+			return err
+		}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	setSession("http://192.168.0.10:8687/.well-known/jmap")
+	before := serviceSnapshotFor(t, accounts, "alice", id)
+	if got := before.Identity().JMAPSessionURL; got != "http://192.168.0.10:8687/.well-known/jmap" {
+		t.Fatalf("snapshot session URL = %q", got)
+	}
+	setSession("http://192.168.0.11:8687/.well-known/jmap")
+	if after := serviceSnapshotFor(t, accounts, "alice", id); after.connection == before.connection {
+		t.Fatal("a new JMAP server kept the same connection identity")
+	}
+}

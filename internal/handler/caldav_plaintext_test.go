@@ -70,3 +70,30 @@ func TestCalDAVPlainHTTPNeedsAnApprovedException(t *testing.T) {
 		t.Fatalf("address without a scheme = %q, want HTTPS", got)
 	}
 }
+
+// A JMAP account's server is tried for CardDAV and CalDAV when no address was
+// entered, right after any address that was.
+func TestDAVDiscoveryTriesTheJMAPServer(t *testing.T) {
+	for sessionURL, want := range map[string]string{
+		"http://192.168.0.10:8687/.well-known/jmap": "http://192.168.0.10:8687",
+		"https://JMAP.example.test/jmap/session":    "https://jmap.example.test",
+		"":                                          "",
+		"ftp://jmap.example.test/":                  "",
+		"not a url":                                 "",
+	} {
+		if got := jmapServerAddress(sessionURL); got != want {
+			t.Errorf("jmapServerAddress(%q) = %q, want %q", sessionURL, got, want)
+		}
+	}
+	// A cancelled context stops before any domain guesses, leaving the
+	// server addresses in the order given.
+	ctx, cancel := context.WithCancel(t.Context())
+	cancel()
+	got := calDAVAutodiscoveryCandidates(ctx, []string{"https://dav.example.test/cal/", "", jmapServerAddress("http://192.168.0.10:8687/.well-known/jmap")}, "robin@example.test")
+	if strings.Join(got, " ") != "https://dav.example.test/cal/ http://192.168.0.10:8687" {
+		t.Fatalf("CalDAV candidates = %v", got)
+	}
+	if got := contactSyncDiscoveryCandidates("", jmapServerAddress("http://192.168.0.10:8687/.well-known/jmap"), "", "", "robin@example.test"); strings.Join(got, " ") != "http://192.168.0.10:8687 robin@example.test" {
+		t.Fatalf("CardDAV candidates = %v", got)
+	}
+}
