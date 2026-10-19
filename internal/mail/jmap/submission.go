@@ -98,7 +98,8 @@ func MatchIdentity(identities []Identity, address string) (Identity, bool) {
 }
 
 // Envelope is the SMTP envelope of a submission: who it is from and who
-// receives it, including Bcc recipients the message headers leave out.
+// receives it, including Bcc recipients. The server strips Bcc headers during
+// delivery (RFC 8621 section 7.5), preserving them in the stored email.
 type Envelope struct {
 	MailFrom string
 	RcptTo   []string

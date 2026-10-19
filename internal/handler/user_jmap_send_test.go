@@ -6,15 +6,21 @@ import (
 	"net"
 	"net/http"
 	"net/http/httptest"
+	stdmail "net/mail"
+	"net/url"
 	"strconv"
 	"strings"
 	"sync"
 	"testing"
 	"time"
 
+	"github.com/cristianadrielbraun/gofer/internal/auth"
 	"github.com/cristianadrielbraun/gofer/internal/config"
+	"github.com/cristianadrielbraun/gofer/internal/mail"
+	"github.com/cristianadrielbraun/gofer/internal/mail/message"
 	"github.com/cristianadrielbraun/gofer/internal/models"
 	"github.com/cristianadrielbraun/gofer/internal/storage"
+	"github.com/cristianadrielbraun/gofer/internal/store"
 )
 
 // fakeJMAPSender is a JMAP server for alice@example.com that answers a send
@@ -27,6 +33,65 @@ type fakeJMAPSender struct {
 	uploaded string
 	envelope map[string]any
 	sends    int
+}
+
+func TestUserJMAPQueuedDraftEditKeepsBcc(t *testing.T) {
+	t.Setenv("GOFER_JMAP_EXPERIMENT", "true")
+	f := newUserContactPushFixture(t, "carddav", http.HandlerFunc(func(http.ResponseWriter, *http.Request) {}))
+	id := f.accounts["alice"].ID
+	if err := f.h.userAccounts.UpdateAccount(t.Context(), "alice", id, &models.CreateAccountRequest{
+		Provider: "jmap", JMAPSessionURL: "https://mail.example.test/.well-known/jmap", Username: "alice@example.com", Password: "secret",
+	}); err != nil {
+		t.Fatal(err)
+	}
+	ctx := auth.ContextWithUser(t.Context(), &auth.User{ID: "alice"})
+	err := f.h.userAccounts.WithUser(ctx, "alice", func(local *config.AccountStore, db *storage.DB) error {
+		h := &Handler{db: db, accountStore: local, blobStore: store.NewBlobStore(t.TempDir()), syncer: mail.NewSyncOrchestrator(db, nil, nil, nil)}
+		if err := db.UpsertFolders(ctx, []storage.UpsertFolderInput{{ID: "drafts", AccountID: id, RemoteID: "mb-drafts", Name: "Drafts", Role: "drafts", Selectable: true}}); err != nil {
+			return err
+		}
+		form := url.Values{"account_id": {id}, "draft_id": {"<queued-bcc@example.com>"}, "to": {"sam@example.test"}, "bcc": {"old-hidden@example.test"}, "subject": {"Queued draft"}, "body": {"Original body"}}
+		save := func() composeDraftSaveResult {
+			r := httptest.NewRequest(http.MethodPost, "/compose/draft", strings.NewReader(form.Encode())).WithContext(ctx)
+			r.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+			saved, failure := h.saveUserComposeDraft(ctx, r)
+			if failure != nil {
+				t.Fatalf("save queued draft: %+v", failure)
+			}
+			return saved
+		}
+		saved := save()
+		msg, err := h.outgoingMessageFromDraft(ctx, saved.MessageID)
+		if err != nil {
+			return err
+		}
+		queued, err := h.queueOutgoingMessage(ctx, id, saved.MessageID, saved.DraftID, msg, time.Now().Add(time.Hour), true)
+		if err != nil {
+			return err
+		}
+		form.Set("bcc", `"New hidden recipient" <new-hidden@example.test>`)
+		form.Set("body", "Edited body")
+		save()
+		edited, err := db.GetOutgoingSend(ctx, queued.ID)
+		if err != nil {
+			return err
+		}
+		stored, err := stdmail.ReadMessage(strings.NewReader(string(edited.MIMEData)))
+		if err != nil {
+			return err
+		}
+		bcc, err := stored.Header.AddressList("Bcc")
+		if err != nil || len(bcc) != 1 || bcc[0].Address != "new-hidden@example.test" || bcc[0].Name != "New hidden recipient" {
+			t.Fatalf("edited queued Bcc = %q, %v", stored.Header.Get("Bcc"), err)
+		}
+		if stored.Header.Get("Message-ID") != msg.MessageID || !strings.Contains(string(edited.MIMEData), "Edited body") || strings.Contains(string(edited.MIMEData), "old-hidden@example.test") {
+			t.Fatalf("edited queued MIME = %s", edited.MIMEData)
+		}
+		return nil
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
 }
 
 func newFakeJMAPSender(t *testing.T, mode string) *fakeJMAPSender {
@@ -114,20 +179,22 @@ func TestUserJMAPDeliveryOutcomes(t *testing.T) {
 			}); err != nil {
 				t.Fatal(err)
 			}
-			snapshot, _ := json.Marshal(outgoingMessageSnapshot{FromEmail: "alice@example.com", MessageID: "<lunch-1@example.com>", Subject: "Lunch on Friday?"})
-			raw := "From: alice@example.com\r\nTo: sam@example.test\r\nSubject: Lunch on Friday?\r\nMessage-ID: <lunch-1@example.com>\r\n\r\nAre you free around noon?\r\n"
+			msg := &message.OutgoingMessage{
+				FromEmail: "alice@example.com", MessageID: "<lunch-1@example.com>", Subject: "Lunch on Friday?",
+				To: []*stdmail.Address{{Address: "sam@example.test"}}, Bcc: []*stdmail.Address{{Name: "Hidden recipient", Address: "hidden@example.test"}},
+				TextBody: "Are you free around noon?",
+			}
+			var raw string
 			var sendID string
 			s := &userMailDeliveryScope{runner: &userMailDelivery{h: f.h}, owner: "alice", id: id}
 			if err := f.h.userAccounts.WithUser(t.Context(), "alice", func(local *config.AccountStore, db *storage.DB) error {
-				queued, err := db.QueueOutgoingSend(t.Context(), storage.QueueOutgoingSendInput{
-					AccountID: id, Transport: storage.OutgoingTransportJMAP, EnvelopeFrom: "alice@example.com",
-					EnvelopeRecipients: []string{"sam@example.test", "hidden@example.test"},
-					MIMEData:           []byte(raw), MessageJSON: snapshot, SendAfter: time.Now().Add(-time.Minute),
-				})
+				localHandler := &Handler{db: db, accountStore: local}
+				queued, err := localHandler.queueOutgoingMessage(t.Context(), id, 0, "", msg, time.Now().Add(-time.Minute), false)
 				if err != nil {
 					return err
 				}
 				sendID = queued.ID
+				raw = string(queued.MIMEData)
 				if s.cfg, err = local.GetConfig(t.Context(), id); err != nil {
 					return err
 				}
@@ -143,6 +210,14 @@ func TestUserJMAPDeliveryOutcomes(t *testing.T) {
 			}
 			if server.sends != 1 || server.uploaded != raw {
 				t.Fatalf("server saw %d sends, upload %q", server.sends, server.uploaded)
+			}
+			stored, err := stdmail.ReadMessage(strings.NewReader(server.uploaded))
+			if err != nil {
+				t.Fatal(err)
+			}
+			bcc, err := stored.Header.AddressList("Bcc")
+			if err != nil || len(bcc) != 1 || bcc[0].Address != "hidden@example.test" || bcc[0].Name != "Hidden recipient" {
+				t.Fatalf("uploaded Sent copy lost Bcc: %q, %v", stored.Header.Get("Bcc"), err)
 			}
 			rcpt, _ := json.Marshal(server.envelope["rcptTo"])
 			if !strings.Contains(string(rcpt), "hidden@example.test") {

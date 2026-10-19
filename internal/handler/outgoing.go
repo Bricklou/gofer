@@ -164,6 +164,9 @@ func outgoingTransportForConfig(cfg *models.AccountConfig) string {
 }
 
 func buildOutgoingMIME(transport string, msg *message.OutgoingMessage) ([]byte, error) {
+	if transport == storage.OutgoingTransportJMAP {
+		return message.BuildMIMEMessageForJMAP(msg)
+	}
 	if transport == storage.OutgoingTransportGmail || transport == storage.OutgoingTransportOutlook {
 		return message.BuildMIMEMessageForGraph(msg)
 	}
