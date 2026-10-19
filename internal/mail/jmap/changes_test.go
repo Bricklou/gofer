@@ -99,3 +99,66 @@ func TestGetMailboxChangesLiveServer(t *testing.T) {
 		t.Fatalf("changes since the current state should be empty")
 	}
 }
+
+func TestGetEmailChanges(t *testing.T) {
+	var name string
+	var args map[string]any
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		call := decodeCalls(t, r)[0]
+		_ = json.Unmarshal(call[0], &name)
+		_ = json.Unmarshal(call[1], &args)
+		_, _ = w.Write([]byte(`{"methodResponses": [["Email/changes", {
+		  "accountId": "a1", "oldState": "es1", "newState": "es2", "hasMoreChanges": false,
+		  "created": ["e2"], "updated": ["e1"], "destroyed": ["e0"]}, "0"]], "sessionState": "s1"}`))
+	}))
+	defer server.Close()
+
+	client := &Client{HTTP: server.Client()}
+	session := &Session{APIURL: server.URL + "/jmap/"}
+	changes, err := client.GetEmailChanges(context.Background(), session, "a1", "es1", 100)
+	if err != nil {
+		t.Fatalf("GetEmailChanges: %v", err)
+	}
+	if name != "Email/changes" || args["sinceState"] != "es1" || args["maxChanges"] != float64(100) {
+		t.Fatalf("call = %s %v", name, args)
+	}
+	if changes.NewState != "es2" || changes.Created[0] != "e2" || changes.Updated[0] != "e1" || changes.Destroyed[0] != "e0" {
+		t.Fatalf("changes = %+v", changes)
+	}
+}
+
+// Like the Mailbox one; with GOFER_JMAP_TEST_SINCE_STATE set it also shows
+// the current keywords and mailboxes of each updated email.
+func TestGetEmailChangesLiveServer(t *testing.T) {
+	client, session := liveSession(t)
+	accountID := session.PrimaryAccount(CapabilityMail)
+	since := os.Getenv("GOFER_JMAP_TEST_SINCE_STATE")
+	if since == "" {
+		current, err := client.GetEmails(context.Background(), session, accountID, []string{}, nil)
+		if err != nil {
+			t.Fatalf("GetEmails: %v", err)
+		}
+		since = current.State
+	}
+	changes, err := client.GetEmailChanges(context.Background(), session, accountID, since, 0)
+	if err != nil {
+		t.Fatalf("GetEmailChanges: %v", err)
+	}
+	t.Logf("since=%s new=%s more=%v created=%v updated=%v destroyed=%v",
+		since, changes.NewState, changes.HasMoreChanges, changes.Created, changes.Updated, changes.Destroyed)
+	if os.Getenv("GOFER_JMAP_TEST_SINCE_STATE") == "" {
+		if len(changes.Created)+len(changes.Updated)+len(changes.Destroyed) != 0 {
+			t.Fatalf("changes since the current state should be empty")
+		}
+		return
+	}
+	if len(changes.Updated) > 0 {
+		updated, err := client.GetEmails(context.Background(), session, accountID, changes.Updated, []string{"keywords", "mailboxIds"})
+		if err != nil {
+			t.Fatalf("GetEmails: %v", err)
+		}
+		for _, email := range updated.List {
+			t.Logf("updated %s keywords=%v mailboxIds=%v", email.ID, email.Keywords, email.MailboxIDs)
+		}
+	}
+}
