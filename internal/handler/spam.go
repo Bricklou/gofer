@@ -72,6 +72,30 @@ func (h *Handler) handleMarkMessagesSpamState(w http.ResponseWriter, r *http.Req
 			continue
 		}
 
+		if strings.EqualFold(h.spamAccountProvider(ctx, infos[0].MessageMutationInfo), providers.ProviderJMAP) {
+			// On JMAP, spam is a move into Junk, or back to the inbox, sent to
+			// the server through the queued changes like any other move.
+			var moving []storage.ThreadMessageMutationInfo
+			for _, info := range infos {
+				if info.FolderID != destFolderID {
+					moving = append(moving, info)
+				}
+			}
+			if len(moving) > 0 {
+				if err := h.queueMessageMoves(ctx, moving, destFolderID); err != nil {
+					if firstErr == nil {
+						firstErr = err
+					}
+					failedMessages += len(moving)
+					continue
+				}
+			}
+			updatedTargets++
+			updatedMessages += len(infos)
+			h.publishSpamMutation(infos, destFolderID)
+			continue
+		}
+
 		targetUpdated := false
 		for _, info := range infos {
 			accountProvider := h.spamAccountProvider(ctx, info.MessageMutationInfo)
