@@ -46,3 +46,15 @@ func TestCommitFromFlagWhenNoCheckout(t *testing.T) {
 		t.Fatalf("no build info: String() = %q, want dev", got)
 	}
 }
+
+func TestCommitFlagIgnoresOtherCheckout(t *testing.T) {
+	bi := &debug.BuildInfo{Settings: []debug.BuildSetting{
+		{Key: "vcs.revision", Value: "ffff000"},
+		{Key: "vcs.time", Value: "2026-10-19T12:00:00Z"},
+		{Key: "vcs.modified", Value: "true"},
+	}}
+	i := from(bi, "", "abc1234")
+	if i.Commit != "abc1234" || i.Modified || !i.CommitTime.IsZero() {
+		t.Fatalf("got %+v, want only the passed commit", i)
+	}
+}

@@ -88,17 +88,21 @@ func from(bi *debug.BuildInfo, version, commit string) Info {
 		!strings.Contains(mv, "+") && !pseudoVersion.MatchString(mv) {
 		i.Version = mv
 	}
+	var vcs Info
 	for _, s := range bi.Settings {
 		switch s.Key {
 		case "vcs.revision":
-			if i.Commit == "" {
-				i.Commit = s.Value
-			}
+			vcs.Commit = s.Value
 		case "vcs.time":
-			i.CommitTime, _ = time.Parse(time.RFC3339, s.Value)
+			vcs.CommitTime, _ = time.Parse(time.RFC3339, s.Value)
 		case "vcs.modified":
-			i.Modified = s.Value == "true"
+			vcs.Modified = s.Value == "true"
 		}
+	}
+	// The checkout's date and changes describe its own commit, so they do
+	// not apply when a different commit was passed in.
+	if i.Commit == "" || i.Commit == vcs.Commit {
+		i.Commit, i.CommitTime, i.Modified = vcs.Commit, vcs.CommitTime, vcs.Modified
 	}
 	return i
 }

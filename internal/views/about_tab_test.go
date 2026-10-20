@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/cristianadrielbraun/gofer/internal/buildinfo"
+	"github.com/cristianadrielbraun/gofer/internal/updatecheck"
 )
 
 func renderAboutTab(t *testing.T, info buildinfo.Info) string {
@@ -53,5 +54,37 @@ func TestSettingsAboutTabShowsSourceBuild(t *testing.T) {
 	}
 	if strings.Contains(html, "/releases/tag/") {
 		t.Fatalf("source build should not link a release: %s", html)
+	}
+}
+
+func renderUpdateCheck(t *testing.T, result *updatecheck.Result, errMsg string) string {
+	t.Helper()
+	var out bytes.Buffer
+	if err := AboutUpdateCheck(result, errMsg).Render(context.Background(), &out); err != nil {
+		t.Fatalf("AboutUpdateCheck.Render() error = %v", err)
+	}
+	return out.String()
+}
+
+func TestAboutUpdateCheckStates(t *testing.T) {
+	for _, tc := range []struct {
+		name   string
+		result *updatecheck.Result
+		errMsg string
+		want   []string
+	}{
+		{"unchecked", nil, "", []string{"Not checked yet.", "Check for updates", `hx-post="/api/settings/about/update-check"`}},
+		{"failed", nil, "Could not check for updates. Try again later.", []string{"Could not check for updates.", "Check again"}},
+		{"release available", &updatecheck.Result{Available: true, Latest: updatecheck.Release{Tag: "v0.11.0", URL: "https://example.test/v0.11.0", Notes: "Faster sync."}}, "", []string{">v0.11.0</a> is available.", "Faster sync."}},
+		{"up to date", &updatecheck.Result{Latest: updatecheck.Release{Tag: "v0.10.0"}}, "", []string{"Gofer is up to date."}},
+		{"commits behind", &updatecheck.Result{Source: true, Available: true, Behind: 12, Commits: []updatecheck.Commit{{SHA: "2222333344445555", Title: "Newer change", URL: "https://example.test/2222"}}}, "", []string{"12 newer commits on master.", ">2222333</a>", "Newer change"}},
+		{"unknown commit", &updatecheck.Result{Source: true, Unknown: true}, "", []string{"GitHub does not have this build's commit"}},
+	} {
+		html := renderUpdateCheck(t, tc.result, tc.errMsg)
+		for _, want := range tc.want {
+			if !strings.Contains(html, want) {
+				t.Errorf("%s: missing %q: %s", tc.name, want, html)
+			}
+		}
 	}
 }
