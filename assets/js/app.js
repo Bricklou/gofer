@@ -16336,7 +16336,9 @@ function refreshAfterLabelMutation(emailId) {
 
 function moveMessage(emailId, folderId, thread) {
   closeMoveDialog()
-  moveMessagesOutOfFolder(emailId, "/api/messages/move", { targets: [{ id: String(emailId), thread: !!thread }], folder_id: folderId })
+  // The source names which copy moves: mail sent to oneself is in Sent and the
+  // Inbox, and only the one being looked at should move.
+  moveMessagesOutOfFolder(emailId, "/api/messages/move", { targets: [{ id: String(emailId), thread: !!thread }], folder_id: folderId, source_folder_id: mailActionCurrentFolderID() })
 }
 
 function unarchiveThread(emailId) {
