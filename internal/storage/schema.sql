@@ -164,6 +164,7 @@ CREATE TABLE IF NOT EXISTS message_folder_state (
     is_deleted INTEGER NOT NULL DEFAULT 0,
     is_archived INTEGER NOT NULL DEFAULT 0,
     synced_at DATETIME,
+    remote_message_id TEXT,
     PRIMARY KEY (message_id, folder_id)
 );
 
@@ -494,6 +495,9 @@ END;
 
 CREATE UNIQUE INDEX IF NOT EXISTS idx_folder_uid
 ON message_folder_state(folder_id, remote_uid);
+
+CREATE INDEX IF NOT EXISTS idx_message_folder_state_remote_message
+ON message_folder_state(remote_message_id) WHERE remote_message_id IS NOT NULL;
 
 CREATE INDEX IF NOT EXISTS idx_recipients_email
 ON message_recipients(email);
@@ -1653,4 +1657,4 @@ CREATE TABLE IF NOT EXISTS calendar_invitation_messages (
 );
 
 -- Schema version marker for fresh installs
-INSERT OR REPLACE INTO schema_version (version) VALUES (117);
+INSERT OR REPLACE INTO schema_version (version) VALUES (118);

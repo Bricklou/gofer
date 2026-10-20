@@ -295,6 +295,28 @@ func TestUserStorageMigrationCopyRecognizesHistoricalColumnsWithoutUpgradingSour
 	}
 }
 
+func TestUserStorageMigrationCopyGivesOldFolderStatesTheirProviderID(t *testing.T) {
+	source := sharedMigrationFixture(t)
+	migrationFixtureSQL(t, source, `UPDATE accounts SET provider='jmap' WHERE id='alice-mail';
+ UPDATE messages SET remote_message_id='email-1' WHERE account_id='alice-mail';
+ DROP INDEX idx_message_folder_state_remote_message;
+ ALTER TABLE message_folder_state DROP COLUMN remote_message_id;
+ UPDATE schema_version SET version=117`)
+	report := migrationCopyReport(t, source)
+	path := source.Path()
+	if err := source.Close(); err != nil {
+		t.Fatal(err)
+	}
+	local := migrationCopyDestination(t, "alice")
+	if err := copyUserStorageMigrationRows(t.Context(), path, local, report, "alice"); err != nil {
+		t.Fatal(err)
+	}
+	var providerID string
+	if err := local.Read().QueryRow(`SELECT COALESCE(remote_message_id, '') FROM message_folder_state`).Scan(&providerID); err != nil || providerID != "email-1" {
+		t.Fatal("copied folder state provider id", providerID, err)
+	}
+}
+
 func TestUserStorageMigrationCopyHighWaterIncludesOtherOwnersWhenSourceSequenceWasReset(t *testing.T) {
 	source := sharedMigrationFixture(t)
 	migrationFixtureSQL(t, source, `UPDATE sqlite_sequence SET seq=0 WHERE name='messages'`)

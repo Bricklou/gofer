@@ -99,6 +99,15 @@ func copyUserStorageMigrationRows(ctx context.Context, sourcePath string, destin
 				}
 			}
 		}
+		// Folder states copied from before they kept a provider id get it
+		// from their row, as migrateV117ToV118 does.
+		for _, table := range report.Tables {
+			if table.Name == "message_folder_state" && !migrationHasColumn(table, "remote_message_id") {
+				if _, err := tx.ExecContext(ctx, folderStateProviderIDBackfillSQL); err != nil {
+					return err
+				}
+			}
+		}
 		// Verify after every insertion/transform, so a later trigger cannot
 		// silently alter a table that already passed comparison.
 		for _, table := range report.Tables {
