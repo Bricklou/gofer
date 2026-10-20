@@ -423,6 +423,7 @@ func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /", h.handleIndex)
 	mux.HandleFunc("GET /email/{id}", h.handleEmailPartial)
 	mux.HandleFunc("GET /email/{id}/move", h.handleMoveDialog)
+	mux.HandleFunc("GET /email/{id}/source", h.handleMessageSourceDialog)
 	mux.HandleFunc("POST /mail/labels-dialog", h.handleLabelsDialog)
 	mux.HandleFunc("GET /api/mail/{id}/calendar", h.handleMailCalendarFooter)
 	mux.HandleFunc("POST /api/mail/{id}/calendar/invitation", h.handleMailCalendarInvitation)
@@ -551,6 +552,7 @@ func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/folders/unread", h.handleFolderUnreadCounts)
 	mux.HandleFunc("POST /api/messages/{id}/prefetch-body", h.handlePrefetchBody)
 	mux.HandleFunc("POST /api/messages/{id}/download-full", h.handleDownloadFullBody)
+	mux.HandleFunc("GET /api/messages/{id}/source", h.handleMessageSource)
 	mux.HandleFunc("GET /api/compose/source", h.handleComposeSource)
 	mux.HandleFunc("GET /compose/pane", h.handleComposePane)
 	mux.HandleFunc("POST /compose", h.handleCompose)
@@ -2089,6 +2091,21 @@ func (h *Handler) persistParsedBody(ctx context.Context, msgID int64, accountID 
 }
 
 func (h *Handler) fetchParsedBody(ctx context.Context, msgID int64, accountID string) (*message.ParsedMessage, error) {
+	bodyData, err := h.fetchRawMessage(ctx, msgID)
+	if err != nil || bodyData == nil {
+		return nil, err
+	}
+
+	parsed, err := message.ParseMessage(ctx, bytes.NewReader(bodyData), h.blobStore, accountID, msgID)
+	if err != nil {
+		return nil, err
+	}
+	return parsed, nil
+}
+
+// fetchRawMessage returns the message as it was received: the saved copy when
+// there is one, otherwise the copy on the mail server.
+func (h *Handler) fetchRawMessage(ctx context.Context, msgID int64) ([]byte, error) {
 	var bodyData []byte
 
 	var rawPath string
@@ -2117,12 +2134,7 @@ func (h *Handler) fetchParsedBody(ctx context.Context, msgID int64, accountID st
 			return nil, err
 		}
 	}
-
-	parsed, err := message.ParseMessage(ctx, bytes.NewReader(bodyData), h.blobStore, accountID, msgID)
-	if err != nil {
-		return nil, err
-	}
-	return parsed, nil
+	return bodyData, nil
 }
 
 func (h *Handler) fetchBodyRemote(ctx context.Context, msgID int64, info *storage.MessageFetchInfo) ([]byte, error) {

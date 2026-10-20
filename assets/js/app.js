@@ -16391,6 +16391,38 @@ function openMoveDialog(emailId, thread) {
     .catch(function () {})
 }
 
+// The source dialog downloads the message when it isn't saved, which can
+// take a moment, so a toast says what failed instead of nothing happening.
+function openMessageSource(emailId) {
+  fetch("/email/" + encodeURIComponent(emailId) + "/source")
+    .then(function (response) {
+      if (!response.ok) {
+        return response.text().then(function (text) { throw new Error(text.trim() || "The message source couldn't be loaded.") })
+      }
+      return response.text()
+    })
+    .then(function (html) {
+      var host = document.getElementById("mail-source-dialog-host")
+      if (!host) {
+        host = document.createElement("div")
+        host.id = "mail-source-dialog-host"
+        document.body.appendChild(host)
+      }
+      host.innerHTML = html
+      if (window.tui && window.tui.dialog) {
+        window.tui.dialog.open("mail-source-dialog")
+        return
+      }
+      var content = host.querySelector("[data-tui-dialog-content]")
+      if (content && !content.open) {
+        try { content.showModal() } catch (_) {}
+      }
+    })
+    .catch(function (err) {
+      showGoferToast({ id: "mail-source-error", title: "Couldn't show the source", description: err.message, variant: "error", icon: "error", position: "bottom-right", duration: 8000, dismissible: true })
+    })
+}
+
 // Clicking a folder only selects it; Move does the move.
 function selectMoveFolder(button) {
   var dialog = document.getElementById("mail-move-dialog")

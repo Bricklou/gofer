@@ -898,10 +898,16 @@ templ MailViewHeader(email *models.Email, thread []models.ThreadItem) {
 						</span>
 					}
 					@dropdown.Separator()
-					@dropdown.Item() {
+					@dropdown.Item(dropdown.ItemProps{Href: "/api/messages/" + email.ID + "/source?download=1"}) {
 						<span class="flex items-center gap-2">
 							@icon.Download(icon.Props{Class: "size-4"})
 							Download
+						</span>
+					}
+					@dropdown.Item(dropdown.ItemProps{Attributes: templ.Attributes{"data-on-click": onAction("openMessageSource", email.ID)}}) {
+						<span class="flex items-center gap-2">
+							@icon.FileCode(icon.Props{Class: "size-4"})
+							View source
 						</span>
 					}
 					@dropdown.Item() {

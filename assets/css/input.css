@@ -6326,3 +6326,24 @@ aside a[data-mail-drop-active] {
   color: var(--sidebar-primary);
   box-shadow: inset 0 0 0 1px var(--sidebar-primary);
 }
+
+/* The source dialog sits on the card color, which some themes also use for
+   muted surfaces (classic dark has them equal), so its tab bar and the
+   highlight the tabs script slides behind the active tab are mixed from the
+   card and text colors: a step apart in every theme, light or dark. Express
+   draws its own tabs. */
+:root:not([data-theme="express"]) #mail-source-dialog [data-tui-tabs-list] {
+  background: color-mix(in srgb, var(--card) 93%, var(--foreground));
+  border: 1px solid var(--border);
+}
+:root:not([data-theme="express"]) #mail-source-dialog [data-tui-tabs-indicator] {
+  background: color-mix(in srgb, var(--card) 80%, var(--foreground)) !important;
+}
+
+/* The raw source and the table label columns are set apart from the card
+   they sit on the same way, since muted surfaces match the card in some
+   themes. */
+#mail-source-dialog .mail-source-text,
+#mail-source-dialog .mail-source-label {
+  background: color-mix(in srgb, var(--card) 94%, var(--foreground));
+}

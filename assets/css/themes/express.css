@@ -1204,7 +1204,8 @@ html:root[data-theme="express"] :is(.account-wizard-card-footer, .account-wizard
   --xp-icon-paths: hidden;
 }
 
-[data-theme="express"] svg[data-lucide="file-text"] {
+[data-theme="express"] svg[data-lucide="file-text"],
+[data-theme="express"] svg[data-lucide="file-code"] {
   --xp-icon: image-set(url("/assets/icons/express/text-x-generic-16.png") 1x, url("/assets/icons/express/text-x-generic-32.png") 2x);
   --xp-icon-paths: hidden;
 }
@@ -1382,6 +1383,11 @@ html:root[data-theme="express"] :is(.account-wizard-card-footer, .account-wizard
 
 [data-theme="express"] svg[data-lucide="search"] {
   --xp-icon: image-set(url("/assets/icons/express/system-search-16.png") 1x, url("/assets/icons/express/system-search-32.png") 2x);
+  --xp-icon-paths: hidden;
+}
+
+[data-theme="express"] svg[data-lucide="external-link"] {
+  --xp-icon: image-set(url("/assets/icons/express/internet-web-browser-16.png") 1x, url("/assets/icons/express/internet-web-browser-32.png") 2x);
   --xp-icon-paths: hidden;
 }
 

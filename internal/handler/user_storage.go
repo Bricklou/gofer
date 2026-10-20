@@ -296,6 +296,8 @@ func (h *Handler) RegisterUserStorageRoutes(ctx context.Context, mux *http.Serve
 	if option.IMAP != nil {
 		private("POST /api/messages/{id}/prefetch-body", routed.handleUserPrefetchBody)
 		private("POST /api/messages/{id}/download-full", routed.handleUserDownloadFullBody)
+		private("GET /api/messages/{id}/source", routed.handleUserMessageSource)
+		private("GET /email/{id}/source", routed.handleUserMessageSourceDialog)
 		private("POST /api/messages/{id}/translate", routed.handleUserTranslateMessage)
 		private("GET /email/{id}/body/translated", routed.handleUserTranslatedEmailBody)
 		private("POST /api/remote-content/{id}/allow", routed.handleUserAllowRemoteContent)

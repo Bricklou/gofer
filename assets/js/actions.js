@@ -90,6 +90,7 @@
     "moveMessage",
     "openAddAccountWizard",
     "openMessageLabels",
+    "openMessageSource",
     "openMoveDialog",
     "openNewCompose",
     "pasteCalendarDescription",

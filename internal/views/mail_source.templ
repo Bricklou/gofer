@@ -1,0 +1,149 @@
+package views
+
+import (
+	"fmt"
+
+	"github.com/cristianadrielbraun/gofer/components/button"
+	"github.com/cristianadrielbraun/gofer/components/dialog"
+	"github.com/cristianadrielbraun/gofer/components/icon"
+	"github.com/cristianadrielbraun/gofer/components/tabs"
+	"github.com/cristianadrielbraun/gofer/internal/mail/message"
+)
+
+// MailSourceDialog shows a message as it was received: what its headers say
+// about the sender, every header in order, and the raw source. A long source
+// is cut short here; View raw opens all of it.
+templ MailSourceDialog(emailID string, report message.SourceReport, source string, truncated bool) {
+	@dialog.Dialog(dialog.Props{ID: "mail-source-dialog"}) {
+		@dialog.Content(dialog.ContentProps{Class: "sm:max-w-6xl"}) {
+			<div class="flex h-[85vh] min-h-0 flex-col gap-4">
+				@dialog.Header() {
+					@dialog.Title() {
+						Message source
+					}
+					@dialog.Description() {
+						What the headers say about where this message came from. Gofer reads the results the receiving server recorded; it doesn't check the signatures itself.
+					}
+				}
+				@tabs.Tabs(tabs.Props{Class: "min-h-0 flex-1"}) {
+					@tabs.List(tabs.ListProps{Class: "self-start"}) {
+						@tabs.Trigger(tabs.TriggerProps{Value: "overview", IsActive: true}) {
+							Overview
+						}
+						@tabs.Trigger(tabs.TriggerProps{Value: "headers"}) {
+							{ fmt.Sprintf("Headers (%d)", len(report.Headers)) }
+						}
+					}
+					@tabs.Content(tabs.ContentProps{Value: "overview", IsActive: true, Class: "flex min-h-0 flex-col gap-4 overflow-y-auto pr-1"}) {
+						@mailSourceSummary(report)
+						<section class="flex min-h-[24rem] flex-1 flex-col gap-2">
+							<h3 class="text-sm font-semibold text-foreground">Source</h3>
+							if truncated {
+								<p class="text-xs text-muted-foreground">This message is long, so only its beginning is shown. View raw opens all of it.</p>
+							}
+							<pre class="mail-source-text min-h-0 flex-1 overflow-auto whitespace-pre-wrap break-all rounded-md border border-border p-3 font-mono text-xs text-foreground">{ source }</pre>
+						</section>
+					}
+					@tabs.Content(tabs.ContentProps{Value: "headers", Class: "min-h-0"}) {
+						<div class="max-h-full overflow-auto rounded-md border border-border">
+							<table class="w-full text-left text-xs">
+								<tbody>
+									for _, header := range report.Headers {
+										<tr class="border-b border-border last:border-0 align-top">
+											<th class="mail-source-label whitespace-nowrap px-3 py-1.5 font-mono font-semibold text-foreground">{ header.Name }</th>
+											<td class="w-full break-all px-3 py-1.5 font-mono text-muted-foreground">{ header.Value }</td>
+										</tr>
+									}
+								</tbody>
+							</table>
+						</div>
+					}
+				}
+				@dialog.Footer() {
+					@button.Button(button.Props{Variant: button.VariantOutline, Class: "h-8 px-3 text-xs", Href: "/api/messages/" + emailID + "/source?download=1"}) {
+						@icon.Download(icon.Props{Class: "size-3.5"})
+						Download .eml
+					}
+					@button.Button(button.Props{Variant: button.VariantOutline, Class: "h-8 px-3 text-xs", Href: "/api/messages/" + emailID + "/source", Target: "_blank"}) {
+						@icon.ExternalLink(icon.Props{Class: "size-3.5"})
+						View raw
+					}
+					@dialog.Close() {
+						@button.Button(button.Props{Class: "h-8 px-3 text-xs"}) {
+							Close
+						}
+					}
+				}
+			</div>
+		}
+	}
+}
+
+// mailSourceSummary puts the warnings and checks beside the details, so the
+// source below gets most of the dialog.
+templ mailSourceSummary(report message.SourceReport) {
+	<div class="flex shrink-0 flex-col gap-4">
+		if len(report.Warnings) > 0 {
+			<section class="flex flex-col gap-2">
+				<h3 class="text-sm font-semibold text-foreground">Warnings</h3>
+				for _, warning := range report.Warnings {
+					<div class={ "flex items-start gap-2 rounded-md border px-3 py-2 text-sm", templ.KV("border-destructive/40 bg-destructive/10 text-destructive", warning.Serious), templ.KV("border-border bg-muted/50 text-foreground", !warning.Serious) }>
+						if warning.Serious {
+							@icon.TriangleAlert(icon.Props{Class: "mt-0.5 size-4 shrink-0"})
+						} else {
+							@icon.Info(icon.Props{Class: "mt-0.5 size-4 shrink-0 text-muted-foreground"})
+						}
+						<span>{ warning.Text }</span>
+					</div>
+				}
+			</section>
+		} else {
+			<div class="flex items-center gap-2 rounded-md border border-emerald-500/30 bg-emerald-500/10 px-3 py-2 text-sm text-emerald-800 dark:text-emerald-200">
+				@icon.ShieldCheck(icon.Props{Class: "size-4 shrink-0"})
+				Nothing in the headers looks inconsistent.
+			</div>
+		}
+		<div class="grid gap-4 lg:grid-cols-2">
+			<div class="flex flex-col gap-4">
+				<section class="flex flex-col gap-2">
+					if len(report.Checks) == 0 {
+						<p class="text-sm text-muted-foreground">No results were recorded.</p>
+					} else {
+						<div class="flex flex-col gap-2">
+							for _, check := range report.Checks {
+								<div class="flex flex-col gap-1 rounded-md border border-border px-3 py-2">
+									<div class="flex items-center justify-between gap-2">
+										<span class="text-sm font-semibold text-foreground">{ check.Method }</span>
+										<span class={ "rounded-full px-2 py-0.5 text-[11px] font-medium", templ.KV("bg-emerald-500/12 text-emerald-700 dark:text-emerald-300", check.Passed()), templ.KV("bg-destructive/10 text-destructive", check.Failed()), templ.KV("bg-muted text-muted-foreground", !check.Passed() && !check.Failed()) }>{ check.Result }</span>
+									</div>
+									if check.Detail != "" {
+										<span class="break-all font-mono text-[11px] text-muted-foreground">{ check.Detail }</span>
+									}
+								</div>
+							}
+						</div>
+					}
+				</section>
+			</div>
+			<section class="flex flex-col gap-2">
+				<h3 class="text-sm font-semibold text-foreground">Details</h3>
+				<div class="overflow-hidden rounded-md border border-border">
+					<table class="w-full text-left text-xs">
+						<tbody>
+							for _, fact := range report.Facts {
+								<tr class="border-b border-border align-top">
+									<th class="mail-source-label whitespace-nowrap px-3 py-1.5 font-medium text-muted-foreground">{ fact.Label }</th>
+									<td class="w-full break-all px-3 py-1.5 text-foreground">{ fact.Value }</td>
+								</tr>
+							}
+							<tr class="align-top">
+								<th class="mail-source-label whitespace-nowrap px-3 py-1.5 font-medium text-muted-foreground">Servers passed</th>
+								<td class="w-full px-3 py-1.5 text-foreground">{ fmt.Sprint(report.Hops) }</td>
+							</tr>
+						</tbody>
+					</table>
+				</div>
+			</section>
+		</div>
+	</div>
+}
