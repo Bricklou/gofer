@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"maps"
 	"net/http"
 	"net/http/httptest"
 	"sort"
@@ -1212,5 +1213,83 @@ func TestSyncReplaysJMAPMessageChanges(t *testing.T) {
 	}
 	if m := jmapMessages(t, f)["e2"]; m == nil || !m.Folders["mb-arch"] || m.Folders["mb-in"] {
 		t.Fatalf("e2 in Gofer after the move = %+v", m)
+	}
+}
+
+// jmapCopies maps each mailbox an account's message is shown in to the id of
+// the email it is there as.
+func jmapCopies(t *testing.T, f *userGmailFixture, internetMessageID string) map[string]string {
+	t.Helper()
+	copies := map[string]string{}
+	f.local(t, "alice", func(db *storage.DB) error {
+		rows, err := db.Read().Query(`SELECT f.provider_remote_id, COALESCE(mfs.remote_message_id, '')
+			FROM messages m JOIN message_folder_state mfs ON mfs.message_id = m.id AND mfs.is_deleted = 0
+			JOIN folders f ON f.id = mfs.folder_id WHERE m.account_id = ? AND m.internet_message_id = ?`, f.ids["alice"], internetMessageID)
+		if err != nil {
+			return err
+		}
+		defer rows.Close()
+		for rows.Next() {
+			var mailbox, id string
+			if err := rows.Scan(&mailbox, &id); err != nil {
+				return err
+			}
+			copies[mailbox] = id
+		}
+		return rows.Err()
+	})
+	return copies
+}
+
+// Mail sent to oneself is two emails with one Message-ID, one in Sent and one
+// in the Inbox. Both stay where they are as either changes, and deleting one
+// leaves the other.
+func TestSyncKeepsBothJMAPCopiesOfMailSentToOneself(t *testing.T) {
+	f := newUserGmailFixture(t)
+	server := newFakeJMAPServer(t)
+	server.emailState = "c0"
+	server.setMailboxes(
+		jmap.Mailbox{ID: "mb-in", Name: "Inbox", Role: "inbox", MyRights: readable()},
+		jmap.Mailbox{ID: "mb-sent", Name: "Sent", Role: "sent", MyRights: readable()},
+	)
+	sent := testJMAPEmail("sent-1", "Reminder to self", 2, "mb-sent")
+	received := testJMAPEmail("in-1", "Reminder to self", 1, "mb-in")
+	sent.MessageID = []string{"reminder@example.test"}
+	received.MessageID = []string{"reminder@example.test"}
+	server.emails = []jmap.Email{sent, received}
+	useFakeJMAPAccount(t, f, server)
+	const internetID = "<reminder@example.test>"
+	want := map[string]string{"mb-sent": "sent-1", "mb-in": "in-1"}
+	if err := f.worker.Sync(t.Context(), "alice", f.ids["alice"]); err != nil {
+		t.Fatalf("first Sync() error = %v", err)
+	}
+	if got := jmapCopies(t, f, internetID); !maps.Equal(got, want) {
+		t.Fatalf("copies after import = %v, want %v", got, want)
+	}
+
+	server.updateEmail("sent-1", func(e *jmap.Email) { e.Keywords = map[string]bool{"$seen": true} })
+	if err := f.worker.Sync(t.Context(), "alice", f.ids["alice"]); err != nil {
+		t.Fatalf("Sync() after reading the Sent copy error = %v", err)
+	}
+	if got := jmapCopies(t, f, internetID); !maps.Equal(got, want) {
+		t.Fatalf("copies after the Sent copy changed = %v, want %v", got, want)
+	}
+
+	// Importing everything again keeps both.
+	server.forgetBefore = 10
+	if err := f.worker.Sync(t.Context(), "alice", f.ids["alice"]); err != nil {
+		t.Fatalf("Sync() after a forgotten state error = %v", err)
+	}
+	if got := jmapCopies(t, f, internetID); !maps.Equal(got, want) {
+		t.Fatalf("copies after importing again = %v, want %v", got, want)
+	}
+
+	server.forgetBefore = 0
+	server.deleteEmail("in-1", true)
+	if err := f.worker.Sync(t.Context(), "alice", f.ids["alice"]); err != nil {
+		t.Fatalf("Sync() after deleting the Inbox copy error = %v", err)
+	}
+	if got := jmapCopies(t, f, internetID); !maps.Equal(got, map[string]string{"mb-sent": "sent-1"}) {
+		t.Fatalf("copies after deleting the Inbox copy = %v, want only Sent", got)
 	}
 }

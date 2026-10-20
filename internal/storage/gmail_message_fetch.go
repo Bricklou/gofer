@@ -184,7 +184,7 @@ func (db *DB) MarkProviderMessageDeleted(ctx context.Context, accountID, provide
 		SELECT DISTINCT mfs.folder_id
 		FROM message_folder_state mfs
 		JOIN messages m ON m.id = mfs.message_id
-		WHERE m.account_id = ? AND m.remote_message_id = ? AND mfs.is_deleted = 0`+db.userProviderDraftProtectionSQL("m"), accountID, providerMessageID)
+		WHERE m.account_id = ? AND `+providerCopyIDSQL("mfs")+` = ? AND mfs.is_deleted = 0`+db.userProviderDraftProtectionSQL("m"), accountID, providerMessageID)
 	if err != nil {
 		return nil, err
 	}
@@ -206,17 +206,46 @@ func (db *DB) MarkProviderMessageDeleted(ctx context.Context, accountID, provide
 	if _, err := tx.ExecContext(ctx, `
 		UPDATE message_folder_state
 		SET is_deleted = 1, synced_at = CURRENT_TIMESTAMP
-		WHERE message_id IN (
-			SELECT m.id FROM messages m WHERE m.account_id = ? AND m.remote_message_id = ?
-		`+db.userProviderDraftProtectionSQL("m")+`)`, accountID, providerMessageID); err != nil {
+		WHERE `+providerCopyIDSQL("message_folder_state")+` = ?
+		  AND message_id IN (
+			SELECT m.id FROM messages m WHERE m.account_id = ?
+		`+db.userProviderDraftProtectionSQL("m")+`)`, providerMessageID, accountID); err != nil {
 		return nil, err
 	}
+	// A delete is confirmed once no copy of the message is left.
 	if _, err := tx.ExecContext(ctx, `
 		DELETE FROM message_mutations
 		WHERE kind = ? AND status = ? AND message_id IN (
-			SELECT id FROM messages WHERE account_id = ? AND remote_message_id = ?
+			SELECT m.id FROM messages m
+			WHERE m.account_id = ?
+			  AND EXISTS (SELECT 1 FROM message_folder_state mfs WHERE mfs.message_id = m.id AND `+providerCopyIDSQL("mfs")+` = ?)
+			  AND NOT EXISTS (SELECT 1 FROM message_folder_state mfs WHERE mfs.message_id = m.id AND mfs.is_deleted = 0)
 		)`, MessageMutationDelete, MessageMutationApplied, accountID, providerMessageID); err != nil {
 		return nil, err
+	}
+	rowRows, err := tx.QueryContext(ctx, `
+		SELECT DISTINCT mfs.message_id FROM message_folder_state mfs
+		JOIN folders f ON f.id = mfs.folder_id
+		WHERE f.account_id = ? AND mfs.remote_message_id = ?`, accountID, providerMessageID)
+	if err != nil {
+		return nil, err
+	}
+	var touched []int64
+	for rowRows.Next() {
+		var msgID int64
+		if err := rowRows.Scan(&msgID); err != nil {
+			rowRows.Close()
+			return nil, err
+		}
+		touched = append(touched, msgID)
+	}
+	if err := rowRows.Close(); err != nil {
+		return nil, err
+	}
+	for _, msgID := range touched {
+		if err := refreshProviderRowIDTx(ctx, tx, msgID); err != nil {
+			return nil, err
+		}
 	}
 	if err := tx.Commit(); err != nil {
 		return nil, err
