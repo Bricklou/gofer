@@ -33,7 +33,7 @@ Gofer is pre-1.0. Security fixes go into the latest release only, so please upgr
 - **A compromised server.** Gofer needs to decrypt your credentials to sync mail, so someone with control of the running process or host can get them too.
 - **Plain HTTP.** Serve Gofer over HTTPS through a reverse proxy. `GOFER_ALLOW_INSECURE_LAN=true` sends session cookies unencrypted on your local network. Only use it if you trust that network.
 
-## honest caveats
+## disclosure
 
 Gofer hasn't had an independent security audit. It has a large test suite, and I use it every day for my own mail, but it's pre-1.0 software built by one person with a lot of help from AI coding tools. I review and test what goes in, but that isn't the same as an expert security review. Keep that in mind before you expose it to the internet, and keep backups.
 
