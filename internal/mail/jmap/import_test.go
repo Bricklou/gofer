@@ -158,6 +158,23 @@ func TestFindEmailsSearchesTogether(t *testing.T) {
 	if len(requests) != 2 || len(requests[0]) != 4 || len(requests[1]) != 2 {
 		t.Fatalf("split into %d requests", len(requests))
 	}
+
+	// A server taking one call per request gets each search's query and get
+	// in two requests.
+	requests = nil
+	session = &Session{APIURL: server.URL, Core: CoreCapability{MaxCallsInRequest: 1}}
+	if found, err := client.FindEmails(context.Background(), session, "a1", "mb", "m1@example.test", windows); err != nil || !reflect.DeepEqual(found, []string{"e1"}) {
+		t.Fatalf("one-call FindEmails = %v, %v", found, err)
+	}
+	// The header search, refused, then a query and a get for each window.
+	if len(requests) != 5 {
+		t.Fatalf("sent %d requests, want 5", len(requests))
+	}
+	for _, calls := range requests {
+		if len(calls) != 1 {
+			t.Fatalf("a request carried %d calls", len(calls))
+		}
+	}
 }
 
 func TestFindEmailsFailsWhenNoSearchIsAnswered(t *testing.T) {

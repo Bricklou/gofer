@@ -88,7 +88,8 @@ const findEmailsLimit = 100
 // receivedAt window in one request, as far as the server's call limit
 // allows: header search is optional and may lag behind a message just
 // stored, and a server may not keep the receivedAt it was given. Results are
-// compared by Message-ID exactly. It fails only when every search fails.
+// compared by Message-ID exactly. It fails only when every search fails. On
+// a server taking one call per request, each search takes two requests.
 func (c *Client) FindEmails(ctx context.Context, session *Session, accountID, mailboxID, messageID string, windows []Window) ([]string, error) {
 	if mailboxID == "" || messageID == "" {
 		return nil, errors.New("jmap: finding an email needs a mailbox and a Message-ID")
@@ -98,24 +99,61 @@ func (c *Client) FindEmails(ctx context.Context, session *Session, accountID, ma
 		from, to := window.From.UTC().Truncate(time.Second), window.To.UTC().Truncate(time.Second).Add(time.Second)
 		filters = append(filters, &EmailFilter{InMailbox: mailboxID, After: &from, Before: &to})
 	}
+	var found []string
+	var failures []error
+	answered := 0
+	match := func(emails []Email) {
+		answered++
+		for _, email := range emails {
+			for _, id := range email.MessageID {
+				if id == messageID && !slices.Contains(found, email.ID) {
+					found = append(found, email.ID)
+				}
+			}
+		}
+	}
+	query := func(filter *EmailFilter) EmailQuery {
+		return EmailQuery{AccountID: accountID, Filter: filter, Sort: []Comparator{{Property: "receivedAt"}}, Limit: findEmailsLimit}
+	}
+	if session.Core.MaxCallsInRequest == 1 {
+		// A query and the get of its results can't share a request, so each
+		// search takes two.
+		for _, filter := range filters {
+			page, err := c.QueryEmails(ctx, session, query(filter))
+			if err != nil {
+				failures = append(failures, err)
+				continue
+			}
+			if len(page.IDs) == 0 {
+				match(nil)
+				continue
+			}
+			emails, err := c.GetEmails(ctx, session, accountID, page.IDs, []string{"id", "messageId"})
+			if err != nil {
+				failures = append(failures, err)
+				continue
+			}
+			match(emails.List)
+		}
+		if answered == 0 {
+			return nil, errors.Join(failures...)
+		}
+		return found, nil
+	}
 	perRequest := len(filters)
 	if limit := session.Core.MaxCallsInRequest; limit > 0 {
 		perRequest = max(1, min(perRequest, limit/2))
 	}
-	var found []string
-	var failures []error
-	answered := 0
 	for start := 0; start < len(filters); start += perRequest {
 		batch := filters[start:min(start+perRequest, len(filters))]
 		var calls []Invocation
 		for i, filter := range batch {
-			query, get := fmt.Sprintf("q%d", i), fmt.Sprintf("g%d", i)
+			queryID, get := fmt.Sprintf("q%d", i), fmt.Sprintf("g%d", i)
 			calls = append(calls,
-				Invocation{Name: "Email/query", Args: EmailQuery{AccountID: accountID, Filter: filter,
-					Sort: []Comparator{{Property: "receivedAt"}}, Limit: findEmailsLimit}, CallID: query},
+				Invocation{Name: "Email/query", Args: query(filter), CallID: queryID},
 				Invocation{Name: "Email/get", Args: map[string]any{
 					"accountId":  accountID,
-					"#ids":       ResultReference{ResultOf: query, Name: "Email/query", Path: "/ids"},
+					"#ids":       ResultReference{ResultOf: queryID, Name: "Email/query", Path: "/ids"},
 					"properties": []string{"id", "messageId"},
 				}, CallID: get},
 			)
@@ -131,14 +169,7 @@ func (c *Client) FindEmails(ctx context.Context, session *Session, accountID, ma
 				failures = append(failures, fmt.Errorf("Email/get: %w", err))
 				continue
 			}
-			answered++
-			for _, email := range emails.List {
-				for _, id := range email.MessageID {
-					if id == messageID && !slices.Contains(found, email.ID) {
-						found = append(found, email.ID)
-					}
-				}
-			}
+			match(emails.List)
 		}
 	}
 	if answered == 0 {
