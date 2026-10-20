@@ -98,7 +98,12 @@ func (db *DB) CompleteUserProviderSentCache(ctx context.Context, send OutgoingSe
 		return err
 	}
 	if providerID != "" {
-		if _, err := tx.ExecContext(ctx, `UPDATE messages SET remote_message_id=?,updated_at=CURRENT_TIMESTAMP WHERE id=?`, providerID, messageID); err != nil {
+		// The sent email is the Sent copy; mail sent to oneself also has a
+		// received copy with its own id.
+		if _, err := tx.ExecContext(ctx, `UPDATE message_folder_state SET remote_message_id=? WHERE message_id=? AND folder_id=?`, providerID, messageID, folder); err != nil {
+			return err
+		}
+		if err := bindProviderCopyIDTx(ctx, tx, messageID, "", providerID); err != nil {
 			return err
 		}
 	}

@@ -1349,7 +1349,7 @@ func (db *DB) GetDraftProviderInfoInternal(ctx context.Context, accountID, inter
 	var remoteUID sql.NullInt64
 	var uidValidity int64
 	err := db.Read().QueryRowContext(ctx, `
-		SELECT m.id, mfs.folder_id, f.remote_id, a.provider, m.remote_message_id, mfs.remote_uid, COALESCE(f.uid_validity, 0)
+		SELECT m.id, mfs.folder_id, f.remote_id, a.provider, COALESCE(NULLIF(mfs.remote_message_id, ''), m.remote_message_id), mfs.remote_uid, COALESCE(f.uid_validity, 0)
 		FROM messages m
 		JOIN accounts a ON m.account_id = a.id
 		JOIN message_folder_state mfs ON m.id = mfs.message_id
@@ -7525,11 +7525,31 @@ func (db *DB) getThreadMutationInfos(ctx context.Context, accountID, threadID, f
 	return infos, rows.Err()
 }
 
+// SetMessageProviderMessageID records a provider id found or assigned for a
+// message without knowing its folder. The copy the row named takes it, as do
+// folder states that have no id yet; other copies keep theirs.
 func (db *DB) SetMessageProviderMessageID(ctx context.Context, messageID int64, providerMessageID string) error {
-	_, err := db.Write().ExecContext(ctx,
+	providerMessageID = strings.TrimSpace(providerMessageID)
+	tx, err := db.Write().BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	if providerMessageID != "" {
+		if _, err := tx.ExecContext(ctx, `
+			UPDATE message_folder_state SET remote_message_id = ?
+			WHERE message_id = ? AND (COALESCE(remote_message_id, '') = ''
+			  OR remote_message_id = (SELECT NULLIF(m.remote_message_id, '') FROM messages m WHERE m.id = ?))`,
+			providerMessageID, messageID, messageID); err != nil {
+			return err
+		}
+	}
+	if _, err := tx.ExecContext(ctx,
 		`UPDATE messages SET remote_message_id = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`,
-		strings.TrimSpace(providerMessageID), messageID)
-	return err
+		providerMessageID, messageID); err != nil {
+		return err
+	}
+	return tx.Commit()
 }
 
 func (db *DB) ThreadHasUnread(ctx context.Context, accountID, threadID string) (bool, error) {

@@ -1,8 +1,10 @@
 package storage
 
 import (
+	"context"
 	"database/sql"
 	"errors"
+	"maps"
 	"testing"
 	"time"
 )
@@ -134,5 +136,46 @@ func TestUserProviderSendReceiptRemainsBoundToAcceptedMailbox(t *testing.T) {
 	var retained int
 	if err := db.Read().QueryRow(`SELECT count(*) FROM gofer_provider_send_receipts`).Scan(&retained); err != nil || retained != 1 {
 		t.Fatal("mailbox mismatch destroyed acceptance proof", err)
+	}
+}
+
+// Mail sent to oneself may arrive before its Sent copy is cached. The sent
+// email's id goes on the Sent copy, and the received copy keeps its own.
+func TestUserProviderSentCacheBindsTheSentCopy(t *testing.T) {
+	db, send := seedUserProviderSend(t)
+	if err := db.CompleteUserProviderSend(t.Context(), send, "subject", "<sent@test.invalid>", "remote"); err != nil {
+		t.Fatal(err)
+	}
+	claimed, err := db.ClaimDueSentCopiesForAccount(t.Context(), "acc", time.Now().Add(time.Second), 1)
+	if err != nil || len(claimed) != 1 {
+		t.Fatal("cache claim", err)
+	}
+	if _, err := db.Write().Exec(`INSERT INTO folders(id,account_id,name,remote_id,provider_remote_id,role) VALUES('sent-copy','acc','Sent','SENT','SENT','sent'),('inbox-copy','acc','Inbox','INBOX','INBOX','inbox')`); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.UpsertProviderSyncMessages(t.Context(), []ProviderSyncMessage{{AccountID: "acc", FolderID: "inbox-copy", ProviderMessageID: "remote-received", InternetMessageID: "<sent@test.invalid>", Subject: "Sent", DateSent: time.Now()}}); err != nil {
+		t.Fatal(err)
+	}
+	if err := db.UpsertSyncMessages(t.Context(), []SyncMessage{{AccountID: "acc", FolderID: "sent-copy", MessageID: "<sent@test.invalid>", Subject: "Sent", FromEmail: "alice@test.invalid", DateSent: time.Now()}}); err != nil {
+		t.Fatal(err)
+	}
+	if err := db.CompleteUserProviderSentCache(t.Context(), claimed[0], "subject", "<sent@test.invalid>", "sent-copy", "remote"); err != nil {
+		t.Fatal(err)
+	}
+	if got, want := visibleCopies(t, db, "<sent@test.invalid>"), map[string]string{"sent-copy": "remote", "inbox-copy": "remote-received"}; !maps.Equal(got, want) {
+		t.Fatalf("copies = %v, want %v", got, want)
+	}
+}
+
+func TestSetMessageProviderMessageIDKeepsOtherCopies(t *testing.T) {
+	ctx := context.Background()
+	db := newContactsTestDB(t)
+	msgID := seedSelfSentCopies(t, db)
+	// The row names the Sent copy, which a provider gave a new id.
+	if err := db.SetMessageProviderMessageID(ctx, msgID, "email-sent-2"); err != nil {
+		t.Fatal(err)
+	}
+	if got, want := visibleCopies(t, db, "<self@example.com>"), map[string]string{"acc_sent": "email-sent-2", "acc_inbox": "email-inbox"}; !maps.Equal(got, want) {
+		t.Fatalf("copies = %v, want %v", got, want)
 	}
 }

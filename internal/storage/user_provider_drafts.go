@@ -246,6 +246,9 @@ func (db *DB) CompleteUserProviderDraftUpsert(ctx context.Context, op UserProvid
 		if _, err := tx.ExecContext(ctx, `UPDATE messages SET remote_message_id=?,updated_at=CURRENT_TIMESTAMP WHERE account_id=? AND internet_message_id=? AND id IN(SELECT local_message_id FROM gofer_provider_draft_states WHERE account_id=? AND draft_key=? AND local_revision=?)`, messageID, op.State.AccountID, op.State.DraftKey, op.State.AccountID, op.State.DraftKey, op.RevisionToken); err != nil {
 			return err
 		}
+		if _, err := tx.ExecContext(ctx, `UPDATE message_folder_state SET remote_message_id=? WHERE folder_id=? AND message_id IN(SELECT local_message_id FROM gofer_provider_draft_states WHERE account_id=? AND draft_key=? AND local_revision=?)`, messageID, op.State.FolderID, op.State.AccountID, op.State.DraftKey, op.RevisionToken); err != nil {
+			return err
+		}
 		_, err := tx.ExecContext(ctx, `DELETE FROM gofer_provider_draft_operations WHERE id=?`, op.ID)
 		return err
 	})
