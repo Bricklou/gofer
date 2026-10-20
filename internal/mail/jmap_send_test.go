@@ -26,6 +26,11 @@ import (
 //   - "drop": stores and submits, then drops the connection
 //   - "storedThen502": stores the draft but doesn't submit, then 502
 //   - "503": refuses with 503 before doing anything
+//   - "importError:<type>": answers the import with a method error
+//   - "submitError:<type>": stores the draft, then answers the submission
+//     with a method error
+//   - "partialFail": stores and submits, then answers the submission with
+//     serverPartialFail
 type jmapSendServer struct {
 	mu          sync.Mutex
 	mode        string
@@ -114,7 +119,16 @@ func (f *jmapSendServer) answer(t *testing.T, w http.ResponseWriter, calls [][]j
 			http.Error(w, "unavailable", http.StatusServiceUnavailable)
 			return
 		}
+		if kind, ok := strings.CutPrefix(f.mode, "importError:"); ok {
+			_, _ = fmt.Fprintf(w, `{"methodResponses": [["error", {"type": %q}, "0"], ["error", {"type": "invalidResultReference"}, "1"]], "sessionState": "s1"}`, kind)
+			return
+		}
 		email := f.store(f.blobs[args.Emails["draft"].BlobID], "mb-drafts", jmap.KeywordDraft, jmap.KeywordSeen)
+		if kind, ok := strings.CutPrefix(f.mode, "submitError:"); ok {
+			_, _ = fmt.Fprintf(w, `{"methodResponses": [["Email/import", {"accountId": "a1", "created": {"draft": {"id": %q}}}, "0"],
+				["error", {"type": %q}, "1"]], "sessionState": "s1"}`, email.id, kind)
+			return
+		}
 		if f.mode != "storedThen502" {
 			f.submissions[email.id] = true
 			email.mailboxes = map[string]bool{"mb-sent": true}
@@ -126,6 +140,9 @@ func (f *jmapSendServer) answer(t *testing.T, w http.ResponseWriter, calls [][]j
 			_ = conn.Close()
 		case "sentThen502", "storedThen502":
 			http.Error(w, "bad gateway", http.StatusBadGateway)
+		case "partialFail":
+			_, _ = fmt.Fprintf(w, `{"methodResponses": [["Email/import", {"accountId": "a1", "created": {"draft": {"id": %q}}}, "0"],
+				["error", {"type": "serverPartialFail"}, "1"]], "sessionState": "s1"}`, email.id)
 		default:
 			_, _ = fmt.Fprintf(w, `{"methodResponses": [["Email/import", {"accountId": "a1", "created": {"draft": {"id": %q}}}, "0"],
 				["EmailSubmission/set", {"accountId": "a1", "created": {"send": {"id": "sub-%s"}}}, "1"]], "sessionState": "s1"}`, email.id, email.id)
@@ -221,6 +238,7 @@ func TestSendJMAPMessageSettlesUnclearOutcomes(t *testing.T) {
 		mode          string
 		lookupFails   bool
 		sent, retry   bool
+		failed        bool
 		destroyedCopy bool
 	}{
 		{mode: "accept", sent: true},
@@ -230,6 +248,15 @@ func TestSendJMAPMessageSettlesUnclearOutcomes(t *testing.T) {
 		{mode: "503", retry: true},
 		{mode: "sentThen502", lookupFails: true},
 		{mode: "drop", lookupFails: true},
+		// A method error means the server made none of that method's
+		// changes: not sent, retried only when the server says it may work
+		// later, and a stored copy is removed.
+		{mode: "importError:accountReadOnly", failed: true},
+		{mode: "importError:serverUnavailable", retry: true},
+		{mode: "submitError:forbidden", failed: true, destroyedCopy: true},
+		{mode: "submitError:serverFail", retry: true, destroyedCopy: true},
+		// serverPartialFail may have submitted it, so the server is asked.
+		{mode: "partialFail", sent: true},
 	} {
 		t.Run(fmt.Sprintf("%s lookupFails=%v", tc.mode, tc.lookupFails), func(t *testing.T) {
 			f, server := newJMAPSendServer(t, tc.mode)
@@ -249,6 +276,10 @@ func TestSendJMAPMessageSettlesUnclearOutcomes(t *testing.T) {
 			case tc.retry:
 				if !errors.As(err, &notSent) || !notSent.Retryable {
 					t.Fatalf("SendJMAPMessage = %q, %v; want not sent, retryable", id, err)
+				}
+			case tc.failed:
+				if !errors.As(err, &notSent) || notSent.Retryable {
+					t.Fatalf("SendJMAPMessage = %q, %v; want not sent, final", id, err)
 				}
 			default:
 				if err == nil || errors.As(err, &notSent) {

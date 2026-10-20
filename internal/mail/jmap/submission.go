@@ -149,6 +149,18 @@ func (e *SubmissionError) Error() string {
 	return "jmap: " + e.Step + ": " + e.SetError.Error()
 }
 
+// refusedMethod turns a method-level error answering one call of a send into
+// a *SubmissionError: the server made none of that method's changes (RFC 8620
+// section 3.6.2). serverPartialFail stays a plain error, since some of them
+// may have happened, as does any answer that isn't a method error.
+func refusedMethod(step, method string, err error) error {
+	var methodErr *MethodError
+	if errors.As(err, &methodErr) && methodErr.Type != "serverPartialFail" {
+		return &SubmissionError{Step: step, SetError: SetError{Type: methodErr.Type, Description: methodErr.Description}}
+	}
+	return fmt.Errorf("%s: %w", method, err)
+}
+
 // SendEmail sends an uploaded message in one request: Email/import stores it
 // in Drafts, and EmailSubmission/set submits it, moving it to Sent, read and
 // no longer a draft, once the server accepts it. If the submission is refused,
@@ -196,7 +208,7 @@ func (c *Client) SendEmail(ctx context.Context, session *Session, accountID stri
 		NotCreated map[string]SetError            `json:"notCreated"`
 	}
 	if err := responses.Get("0", &imported); err != nil {
-		return nil, fmt.Errorf("Email/import: %w", err)
+		return nil, refusedMethod("import", "Email/import", err)
 	}
 	if failure, ok := imported.NotCreated["draft"]; ok {
 		return nil, &SubmissionError{Step: "import", SetError: failure}
@@ -206,14 +218,22 @@ func (c *Client) SendEmail(ctx context.Context, session *Session, accountID stri
 		Created    map[string]struct{ ID string } `json:"created"`
 		NotCreated map[string]SetError            `json:"notCreated"`
 	}
-	if err := responses.Get("1", &submitted); err != nil {
-		return nil, fmt.Errorf("EmailSubmission/set: %w", err)
-	}
-	if failure, ok := submitted.NotCreated["send"]; ok {
+	removeDraft := func() {
 		if emailID != "" {
 			// Best effort: the refusal is what matters, not the cleanup.
 			_, _ = c.SetEmails(ctx, session, EmailSet{AccountID: accountID, Destroy: []string{emailID}})
 		}
+	}
+	if err := responses.Get("1", &submitted); err != nil {
+		err = refusedMethod("submission", "EmailSubmission/set", err)
+		var refused *SubmissionError
+		if errors.As(err, &refused) {
+			removeDraft()
+		}
+		return nil, err
+	}
+	if failure, ok := submitted.NotCreated["send"]; ok {
+		removeDraft()
 		return nil, &SubmissionError{Step: "submission", SetError: failure}
 	}
 	submission := submitted.Created["send"].ID

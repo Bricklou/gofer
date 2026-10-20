@@ -106,7 +106,6 @@ func SendJMAPMessage(ctx context.Context, cfg *models.AccountConfig, password, f
 	})
 	var refused *jmap.SubmissionError
 	var httpErr *jmap.HTTPError
-	var methodErr *jmap.MethodError
 	switch {
 	case err == nil:
 		return result.EmailID, nil
@@ -115,8 +114,6 @@ func SendJMAPMessage(ctx context.Context, cfg *models.AccountConfig, password, f
 	case errors.As(err, &httpErr) && httpErr.StatusCode < 500:
 		// The server refused the request as a whole, so it ran no part of it.
 		return "", notSent(err, httpErr.StatusCode == http.StatusTooManyRequests)
-	case errors.As(err, &methodErr):
-		return "", err
 	}
 	// A 5xx may come from a gateway that gave up while the server went on,
 	// and a dropped connection may follow the server accepting the message,
