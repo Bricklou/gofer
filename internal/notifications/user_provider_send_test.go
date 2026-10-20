@@ -98,7 +98,7 @@ func TestUserProviderSendHTTPAndSentCacheOwnedEvents(t *testing.T) {
 				}
 				if err := f.routing.WithUser(t.Context(), owner, func(db *storage.DB) error {
 					var subject, remote, bodyPath string
-					if err := db.Read().QueryRow(`SELECT m.subject,COALESCE(m.remote_message_id,''),m.body_text_path FROM messages m JOIN message_folder_state s ON s.message_id=m.id JOIN folders f ON f.id=s.folder_id WHERE f.role='sent'`).Scan(&subject, &remote, &bodyPath); err != nil {
+					if err := db.Read().QueryRow(`SELECT m.subject,COALESCE(s.remote_message_id,''),m.body_text_path FROM messages m JOIN message_folder_state s ON s.message_id=m.id JOIN folders f ON f.id=s.folder_id WHERE f.role='sent'`).Scan(&subject, &remote, &bodyPath); err != nil {
 						return err
 					}
 					if subject != owner+" private delivery" || bodyPath == "" || (provider == "gmail" && remote != "same-sent-provider-id") {

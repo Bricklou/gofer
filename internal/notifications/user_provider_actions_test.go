@@ -341,10 +341,10 @@ func newProviderActionFixture(t *testing.T, provider string) (*userStorageFixtur
 					return err
 				}
 			}
-			if _, err := db.Write().Exec(`INSERT INTO messages(id,account_id,remote_message_id,internet_message_id,thread_id,subject,from_email) VALUES(1,?,'m1',?,'thread','private','sender@provider.test')`, account.ID, "<"+owner+"@provider.test>"); err != nil {
+			if _, err := db.Write().Exec(`INSERT INTO messages(id,account_id,internet_message_id,thread_id,subject,from_email) VALUES(1,?,?,'thread','private','sender@provider.test')`, account.ID, "<"+owner+"@provider.test>"); err != nil {
 				return err
 			}
-			_, err := db.Write().Exec(`INSERT INTO message_folder_state(message_id,folder_id,remote_uid,is_read,is_starred,is_deleted) VALUES(1,?,1,0,0,0)`, account.ID+"-inbox")
+			_, err := db.Write().Exec(`INSERT INTO message_folder_state(message_id,folder_id,remote_uid,is_read,is_starred,is_deleted,remote_message_id) VALUES(1,?,1,0,0,0,'m1')`, account.ID+"-inbox")
 			return err
 		}); err != nil {
 			t.Fatal(err)
@@ -464,7 +464,7 @@ func TestUserProviderActionsChangedIdentityRejectsPublication(t *testing.T) {
 			}
 			awaitIMAP(t, api.entered)
 			if err := f.routing.WithUser(t.Context(), "alice", func(db *storage.DB) error {
-				_, err := db.Write().Exec(`UPDATE messages SET remote_message_id='replacement' WHERE id=1`)
+				_, err := db.Write().Exec(`UPDATE message_folder_state SET remote_message_id='replacement' WHERE message_id=1`)
 				return err
 			}); err != nil {
 				t.Fatal(err)
@@ -479,7 +479,7 @@ func TestUserProviderActionsChangedIdentityRejectsPublication(t *testing.T) {
 			})
 			var id string
 			if err := f.routing.WithUser(t.Context(), "alice", func(db *storage.DB) error {
-				return db.Read().QueryRow(`SELECT COALESCE(remote_message_id,'') FROM messages WHERE id=1`).Scan(&id)
+				return db.Read().QueryRow(`SELECT COALESCE(MAX(remote_message_id), '') FROM message_folder_state WHERE message_id = 1`).Scan(&id)
 			}); err != nil || id != "replacement" {
 				t.Fatalf("stale publication changed identity: %q %v", id, err)
 			}
@@ -490,7 +490,7 @@ func TestUserProviderActionsChangedIdentityRejectsPublication(t *testing.T) {
 func TestUserProviderActionsMoveRecoveryAfterPublicationFailure(t *testing.T) {
 	f, api := newProviderActionFixture(t, "outlook")
 	if err := f.routing.WithUser(t.Context(), "alice", func(db *storage.DB) error {
-		_, err := db.Write().Exec(`CREATE TRIGGER reject_action_move BEFORE UPDATE OF remote_message_id ON messages BEGIN SELECT RAISE(ABORT,'injected move publication failure'); END`)
+		_, err := db.Write().Exec(`CREATE TRIGGER reject_action_move BEFORE UPDATE OF remote_message_id ON message_folder_state BEGIN SELECT RAISE(ABORT,'injected move publication failure'); END`)
 		return err
 	}); err != nil {
 		t.Fatal(err)
@@ -591,7 +591,7 @@ func TestUserProviderActionsMissingIdentity(t *testing.T) {
 				f, api := newProviderActionFixture(t, provider)
 				api.lookupCount = count
 				if err := f.routing.WithUser(t.Context(), "alice", func(db *storage.DB) error {
-					_, err := db.Write().Exec(`UPDATE messages SET remote_message_id=NULL WHERE id=1`)
+					_, err := db.Write().Exec(`UPDATE message_folder_state SET remote_message_id=NULL WHERE message_id=1`)
 					return err
 				}); err != nil {
 					t.Fatal(err)
@@ -608,7 +608,7 @@ func TestUserProviderActionsMissingIdentity(t *testing.T) {
 				})
 				var remote string
 				if err := f.routing.WithUser(t.Context(), "alice", func(db *storage.DB) error {
-					return db.Read().QueryRow(`SELECT COALESCE(remote_message_id,'') FROM messages WHERE id=1`).Scan(&remote)
+					return db.Read().QueryRow(`SELECT COALESCE(MAX(remote_message_id), '') FROM message_folder_state WHERE message_id = 1`).Scan(&remote)
 				}); err != nil {
 					t.Fatal(err)
 				}

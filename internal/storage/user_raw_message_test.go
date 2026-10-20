@@ -57,7 +57,7 @@ func TestUserRawMessagePublicationRestoresOnlyRawPath(t *testing.T) {
 
 func TestUserRawMessagePublicationRejectsWriterWaitChanges(t *testing.T) {
 	for _, change := range []string{
-		`UPDATE messages SET remote_message_id='changed'`,
+		`UPDATE message_folder_state SET remote_message_id='changed'`,
 		`UPDATE messages SET internet_message_id='changed'`,
 		`UPDATE messages SET raw_path='newer-cache'`,
 		`UPDATE accounts SET provider_account_id='changed'`,
@@ -126,7 +126,7 @@ func TestUserRawMessagePublicationRejectsWriterWaitChanges(t *testing.T) {
 func TestUserRawMessagePublicationTriggerFaultsRollBack(t *testing.T) {
 	for _, trigger := range []string{
 		`CREATE TRIGGER fault BEFORE UPDATE OF raw_path ON messages BEGIN SELECT RAISE(IGNORE); END`,
-		`CREATE TRIGGER fault AFTER UPDATE OF raw_path ON messages BEGIN UPDATE messages SET remote_message_id='wrong' WHERE id=NEW.id; END`,
+		`CREATE TRIGGER fault AFTER UPDATE OF raw_path ON messages BEGIN UPDATE message_folder_state SET remote_message_id='wrong' WHERE message_id=NEW.id; END`,
 		`CREATE TRIGGER fault AFTER UPDATE OF raw_path ON messages BEGIN UPDATE messages SET raw_path='wrong' WHERE id=NEW.id; END`,
 	} {
 		t.Run(trigger, func(t *testing.T) {

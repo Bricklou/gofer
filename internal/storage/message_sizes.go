@@ -65,14 +65,12 @@ func (db *DB) SetFolderMessageSizes(ctx context.Context, folderID string, sizes 
 // messages that have no size yet, newest first.
 func (db *DB) ListProviderMessagesMissingSize(ctx context.Context, accountID string, limit int) ([]string, error) {
 	rows, err := db.Read().QueryContext(ctx, `
-		SELECT COALESCE((
-			SELECT mfs.remote_message_id FROM message_folder_state mfs
-			WHERE mfs.message_id = m.id AND COALESCE(mfs.remote_message_id, '') != ''
-			ORDER BY mfs.is_deleted ASC, mfs.synced_at DESC LIMIT 1
-		), m.remote_message_id)
-		FROM messages m
-		WHERE m.account_id = ? AND m.size_bytes = 0 AND COALESCE(m.remote_message_id, '') != ''
-		ORDER BY m.date_received DESC, m.id DESC LIMIT ?`, accountID, limit)
+		SELECT copy_id FROM (
+			SELECT `+anyProviderCopyIDSQL("m")+` AS copy_id, m.date_received, m.id
+			FROM messages m
+			WHERE m.account_id = ? AND m.size_bytes = 0
+		) WHERE copy_id != ''
+		ORDER BY date_received DESC, id DESC LIMIT ?`, accountID, limit)
 	if err != nil {
 		return nil, fmt.Errorf("list messages missing size: %w", err)
 	}
@@ -101,11 +99,11 @@ func (db *DB) SetProviderMessageSizes(ctx context.Context, accountID string, siz
 	// Every copy of a message has its size, so the id of any copy sets it.
 	stmt, err := tx.PrepareContext(ctx, `
 		UPDATE messages SET size_bytes = ?
-		WHERE account_id = ? AND (remote_message_id = ? OR id IN (
+		WHERE account_id = ? AND id IN (
 			SELECT mfs.message_id FROM message_folder_state mfs
 			JOIN folders f ON f.id = mfs.folder_id
 			WHERE f.account_id = messages.account_id AND mfs.remote_message_id = ?
-		))`)
+		)`)
 	if err != nil {
 		return err
 	}
@@ -115,7 +113,7 @@ func (db *DB) SetProviderMessageSizes(ctx context.Context, accountID string, siz
 		if id == "" || size == 0 {
 			continue
 		}
-		if _, err := stmt.ExecContext(ctx, size, accountID, id, id); err != nil {
+		if _, err := stmt.ExecContext(ctx, size, accountID, id); err != nil {
 			return fmt.Errorf("set message size: %w", err)
 		}
 	}

@@ -223,30 +223,6 @@ func (db *DB) MarkProviderMessageDeleted(ctx context.Context, accountID, provide
 		)`, MessageMutationDelete, MessageMutationApplied, accountID, providerMessageID); err != nil {
 		return nil, err
 	}
-	rowRows, err := tx.QueryContext(ctx, `
-		SELECT DISTINCT mfs.message_id FROM message_folder_state mfs
-		JOIN folders f ON f.id = mfs.folder_id
-		WHERE f.account_id = ? AND mfs.remote_message_id = ?`, accountID, providerMessageID)
-	if err != nil {
-		return nil, err
-	}
-	var touched []int64
-	for rowRows.Next() {
-		var msgID int64
-		if err := rowRows.Scan(&msgID); err != nil {
-			rowRows.Close()
-			return nil, err
-		}
-		touched = append(touched, msgID)
-	}
-	if err := rowRows.Close(); err != nil {
-		return nil, err
-	}
-	for _, msgID := range touched {
-		if err := refreshProviderRowIDTx(ctx, tx, msgID); err != nil {
-			return nil, err
-		}
-	}
 	if err := tx.Commit(); err != nil {
 		return nil, err
 	}

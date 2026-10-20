@@ -117,9 +117,9 @@ func TestFolderThreadStateIncrementalMatchesFullRebuild(t *testing.T) {
 			id := nextID
 			nextID++
 			ids = append(ids, id)
-			exec(`INSERT INTO messages(id, account_id, remote_message_id, internet_message_id, thread_id, subject, date_received, has_attachments)
-				VALUES (?, 'acct', ?, ?, NULLIF(?, ''), 'Hello', datetime('2024-01-01', '+' || ? || ' minutes'), ?)`,
-				id, fmt.Sprint("r", id), fmt.Sprint("<", id, "@example.test>"), threads[random.Intn(len(threads))], random.Intn(500), random.Intn(2))
+			exec(`INSERT INTO messages(id, account_id, internet_message_id, thread_id, subject, date_received, has_attachments)
+				VALUES (?, 'acct', ?, NULLIF(?, ''), 'Hello', datetime('2024-01-01', '+' || ? || ' minutes'), ?)`,
+				id, fmt.Sprint("<", id, "@example.test>"), threads[random.Intn(len(threads))], random.Intn(500), random.Intn(2))
 			exec(`INSERT INTO message_folder_state(message_id, folder_id, remote_uid, is_read, is_starred)
 				VALUES (?, ?, ?, ?, ?)`, id, folders[random.Intn(len(folders))], id, random.Intn(2), random.Intn(2))
 		case op == 3:
@@ -168,10 +168,10 @@ func TestFolderThreadStateUpgradeRebuildsEachFolderOnFirstUse(t *testing.T) {
 	db := newFolderThreadTestDB(t)
 	ctx := context.Background()
 	if _, err := db.Write().Exec(withoutFolderThreadTracking + `;
-		INSERT INTO messages(id, account_id, remote_message_id, thread_id, date_received) VALUES
-			(1, 'acct', 'r1', 'thread-a', '2024-01-01 10:00:00'),
-			(2, 'acct', 'r2', 'thread-a', '2024-01-02 10:00:00'),
-			(3, 'acct', 'r3', NULL, '2024-01-03 10:00:00');
+		INSERT INTO messages(id, account_id, thread_id, date_received) VALUES
+			(1, 'acct', 'thread-a', '2024-01-01 10:00:00'),
+			(2, 'acct', 'thread-a', '2024-01-02 10:00:00'),
+			(3, 'acct', NULL, '2024-01-03 10:00:00');
 		INSERT INTO message_folder_state(message_id, folder_id, is_read) VALUES (1, 'box-inbox', 1), (2, 'box-inbox', 0), (3, 'box-inbox', 1);
 		-- A summary left behind by an older release that is no longer right.
 		INSERT INTO folder_thread_state(folder_id, thread_key, head_message_id, account_id, thread_count)
@@ -191,7 +191,7 @@ func TestFolderThreadStateUpgradeRebuildsEachFolderOnFirstUse(t *testing.T) {
 
 	// A new message in a folder that was never rebuilt must not make its
 	// stale summary look complete.
-	if _, err := db.Write().Exec(`INSERT INTO messages(id, account_id, remote_message_id, date_received) VALUES (4, 'acct', 'r4', '2024-01-04 10:00:00');
+	if _, err := db.Write().Exec(`INSERT INTO messages(id, account_id, date_received) VALUES (4, 'acct', '2024-01-04 10:00:00');
 		INSERT INTO message_folder_state(message_id, folder_id) VALUES (4, 'box-inbox');`); err != nil {
 		t.Fatal(err)
 	}
@@ -219,7 +219,7 @@ func TestFolderThreadStateUpgradeRebuildsEachFolderOnFirstUse(t *testing.T) {
 func TestFolderThreadStateReadsDoNotWriteWhenCurrent(t *testing.T) {
 	db := newFolderThreadTestDB(t)
 	ctx := context.Background()
-	if _, err := db.Write().Exec(`INSERT INTO messages(id, account_id, remote_message_id, date_received) VALUES (1, 'acct', 'r1', '2024-01-01 10:00:00');
+	if _, err := db.Write().Exec(`INSERT INTO messages(id, account_id, date_received) VALUES (1, 'acct', '2024-01-01 10:00:00');
 		INSERT INTO message_folder_state(message_id, folder_id) VALUES (1, 'box-inbox');`); err != nil {
 		t.Fatal(err)
 	}

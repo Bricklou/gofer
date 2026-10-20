@@ -381,7 +381,7 @@ func (h *Handler) reportOutlookMessageSpam(ctx context.Context, disposition spam
 		return err
 	}
 	if strings.TrimSpace(moved.ID) != "" && strings.TrimSpace(moved.ID) != providerMessageID {
-		if err := h.db.SetMessageProviderMessageID(ctx, messageID, strings.TrimSpace(moved.ID)); err != nil {
+		if err := h.db.ReplaceProviderMessageID(ctx, messageID, providerMessageID, strings.TrimSpace(moved.ID)); err != nil {
 			log.Printf("cache outlook message id failed: %v", err)
 		}
 	}

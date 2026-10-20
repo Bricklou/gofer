@@ -497,7 +497,7 @@ func jmapMessages(t *testing.T, f *userGmailFixture) map[string]*jmapTestMessage
 	t.Helper()
 	messages := map[string]*jmapTestMessage{}
 	f.local(t, "alice", func(db *storage.DB) error {
-		rows, err := db.Read().Query(`SELECT m.remote_message_id, f.provider_remote_id, mfs.is_read, mfs.is_flagged, m.subject, m.from_email, m.internet_message_id
+		rows, err := db.Read().Query(`SELECT COALESCE(mfs.remote_message_id, ''), f.provider_remote_id, mfs.is_read, mfs.is_flagged, m.subject, m.from_email, m.internet_message_id
 			FROM messages m JOIN message_folder_state mfs ON mfs.message_id = m.id AND mfs.is_deleted = 0
 			JOIN folders f ON f.id = mfs.folder_id WHERE m.account_id = ?`, f.ids["alice"])
 		if err != nil {
@@ -903,7 +903,7 @@ func TestSyncReplaysJMAPLabelChanges(t *testing.T) {
 		t.Helper()
 		f.local(t, "alice", func(db *storage.DB) error {
 			var id int64
-			if err := db.Read().QueryRow(`SELECT id FROM messages WHERE account_id=? AND remote_message_id=?`, f.ids["alice"], emailID).Scan(&id); err != nil {
+			if err := db.Read().QueryRow(`SELECT DISTINCT s.message_id FROM message_folder_state s JOIN folders f ON f.id=s.folder_id WHERE f.account_id=? AND s.remote_message_id=?`, f.ids["alice"], emailID).Scan(&id); err != nil {
 				return err
 			}
 			info, err := db.GetMessageMutationInfoForUser(t.Context(), id, "alice")
@@ -964,7 +964,7 @@ func TestSyncSendsJMAPSpamKeywords(t *testing.T) {
 		t.Helper()
 		f.local(t, "alice", func(db *storage.DB) error {
 			var id int64
-			if err := db.Read().QueryRow(`SELECT id FROM messages WHERE account_id=? AND remote_message_id='e1'`, f.ids["alice"]).Scan(&id); err != nil {
+			if err := db.Read().QueryRow(`SELECT DISTINCT s.message_id FROM message_folder_state s JOIN folders f ON f.id=s.folder_id WHERE f.account_id=? AND s.remote_message_id='e1'`, f.ids["alice"]).Scan(&id); err != nil {
 				return err
 			}
 			info, err := db.GetMessageMutationInfoForFolder(t.Context(), id, from)
@@ -1035,7 +1035,7 @@ func TestSharedSyncSendsJMAPSpamKeywords(t *testing.T) {
 		t.Fatal(err)
 	}
 	var id int64
-	if err := db.Read().QueryRow(`SELECT id FROM messages WHERE account_id=? AND remote_message_id='e1'`, account.ID).Scan(&id); err != nil {
+	if err := db.Read().QueryRow(`SELECT DISTINCT s.message_id FROM message_folder_state s JOIN folders f ON f.id=s.folder_id WHERE f.account_id=? AND s.remote_message_id='e1'`, account.ID).Scan(&id); err != nil {
 		t.Fatal(err)
 	}
 	inbox := jmapLocalFolderID(account.ID, "mb-in")
@@ -1068,7 +1068,7 @@ func jmapLabels(t *testing.T, f *userGmailFixture, emailID string) string {
 	var names []string
 	f.local(t, "alice", func(db *storage.DB) error {
 		rows, err := db.Read().Query(`SELECT l.name FROM messages m JOIN message_labels ml ON ml.message_id = m.id
-			JOIN labels l ON l.id = ml.label_id WHERE m.account_id = ? AND m.remote_message_id = ? ORDER BY l.name`, f.ids["alice"], emailID)
+			JOIN labels l ON l.id = ml.label_id WHERE m.account_id = ? AND m.id IN (SELECT s.message_id FROM message_folder_state s WHERE s.remote_message_id = ?) ORDER BY l.name`, f.ids["alice"], emailID)
 		if err != nil {
 			return err
 		}
@@ -1106,7 +1106,7 @@ func TestEnsureBodyDownloadsJMAPMessages(t *testing.T) {
 	localID := func(providerID string) int64 {
 		var id int64
 		f.local(t, "alice", func(db *storage.DB) error {
-			return db.Read().QueryRow(`SELECT id FROM messages WHERE account_id=? AND remote_message_id=?`, f.ids["alice"], providerID).Scan(&id)
+			return db.Read().QueryRow(`SELECT DISTINCT s.message_id FROM message_folder_state s JOIN folders f ON f.id=s.folder_id WHERE f.account_id=? AND s.remote_message_id=?`, f.ids["alice"], providerID).Scan(&id)
 		})
 		return id
 	}
@@ -1159,7 +1159,7 @@ func TestSyncReplaysJMAPMessageChanges(t *testing.T) {
 	local := func(providerID string) int64 {
 		var id int64
 		f.local(t, "alice", func(db *storage.DB) error {
-			return db.Read().QueryRow(`SELECT id FROM messages WHERE account_id=? AND remote_message_id=?`, account, providerID).Scan(&id)
+			return db.Read().QueryRow(`SELECT DISTINCT s.message_id FROM message_folder_state s JOIN folders f ON f.id=s.folder_id WHERE f.account_id=? AND s.remote_message_id=?`, account, providerID).Scan(&id)
 		})
 		return id
 	}

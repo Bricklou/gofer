@@ -502,7 +502,7 @@ func (o *SyncOrchestrator) syncGmailHistoryMessageLabelsWithAuthRetry(ctx contex
 
 func (o *SyncOrchestrator) applyGmailMessageState(ctx context.Context, msg storage.ProviderLabelSyncMessage, providerMessageID string, state gmailMessageState, labelsByID map[string]gmailLabel) (gmailLabelSyncResult, error) {
 	if strings.TrimSpace(state.ID) != "" && strings.TrimSpace(state.ID) != strings.TrimSpace(msg.ProviderMessageID) {
-		if err := o.db.SetMessageProviderMessageID(ctx, msg.ID, strings.TrimSpace(state.ID)); err != nil {
+		if err := o.db.ReplaceProviderMessageID(ctx, msg.ID, msg.ProviderMessageID, strings.TrimSpace(state.ID)); err != nil {
 			log.Printf("cache gmail message id failed: %v", err)
 		}
 	} else if strings.TrimSpace(msg.ProviderMessageID) == "" && strings.TrimSpace(providerMessageID) != "" {
@@ -947,7 +947,7 @@ func (o *SyncOrchestrator) syncOutlookMessageCategories(ctx context.Context, tok
 		return err
 	}
 	if strings.TrimSpace(state.ID) != "" && state.ID != providerMessageID {
-		if err := o.db.SetMessageProviderMessageID(ctx, msg.ID, strings.TrimSpace(state.ID)); err != nil {
+		if err := o.db.ReplaceProviderMessageID(ctx, msg.ID, providerMessageID, strings.TrimSpace(state.ID)); err != nil {
 			log.Printf("cache outlook message id failed: %v", err)
 		}
 	}
@@ -1037,7 +1037,7 @@ func (o *SyncOrchestrator) syncOutlookMessageCategoriesBatchChunk(ctx context.Co
 			continue
 		}
 		if strings.TrimSpace(state.ID) != "" && strings.TrimSpace(state.ID) != strings.TrimSpace(msg.ProviderMessageID) {
-			if err := o.db.SetMessageProviderMessageID(ctx, msg.ID, strings.TrimSpace(state.ID)); err != nil {
+			if err := o.db.ReplaceProviderMessageID(ctx, msg.ID, msg.ProviderMessageID, strings.TrimSpace(state.ID)); err != nil {
 				log.Printf("cache outlook message id failed: %v", err)
 			}
 		}

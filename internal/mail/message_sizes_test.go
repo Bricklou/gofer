@@ -113,7 +113,7 @@ func seedProviderMessagesMissingSize(t *testing.T, provider string, count int) *
 
 func storedSizes(t *testing.T, db *storage.DB) map[string]int64 {
 	t.Helper()
-	rows, err := db.Read().Query(`SELECT remote_message_id, size_bytes FROM messages`)
+	rows, err := db.Read().Query(`SELECT DISTINCT s.remote_message_id, m.size_bytes FROM messages m JOIN message_folder_state s ON s.message_id = m.id`)
 	if err != nil {
 		t.Fatal(err)
 	}

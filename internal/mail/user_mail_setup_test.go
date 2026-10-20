@@ -103,7 +103,7 @@ wait:
 	for _, owner := range []string{"alice", "bob"} {
 		f.local(t, owner, func(db *storage.DB) error {
 			var subject string
-			if err := db.Read().QueryRow(`SELECT subject FROM messages WHERE account_id=? AND remote_message_id='m1'`, f.ids[owner]).Scan(&subject); err != nil {
+			if err := db.Read().QueryRow(`SELECT DISTINCT m.subject FROM messages m JOIN message_folder_state s ON s.message_id=m.id WHERE m.account_id=? AND s.remote_message_id='m1'`, f.ids[owner]).Scan(&subject); err != nil {
 				return err
 			}
 			if (subject == "damaged metadata") == (owner == "alice") {

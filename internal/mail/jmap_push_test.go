@@ -286,7 +286,7 @@ func TestSyncOrchestratorWatchesJMAPAccountsOverPush(t *testing.T) {
 	t.Cleanup(func() { orchestrator.StopAccount(account.ID) })
 	stored := func(emailID string) bool {
 		var n int
-		_ = db.Read().QueryRow(`SELECT COUNT(*) FROM messages WHERE account_id=? AND remote_message_id=?`, account.ID, emailID).Scan(&n)
+		_ = db.Read().QueryRow(`SELECT COUNT(DISTINCT s.message_id) FROM message_folder_state s JOIN folders f ON f.id=s.folder_id WHERE f.account_id=? AND s.remote_message_id=?`, account.ID, emailID).Scan(&n)
 		return n > 0
 	}
 	streams := func() int { server.mu.Lock(); defer server.mu.Unlock(); return server.streams }

@@ -325,7 +325,7 @@ func TestUpsertProviderSyncMessagesHydratesExistingIMAPMessage(t *testing.T) {
 	var remoteID string
 	var isRead bool
 	if err := db.Read().QueryRowContext(ctx, `
-		SELECT COALESCE(m.remote_message_id, ''), mfs.is_read
+		SELECT COALESCE(mfs.remote_message_id, ''), mfs.is_read
 		FROM messages m JOIN message_folder_state mfs ON mfs.message_id = m.id
 		WHERE m.id = ?`, beforeID).Scan(&remoteID, &isRead); err != nil {
 		t.Fatalf("query hydrated message: %v", err)

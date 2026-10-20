@@ -695,8 +695,11 @@ func (db *DB) ConfirmProviderMessageDeleted(ctx context.Context, accountID, prov
 				WHERE mfs.message_id = message_mutations.message_id AND mfs.folder_id = message_mutations.folder_id
 				  AND `+providerCopyIDSQL("mfs")+` = ?
 			)
-			OR (folder_id = '' AND message_id IN (SELECT id FROM messages WHERE account_id = ? AND remote_message_id = ?))
-		)`, MessageMutationDelete, MessageMutationApplied, accountID, providerMessageID, accountID, providerMessageID)
+			OR (folder_id = '' AND EXISTS (
+				SELECT 1 FROM message_folder_state mfs
+				WHERE mfs.message_id = message_mutations.message_id AND mfs.remote_message_id = ?
+			))
+		)`, MessageMutationDelete, MessageMutationApplied, accountID, providerMessageID, providerMessageID)
 	return err
 }
 

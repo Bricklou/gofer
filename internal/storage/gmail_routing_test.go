@@ -57,7 +57,7 @@ func TestOutlookBodyPublicationValidatesIdentityAndRollsBackAllRows(t *testing.T
 func testProviderBodyPublication(t *testing.T, provider string) {
 	t.Helper()
 	db, id := seedMessageMutationTest(t, provider, []UpsertFolderInput{{ID: "inbox", AccountID: "acc", RemoteID: "INBOX", Name: "Inbox", Role: "inbox", Selectable: true}})
-	if _, err := db.Write().Exec(`UPDATE accounts SET auth_method='oauth2',provider_account_id='subject' WHERE id='acc'; UPDATE messages SET remote_message_id='m1' WHERE id=?`, id); err != nil {
+	if _, err := db.Write().Exec(`UPDATE accounts SET auth_method='oauth2',provider_account_id='subject' WHERE id='acc'; UPDATE message_folder_state SET remote_message_id='m1' WHERE message_id=?`, id); err != nil {
 		t.Fatal(err)
 	}
 	cache := MessageBodyCache{ProviderMessageID: "m1", ProviderAccountID: "subject", ProviderType: provider, TextPath: "candidate-text", Parsed: &mailmessage.ParsedMessage{Subject: "published body", FromEmail: "sender@mail.test", RawPath: "candidate-raw", Attachments: []mailmessage.AttachmentMeta{{Filename: "report.txt", BlobPath: "candidate-attachment"}}, To: []mailmessage.Recipient{{Email: "recipient@mail.test"}}}}

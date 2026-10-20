@@ -243,10 +243,7 @@ func (db *DB) CompleteUserProviderDraftUpsert(ctx context.Context, op UserProvid
 		}
 		// Publishing an older remote revision must not bind its ID to newer local
 		// content. The next immutable operation sees the actual remote state.
-		if _, err := tx.ExecContext(ctx, `UPDATE messages SET remote_message_id=?,updated_at=CURRENT_TIMESTAMP WHERE account_id=? AND internet_message_id=? AND id IN(SELECT local_message_id FROM gofer_provider_draft_states WHERE account_id=? AND draft_key=? AND local_revision=?)`, messageID, op.State.AccountID, op.State.DraftKey, op.State.AccountID, op.State.DraftKey, op.RevisionToken); err != nil {
-			return err
-		}
-		if _, err := tx.ExecContext(ctx, `UPDATE message_folder_state SET remote_message_id=? WHERE folder_id=? AND message_id IN(SELECT local_message_id FROM gofer_provider_draft_states WHERE account_id=? AND draft_key=? AND local_revision=?)`, messageID, op.State.FolderID, op.State.AccountID, op.State.DraftKey, op.RevisionToken); err != nil {
+		if _, err := tx.ExecContext(ctx, `UPDATE message_folder_state SET remote_message_id=? WHERE folder_id=? AND message_id IN(SELECT m.id FROM messages m JOIN gofer_provider_draft_states d ON d.local_message_id=m.id WHERE m.account_id=? AND m.internet_message_id=? AND d.account_id=? AND d.draft_key=? AND d.local_revision=?)`, messageID, op.State.FolderID, op.State.AccountID, op.State.DraftKey, op.State.AccountID, op.State.DraftKey, op.RevisionToken); err != nil {
 			return err
 		}
 		_, err := tx.ExecContext(ctx, `DELETE FROM gofer_provider_draft_operations WHERE id=?`, op.ID)

@@ -24,7 +24,7 @@ func TestRunMessageWorkAcceptsJMAPMessages(t *testing.T) {
 	}
 	var id int64
 	f.local(t, "alice", func(db *storage.DB) error {
-		return db.Read().QueryRow(`SELECT id FROM messages WHERE account_id=? AND remote_message_id='e1'`, f.ids["alice"]).Scan(&id)
+		return db.Read().QueryRow(`SELECT DISTINCT s.message_id FROM message_folder_state s JOIN folders f ON f.id=s.folder_id WHERE f.account_id=? AND s.remote_message_id='e1'`, f.ids["alice"]).Scan(&id)
 	})
 	ran := ""
 	if err := f.worker.RunMessageWork(t.Context(), "alice", id, func(_ context.Context, account string) error {
@@ -55,7 +55,7 @@ func TestEnsureAttachmentRecoversJMAPAttachments(t *testing.T) {
 	}
 	var messageID, attachmentID int64
 	f.local(t, "alice", func(db *storage.DB) error {
-		return db.Read().QueryRow(`SELECT id FROM messages WHERE account_id=? AND remote_message_id='e1'`, f.ids["alice"]).Scan(&messageID)
+		return db.Read().QueryRow(`SELECT DISTINCT s.message_id FROM message_folder_state s JOIN folders f ON f.id=s.folder_id WHERE f.account_id=? AND s.remote_message_id='e1'`, f.ids["alice"]).Scan(&messageID)
 	})
 	if err := f.worker.EnsureBody(t.Context(), "alice", messageID); err != nil {
 		t.Fatal(err)

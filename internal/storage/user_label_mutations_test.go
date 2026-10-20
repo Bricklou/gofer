@@ -20,10 +20,10 @@ func seedUserLabelTest(t *testing.T, provider string) (*DB, ThreadMessageMutatio
 	if _, err := db.Write().Exec(`INSERT INTO folders(id,account_id,remote_id,name,role,uid_validity) VALUES('inbox','acc','INBOX','Inbox','inbox',42),('junk','acc','Junk','Junk','junk',42)`); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := db.Write().Exec(`INSERT INTO messages(id,account_id,remote_message_id,internet_message_id,subject) VALUES(1,'acc','m1','<label@test.invalid>','Label')`); err != nil {
+	if _, err := db.Write().Exec(`INSERT INTO messages(id,account_id,internet_message_id,subject) VALUES(1,'acc','<label@test.invalid>','Label')`); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := db.Write().Exec(`INSERT INTO message_folder_state(message_id,folder_id,remote_uid) VALUES(1,'inbox',2)`); err != nil {
+	if _, err := db.Write().Exec(`INSERT INTO message_folder_state(message_id,folder_id,remote_uid,remote_message_id) VALUES(1,'inbox',2,'m1')`); err != nil {
 		t.Fatal(err)
 	}
 	info, err := db.GetMessageMutationInfoForUser(t.Context(), 1, "alice")
@@ -137,7 +137,7 @@ func TestUserLabelsRejectChangedIdentityAndUIDEpoch(t *testing.T) {
 }
 func TestUserLabelsMissingProviderIDPublicationRollsBackWithAssociations(t *testing.T) {
 	db, info := seedUserLabelTest(t, "outlook")
-	if _, err := db.Write().Exec(`UPDATE messages SET remote_message_id=NULL WHERE id=1`); err != nil {
+	if _, err := db.Write().Exec(`UPDATE message_folder_state SET remote_message_id=NULL WHERE message_id=1`); err != nil {
 		t.Fatal(err)
 	}
 	info.RemoteMessageID = ""
@@ -152,7 +152,7 @@ func TestUserLabelsMissingProviderIDPublicationRollsBackWithAssociations(t *test
 		t.Fatal("failure accepted")
 	}
 	var id string
-	if err := db.Read().QueryRow(`SELECT COALESCE(remote_message_id,'') FROM messages WHERE id=1`).Scan(&id); err != nil || id != "" {
+	if err := db.Read().QueryRow(`SELECT COALESCE(MAX(remote_message_id), '') FROM message_folder_state WHERE message_id = 1`).Scan(&id); err != nil || id != "" {
 		t.Fatalf("identity escaped rollback: %q %v", id, err)
 	}
 	if _, err := db.Write().Exec(`DROP TRIGGER fail_remote_label`); err != nil {
@@ -161,7 +161,7 @@ func TestUserLabelsMissingProviderIDPublicationRollsBackWithAssociations(t *test
 	if err := db.CompleteUserLabelMutation(t.Context(), entry, info.MessageMutationInfo, "subject", "resolved", 42, LabelInput{Name: "Projects", ProviderID: "Projects", ProviderType: LabelProviderOutlook}); err != nil {
 		t.Fatal(err)
 	}
-	if err := db.Read().QueryRow(`SELECT COALESCE(remote_message_id,'') FROM messages WHERE id=1`).Scan(&id); err != nil || id != "resolved" {
+	if err := db.Read().QueryRow(`SELECT COALESCE(MAX(remote_message_id), '') FROM message_folder_state WHERE message_id = 1`).Scan(&id); err != nil || id != "resolved" {
 		t.Fatalf("identity not published: %q %v", id, err)
 	}
 	if entries, err := db.ListDueLabelMutations(t.Context(), "acc", LabelProviderOutlook, 1); err != nil || len(entries) != 0 {

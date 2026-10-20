@@ -112,10 +112,10 @@ func newOwnedMailCalendarFixture(t *testing.T, provider string, cached bool, bef
 			if _, err := db.Write().Exec(`INSERT INTO folders(id,account_id,remote_id,name,role,uid_validity) VALUES(?,?,'INBOX','Inbox','inbox',100)`, owner+"-calendar-mail", f.accounts[owner].ID); err != nil {
 				return err
 			}
-			if _, err := db.Write().Exec(`INSERT INTO messages(id,account_id,remote_message_id,internet_message_id,subject,raw_path,body_text_path) VALUES(1,?,'m1',?,'cached body metadata',?,'existing-body')`, f.accounts[owner].ID, "<"+owner+"-invitation@example.com>", path); err != nil {
+			if _, err := db.Write().Exec(`INSERT INTO messages(id,account_id,internet_message_id,subject,raw_path,body_text_path) VALUES(1,?,?,'cached body metadata',?,'existing-body')`, f.accounts[owner].ID, "<"+owner+"-invitation@example.com>", path); err != nil {
 				return err
 			}
-			if _, err := db.Write().Exec(`INSERT INTO message_folder_state(message_id,folder_id,remote_uid) VALUES(1,?,2)`, owner+"-calendar-mail"); err != nil {
+			if _, err := db.Write().Exec(`INSERT INTO message_folder_state(message_id,folder_id,remote_uid,remote_message_id) VALUES(1,?,2,'m1')`, owner+"-calendar-mail"); err != nil {
 				return err
 			}
 			start := time.Date(2026, 10, 3, 10, 0, 0, 0, time.UTC)
@@ -210,7 +210,7 @@ func TestUserMailCalendarHTTPProviderWaitRejectsChangesAndFreesStore(t *testing.
 			switch mode {
 			case "message":
 				if err := f.routing.WithUser(t.Context(), "alice", func(db *storage.DB) error {
-					_, err := db.Write().Exec(`UPDATE messages SET remote_message_id='new' WHERE id=1`)
+					_, err := db.Write().Exec(`UPDATE message_folder_state SET remote_message_id='new' WHERE message_id=1`)
 					return err
 				}); err != nil {
 					t.Fatal(err)
@@ -403,10 +403,10 @@ func TestUserMailCalendarHTTPForcedRefreshAfterAcceptedMailRead(t *testing.T) {
 		if _, err := db.Write().Exec(`INSERT INTO folders(id,account_id,remote_id,name,role,uid_validity) VALUES('mail',?,'INBOX','Inbox','inbox',100)`, account); err != nil {
 			return err
 		}
-		if _, err := db.Write().Exec(`INSERT INTO messages(id,account_id,remote_message_id,internet_message_id) VALUES(1,?,'m1','<alice-invitation@example.com>')`, account); err != nil {
+		if _, err := db.Write().Exec(`INSERT INTO messages(id,account_id,internet_message_id) VALUES(1,?,'<alice-invitation@example.com>')`, account); err != nil {
 			return err
 		}
-		_, err := db.Write().Exec(`INSERT INTO message_folder_state(message_id,folder_id,remote_uid) VALUES(1,'mail',2)`)
+		_, err := db.Write().Exec(`INSERT INTO message_folder_state(message_id,folder_id,remote_uid,remote_message_id) VALUES(1,'mail',2,'m1')`)
 		return err
 	}); err != nil {
 		t.Fatal(err)

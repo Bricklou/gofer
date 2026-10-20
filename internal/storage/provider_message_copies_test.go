@@ -164,10 +164,6 @@ func TestProviderFolderReconcileOnlyTouchesTheSameCopy(t *testing.T) {
 	if got, want := visible("<self@example.com>"), map[string]string{"acc_sent": "email-sent"}; !maps.Equal(got, want) {
 		t.Fatalf("after importing the Inbox = %v, want %v", got, want)
 	}
-	var rowID string
-	if err := db.Read().QueryRowContext(ctx, `SELECT remote_message_id FROM messages WHERE internet_message_id = '<self@example.com>'`).Scan(&rowID); err != nil || rowID != "email-sent" {
-		t.Fatalf("row provider id = %q, %v; want the Sent copy", rowID, err)
-	}
 }
 
 // seedSelfSentCopies stores the Sent and Inbox copies of mail sent to oneself
@@ -308,16 +304,15 @@ func TestProviderContentIsFetchedThroughALiveCopy(t *testing.T) {
 	db := newContactsTestDB(t)
 	msgID := seedSelfSentCopies(t, db)
 	snapshot, err := db.GetMessageContentSnapshotForUser(ctx, "default", msgID)
-	if err != nil || snapshot.RemoteMessageID != "email-sent" {
-		t.Fatalf("content snapshot = %+v, %v; want the row's copy", snapshot, err)
+	if err != nil || snapshot.RemoteMessageID != "email-inbox" {
+		t.Fatalf("content snapshot = %+v, %v; want the Inbox copy", snapshot, err)
 	}
-	// The Sent copy leaves on a full import of Sent, without the row hearing
-	// of it; content then comes through the Inbox copy.
-	if _, err := db.MarkProviderMessagesMissingFromFolder(ctx, "acc", "acc_sent", map[string]bool{}); err != nil {
+	// Once the Inbox copy leaves, content comes through the Sent copy.
+	if _, err := db.MarkProviderMessagesMissingFromFolder(ctx, "acc", "acc_inbox", map[string]bool{}); err != nil {
 		t.Fatalf("MarkProviderMessagesMissingFromFolder() error = %v", err)
 	}
 	snapshot, err = db.GetMessageContentSnapshotForUser(ctx, "default", msgID)
-	if err != nil || snapshot.RemoteMessageID != "email-inbox" {
-		t.Fatalf("content snapshot = %+v, %v; want the Inbox copy", snapshot, err)
+	if err != nil || snapshot.RemoteMessageID != "email-sent" {
+		t.Fatalf("content snapshot = %+v, %v; want the Sent copy", snapshot, err)
 	}
 }

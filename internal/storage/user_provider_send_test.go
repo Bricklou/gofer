@@ -108,7 +108,7 @@ func TestUserProviderSendCacheCompletionRollsBackIdentityAndPayload(t *testing.T
 		t.Fatal("failed cache completion discarded payload", err)
 	}
 	var remote string
-	if err := db.Read().QueryRow(`SELECT COALESCE(remote_message_id,'') FROM messages WHERE internet_message_id='<sent@test.invalid>'`).Scan(&remote); err != nil || remote != "" {
+	if err := db.Read().QueryRow(`SELECT COALESCE(MAX(s.remote_message_id),'') FROM messages m JOIN message_folder_state s ON s.message_id=m.id WHERE m.internet_message_id='<sent@test.invalid>'`).Scan(&remote); err != nil || remote != "" {
 		t.Fatal("failed cache completion leaked remote identity", err)
 	}
 	if _, err := db.Write().Exec(`DROP TRIGGER reject_cache_completion`); err != nil {
@@ -167,12 +167,19 @@ func TestUserProviderSentCacheBindsTheSentCopy(t *testing.T) {
 	}
 }
 
-func TestSetMessageProviderMessageIDKeepsOtherCopies(t *testing.T) {
+func TestProviderMessageIDsKeepOtherCopies(t *testing.T) {
 	ctx := context.Background()
 	db := newContactsTestDB(t)
 	msgID := seedSelfSentCopies(t, db)
-	// The row names the Sent copy, which a provider gave a new id.
-	if err := db.SetMessageProviderMessageID(ctx, msgID, "email-sent-2"); err != nil {
+	// An id found without a folder doesn't take over a copy that has one.
+	if err := db.SetMessageProviderMessageID(ctx, msgID, "email-found"); err != nil {
+		t.Fatal(err)
+	}
+	if got, want := visibleCopies(t, db, "<self@example.com>"), map[string]string{"acc_sent": "email-sent", "acc_inbox": "email-inbox"}; !maps.Equal(got, want) {
+		t.Fatalf("copies = %v, want %v", got, want)
+	}
+	// A provider gave the Sent copy a new id.
+	if err := db.ReplaceProviderMessageID(ctx, msgID, "email-sent", "email-sent-2"); err != nil {
 		t.Fatal(err)
 	}
 	if got, want := visibleCopies(t, db, "<self@example.com>"), map[string]string{"acc_sent": "email-sent-2", "acc_inbox": "email-inbox"}; !maps.Equal(got, want) {

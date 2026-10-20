@@ -127,7 +127,7 @@ func TestSaveOutlookGraphDraftCreatesMIMEDraftAndCachesProviderID(t *testing.T) 
 		t.Fatal("Graph draft create was not observed")
 	}
 	var providerID string
-	if err := db.Read().QueryRowContext(ctx, `SELECT COALESCE(remote_message_id, '') FROM messages WHERE id = ?`, msgID).Scan(&providerID); err != nil {
+	if err := db.Read().QueryRowContext(ctx, `SELECT COALESCE(MAX(remote_message_id), '') FROM message_folder_state WHERE message_id = ?`, msgID).Scan(&providerID); err != nil {
 		t.Fatalf("query provider id: %v", err)
 	}
 	if providerID != "graph-draft-1" {
@@ -222,7 +222,7 @@ func TestSendOutlookGraphMessageUsesSendMailMIMEAndCachesSentID(t *testing.T) {
 		t.Fatalf("GetMessageLocalIDByInternetIDInternal() = %d, %v", msgID, err)
 	}
 	var providerID string
-	if err := db.Read().QueryRowContext(ctx, `SELECT COALESCE(remote_message_id, '') FROM messages WHERE id = ?`, msgID).Scan(&providerID); err != nil {
+	if err := db.Read().QueryRowContext(ctx, `SELECT COALESCE(MAX(remote_message_id), '') FROM message_folder_state WHERE message_id = ?`, msgID).Scan(&providerID); err != nil {
 		t.Fatalf("query provider id: %v", err)
 	}
 	if providerID != "graph-sent-1" {

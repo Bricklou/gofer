@@ -329,7 +329,7 @@ func TestIMAPMoveWaitsForDestinationSyncWithoutRevivingSource(t *testing.T) {
 func TestProviderMoveIgnoresStaleSourceUntilDestinationIsConfirmed(t *testing.T) {
 	db, messageID := seedMoveMutationTest(t, MessageMutationProviderGmail)
 	ctx := t.Context()
-	if _, err := db.Write().Exec(`UPDATE messages SET remote_message_id = 'gmail-message' WHERE id = ?`, messageID); err != nil {
+	if _, err := db.Write().Exec(`UPDATE message_folder_state SET remote_message_id='gmail-message' WHERE message_id=?`, messageID); err != nil {
 		t.Fatalf("set provider identity: %v", err)
 	}
 	if err := db.MoveMessageAndQueue(ctx, messageID, "inbox", "archive"); err != nil {
@@ -440,7 +440,7 @@ func TestPermanentDeleteRollsBackLocalStateWhenQueueFails(t *testing.T) {
 
 func TestProviderPermanentDeleteHidesEveryFolderAndWaitsForConfirmation(t *testing.T) {
 	db, messageID := seedDeleteMutationTest(t, MessageMutationProviderGmail)
-	if _, err := db.Write().Exec(`UPDATE messages SET remote_message_id = 'gmail-delete' WHERE id = ?`, messageID); err != nil {
+	if _, err := db.Write().Exec(`UPDATE message_folder_state SET remote_message_id='gmail-delete' WHERE message_id=?`, messageID); err != nil {
 		t.Fatalf("set provider identity: %v", err)
 	}
 	if err := db.PermanentlyDeleteMessageAndQueue(t.Context(), messageID, "trash"); err != nil {

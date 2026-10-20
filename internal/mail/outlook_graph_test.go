@@ -508,7 +508,7 @@ func TestSyncOutlookGraphAccountImportsFoldersMessagesAndDeltaCursor(t *testing.
 		t.Fatalf("GetMessageLocalIDByInternetIDInternal() = %d, %v", msgID, err)
 	}
 	var providerID string
-	if err := db.Read().QueryRowContext(ctx, `SELECT COALESCE(remote_message_id, '') FROM messages WHERE id = ?`, msgID).Scan(&providerID); err != nil {
+	if err := db.Read().QueryRowContext(ctx, `SELECT COALESCE(MAX(remote_message_id), '') FROM message_folder_state WHERE message_id = ?`, msgID).Scan(&providerID); err != nil {
 		t.Fatalf("query remote_message_id: %v", err)
 	}
 	if providerID != "graph-message-1" {
@@ -519,7 +519,7 @@ func TestSyncOutlookGraphAccountImportsFoldersMessagesAndDeltaCursor(t *testing.
 		t.Fatalf("GetMessageLocalIDByInternetIDInternal(legacy) = %d, %v", legacyID, err)
 	}
 	var legacyProviderID string
-	if err := db.Read().QueryRowContext(ctx, `SELECT COALESCE(remote_message_id, '') FROM messages WHERE id = ?`, legacyID).Scan(&legacyProviderID); err != nil {
+	if err := db.Read().QueryRowContext(ctx, `SELECT COALESCE(MAX(remote_message_id), '') FROM message_folder_state WHERE message_id = ?`, legacyID).Scan(&legacyProviderID); err != nil {
 		t.Fatalf("query legacy remote_message_id: %v", err)
 	}
 	if legacyProviderID != "graph-legacy-1" {
@@ -1473,7 +1473,7 @@ func queryOutlookGraphDeletedByRemoteID(t *testing.T, ctx context.Context, db *s
 		SELECT mfs.is_deleted
 		FROM messages m
 		JOIN message_folder_state mfs ON mfs.message_id = m.id
-		WHERE m.account_id = 'acc' AND m.remote_message_id = ? AND mfs.folder_id = 'acc_inbox'`, providerMessageID).Scan(&deleted); err != nil {
+		WHERE m.account_id = 'acc' AND mfs.remote_message_id = ? AND mfs.folder_id = 'acc_inbox'`, providerMessageID).Scan(&deleted); err != nil {
 		t.Fatalf("query deleted state for %s: %v", providerMessageID, err)
 	}
 	return deleted
@@ -1500,7 +1500,7 @@ func queryOutlookGraphFolderProgress(t *testing.T, ctx context.Context, db *stor
 func queryOutlookGraphProviderMessageCount(t *testing.T, ctx context.Context, db *storage.DB) int {
 	t.Helper()
 	var count int
-	if err := db.Read().QueryRowContext(ctx, `SELECT COUNT(*) FROM messages WHERE account_id = 'acc' AND COALESCE(remote_message_id, '') != ''`).Scan(&count); err != nil {
+	if err := db.Read().QueryRowContext(ctx, `SELECT COUNT(DISTINCT s.message_id) FROM message_folder_state s JOIN folders f ON f.id = s.folder_id WHERE f.account_id = 'acc' AND COALESCE(s.remote_message_id, '') != ''`).Scan(&count); err != nil {
 		t.Fatalf("query provider message count: %v", err)
 	}
 	return count

@@ -55,7 +55,7 @@ func TestUserAttachmentPublicationRejectsChangedSnapshots(t *testing.T) {
 		`UPDATE accounts SET provider='outlook'`,
 		`UPDATE accounts SET is_deleting=1`,
 		`UPDATE users SET status='disabled'`,
-		`UPDATE messages SET remote_message_id='new'`,
+		`UPDATE message_folder_state SET remote_message_id='new'`,
 		`UPDATE messages SET internet_message_id='new'`,
 		`UPDATE messages SET raw_path='new'`,
 		`UPDATE attachments SET storage_path='new' WHERE id=2`,
@@ -85,7 +85,7 @@ func TestUserAttachmentPublicationRejectsChangedSnapshots(t *testing.T) {
 
 func TestUserAttachmentLookupAndPathRollbackTogether(t *testing.T) {
 	db := seedAttachmentRecovery(t)
-	if _, err := db.Write().Exec(`UPDATE messages SET remote_message_id=''; CREATE TRIGGER fail_attachment BEFORE UPDATE OF storage_path ON attachments BEGIN SELECT RAISE(ABORT,'injected path failure'); END`); err != nil {
+	if _, err := db.Write().Exec(`UPDATE message_folder_state SET remote_message_id=''; CREATE TRIGGER fail_attachment BEFORE UPDATE OF storage_path ON attachments BEGIN SELECT RAISE(ABORT,'injected path failure'); END`); err != nil {
 		t.Fatal(err)
 	}
 	s := attachmentSnapshot(t, db)
@@ -93,7 +93,7 @@ func TestUserAttachmentLookupAndPathRollbackTogether(t *testing.T) {
 		t.Fatal("failed path update reported success")
 	}
 	var id, path string
-	if err := db.Read().QueryRow(`SELECT m.remote_message_id,a.storage_path FROM messages m JOIN attachments a ON a.message_id=m.id WHERE a.id=2`).Scan(&id, &path); err != nil {
+	if err := db.Read().QueryRow(`SELECT COALESCE((SELECT MAX(s.remote_message_id) FROM message_folder_state s WHERE s.message_id=m.id),''),a.storage_path FROM messages m JOIN attachments a ON a.message_id=m.id WHERE a.id=2`).Scan(&id, &path); err != nil {
 		t.Fatal(err)
 	}
 	if id != "" || path != "sibling-path" {

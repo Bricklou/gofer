@@ -98,7 +98,7 @@ func TestProviderMessageSizesAreStoredAndLookedUp(t *testing.T) {
 		t.Fatal(err)
 	}
 	var size int64
-	if err := db.Read().QueryRowContext(ctx, `SELECT size_bytes FROM messages WHERE remote_message_id = 'p-1'`).Scan(&size); err != nil || size != 4096 {
+	if err := db.Read().QueryRowContext(ctx, `SELECT m.size_bytes FROM messages m JOIN message_folder_state s ON s.message_id = m.id WHERE s.remote_message_id = 'p-1'`).Scan(&size); err != nil || size != 4096 {
 		t.Fatalf("size = %d, %v", size, err)
 	}
 }

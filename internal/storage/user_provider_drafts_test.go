@@ -70,7 +70,7 @@ func TestUserProviderDraftOlderCompletionPreservesNewLocalRevision(t *testing.T)
 		t.Fatal(err)
 	}
 	var subject, remote string
-	if err := db.Read().QueryRow(`SELECT subject,COALESCE(remote_message_id,'') FROM messages WHERE id=?`, id).Scan(&subject, &remote); err != nil {
+	if err := db.Read().QueryRow(`SELECT m.subject,COALESCE((SELECT MAX(s.remote_message_id) FROM message_folder_state s WHERE s.message_id=m.id),'') FROM messages m WHERE m.id=?`, id).Scan(&subject, &remote); err != nil {
 		t.Fatal(err)
 	}
 	if subject != "second" || remote != "" {
@@ -86,7 +86,7 @@ func TestUserProviderDraftOlderCompletionPreservesNewLocalRevision(t *testing.T)
 	if err := db.CompleteUserProviderDraftUpsert(t.Context(), second); err != nil {
 		t.Fatal(err)
 	}
-	if err := db.Read().QueryRow(`SELECT COALESCE(remote_message_id,'') FROM messages WHERE id=?`, id).Scan(&remote); err != nil || remote != "message-second" {
+	if err := db.Read().QueryRow(`SELECT COALESCE(MAX(remote_message_id), '') FROM message_folder_state WHERE message_id = ?`, id).Scan(&remote); err != nil || remote != "message-second" {
 		t.Fatal("latest identity not published", remote, err)
 	}
 }
@@ -135,7 +135,7 @@ func TestUserProviderDraftReceivingPreservesPendingEditAndDiscard(t *testing.T) 
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := db.Write().Exec(`UPDATE messages SET remote_message_id='old-remote' WHERE id=?`, id); err != nil {
+	if _, err := db.Write().Exec(`UPDATE message_folder_state SET remote_message_id='old-remote' WHERE message_id=?`, id); err != nil {
 		t.Fatal(err)
 	}
 	remote := ProviderSyncMessage{AccountID: "acc", FolderID: "drafts", ProviderMessageID: "old-remote", InternetMessageID: "<draft@mail.test>", Subject: "stale remote", IsDraft: true}
@@ -222,7 +222,7 @@ func TestUserProviderDraftPendingEditRejectsOlderBodyPublication(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			if _, err := db.Write().Exec(`UPDATE messages SET remote_message_id='old-remote' WHERE id=?`, id); err != nil {
+			if _, err := db.Write().Exec(`UPDATE message_folder_state SET remote_message_id='old-remote' WHERE message_id=?`, id); err != nil {
 				t.Fatal(err)
 			}
 			// This identity is still valid until draft replacement completes:

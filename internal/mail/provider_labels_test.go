@@ -73,10 +73,15 @@ func seedLabelSyncMessage(t *testing.T, db *storage.DB, provider, messageID, rem
 	if err := db.UpsertFolders(ctx, []storage.UpsertFolderInput{{ID: "acc_inbox", AccountID: "acc", RemoteID: "INBOX", Name: "Inbox", Role: "inbox", Selectable: true}}); err != nil {
 		t.Fatalf("UpsertFolders() error = %v", err)
 	}
+	// Each message has its own folder state, so its own UID.
+	var seeded uint32
+	if err := db.Read().QueryRowContext(ctx, `SELECT COUNT(*) FROM messages`).Scan(&seeded); err != nil {
+		t.Fatalf("count messages: %v", err)
+	}
 	if err := db.UpsertSyncMessages(ctx, []storage.SyncMessage{{
 		AccountID: "acc",
 		FolderID:  "acc_inbox",
-		RemoteUID: 7,
+		RemoteUID: 7 + seeded,
 		MessageID: messageID,
 		Subject:   "Provider labels",
 		FromEmail: "sender@example.com",

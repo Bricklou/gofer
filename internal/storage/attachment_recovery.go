@@ -32,7 +32,7 @@ type attachmentRecoveryQueries interface {
 func (db *DB) attachmentRecovery(ctx context.Context, q attachmentRecoveryQueries, owner string, id int64) (*AttachmentRecovery, error) {
 	var s AttachmentRecovery
 	visible := `EXISTS(SELECT 1 FROM message_folder_state ms JOIN folders f ON f.id=ms.folder_id WHERE ms.message_id=m.id AND ms.is_deleted=0 AND f.account_id=m.account_id)` + db.userProviderDraftProtectionSQL("m")
-	err := q.QueryRowContext(ctx, `SELECT att.id,att.message_id,m.account_id,a.provider,`+liveProviderCopyIDSQL("m")+`,COALESCE(att.provider_remote_id,''),att.filename,att.content_type,COALESCE(att.content_id,''),att.size_bytes,att.storage_path,
+	err := q.QueryRowContext(ctx, `SELECT att.id,att.message_id,m.account_id,a.provider,`+anyProviderCopyIDSQL("m")+`,COALESCE(att.provider_remote_id,''),att.filename,att.content_type,COALESCE(att.content_id,''),att.size_bytes,att.storage_path,
 	 COALESCE(m.internet_message_id,''),COALESCE(m.raw_path,''),COALESCE(a.provider_account_id,''),a.auth_method,(`+visible+`)
 	 FROM attachments att JOIN messages m ON m.id=att.message_id JOIN accounts a ON a.id=m.account_id JOIN users u ON u.id=a.user_id
 	 WHERE att.id=? AND a.user_id=? AND COALESCE(a.is_deleting,0)=0 AND u.status='active'`, id, owner).Scan(

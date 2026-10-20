@@ -110,10 +110,10 @@ func newOwnedCalendarResponseFormFixture(t *testing.T, variant string, before fu
 			if _, err := db.Write().Exec(`INSERT INTO folders(id,account_id,remote_id,name,role,uid_validity) VALUES(?,?,'INBOX','Inbox','inbox',100)`, owner+"-response-mail", f.accounts[owner].ID); err != nil {
 				return err
 			}
-			if _, err := db.Write().Exec(`INSERT INTO messages(id,account_id,remote_message_id,internet_message_id,raw_path) VALUES(1,?,'m1',?,?)`, f.accounts[owner].ID, "<"+owner+"-invitation@example.com>", path); err != nil {
+			if _, err := db.Write().Exec(`INSERT INTO messages(id,account_id,internet_message_id,raw_path) VALUES(1,?,?,?)`, f.accounts[owner].ID, "<"+owner+"-invitation@example.com>", path); err != nil {
 				return err
 			}
-			if _, err := db.Write().Exec(`INSERT INTO message_folder_state(message_id,folder_id,remote_uid) VALUES(1,?,2)`, owner+"-response-mail"); err != nil {
+			if _, err := db.Write().Exec(`INSERT INTO message_folder_state(message_id,folder_id,remote_uid,remote_message_id) VALUES(1,?,2,'m1')`, owner+"-response-mail"); err != nil {
 				return err
 			}
 			start := time.Date(2026, 10, 3, 10, 0, 0, 0, time.UTC)
@@ -252,7 +252,7 @@ func TestUserCalendarResponseFormHTTPRejectsInFlightChanges(t *testing.T) {
 				}
 			case "mail-identity":
 				if err := f.routing.WithUser(t.Context(), "alice", func(db *storage.DB) error {
-					_, err := db.Write().Exec(`UPDATE messages SET remote_message_id='changed' WHERE id=1`)
+					_, err := db.Write().Exec(`UPDATE message_folder_state SET remote_message_id='changed' WHERE message_id=1`)
 					return err
 				}); err != nil {
 					t.Fatal(err)
