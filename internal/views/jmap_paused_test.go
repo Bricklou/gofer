@@ -56,3 +56,30 @@ func TestJMAPAccountShowsPausedWhileJMAPIsOff(t *testing.T) {
 		})
 	}
 }
+
+// In the menu that syncs one account at a time, a paused JMAP account can't
+// be chosen, and says why; the other accounts can.
+func TestSyncMenuDisablesPausedJMAPAccounts(t *testing.T) {
+	accounts := []models.Account{
+		{ID: "acc-jmap", Provider: "jmap", Name: "JMAP", Email: "robin@example.test", EmailSyncEnabled: true},
+		{ID: "acc-imap", Provider: "imap", Name: "IMAP", Email: "robin@example.org", EmailSyncEnabled: true},
+	}
+	for _, on := range []string{"false", "true"} {
+		t.Setenv("GOFER_JMAP_EXPERIMENT", on)
+		var out strings.Builder
+		if err := SidebarSyncControls(accounts, "mail").Render(t.Context(), &out); err != nil {
+			t.Fatal(err)
+		}
+		html := out.String()
+		paused := on == "false"
+		if strings.Contains(html, `hx-post="/api/mail/sync/accounts/acc-jmap"`) == paused || strings.Contains(html, `data-mail-account-sync-paused="acc-jmap"`) != paused {
+			t.Fatalf("JMAP %s: the JMAP account's sync choice is wrong:\n%s", on, html)
+		}
+		if !strings.Contains(html, `hx-post="/api/mail/sync/accounts/acc-imap"`) {
+			t.Fatalf("JMAP %s: the IMAP account can't be synced", on)
+		}
+		if paused && !strings.Contains(html, "GOFER_JMAP_EXPERIMENT=true") {
+			t.Fatal("the paused account doesn't say how to turn JMAP on")
+		}
+	}
+}
