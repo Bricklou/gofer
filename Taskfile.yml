@@ -44,6 +44,11 @@ tasks:
     cmds:
       - ./scripts/release-build.sh
 
+  licenses:
+    desc: Regenerate the third-party license list and notices
+    cmds:
+      - ./scripts/licenses.sh
+
   clean:
     desc: Clean build artifacts
     cmds:

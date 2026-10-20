@@ -10,8 +10,8 @@ import (
 )
 
 // Personal and managed mode serve signed-in users from the per-user routes,
-// so the About page's update check has to be mounted there too.
-func TestUserStorageRoutesServeAboutUpdateCheck(t *testing.T) {
+// so the About page's routes have to be mounted there too.
+func TestUserStorageRoutesServeAboutPage(t *testing.T) {
 	f := verifiedOwnedStatusFixture(t)
 	root, cancel := context.WithCancel(t.Context())
 	syncer := mail.NewSyncOrchestrator(f.system, nil, nil, nil)
@@ -25,8 +25,13 @@ func TestUserStorageRoutesServeAboutUpdateCheck(t *testing.T) {
 	if err := h.RegisterUserStorageRoutes(root, mux, f.h.userStorage, UserStorageOptions{Accounts: f.h.userAccounts, IMAP: imap}); err != nil {
 		t.Fatal(err)
 	}
-	req := httptest.NewRequest(http.MethodPost, "/api/settings/about/update-check", nil)
-	if _, pattern := mux.Handler(req); pattern != "POST /api/settings/about/update-check" {
-		t.Fatalf("update check is not routed for users; matched %q", pattern)
+	for _, route := range []struct{ method, path string }{
+		{http.MethodPost, "/api/settings/about/update-check"},
+		{http.MethodGet, "/settings/about/licenses"},
+	} {
+		req := httptest.NewRequest(route.method, route.path, nil)
+		if _, pattern := mux.Handler(req); pattern != route.method+" "+route.path {
+			t.Errorf("%s %s is not routed for users; matched %q", route.method, route.path, pattern)
+		}
 	}
 }

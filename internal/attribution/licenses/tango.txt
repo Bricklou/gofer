@@ -1,0 +1,3 @@
+The Tango Desktop Project's icon theme (tango-icon-theme 0.8.90) is in the
+public domain. Its COPYING file reads: "The icons in this repository are
+herefore released into the Public Domain." (SPDX: CC0-1.0)

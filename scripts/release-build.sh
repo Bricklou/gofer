@@ -14,6 +14,7 @@ rm -rf "$DIST"
 mkdir -p "$DIST"
 
 task generate
+./scripts/licenses.sh --check
 
 export CGO_ENABLED="${CGO_ENABLED:-0}"
 LDFLAGS="-X github.com/cristianadrielbraun/gofer/internal/buildinfo.Version=${VERSION}"
@@ -42,6 +43,7 @@ for target in "${targets[@]}"; do
   echo "==> Building $goos/$goarch"
   GOOS="$goos" GOARCH="$goarch" go build -tags embedded_assets -trimpath -ldflags "$LDFLAGS" -o "$package_dir/gofer$ext" .
   cp README.md LICENSE "$package_dir/"
+  cp internal/attribution/notices.txt "$package_dir/THIRD_PARTY_NOTICES.txt"
 
   echo "==> Packaging $name.$archive_ext"
   if [[ "$archive_ext" == "zip" ]]; then

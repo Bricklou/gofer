@@ -1,0 +1,12 @@
+name,version,license,url,text
+Go standard library,,BSD-3-Clause,https://go.dev,internal/attribution/licenses/go.txt
+SQLite,,Public domain,https://sqlite.org,internal/attribution/licenses/sqlite.txt
+htmx,2.0.4,0BSD,https://htmx.org,internal/attribution/licenses/htmx.txt
+Floating UI,1.7.0,MIT,https://floating-ui.com,internal/attribution/licenses/floating-ui.txt
+templUI,1.10.0,MIT,https://templui.io,internal/attribution/licenses/templui.txt
+Lucide icons,0.576.0,ISC,https://lucide.dev,internal/attribution/licenses/lucide.txt
+Tailwind CSS,4.2.4,MIT,https://tailwindcss.com,internal/attribution/licenses/tailwindcss.txt
+Fraunces font,,OFL-1.1,https://github.com/undercasetype/Fraunces,assets/fonts/fraunces/OFL.txt
+Nunito Sans font,,OFL-1.1,https://github.com/googlefonts/NunitoSans,assets/fonts/nunito-sans/OFL.txt
+Wine Tahoma font,Wine 11.0,LGPL-2.1-or-later,https://gitlab.winehq.org/wine/wine,assets/fonts/COPYING.LIB
+Tango icons,0.8.90,Public domain,http://tango.freedesktop.org/Tango_Desktop_Project,internal/attribution/licenses/tango.txt

@@ -265,8 +265,10 @@ func (h *Handler) RegisterUserStorageRoutes(ctx context.Context, mux *http.Serve
 	private("GET /settings/operations/content", routed.handleSettingsMailOperationsContent)
 	private("GET /settings", routed.handleSettings)
 	private("GET /settings/{tab}", routed.handleSettingsTab)
-	// The update check reads nothing of the user's, so it needs no storage.
+	// The About page's update check and license texts read nothing of the
+	// user's, so they need no storage.
 	mux.HandleFunc("POST /api/settings/about/update-check", routed.handleAboutUpdateCheck)
+	mux.HandleFunc("GET /settings/about/licenses", routed.handleAboutLicenses)
 	routed.registerSecuritySettingsRoutes(private)
 	private("GET /settings/accounts", routed.handleUserAccountSettings)
 	private("GET /settings/sync", func(w http.ResponseWriter, r *http.Request) { routed.handleUserSyncSettingsView(w, r, "sync") })

@@ -499,6 +499,7 @@ func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /settings", h.handleSettings)
 	mux.HandleFunc("GET /settings/{tab}", h.handleSettingsTab)
 	mux.HandleFunc("POST /api/settings/about/update-check", h.handleAboutUpdateCheck)
+	mux.HandleFunc("GET /settings/about/licenses", h.handleAboutLicenses)
 	h.registerSecuritySettingsRoutes(func(pattern string, handler http.HandlerFunc) {
 		mux.HandleFunc(pattern, handler)
 	})

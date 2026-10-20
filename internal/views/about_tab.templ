@@ -4,7 +4,9 @@ import (
 	"strconv"
 
 	"github.com/cristianadrielbraun/gofer/components/button"
+	"github.com/cristianadrielbraun/gofer/components/collapsible"
 	"github.com/cristianadrielbraun/gofer/components/icon"
+	"github.com/cristianadrielbraun/gofer/internal/attribution"
 	"github.com/cristianadrielbraun/gofer/internal/buildinfo"
 	"github.com/cristianadrielbraun/gofer/internal/updatecheck"
 )
@@ -76,7 +78,53 @@ templ SettingsAboutTab(info buildinfo.Info) {
 			</div>
 			@AboutUpdateCheck(nil, "")
 		</div>
+		@aboutLibraries(attribution.Bundled(), attribution.GoModules())
 	</div>
+}
+
+templ aboutLibraries(bundled, modules []attribution.Library) {
+	<div class="settings-card bg-card rounded-lg border p-6 space-y-5" data-about-libraries>
+		<div>
+			<h3 class="text-sm font-semibold text-muted-foreground uppercase tracking-wider mb-1">Open-source software</h3>
+			<p class="text-xs text-muted-foreground leading-relaxed">
+				Gofer is built on the work of these projects.
+				<a href="/settings/about/licenses" target="_blank" class="text-primary hover:underline">Read the full license texts</a>.
+			</p>
+		</div>
+		<div class="settings-row border-t border-border/60 pt-5">
+			@aboutLibraryList(bundled)
+		</div>
+		<div class="settings-row border-t border-border/60 pt-5">
+			@collapsible.Collapsible() {
+				@collapsible.Trigger(collapsible.TriggerProps{Class: "group cursor-pointer"}) {
+					<button type="button" class="inline-flex items-center gap-1.5 text-sm text-foreground hover:text-primary">
+						@icon.ChevronRight(icon.Props{Class: "size-4 transition-transform group-aria-expanded:rotate-90"})
+						{ strconv.Itoa(len(modules)) } Go modules
+					</button>
+				}
+				@collapsible.Content() {
+					<div class="pt-4">
+						@aboutLibraryList(modules)
+					</div>
+				}
+			}
+		</div>
+		@collapsible.Script()
+	</div>
+}
+
+templ aboutLibraryList(libs []attribution.Library) {
+	<ul class="space-y-2 text-sm">
+		for _, lib := range libs {
+			<li class="flex flex-wrap items-baseline gap-x-3 gap-y-0.5 min-w-0">
+				<a href={ templ.URL(lib.URL) } target="_blank" rel="noopener noreferrer" class="text-foreground hover:text-primary break-all">{ lib.Name }</a>
+				if lib.Version != "" {
+					<span class="font-mono text-xs text-muted-foreground">{ lib.Version }</span>
+				}
+				<span class="ml-auto shrink-0 text-xs text-muted-foreground">{ lib.License }</span>
+			</li>
+		}
+	</ul>
 }
 
 // AboutUpdateCheck is the check button with the last check's outcome, if

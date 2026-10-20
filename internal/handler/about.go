@@ -5,6 +5,7 @@ import (
 	"log"
 	"net/http"
 
+	"github.com/cristianadrielbraun/gofer/internal/attribution"
 	"github.com/cristianadrielbraun/gofer/internal/buildinfo"
 	"github.com/cristianadrielbraun/gofer/internal/updatecheck"
 	"github.com/cristianadrielbraun/gofer/internal/views"
@@ -26,4 +27,11 @@ func (h *Handler) handleAboutUpdateCheck(w http.ResponseWriter, r *http.Request)
 		return
 	}
 	views.AboutUpdateCheck(&result, "").Render(ctx, w)
+}
+
+// handleAboutLicenses serves the full license texts of the third-party
+// software built into Gofer.
+func (h *Handler) handleAboutLicenses(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+	_, _ = w.Write([]byte(attribution.Notices()))
 }
