@@ -11,6 +11,7 @@ import (
 
 	"github.com/cristianadrielbraun/gofer/internal/auth"
 	"github.com/cristianadrielbraun/gofer/internal/config"
+	"github.com/cristianadrielbraun/gofer/internal/mail"
 	"github.com/cristianadrielbraun/gofer/internal/mail/message"
 	"github.com/cristianadrielbraun/gofer/internal/models"
 	"github.com/cristianadrielbraun/gofer/internal/providers"
@@ -97,5 +98,30 @@ func TestQueueOutgoingMessageRefusesJMAPWhileJMAPIsOff(t *testing.T) {
 		return nil
 	}); err != nil {
 		t.Fatal(err)
+	}
+}
+
+// In single-user mode too, while JMAP is turned off, syncing leaves JMAP
+// accounts out and says why instead of reporting a sync that never runs.
+func TestSharedManualSyncRefusesPausedJMAPAccounts(t *testing.T) {
+	db, _ := jmapSpamFixture(t)
+	if _, err := db.Write().Exec(`UPDATE accounts SET email_sync_enabled=1 WHERE id='acc'`); err != nil {
+		t.Fatal(err)
+	}
+	h := &Handler{db: db, syncer: mail.NewSyncOrchestrator(db, nil, nil, nil)}
+	t.Setenv("GOFER_JMAP_EXPERIMENT", "false")
+	for _, single := range []bool{false, true} {
+		req := httptest.NewRequest(http.MethodPost, "/api/sync", nil)
+		req = req.WithContext(auth.ContextWithUser(req.Context(), &auth.User{ID: "default"}))
+		rec := httptest.NewRecorder()
+		if single {
+			req.SetPathValue("id", "acc")
+			h.handleSyncMailAccount(rec, req)
+		} else {
+			h.handleSyncMail(rec, req)
+		}
+		if rec.Header().Get("X-Gofer-Status") != "error" || !strings.Contains(rec.Body.String(), "GOFER_JMAP_EXPERIMENT") || rec.Header().Get("X-Gofer-Mail-Sync-Run-ID") != "" {
+			t.Fatalf("sync (single %t) = %d %q", single, rec.Code, rec.Body.String())
+		}
 	}
 }

@@ -4741,12 +4741,38 @@ func (h *Handler) handleSidebarAccount(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+// pausedJMAPAccounts gives the user's JMAP accounts while JMAP is turned
+// off, when they don't sync.
+func (h *Handler) pausedJMAPAccounts(ctx context.Context, userID string) (map[string]bool, error) {
+	paused := map[string]bool{}
+	if providers.JMAPEnabled() {
+		return paused, nil
+	}
+	accounts, err := h.db.GetAccounts(ctx, userID)
+	for _, account := range accounts {
+		if account.Provider == providers.ProviderJMAP {
+			paused[account.ID] = true
+		}
+	}
+	return paused, err
+}
+
 func (h *Handler) handleSyncMail(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	userID := h.userID(ctx)
 	accountIDs, err := h.db.GetEmailSyncAccountIDs(ctx, userID)
 	if err != nil {
 		htmlStatus(w, http.StatusInternalServerError, "Could not find email-sync accounts.")
+		return
+	}
+	paused, err := h.pausedJMAPAccounts(ctx, userID)
+	if err != nil {
+		htmlStatus(w, http.StatusInternalServerError, "Could not find email-sync accounts.")
+		return
+	}
+	accountIDs = slices.DeleteFunc(accountIDs, func(id string) bool { return paused[id] })
+	if len(accountIDs) == 0 && len(paused) > 0 {
+		htmlStatus(w, http.StatusConflict, providers.ErrJMAPDisabled.Error())
 		return
 	}
 	if len(accountIDs) == 0 {
@@ -4794,6 +4820,15 @@ func (h *Handler) handleSyncMailAccount(w http.ResponseWriter, r *http.Request) 
 	}
 	if !found {
 		htmlStatus(w, http.StatusNotFound, "That account is not available for mail sync.")
+		return
+	}
+	paused, err := h.pausedJMAPAccounts(ctx, userID)
+	if err != nil {
+		htmlStatus(w, http.StatusInternalServerError, "Could not find email-sync accounts.")
+		return
+	}
+	if paused[accountID] {
+		htmlStatus(w, http.StatusConflict, providers.ErrJMAPDisabled.Error())
 		return
 	}
 
