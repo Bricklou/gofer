@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"log"
 	"path/filepath"
+	"time"
 
 	"github.com/cristianadrielbraun/gofer/internal/runtimeguard"
 )
@@ -125,6 +126,12 @@ func upgradeStorageDatabase(ctx context.Context, path, owner string) (err error)
 		return nil
 	}
 	log.Printf("storage: upgrading %s from schema version %d/%d to %d/%d", path, version, layout, CurrentSchemaVersion, len(steps))
+	started := time.Now()
+	defer func() {
+		if err == nil {
+			log.Printf("storage: upgraded %s in %s", path, time.Since(started).Round(time.Second))
+		}
+	}()
 	write, err := openDB(path, writePoolOption)
 	if err != nil {
 		return err
