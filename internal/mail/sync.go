@@ -2248,6 +2248,11 @@ func (o *SyncOrchestrator) syncAccount(ctx context.Context, accountID string, in
 		return err
 	}
 	if cfg.Provider == providers.ProviderJMAP {
+		if !providers.JMAPEnabled() {
+			// Paused while JMAP is turned off, with no error: the account
+			// shows why on its own.
+			return nil
+		}
 		return o.syncJMAPAccount(ctx, accountID, cfg)
 	}
 
