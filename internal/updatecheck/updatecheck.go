@@ -61,8 +61,10 @@ type Result struct {
 	Commits    []Commit
 	CompareURL string
 	// Unknown reports a commit GitHub does not have, such as one never
-	// pushed, so nothing could be compared.
+	// pushed, so nothing could be compared. Head is then master's newest
+	// commit, for the reader to compare by hand.
 	Unknown bool
+	Head    Commit
 	// Diverged reports that the running build also has commits master
 	// does not.
 	Diverged bool
@@ -160,21 +162,28 @@ func (c *Checker) checkRelease(ctx context.Context, current string) (Result, err
 	return Result{}, nil
 }
 
+type githubCommit struct {
+	SHA     string `json:"sha"`
+	HTMLURL string `json:"html_url"`
+	Commit  struct {
+		Message   string `json:"message"`
+		Committer struct {
+			Date time.Time `json:"date"`
+		} `json:"committer"`
+	} `json:"commit"`
+}
+
+func (gc githubCommit) toCommit() Commit {
+	title, _, _ := strings.Cut(gc.Commit.Message, "\n")
+	return Commit{SHA: gc.SHA, Title: strings.TrimSpace(title), URL: gc.HTMLURL, Date: gc.Commit.Committer.Date}
+}
+
 type githubCompare struct {
-	Status   string `json:"status"`
-	AheadBy  int    `json:"ahead_by"`
-	BehindBy int    `json:"behind_by"`
-	HTMLURL  string `json:"html_url"`
-	Commits  []struct {
-		SHA     string `json:"sha"`
-		HTMLURL string `json:"html_url"`
-		Commit  struct {
-			Message   string `json:"message"`
-			Committer struct {
-				Date time.Time `json:"date"`
-			} `json:"committer"`
-		} `json:"commit"`
-	} `json:"commits"`
+	Status   string         `json:"status"`
+	AheadBy  int            `json:"ahead_by"`
+	BehindBy int            `json:"behind_by"`
+	HTMLURL  string         `json:"html_url"`
+	Commits  []githubCommit `json:"commits"`
 }
 
 func (c *Checker) checkSource(ctx context.Context, commit string) (Result, error) {
@@ -189,6 +198,11 @@ func (c *Checker) checkSource(ctx context.Context, commit string) (Result, error
 	status, err := c.get(ctx, "/repos/"+repository+"/compare/"+commit+"..."+branch, &cmp)
 	if status == http.StatusNotFound {
 		r.Unknown = true
+		var head githubCommit
+		if _, err := c.get(ctx, "/repos/"+repository+"/commits/"+branch, &head); err != nil {
+			return Result{}, err
+		}
+		r.Head = head.toCommit()
 		return r, nil
 	}
 	if err != nil {
@@ -199,9 +213,7 @@ func (c *Checker) checkSource(ctx context.Context, commit string) (Result, error
 	r.Diverged = cmp.Status == "diverged"
 	r.CompareURL = cmp.HTMLURL
 	for i := len(cmp.Commits) - 1; i >= 0 && len(r.Commits) < maxCommits; i-- {
-		gc := cmp.Commits[i]
-		title, _, _ := strings.Cut(gc.Commit.Message, "\n")
-		r.Commits = append(r.Commits, Commit{SHA: gc.SHA, Title: strings.TrimSpace(title), URL: gc.HTMLURL, Date: gc.Commit.Committer.Date})
+		r.Commits = append(r.Commits, cmp.Commits[i].toCommit())
 	}
 	return r, nil
 }

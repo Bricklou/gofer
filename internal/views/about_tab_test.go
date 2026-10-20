@@ -78,7 +78,7 @@ func TestAboutUpdateCheckStates(t *testing.T) {
 		{"release available", &updatecheck.Result{Available: true, Latest: updatecheck.Release{Tag: "v0.11.0", URL: "https://example.test/v0.11.0", Notes: "Faster sync."}}, "", []string{">v0.11.0</a> is available.", "Faster sync."}},
 		{"up to date", &updatecheck.Result{Latest: updatecheck.Release{Tag: "v0.10.0"}}, "", []string{"Gofer is up to date."}},
 		{"commits behind", &updatecheck.Result{Source: true, Available: true, Behind: 12, Commits: []updatecheck.Commit{{SHA: "2222333344445555", Title: "Newer change", URL: "https://example.test/2222"}}}, "", []string{"12 newer commits on master.", ">2222333</a>", "Newer change"}},
-		{"unknown commit", &updatecheck.Result{Source: true, Unknown: true}, "", []string{"GitHub does not have this build's commit"}},
+		{"unknown commit", &updatecheck.Result{Source: true, Unknown: true, Head: updatecheck.Commit{SHA: "3333444455556666", Title: "Latest change", URL: "https://example.test/3333"}}, "", []string{"local commits that are not on GitHub", "Latest on master:", ">3333444</a>", "Latest change"}},
 	} {
 		html := renderUpdateCheck(t, tc.result, tc.errMsg)
 		for _, want := range tc.want {

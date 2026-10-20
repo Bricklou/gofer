@@ -153,7 +153,17 @@ templ aboutReleaseStatus(r updatecheck.Result) {
 
 templ aboutSourceStatus(r updatecheck.Result) {
 	if r.Unknown {
-		<p class="text-muted-foreground">GitHub does not have this build's commit, so there is nothing to compare with.</p>
+		<p class="text-foreground">This build has local commits that are not on GitHub, so it cannot be compared with master.</p>
+		if r.Head.SHA != "" {
+			<p class="text-xs text-muted-foreground mt-1" data-about-master-head>
+				Latest on master:
+				<a href={ templ.URL(r.Head.URL) } target="_blank" rel="noopener noreferrer" class="font-mono hover:text-primary">{ shortSHA(r.Head.SHA) }</a>
+				{ r.Head.Title }
+				if !r.Head.Date.IsZero() {
+					· { r.Head.Date.UTC().Format("January 2, 2006") }
+				}
+			</p>
+		}
 	} else if r.Available {
 		<p class="font-medium text-foreground">
 			if r.Behind == 1 {

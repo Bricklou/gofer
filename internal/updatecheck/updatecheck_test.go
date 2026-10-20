@@ -78,10 +78,16 @@ func TestSourceBuildListsNewerCommits(t *testing.T) {
 }
 
 func TestSourceBuildWithUnpushedCommit(t *testing.T) {
-	c, _ := testChecker(t, func(w http.ResponseWriter, r *http.Request) { http.NotFound(w, r) })
+	c, _ := testChecker(t, func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/repos/cristianadrielbraun/gofer/commits/master" {
+			w.Write([]byte(`{"sha":"3333","html_url":"https://example.test/3333","commit":{"message":"Latest change\n\nBody","committer":{"date":"2026-10-20T09:00:00Z"}}}`))
+			return
+		}
+		http.NotFound(w, r)
+	})
 	r, err := c.Check(context.Background(), buildinfo.Info{Commit: "local"})
-	if err != nil || !r.Unknown || r.Available {
-		t.Fatalf("got %+v, %v; want an unknown commit", r, err)
+	if err != nil || !r.Unknown || r.Available || r.Head.SHA != "3333" || r.Head.Title != "Latest change" {
+		t.Fatalf("got %+v, %v; want an unknown commit with master's newest commit", r, err)
 	}
 }
 
