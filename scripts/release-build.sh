@@ -16,6 +16,7 @@ mkdir -p "$DIST"
 task generate
 
 export CGO_ENABLED="${CGO_ENABLED:-0}"
+LDFLAGS="-X github.com/cristianadrielbraun/gofer/internal/buildinfo.Version=${VERSION}"
 
 targets=(
   "linux amd64"
@@ -39,7 +40,7 @@ for target in "${targets[@]}"; do
   mkdir -p "$package_dir"
 
   echo "==> Building $goos/$goarch"
-  GOOS="$goos" GOARCH="$goarch" go build -tags embedded_assets -trimpath -o "$package_dir/gofer$ext" .
+  GOOS="$goos" GOARCH="$goarch" go build -tags embedded_assets -trimpath -ldflags "$LDFLAGS" -o "$package_dir/gofer$ext" .
   cp README.md LICENSE "$package_dir/"
 
   echo "==> Packaging $name.$archive_ext"

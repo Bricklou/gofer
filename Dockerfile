@@ -12,6 +12,11 @@ ARG BUILDARCH
 ARG TAILWIND_VERSION=v4.2.4
 ARG TEMPL_VERSION=v0.3.1001
 ARG ESBUILD_VERSION=v0.28.2
+# The release version and commit shown in Settings > About. The build has no
+# git checkout, so the commit has to be passed in, e.g.
+# --build-arg VERSION=v1.2.3 --build-arg COMMIT=$(git rev-parse HEAD)
+ARG VERSION=
+ARG COMMIT=
 
 # libstdc++ and libgcc are needed by the musl build of the Tailwind CLI.
 RUN apk add --no-cache curl libstdc++ libgcc
@@ -41,7 +46,9 @@ RUN --mount=type=cache,target=/go/pkg/mod \
     go run github.com/a-h/templ/cmd/templ@${TEMPL_VERSION} generate --ignore-pattern='(^|/)dist(/|$)'; \
     tailwindcss -i ./assets/css/input.css -o ./assets/css/output.css --minify; \
     go run github.com/evanw/esbuild/cmd/esbuild@${ESBUILD_VERSION} $(ls assets/js/*.js | grep -v -e '\.min\.js$' -e '/sw\.js$') --minify --outdir=assets/min/js --log-level=warning; \
-    CGO_ENABLED=0 GOOS=$TARGETOS GOARCH=$TARGETARCH go build -tags embedded_assets -trimpath -o /out/gofer .
+    CGO_ENABLED=0 GOOS=$TARGETOS GOARCH=$TARGETARCH go build -tags embedded_assets -trimpath \
+      -ldflags "-X github.com/cristianadrielbraun/gofer/internal/buildinfo.Version=${VERSION} -X github.com/cristianadrielbraun/gofer/internal/buildinfo.Commit=${COMMIT}" \
+      -o /out/gofer .
 
 FROM alpine:3.24
 

@@ -46,6 +46,9 @@ jobs:
           # Without this, each architecture gets a provenance attestation that
           # GHCR lists as an "unknown/unknown" platform.
           provenance: false
+          build-args: |
+            VERSION=${{ github.ref_name }}
+            COMMIT=${{ github.sha }}
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha
