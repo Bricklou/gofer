@@ -65,7 +65,7 @@ func (db *DB) CompleteProviderMutation(ctx context.Context, m MessageMutation, s
 		}
 	}
 	if m.Kind == MessageMutationDelete {
-		if _, err := tx.ExecContext(ctx, `DELETE FROM message_mutations WHERE message_id=? AND id!=?`, m.MessageID, m.ID); err != nil {
+		if err := deleteCopyMutationsTx(ctx, tx, m.MessageID, m.ID, m.FolderID); err != nil {
 			return err
 		}
 	}

@@ -1623,7 +1623,7 @@ func (db *DB) UpsertSyncMessages(ctx context.Context, msgs []SyncMessage) error 
 			if err := resolveMessageMutationTargetsTx(ctx, tx, msgID, m.FolderID, "", &isRead, &isStarred); err != nil {
 				return fmt.Errorf("protect pending message mutation: %w", err)
 			}
-			if visible, err = protectProviderMoveFolderTx(ctx, tx, msgID, m.FolderID); err != nil {
+			if visible, err = protectProviderMoveFolderTx(ctx, tx, msgID, m.FolderID, ""); err != nil {
 				return fmt.Errorf("protect pending message location mutation: %w", err)
 			}
 		}
@@ -1891,7 +1891,7 @@ func (db *DB) UpsertProviderSyncMessages(ctx context.Context, msgs []ProviderSyn
 		if err := resolveMessageMutationTargetsTx(ctx, tx, msgID, m.FolderID, m.ProviderMessageID, &isRead, &isStarred); err != nil {
 			return nil, fmt.Errorf("protect pending provider mutation: %w", err)
 		}
-		visible, err := protectProviderMoveFolderTx(ctx, tx, msgID, m.FolderID)
+		visible, err := protectProviderMoveFolderTx(ctx, tx, msgID, m.FolderID, m.ProviderMessageID)
 		if err != nil {
 			return nil, fmt.Errorf("protect pending provider move: %w", err)
 		}
@@ -1991,7 +1991,7 @@ func (db *DB) UpsertProviderSyncMessages(ctx context.Context, msgs []ProviderSyn
 		if err := rows.Close(); err != nil {
 			return nil, err
 		}
-		if err := resolveProviderMoveFoldersTx(ctx, tx, msgID, observedProviderFolders[copyKey], folderSet); err != nil {
+		if err := resolveProviderMoveFoldersTx(ctx, tx, msgID, copyKey.providerID, observedProviderFolders[copyKey], folderSet); err != nil {
 			return nil, fmt.Errorf("reconcile pending provider move: %w", err)
 		}
 		if err := reconcileProviderFolderStatesTx(ctx, tx, msgID, messageAccounts[msgID], copyKey.providerID, folderSet); err != nil {
@@ -2137,7 +2137,7 @@ func (db *DB) UpsertExistingProviderFolderStates(ctx context.Context, accountID,
 			if providerID == "" {
 				continue
 			}
-			visible, err := protectProviderMoveFolderTx(ctx, tx, msgID, folderID)
+			visible, err := protectProviderMoveFolderTx(ctx, tx, msgID, folderID, providerID)
 			if err != nil {
 				rows.Close()
 				return nil, fmt.Errorf("protect existing provider move: %w", err)

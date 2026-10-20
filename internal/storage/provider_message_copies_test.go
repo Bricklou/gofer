@@ -316,3 +316,47 @@ func TestProviderContentIsFetchedThroughALiveCopy(t *testing.T) {
 		t.Fatalf("content snapshot = %+v, %v; want the Sent copy", snapshot, err)
 	}
 }
+
+func TestProviderChangesQueueOncePerCopy(t *testing.T) {
+	ctx := context.Background()
+	db := newContactsTestDB(t)
+	msgID := seedSelfSentCopies(t, db)
+
+	// Moving each copy out of its folder queues two moves.
+	if err := db.MoveMessageAndQueue(ctx, msgID, "acc_inbox", "acc_archive"); err != nil {
+		t.Fatalf("MoveMessageAndQueue(Inbox) error = %v", err)
+	}
+	if err := db.MoveMessageAndQueue(ctx, msgID, "acc_sent", "acc_archive"); err != nil {
+		t.Fatalf("MoveMessageAndQueue(Sent) error = %v", err)
+	}
+	var moves int
+	if err := db.Read().QueryRowContext(ctx, `SELECT COUNT(*) FROM message_mutations WHERE message_id = ? AND kind = 'move'`, msgID).Scan(&moves); err != nil || moves != 2 {
+		t.Fatalf("queued moves = %d, %v; want one per copy", moves, err)
+	}
+	if _, err := db.Write().ExecContext(ctx, `DELETE FROM message_mutations`); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.Write().ExecContext(ctx, `UPDATE message_folder_state SET is_deleted = (folder_id = 'acc_archive') WHERE message_id = ?`, msgID); err != nil {
+		t.Fatal(err)
+	}
+
+	// Deleting both copies before either delete is sent queues both.
+	if err := db.PermanentlyDeleteMessageAndQueue(ctx, msgID, "acc_sent"); err != nil {
+		t.Fatalf("PermanentlyDeleteMessageAndQueue(Sent) error = %v", err)
+	}
+	if err := db.PermanentlyDeleteMessageAndQueue(ctx, msgID, "acc_inbox"); err != nil {
+		t.Fatalf("PermanentlyDeleteMessageAndQueue(Inbox) error = %v", err)
+	}
+	if got, want := queuedMutationTargets(t, db, msgID, MessageMutationDelete), map[string]string{"acc_sent": "email-sent", "acc_inbox": "email-inbox"}; !maps.Equal(got, want) {
+		t.Fatalf("deletes = %v, want %v", got, want)
+	}
+	// A sync of the Sent copy before its delete is sent keeps it hidden.
+	if _, err := db.UpsertProviderSyncMessages(ctx, []ProviderSyncMessage{
+		{AccountID: "acc", FolderID: "acc_sent", ProviderMessageID: "email-sent", InternetMessageID: "<self@example.com>", Subject: "Plans", DateSent: time.Now()},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if got := visibleCopies(t, db, "<self@example.com>"); len(got) != 0 {
+		t.Fatalf("copies shown while their deletes are pending = %v", got)
+	}
+}

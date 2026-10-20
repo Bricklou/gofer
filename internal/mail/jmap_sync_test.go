@@ -1344,3 +1344,46 @@ func TestSyncReplaysJMAPChangesOnEachCopy(t *testing.T) {
 		t.Fatalf("copies after the delete = %v, want only Sent", got)
 	}
 }
+
+// Deleting both copies of mail sent to oneself before Gofer syncs destroys
+// both emails.
+func TestSyncReplaysJMAPDeletesOfBothCopies(t *testing.T) {
+	f := newUserGmailFixture(t)
+	server := newFakeJMAPServer(t)
+	server.emailState = "c0"
+	server.setMailboxes(
+		jmap.Mailbox{ID: "mb-in", Name: "Inbox", Role: "inbox", MyRights: readable()},
+		jmap.Mailbox{ID: "mb-sent", Name: "Sent", Role: "sent", MyRights: readable()},
+	)
+	sent := testJMAPEmail("sent-1", "Reminder to self", 2, "mb-sent")
+	received := testJMAPEmail("in-1", "Reminder to self", 1, "mb-in")
+	sent.MessageID = []string{"reminder@example.test"}
+	received.MessageID = []string{"reminder@example.test"}
+	server.emails = []jmap.Email{sent, received}
+	useFakeJMAPAccount(t, f, server)
+	account := f.ids["alice"]
+	if err := f.worker.Sync(t.Context(), "alice", account); err != nil {
+		t.Fatalf("first Sync() error = %v", err)
+	}
+	var msgID int64
+	f.local(t, "alice", func(db *storage.DB) error {
+		return db.Read().QueryRow(`SELECT id FROM messages WHERE account_id=? AND internet_message_id='<reminder@example.test>'`, account).Scan(&msgID)
+	})
+	f.local(t, "alice", func(db *storage.DB) error {
+		return errors.Join(
+			db.PermanentlyDeleteMessageAndQueue(t.Context(), msgID, jmapLocalFolderID(account, "mb-sent")),
+			db.PermanentlyDeleteMessageAndQueue(t.Context(), msgID, jmapLocalFolderID(account, "mb-in")),
+		)
+	})
+	if err := f.worker.Sync(t.Context(), "alice", account); err != nil {
+		t.Fatalf("Sync() replaying deletes error = %v", err)
+	}
+	for _, id := range []string{"sent-1", "in-1"} {
+		if _, ok := server.email(id); ok {
+			t.Fatalf("%s still on the server after deleting both copies", id)
+		}
+	}
+	if got := jmapCopies(t, f, "<reminder@example.test>"); len(got) != 0 {
+		t.Fatalf("copies after both deletes = %v", got)
+	}
+}

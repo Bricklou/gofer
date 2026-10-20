@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"strings"
 )
 
 // Gmail, Outlook and JMAP can hold two messages with one Message-ID, such as
@@ -126,4 +127,76 @@ func anyProviderCopyIDSQL(row string) string {
 // another copy of its row while the state has none.
 func stateOrAnyProviderCopyIDSQL(state, row string) string {
 	return `COALESCE(NULLIF(` + state + `.remote_message_id, ''), ` + anyProviderCopyIDSQL(row) + `)`
+}
+
+// Queued changes belong to a copy too. A delete removes the whole copy, so it
+// belongs to every folder that copy is in. A move swaps one folder for
+// another, so it belongs to its source folder, and to its destination while a
+// later move continues it.
+
+// copyFoldersTx returns the folders of the copy in a folder: that folder and,
+// for a provider copy, the others with its provider id. An empty
+// providerMessageID is read from the folder's state.
+func copyFoldersTx(ctx context.Context, tx *sql.Tx, messageID int64, folderID, providerMessageID string) ([]string, error) {
+	if providerMessageID == "" {
+		err := tx.QueryRowContext(ctx, `SELECT COALESCE(remote_message_id, '') FROM message_folder_state WHERE message_id = ? AND folder_id = ?`,
+			messageID, folderID).Scan(&providerMessageID)
+		if err != nil && err != sql.ErrNoRows {
+			return nil, err
+		}
+	}
+	folders := []string{folderID}
+	if providerMessageID == "" {
+		return folders, nil
+	}
+	rows, err := tx.QueryContext(ctx, `SELECT folder_id FROM message_folder_state WHERE message_id = ? AND remote_message_id = ? AND folder_id != ?`,
+		messageID, providerMessageID, folderID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var other string
+		if err := rows.Scan(&other); err != nil {
+			return nil, err
+		}
+		folders = append(folders, other)
+	}
+	return folders, rows.Err()
+}
+
+// folderListSQL returns placeholders and arguments for folder ids in an IN list.
+func folderListSQL(folders []string) (string, []any) {
+	placeholders := make([]string, len(folders))
+	args := make([]any, len(folders))
+	for i, folderID := range folders {
+		placeholders[i] = "?"
+		args[i] = folderID
+	}
+	return strings.Join(placeholders, ","), args
+}
+
+// deleteCopyMutationsTx removes the other changes queued for a copy once it is
+// deleted. Changes queued for the whole message go too when no other copy is
+// left in a folder.
+func deleteCopyMutationsTx(ctx context.Context, tx *sql.Tx, messageID int64, keepID, folderID string) error {
+	folders, err := copyFoldersTx(ctx, tx, messageID, folderID, "")
+	if err != nil {
+		return err
+	}
+	list, folderArgs := folderListSQL(folders)
+	args := append([]any{messageID, keepID}, folderArgs...)
+	args = append(args, folderArgs...)
+	args = append(args, folderArgs...)
+	_, err = tx.ExecContext(ctx, `
+		DELETE FROM message_mutations
+		WHERE message_id = ? AND id != ? AND (
+			folder_id IN (`+list+`) OR destination_folder_id IN (`+list+`)
+			OR (folder_id = '' AND NOT EXISTS (
+				SELECT 1 FROM message_folder_state other
+				WHERE other.message_id = message_mutations.message_id AND other.is_deleted = 0
+				  AND other.folder_id NOT IN (`+list+`)
+			))
+		)`, args...)
+	return err
 }
