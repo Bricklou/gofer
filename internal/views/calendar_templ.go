@@ -496,12 +496,12 @@ func CalendarSidebarContent(accounts []models.Account, loading bool) templ.Compo
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 31, "<span>New event</span></button></div><hr class=\"divider-etched mx-4\"><nav class=\"flex min-h-0 flex-1 flex-col overflow-y-auto px-3 pt-3 pb-3\"><div class=\"px-2.5 pb-2 text-[10px] font-bold uppercase tracking-[0.16em] text-sidebar-foreground/45\">Connected accounts</div>")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 31, "<span>New event</span></button></div><hr class=\"divider-etched mx-4\"><nav class=\"flex min-h-0 flex-1 flex-col overflow-y-auto px-3 pt-3 pb-3\"><div class=\"px-2.5 pb-2 text-[10px] font-bold uppercase tracking-[0.16em] text-sidebar-foreground\">Connected accounts</div>")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
 		if len(configuredAccounts) == 0 {
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 32, "<div class=\"rounded-md border border-sidebar-border/60 bg-sidebar-accent/20 px-2.5 py-3 text-[11px] leading-relaxed text-sidebar-foreground/55\"><p>No calendar accounts configured yet.</p><a href=\"/settings/accounts\" class=\"mt-2 inline-flex items-center gap-1.5 font-semibold text-sidebar-primary hover:text-sidebar-accent-foreground\">Open account setup")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 32, "<div class=\"rounded-md border border-sidebar-border/60 bg-sidebar-accent/20 px-2.5 py-3 text-[11px] leading-relaxed text-sidebar-foreground\"><p>No calendar accounts configured yet.</p><a href=\"/settings/accounts\" class=\"mt-2 inline-flex items-center gap-1.5 font-semibold text-sidebar-primary hover:text-sidebar-accent-foreground\">Open account setup")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
@@ -515,7 +515,7 @@ func CalendarSidebarContent(accounts []models.Account, loading bool) templ.Compo
 			}
 		} else {
 			for _, account := range configuredAccounts {
-				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 34, "<div class=\"flex items-center gap-2.5 rounded-md px-2.5 py-2 text-[13px] text-sidebar-foreground/70\"><div class=\"account-color-marker size-2.5 shrink-0\" style=\"")
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 34, "<div class=\"flex items-center gap-2.5 rounded-md px-2.5 py-2 text-[13px] text-sidebar-foreground\"><div class=\"account-color-marker size-2.5 shrink-0\" style=\"")
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
@@ -541,14 +541,14 @@ func CalendarSidebarContent(accounts []models.Account, loading bool) templ.Compo
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
-				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 36, "</div><div class=\"truncate text-[11px] text-sidebar-foreground/50\">")
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 36, "</div><div class=\"truncate text-[11px] text-sidebar-foreground\">")
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
 				var templ_7745c5c3_Var23 string
 				templ_7745c5c3_Var23, templ_7745c5c3_Err = templ.JoinStringErrs(calendarAccountProviderLabel(account))
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/calendar.templ`, Line: 103, Col: 107}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/calendar.templ`, Line: 103, Col: 104}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var23))
 				if templ_7745c5c3_Err != nil {
@@ -572,7 +572,7 @@ func CalendarSidebarContent(accounts []models.Account, loading bool) templ.Compo
 					return templ_7745c5c3_Err
 				}
 				for _, source := range account.CalendarSources {
-					templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 39, "<label class=\"group flex min-h-8 cursor-pointer items-center gap-2.5 rounded-md py-1.5 pl-7 pr-2.5 text-[12px] text-sidebar-foreground/80 transition-colors hover:bg-sidebar-accent/60 has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-sidebar-ring\" data-calendar-source-row><span class=\"inline-flex shrink-0\">")
+					templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 39, "<label class=\"group flex min-h-8 cursor-pointer items-center gap-2.5 rounded-md py-1.5 pl-7 pr-2.5 text-[12px] text-sidebar-foreground transition-colors hover:bg-sidebar-accent/60 has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-sidebar-ring\" data-calendar-source-row><span class=\"inline-flex shrink-0\">")
 					if templ_7745c5c3_Err != nil {
 						return templ_7745c5c3_Err
 					}
@@ -961,7 +961,7 @@ func CalendarSourceSyncIndicator(source models.AccountCalendarSource, loading bo
 					return templ_7745c5c3_Err
 				}
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 75, " class=\"text-sidebar-foreground/45\">")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 75, " class=\"text-sidebar-foreground\">")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
@@ -2700,14 +2700,14 @@ func CalendarAgendaPane(month CalendarMonthData) templ.Component {
 					return templ_7745c5c3_Err
 				}
 				if calendarEventMeta(event) != "" {
-					templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 244, "<p class=\"mt-1 truncate text-[11px] text-muted-foreground/75\">")
+					templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 244, "<p class=\"mt-1 truncate text-[11px] text-muted-foreground\">")
 					if templ_7745c5c3_Err != nil {
 						return templ_7745c5c3_Err
 					}
 					var templ_7745c5c3_Var143 string
 					templ_7745c5c3_Var143, templ_7745c5c3_Err = templ.JoinStringErrs(calendarEventMeta(event))
 					if templ_7745c5c3_Err != nil {
-						return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/calendar.templ`, Line: 367, Col: 99}
+						return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/calendar.templ`, Line: 367, Col: 96}
 					}
 					_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var143))
 					if templ_7745c5c3_Err != nil {

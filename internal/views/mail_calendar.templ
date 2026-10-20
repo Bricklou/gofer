@@ -12,14 +12,14 @@ templ MailCalendarFooter(emailID string, events []MailCalendarEventData) {
 			for _, event := range events {
 				<div class="space-y-2 text-sm text-ink">
 					<div class="flex items-start gap-3">
-						@icon.CalendarDays(icon.Props{Class: "mt-0.5 size-5 shrink-0 text-ink/50"})
+						@icon.CalendarDays(icon.Props{Class: "mt-0.5 size-5 shrink-0 text-muted-foreground"})
 						<div class="min-w-0 flex-1">
-							<p class="text-[11px] font-medium text-ink/50">{ event.Kind }</p>
+							<p class="text-[11px] font-medium text-muted-foreground">{ event.Kind }</p>
 							<h2 class="font-semibold break-words">{ event.Summary }</h2>
 						</div>
-						<button type="button" class="shrink-0 text-xs text-ink/50 hover:text-ink" hx-get={ "/api/mail/" + emailID + "/calendar?refresh=1" } hx-target="closest [data-mail-calendar-footer]" hx-swap="innerHTML" hx-sync="closest [data-mail-calendar-footer]:replace" hx-disabled-elt="this" aria-label="Refresh event information">Refresh</button>
+						<button type="button" class="shrink-0 text-xs text-muted-foreground hover:text-ink" hx-get={ "/api/mail/" + emailID + "/calendar?refresh=1" } hx-target="closest [data-mail-calendar-footer]" hx-swap="innerHTML" hx-sync="closest [data-mail-calendar-footer]:replace" hx-disabled-elt="this" aria-label="Refresh event information">Refresh</button>
 					</div>
-					<div class="space-y-1 text-xs text-ink/60 break-words">
+					<div class="space-y-1 text-xs text-muted-foreground break-words">
 						if event.Date != "" {
 							<p>{ event.Date }</p>
 						}
@@ -56,7 +56,7 @@ templ MailCalendarFooter(emailID string, events []MailCalendarEventData) {
 					if event.Invitation != nil {
 						<div class="space-y-1 text-xs" data-mail-calendar-invitation>
 							if event.Invitation.Note != "" {
-								<p class="text-ink/60">{ event.Invitation.Note }</p>
+								<p class="text-muted-foreground">{ event.Invitation.Note }</p>
 							}
 							<button type="button" class="font-medium underline underline-offset-2" hx-post={ "/api/mail/" + emailID + "/calendar/invitation" } hx-vals={ mailCalendarInvitationValues(*event.Invitation) } hx-target="closest [data-mail-calendar-footer]" hx-swap="innerHTML" hx-sync="closest [data-mail-calendar-footer]:replace" hx-disabled-elt="this">{ event.Invitation.Label }</button>
 						</div>
@@ -66,7 +66,7 @@ templ MailCalendarFooter(emailID string, events []MailCalendarEventData) {
 							@MailCalendarResponseForm(*event.Response)
 						</div>
 					} else if event.Note != "" {
-						<p class="text-xs text-ink/50">{ event.Note }</p>
+						<p class="text-xs text-muted-foreground">{ event.Note }</p>
 					}
 				</div>
 			}
@@ -80,7 +80,7 @@ templ MailCalendarResponseForm(data CalendarResponseData) {
 		<input type="hidden" name="scope" value={ data.Scope }/>
 		<div class="flex flex-wrap items-center gap-2" data-mail-calendar-response-summary hidden?={ mailCalendarResponseMessage(data.Status) == "" || data.MailResponseEditing }>
 			<p class="text-sm" role="status" data-mail-calendar-response-message>{ mailCalendarResponseMessage(data.Status) }</p>
-			<button type="button" class="text-xs text-ink/60 underline underline-offset-2" data-mail-calendar-response-edit disabled?={ !data.Ready }>Edit response</button>
+			<button type="button" class="text-xs text-muted-foreground underline underline-offset-2" data-mail-calendar-response-edit disabled?={ !data.Ready }>Edit response</button>
 		</div>
 		<div data-mail-calendar-response-editor hidden?={ mailCalendarResponseMessage(data.Status) != "" && !data.MailResponseEditing }>
 			<div class="flex flex-wrap items-center gap-2" role="group" aria-label="Respond to invitation">
@@ -97,7 +97,7 @@ templ MailCalendarResponseForm(data CalendarResponseData) {
 					}
 				}
 				if mailCalendarResponseMessage(data.Status) != "" {
-					<button type="button" class="text-xs text-ink/60 underline underline-offset-2" data-mail-calendar-response-cancel disabled?={ !data.Ready }>Cancel</button>
+					<button type="button" class="text-xs text-muted-foreground underline underline-offset-2" data-mail-calendar-response-cancel disabled?={ !data.Ready }>Cancel</button>
 				}
 			</div>
 			if data.HasOccurrence {
@@ -113,13 +113,13 @@ templ MailCalendarResponseForm(data CalendarResponseData) {
 					}
 				</div>
 			} else if data.Scope == "series" {
-				<p class="text-xs text-ink/60">Your response applies to the entire series.</p>
+				<p class="text-xs text-muted-foreground">Your response applies to the entire series.</p>
 			}
 		</div>
-		<p class="text-xs text-ink/50" data-calendar-response-progress role="status" aria-live="polite" hidden?={ mailCalendarResponseMessage(data.Status) != "" && !data.MailResponseEditing }>Your response will be sent to the organizer.</p>
+		<p class="text-xs text-muted-foreground" data-calendar-response-progress role="status" aria-live="polite" hidden?={ mailCalendarResponseMessage(data.Status) != "" && !data.MailResponseEditing }>Your response will be sent to the organizer.</p>
 		<p hidden data-calendar-response-error role="alert" tabindex="-1" class="text-xs text-destructive"></p>
 		if !data.Ready {
-			<button type="button" data-calendar-response-load class="text-xs text-ink/50 underline underline-offset-2" hx-get={ calendarEventDetailsURL(data.EventID) + "/response?scope=" + data.Scope + "&mail_id=" + data.MailMessageID + mailCalendarResponseEditQuery(data.MailResponseEditing) } hx-trigger="load, click" hx-target="closest [data-mail-calendar-response]" hx-swap="innerHTML" hx-params="none" hx-sync="closest [data-mail-calendar-response]:replace">Check invitation</button>
+			<button type="button" data-calendar-response-load class="text-xs text-muted-foreground underline underline-offset-2" hx-get={ calendarEventDetailsURL(data.EventID) + "/response?scope=" + data.Scope + "&mail_id=" + data.MailMessageID + mailCalendarResponseEditQuery(data.MailResponseEditing) } hx-trigger="load, click" hx-target="closest [data-mail-calendar-response]" hx-swap="innerHTML" hx-params="none" hx-sync="closest [data-mail-calendar-response]:replace">Check invitation</button>
 		}
 	</form>
 }

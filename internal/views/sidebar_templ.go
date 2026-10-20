@@ -487,7 +487,7 @@ func ContactsSidebarAccountSection(account models.Account, filters models.Contac
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = icon.ChevronDown(icon.Props{Class: "sidebar-account-chevron size-3.5 shrink-0 text-sidebar-foreground/60 transition-transform duration-200"}).Render(ctx, templ_7745c5c3_Buffer)
+		templ_7745c5c3_Err = icon.ChevronDown(icon.Props{Class: "sidebar-account-chevron size-3.5 shrink-0 text-sidebar-foreground transition-transform duration-200"}).Render(ctx, templ_7745c5c3_Buffer)
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -624,7 +624,7 @@ func ContactsSidebarItem(target string, label string, filters models.ContactFilt
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 39, "\"><span class=\"flex size-5 shrink-0 items-center justify-center rounded text-sidebar-foreground/70\">")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 39, "\"><span class=\"flex size-5 shrink-0 items-center justify-center rounded text-sidebar-foreground\">")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -749,7 +749,7 @@ func ContactsSidebarBookItem(book models.ContactAddressBook, filters models.Cont
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 47, "\"><span class=\"flex size-4 shrink-0 items-center justify-center rounded text-sidebar-foreground/60\">")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 47, "\"><span class=\"flex size-4 shrink-0 items-center justify-center rounded text-sidebar-foreground\">")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -874,7 +874,7 @@ func ContactsSidebarAccountItem(account models.Account, filters models.ContactFi
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 55, "\"><span class=\"flex size-4 shrink-0 items-center justify-center rounded text-sidebar-foreground/60\">")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 55, "\"><span class=\"flex size-4 shrink-0 items-center justify-center rounded text-sidebar-foreground\">")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -1021,7 +1021,7 @@ func SettingsSidebar(activeTab string, width string) templ.Component {
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 61, "Back to inbox</a></div><hr class=\"divider-etched mx-4\"><nav class=\"flex-1 overflow-y-auto px-3 pt-3 pb-3\"><div class=\"px-2.5 pb-2 text-[11px] text-sidebar-foreground/45 uppercase tracking-wider font-semibold\">Categories</div>")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 61, "Back to inbox</a></div><hr class=\"divider-etched mx-4\"><nav class=\"flex-1 overflow-y-auto px-3 pt-3 pb-3\"><div class=\"px-2.5 pb-2 text-[11px] text-sidebar-foreground uppercase tracking-wider font-semibold\">Categories</div>")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -1189,7 +1189,7 @@ func SettingsSidebarItem(activeTab string, value string, label string) templ.Com
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 71, "\"><span class=\"flex size-5 shrink-0 items-center justify-center rounded text-sidebar-foreground/70\">")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 71, "\"><span class=\"flex size-5 shrink-0 items-center justify-center rounded text-sidebar-foreground\">")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -1691,7 +1691,7 @@ func SidebarSyncControls(accounts []models.Account, activeApp string) templ.Comp
 						}()
 					}
 					ctx = templ.InitializeContext(ctx)
-					templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 107, "<div class=\"px-2 py-1.5 text-[11px] font-semibold uppercase text-sidebar-foreground/55\">Refresh calendars by account</div><div class=\"space-y-1\">")
+					templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 107, "<div class=\"px-2 py-1.5 text-[11px] font-semibold uppercase text-sidebar-foreground\">Refresh calendars by account</div><div class=\"space-y-1\">")
 					if templ_7745c5c3_Err != nil {
 						return templ_7745c5c3_Err
 					}
@@ -1756,14 +1756,14 @@ func SidebarSyncControls(accounts []models.Account, activeApp string) templ.Comp
 						if templ_7745c5c3_Err != nil {
 							return templ_7745c5c3_Err
 						}
-						templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 113, "</span> <span class=\"block truncate text-[11px] text-sidebar-foreground/60\">")
+						templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 113, "</span> <span class=\"block truncate text-[11px] text-sidebar-foreground\">")
 						if templ_7745c5c3_Err != nil {
 							return templ_7745c5c3_Err
 						}
 						var templ_7745c5c3_Var76 string
 						templ_7745c5c3_Var76, templ_7745c5c3_Err = templ.JoinStringErrs(account.Email)
 						if templ_7745c5c3_Err != nil {
-							return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/sidebar.templ`, Line: 490, Col: 93}
+							return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/sidebar.templ`, Line: 490, Col: 90}
 						}
 						_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var76))
 						if templ_7745c5c3_Err != nil {
@@ -1960,7 +1960,7 @@ func SidebarSyncControls(accounts []models.Account, activeApp string) templ.Comp
 					}
 					ctx = templ.InitializeContext(ctx)
 					if activeApp == "contacts" {
-						templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 128, "<div class=\"px-2 py-1.5 text-[11px] font-semibold uppercase text-sidebar-foreground/55\">Sync individual contact account</div><div class=\"space-y-1\">")
+						templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 128, "<div class=\"px-2 py-1.5 text-[11px] font-semibold uppercase text-sidebar-foreground\">Sync individual contact account</div><div class=\"space-y-1\">")
 						if templ_7745c5c3_Err != nil {
 							return templ_7745c5c3_Err
 						}
@@ -2026,14 +2026,14 @@ func SidebarSyncControls(accounts []models.Account, activeApp string) templ.Comp
 								if templ_7745c5c3_Err != nil {
 									return templ_7745c5c3_Err
 								}
-								templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 134, "</span> <span class=\"block truncate text-[11px] text-sidebar-foreground/60\">")
+								templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 134, "</span> <span class=\"block truncate text-[11px] text-sidebar-foreground\">")
 								if templ_7745c5c3_Err != nil {
 									return templ_7745c5c3_Err
 								}
 								var templ_7745c5c3_Var87 string
 								templ_7745c5c3_Var87, templ_7745c5c3_Err = templ.JoinStringErrs(account.Email)
 								if templ_7745c5c3_Err != nil {
-									return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/sidebar.templ`, Line: 571, Col: 95}
+									return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/sidebar.templ`, Line: 571, Col: 92}
 								}
 								_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var87))
 								if templ_7745c5c3_Err != nil {
@@ -2050,7 +2050,7 @@ func SidebarSyncControls(accounts []models.Account, activeApp string) templ.Comp
 							return templ_7745c5c3_Err
 						}
 					} else {
-						templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 137, "<div class=\"px-2 py-1.5 text-[11px] font-semibold uppercase text-sidebar-foreground/55\">Force sync individual account, including IDLE folders</div><div class=\"space-y-1\">")
+						templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 137, "<div class=\"px-2 py-1.5 text-[11px] font-semibold uppercase text-sidebar-foreground\">Force sync individual account, including IDLE folders</div><div class=\"space-y-1\">")
 						if templ_7745c5c3_Err != nil {
 							return templ_7745c5c3_Err
 						}
@@ -2121,14 +2121,14 @@ func SidebarSyncControls(accounts []models.Account, activeApp string) templ.Comp
 								if templ_7745c5c3_Err != nil {
 									return templ_7745c5c3_Err
 								}
-								templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 143, "</span> <span class=\"block truncate text-[11px] text-sidebar-foreground/60\">")
+								templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 143, "</span> <span class=\"block truncate text-[11px] text-sidebar-foreground\">")
 								if templ_7745c5c3_Err != nil {
 									return templ_7745c5c3_Err
 								}
 								var templ_7745c5c3_Var92 string
 								templ_7745c5c3_Var92, templ_7745c5c3_Err = templ.JoinStringErrs(account.Email)
 								if templ_7745c5c3_Err != nil {
-									return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/sidebar.templ`, Line: 597, Col: 95}
+									return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/sidebar.templ`, Line: 597, Col: 92}
 								}
 								_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var92))
 								if templ_7745c5c3_Err != nil {
@@ -2587,7 +2587,7 @@ func SidebarUnifiedSection(accounts []models.Account, activeFolder string, uiSet
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			templ_7745c5c3_Err = icon.ChevronDown(icon.Props{Class: "sidebar-account-chevron size-3.5 shrink-0 text-sidebar-foreground/60 transition-transform duration-200"}).Render(ctx, templ_7745c5c3_Buffer)
+			templ_7745c5c3_Err = icon.ChevronDown(icon.Props{Class: "sidebar-account-chevron size-3.5 shrink-0 text-sidebar-foreground transition-transform duration-200"}).Render(ctx, templ_7745c5c3_Buffer)
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
@@ -2767,7 +2767,7 @@ func SidebarAccountSection(account models.Account, activeFolder string, uiSettin
 				return templ_7745c5c3_Err
 			}
 		}
-		templ_7745c5c3_Err = icon.ChevronDown(icon.Props{Class: "sidebar-account-chevron size-3.5 shrink-0 text-sidebar-foreground/60 transition-transform duration-200"}).Render(ctx, templ_7745c5c3_Buffer)
+		templ_7745c5c3_Err = icon.ChevronDown(icon.Props{Class: "sidebar-account-chevron size-3.5 shrink-0 text-sidebar-foreground transition-transform duration-200"}).Render(ctx, templ_7745c5c3_Buffer)
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -2893,7 +2893,7 @@ func SidebarTagGroup(labels []models.Label, activeFolder string, filters models.
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 196, "\"><span class=\"flex size-5 shrink-0 items-center justify-center rounded text-sidebar-foreground/70\">")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 196, "\"><span class=\"flex size-5 shrink-0 items-center justify-center rounded text-sidebar-foreground\">")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
@@ -2905,7 +2905,7 @@ func SidebarTagGroup(labels []models.Label, activeFolder string, filters models.
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			templ_7745c5c3_Err = icon.ChevronDown(icon.Props{Class: "sidebar-tag-chevron size-3.5 shrink-0 text-sidebar-foreground/60 transition-transform duration-200"}).Render(ctx, templ_7745c5c3_Buffer)
+			templ_7745c5c3_Err = icon.ChevronDown(icon.Props{Class: "sidebar-tag-chevron size-3.5 shrink-0 text-sidebar-foreground transition-transform duration-200"}).Render(ctx, templ_7745c5c3_Buffer)
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
@@ -3036,7 +3036,7 @@ func SidebarTagFilterLink(label models.Label, folderID string, activeFolder stri
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 206, "\"><span class=\"flex size-5 shrink-0 items-center justify-center rounded text-sidebar-foreground/70\">")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 206, "\"><span class=\"flex size-5 shrink-0 items-center justify-center rounded text-sidebar-foreground\">")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -3255,7 +3255,7 @@ func SidebarFolderItem(folder models.Folder, activeFolder string, accountID stri
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 223, "\"><span class=\"flex size-5 shrink-0 items-center justify-center rounded text-sidebar-foreground/70\">")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 223, "\"><span class=\"flex size-5 shrink-0 items-center justify-center rounded text-sidebar-foreground\">")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
@@ -3283,7 +3283,7 @@ func SidebarFolderItem(folder models.Folder, activeFolder string, accountID stri
 			if folder.Unread > 0 {
 				var templ_7745c5c3_Var147 = []any{"min-w-5 h-5 px-1.5 flex items-center justify-center rounded-full text-[11px] font-semibold tabular-nums",
 					templ.KV("bg-sidebar-primary/20 text-sidebar-primary", activeFolder == folder.ID),
-					templ.KV("bg-sidebar-accent text-sidebar-foreground/80", activeFolder != folder.ID),
+					templ.KV("bg-sidebar-accent text-sidebar-foreground", activeFolder != folder.ID),
 				}
 				templ_7745c5c3_Err = templ.RenderCSSItems(ctx, templ_7745c5c3_Buffer, templ_7745c5c3_Var147...)
 				if templ_7745c5c3_Err != nil {
@@ -3333,7 +3333,7 @@ func SidebarFolderItem(folder models.Folder, activeFolder string, accountID stri
 					return templ_7745c5c3_Err
 				}
 			}
-			templ_7745c5c3_Err = icon.ChevronDown(icon.Props{Class: "sidebar-folder-chevron size-3.5 shrink-0 text-sidebar-foreground/60 transition-transform duration-200"}).Render(ctx, templ_7745c5c3_Buffer)
+			templ_7745c5c3_Err = icon.ChevronDown(icon.Props{Class: "sidebar-folder-chevron size-3.5 shrink-0 text-sidebar-foreground transition-transform duration-200"}).Render(ctx, templ_7745c5c3_Buffer)
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
@@ -3481,7 +3481,7 @@ func SidebarFolderLink(folder models.Folder, activeFolder string, accountID stri
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 239, "\"><span class=\"flex size-5 shrink-0 items-center justify-center rounded text-sidebar-foreground/70\">")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 239, "\"><span class=\"flex size-5 shrink-0 items-center justify-center rounded text-sidebar-foreground\">")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -3509,7 +3509,7 @@ func SidebarFolderLink(folder models.Folder, activeFolder string, accountID stri
 		if folder.Unread > 0 {
 			var templ_7745c5c3_Var161 = []any{"min-w-5 h-5 px-1.5 flex items-center justify-center rounded-full text-[11px] font-semibold tabular-nums",
 				templ.KV("bg-sidebar-primary/20 text-sidebar-primary", activeFolder == folder.ID),
-				templ.KV("bg-sidebar-accent text-sidebar-foreground/80", activeFolder != folder.ID),
+				templ.KV("bg-sidebar-accent text-sidebar-foreground", activeFolder != folder.ID),
 			}
 			templ_7745c5c3_Err = templ.RenderCSSItems(ctx, templ_7745c5c3_Buffer, templ_7745c5c3_Var161...)
 			if templ_7745c5c3_Err != nil {
@@ -4186,7 +4186,7 @@ func SidebarFooter() templ.Component {
 			templ_7745c5c3_Var192 = templ.NopComponent
 		}
 		ctx = templ.ClearChildren(ctx)
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 274, "<div class=\"px-4 py-3 border-t border-sidebar-border\"><div class=\"flex items-center gap-1.5\"><a href=\"/settings/accounts\" class=\"flex min-w-0 flex-1 items-center gap-2 px-2 py-1.5 rounded-md text-sidebar-foreground/60 hover:text-sidebar-accent-foreground hover:bg-sidebar-accent/60 transition-colors text-[13px]\"><span class=\"flex size-4 shrink-0 items-center justify-center\">")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 274, "<div class=\"px-4 py-3 border-t border-sidebar-border\"><div class=\"flex items-center gap-1.5\"><a href=\"/settings/accounts\" class=\"flex min-w-0 flex-1 items-center gap-2 px-2 py-1.5 rounded-md text-sidebar-foreground hover:text-sidebar-accent-foreground hover:bg-sidebar-accent/60 transition-colors text-[13px]\"><span class=\"flex size-4 shrink-0 items-center justify-center\">")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -4222,7 +4222,7 @@ func SidebarFooter() templ.Component {
 					}()
 				}
 				ctx = templ.InitializeContext(ctx)
-				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 276, "<button type=\"button\" class=\"inline-flex size-7 items-center justify-center rounded-md text-sidebar-foreground/60 transition-colors hover:bg-sidebar-accent/60 hover:text-sidebar-accent-foreground data-[tui-popover-open=true]:bg-sidebar-accent data-[tui-popover-open=true]:text-sidebar-accent-foreground\" aria-label=\"Show keyboard navigation hints\">")
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 276, "<button type=\"button\" class=\"inline-flex size-7 items-center justify-center rounded-md text-sidebar-foreground transition-colors hover:bg-sidebar-accent/60 hover:text-sidebar-accent-foreground data-[tui-popover-open=true]:bg-sidebar-accent data-[tui-popover-open=true]:text-sidebar-accent-foreground\" aria-label=\"Show keyboard navigation hints\">")
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
@@ -4256,7 +4256,7 @@ func SidebarFooter() templ.Component {
 					}()
 				}
 				ctx = templ.InitializeContext(ctx)
-				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 279, "<div class=\"mb-2\"><h3 class=\"text-sm font-bold tracking-tight text-sidebar-accent-foreground\" style=\"font-family: var(--font-serif)\">Keyboard navigation</h3><p class=\"mt-0.5 text-[11px] leading-relaxed text-sidebar-foreground/60\">Shortcuts for moving through mail.</p></div><div class=\"space-y-1 text-[12px] leading-relaxed\">")
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 279, "<div class=\"mb-2\"><h3 class=\"text-sm font-bold tracking-tight text-sidebar-accent-foreground\" style=\"font-family: var(--font-serif)\">Keyboard navigation</h3><p class=\"mt-0.5 text-[11px] leading-relaxed text-sidebar-foreground\">Shortcuts for moving through mail.</p></div><div class=\"space-y-1 text-[12px] leading-relaxed\">")
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
@@ -4369,14 +4369,14 @@ func SidebarShortcutHint(label string, keys string) templ.Component {
 			templ_7745c5c3_Var196 = templ.NopComponent
 		}
 		ctx = templ.ClearChildren(ctx)
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 283, "<div class=\"flex items-center justify-between gap-3 rounded-md px-1.5 py-1 transition-colors hover:bg-sidebar-accent/25\"><span class=\"min-w-0 truncate text-sidebar-foreground/72\">")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 283, "<div class=\"flex items-center justify-between gap-3 rounded-md px-1.5 py-1 transition-colors hover:bg-sidebar-accent/25\"><span class=\"min-w-0 truncate text-sidebar-foreground\">")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
 		var templ_7745c5c3_Var197 string
 		templ_7745c5c3_Var197, templ_7745c5c3_Err = templ.JoinStringErrs(label)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/sidebar.templ`, Line: 1081, Col: 67}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/sidebar.templ`, Line: 1081, Col: 64}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var197))
 		if templ_7745c5c3_Err != nil {
@@ -4438,7 +4438,7 @@ func WebmailSidebarLogout() templ.Component {
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 287, "\"> <button type=\"submit\" class=\"flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-[13px] text-sidebar-foreground/60 transition-colors hover:bg-sidebar-accent/60 hover:text-sidebar-accent-foreground\">")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 287, "\"> <button type=\"submit\" class=\"flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-[13px] text-sidebar-foreground transition-colors hover:bg-sidebar-accent/60 hover:text-sidebar-accent-foreground\">")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
@@ -4500,7 +4500,7 @@ func MobileTopBar() templ.Component {
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 291, "\" alt=\"\" class=\"h-7 w-7 shrink-0\"> <span class=\"truncate text-base font-bold tracking-tight text-sidebar-accent-foreground\" style=\"font-family: var(--font-serif)\">Gofer</span></a><div class=\"mobile-topbar-title hidden min-w-0 items-baseline gap-2\" data-mobile-topbar-title><span class=\"truncate text-lg font-bold tracking-tight text-sidebar-accent-foreground\" style=\"font-family: var(--font-serif)\" data-mobile-topbar-title-text></span> <span class=\"shrink-0 text-xs font-medium tabular-nums text-sidebar-foreground/70\" data-mobile-topbar-title-count></span> <button type=\"button\" class=\"mobile-topbar-sync hidden shrink-0 text-xs font-medium\" data-mobile-topbar-sync></button></div><div class=\"flex-1\"></div><div class=\"mobile-topbar-mail-actions hidden items-center\" data-mobile-topbar-mail-actions><button type=\"button\" class=\"mobile-topbar-button\" data-mobile-mail-action=\"search\" aria-label=\"Search mail\">")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 291, "\" alt=\"\" class=\"h-7 w-7 shrink-0\"> <span class=\"truncate text-base font-bold tracking-tight text-sidebar-accent-foreground\" style=\"font-family: var(--font-serif)\">Gofer</span></a><div class=\"mobile-topbar-title hidden min-w-0 items-baseline gap-2\" data-mobile-topbar-title><span class=\"truncate text-lg font-bold tracking-tight text-sidebar-accent-foreground\" style=\"font-family: var(--font-serif)\" data-mobile-topbar-title-text></span> <span class=\"shrink-0 text-xs font-medium tabular-nums text-sidebar-foreground\" data-mobile-topbar-title-count></span> <button type=\"button\" class=\"mobile-topbar-sync hidden shrink-0 text-xs font-medium\" data-mobile-topbar-sync></button></div><div class=\"flex-1\"></div><div class=\"mobile-topbar-mail-actions hidden items-center\" data-mobile-topbar-mail-actions><button type=\"button\" class=\"mobile-topbar-button\" data-mobile-mail-action=\"search\" aria-label=\"Search mail\">")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}

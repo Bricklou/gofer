@@ -301,7 +301,7 @@ func MailViewLoading() templ.Component {
 			templ_7745c5c3_Var7 = templ.NopComponent
 		}
 		ctx = templ.ClearChildren(ctx)
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 10, "<div id=\"mail-view\" class=\"hidden lg:flex flex-1 flex-col min-w-0 bg-background surface-desk\" data-mail-reader><div class=\"mail-view-frame flex flex-col h-full\" aria-busy=\"true\" aria-label=\"Loading message\"><div class=\"surface-paper rounded-md flex flex-col h-full overflow-hidden\"><div class=\"mail-view-toolbar flex items-center justify-between px-6 py-2.5\"><div class=\"mail-view-actions flex items-center gap-1 min-w-0\"><button type=\"button\" class=\"mobile-back-button h-9 w-9 shrink-0 items-center justify-center rounded-md text-ink/60 hover:bg-ink/5\" data-on-click='[\"closeMobileMailView\"]' aria-label=\"Back to list\">")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 10, "<div id=\"mail-view\" class=\"hidden lg:flex flex-1 flex-col min-w-0 bg-background surface-desk\" data-mail-reader><div class=\"mail-view-frame flex flex-col h-full\" aria-busy=\"true\" aria-label=\"Loading message\"><div class=\"surface-paper rounded-md flex flex-col h-full overflow-hidden\"><div class=\"mail-view-toolbar flex items-center justify-between px-6 py-2.5\"><div class=\"mail-view-actions flex items-center gap-1 min-w-0\"><button type=\"button\" class=\"mobile-back-button h-9 w-9 shrink-0 items-center justify-center rounded-md text-muted-foreground hover:bg-ink/5\" data-on-click='[\"closeMobileMailView\"]' aria-label=\"Back to list\">")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -381,7 +381,7 @@ func MailViewLoading() templ.Component {
 				}()
 			}
 			ctx = templ.InitializeContext(ctx)
-			templ_7745c5c3_Err = icon.Star(icon.Props{Class: "size-4 text-ink/30"}).Render(ctx, templ_7745c5c3_Buffer)
+			templ_7745c5c3_Err = icon.Star(icon.Props{Class: "size-4 text-muted-foreground"}).Render(ctx, templ_7745c5c3_Buffer)
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
@@ -778,24 +778,24 @@ func MailViewThreadContent(email *models.Email, thread []models.ThreadItem) temp
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = icon.MessagesSquare(icon.Props{Class: "size-3.5 text-ink/30"}).Render(ctx, templ_7745c5c3_Buffer)
+		templ_7745c5c3_Err = icon.MessagesSquare(icon.Props{Class: "size-3.5 text-muted-foreground"}).Render(ctx, templ_7745c5c3_Buffer)
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 35, "<span class=\"text-xs font-medium text-ink/40\" data-thread-count>")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 35, "<span class=\"text-xs font-medium text-muted-foreground\" data-thread-count>")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
 		var templ_7745c5c3_Var24 string
 		templ_7745c5c3_Var24, templ_7745c5c3_Err = templ.JoinStringErrs(fmt.Sprintf("%d messages in this thread", len(thread)))
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/mailview.templ`, Line: 289, Col: 125}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/mailview.templ`, Line: 289, Col: 135}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var24))
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 36, "</span> <span class=\"text-xs text-ink/20\">|</span> <button type=\"button\" data-thread-expand-all class=\"flex items-center gap-1.5 text-xs text-ink/40 hover:text-ink/65 transition-colors cursor-pointer\">")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 36, "</span> <span class=\"text-xs text-ink/20\">|</span> <button type=\"button\" data-thread-expand-all class=\"flex items-center gap-1.5 text-xs text-muted-foreground hover:text-ink transition-colors cursor-pointer\">")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -849,7 +849,7 @@ func MailViewThreadContent(email *models.Email, thread []models.ThreadItem) temp
 					return templ_7745c5c3_Err
 				}
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 42, " data-thread-details class=\"mt-4 group\"><summary class=\"flex items-center gap-3 cursor-pointer list-none marker:hidden text-xs text-ink/35 transition-colors select-none\"><span class=\"flex items-center gap-1.5 hover:text-ink/55 transition-colors\">")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 42, " data-thread-details class=\"mt-4 group\"><summary class=\"flex items-center gap-3 cursor-pointer list-none marker:hidden text-xs text-muted-foreground transition-colors select-none\"><span class=\"flex items-center gap-1.5 hover:text-ink transition-colors\">")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
@@ -857,7 +857,7 @@ func MailViewThreadContent(email *models.Email, thread []models.ThreadItem) temp
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 43, "<span class=\"group-open:hidden\">Show email</span> <span class=\"hidden group-open:inline\">Hide email</span></span> <span class=\"group-open:hidden\"><span class=\"text-ink/20\">|</span> <button type=\"button\" data-thread-show-exclusive class=\"ml-1 text-ink/35 hover:text-ink/60 transition-colors cursor-pointer\">Show and hide others</button></span> <span class=\"hidden group-open:inline\"><span class=\"text-ink/20\">|</span> <button type=\"button\" data-thread-hide-others class=\"ml-1 text-ink/35 hover:text-ink/60 transition-colors cursor-pointer\">Hide all others</button></span></summary><div class=\"thread-details-content mt-3\">")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 43, "<span class=\"group-open:hidden\">Show email</span> <span class=\"hidden group-open:inline\">Hide email</span></span> <span class=\"group-open:hidden\"><span class=\"text-ink/20\">|</span> <button type=\"button\" data-thread-show-exclusive class=\"ml-1 text-muted-foreground hover:text-ink transition-colors cursor-pointer\">Show and hide others</button></span> <span class=\"hidden group-open:inline\"><span class=\"text-ink/20\">|</span> <button type=\"button\" data-thread-hide-others class=\"ml-1 text-muted-foreground hover:text-ink transition-colors cursor-pointer\">Hide all others</button></span></summary><div class=\"thread-details-content mt-3\">")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
@@ -956,14 +956,14 @@ func MailViewThreadItemSender(email *models.Email, item *models.ThreadItem) temp
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 52, "</span> <span class=\"mail-view-address text-xs text-ink/40\">&lt;")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 52, "</span> <span class=\"mail-view-address text-xs text-muted-foreground\">&lt;")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
 		var templ_7745c5c3_Var30 string
 		templ_7745c5c3_Var30, templ_7745c5c3_Err = templ.JoinStringErrs(item.From.Email)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/mailview.templ`, Line: 343, Col: 77}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/mailview.templ`, Line: 343, Col: 87}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var30))
 		if templ_7745c5c3_Err != nil {
@@ -974,14 +974,14 @@ func MailViewThreadItemSender(email *models.Email, item *models.ThreadItem) temp
 			return templ_7745c5c3_Err
 		}
 		if item.FolderName != "" {
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 54, "<span class=\"text-[10px] font-medium text-ink/40 bg-ink/[0.04] px-1.5 py-0.5 rounded shrink-0\">")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 54, "<span class=\"text-[10px] font-medium text-muted-foreground bg-ink/[0.04] px-1.5 py-0.5 rounded shrink-0\">")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
 			var templ_7745c5c3_Var31 string
 			templ_7745c5c3_Var31, templ_7745c5c3_Err = templ.JoinStringErrs(item.FolderName)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/mailview.templ`, Line: 345, Col: 117}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/mailview.templ`, Line: 345, Col: 127}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var31))
 			if templ_7745c5c3_Err != nil {
@@ -1035,7 +1035,7 @@ func MailViewThreadItemSender(email *models.Email, item *models.ThreadItem) temp
 				return templ_7745c5c3_Err
 			}
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 60, "</div><div class=\"text-xs text-ink/40 mt-0.5\">")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 60, "</div><div class=\"text-xs text-muted-foreground mt-0.5\">")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -1103,14 +1103,14 @@ func MailViewThreadItemSender(email *models.Email, item *models.ThreadItem) temp
 				}
 			}
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 66, "</div><div class=\"text-xs text-ink/35 mt-0.5\">")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 66, "</div><div class=\"text-xs text-muted-foreground mt-0.5\">")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
 		var templ_7745c5c3_Var39 string
 		templ_7745c5c3_Var39, templ_7745c5c3_Err = templ.JoinStringErrs(item.DateFull)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/mailview.templ`, Line: 368, Col: 58}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/mailview.templ`, Line: 368, Col: 68}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var39))
 		if templ_7745c5c3_Err != nil {
@@ -1144,7 +1144,7 @@ func MailViewThreadItemSender(email *models.Email, item *models.ThreadItem) temp
 					}()
 				}
 				ctx = templ.InitializeContext(ctx)
-				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 68, "<button type=\"button\" class=\"shrink-0 size-7 rounded flex items-center justify-center text-ink/30 hover:text-ink/60 hover:bg-ink/5 transition-colors mt-0.5\">")
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 68, "<button type=\"button\" class=\"shrink-0 size-7 rounded flex items-center justify-center text-muted-foreground hover:text-ink hover:bg-ink/5 transition-colors mt-0.5\">")
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
@@ -1223,14 +1223,14 @@ func MailViewThreadItemSender(email *models.Email, item *models.ThreadItem) temp
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
-				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 75, "\" class=\"text-xs text-ink/50 truncate\">")
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 75, "\" class=\"text-xs text-muted-foreground truncate\">")
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
 				var templ_7745c5c3_Var45 string
 				templ_7745c5c3_Var45, templ_7745c5c3_Err = templ.JoinStringErrs(item.From.Email)
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/mailview.templ`, Line: 392, Col: 102}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/mailview.templ`, Line: 392, Col: 112}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var45))
 				if templ_7745c5c3_Err != nil {
@@ -1241,7 +1241,7 @@ func MailViewThreadItemSender(email *models.Email, item *models.ThreadItem) temp
 					return templ_7745c5c3_Err
 				}
 				if len(item.To) > 0 {
-					templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 77, "<div><span class=\"text-[11px] font-medium text-ink/30 uppercase tracking-wider\">To</span><div class=\"mt-1 space-y-0.5\">")
+					templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 77, "<div><span class=\"text-[11px] font-medium text-muted-foreground uppercase tracking-wider\">To</span><div class=\"mt-1 space-y-0.5\">")
 					if templ_7745c5c3_Err != nil {
 						return templ_7745c5c3_Err
 					}
@@ -1259,14 +1259,14 @@ func MailViewThreadItemSender(email *models.Email, item *models.ThreadItem) temp
 						if templ_7745c5c3_Err != nil {
 							return templ_7745c5c3_Err
 						}
-						templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 79, "</span> <span class=\"text-xs text-ink/35 truncate\">&lt;")
+						templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 79, "</span> <span class=\"text-xs text-muted-foreground truncate\">&lt;")
 						if templ_7745c5c3_Err != nil {
 							return templ_7745c5c3_Err
 						}
 						var templ_7745c5c3_Var47 string
 						templ_7745c5c3_Var47, templ_7745c5c3_Err = templ.JoinStringErrs(c.Email)
 						if templ_7745c5c3_Err != nil {
-							return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/mailview.templ`, Line: 402, Col: 66}
+							return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/mailview.templ`, Line: 402, Col: 76}
 						}
 						_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var47))
 						if templ_7745c5c3_Err != nil {
@@ -1283,7 +1283,7 @@ func MailViewThreadItemSender(email *models.Email, item *models.ThreadItem) temp
 					}
 				}
 				if len(item.CC) > 0 {
-					templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 82, "<div><span class=\"text-[11px] font-medium text-ink/30 uppercase tracking-wider\">Cc</span><div class=\"mt-1 space-y-0.5\">")
+					templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 82, "<div><span class=\"text-[11px] font-medium text-muted-foreground uppercase tracking-wider\">Cc</span><div class=\"mt-1 space-y-0.5\">")
 					if templ_7745c5c3_Err != nil {
 						return templ_7745c5c3_Err
 					}
@@ -1301,14 +1301,14 @@ func MailViewThreadItemSender(email *models.Email, item *models.ThreadItem) temp
 						if templ_7745c5c3_Err != nil {
 							return templ_7745c5c3_Err
 						}
-						templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 84, "</span> <span class=\"text-xs text-ink/35 truncate\">&lt;")
+						templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 84, "</span> <span class=\"text-xs text-muted-foreground truncate\">&lt;")
 						if templ_7745c5c3_Err != nil {
 							return templ_7745c5c3_Err
 						}
 						var templ_7745c5c3_Var49 string
 						templ_7745c5c3_Var49, templ_7745c5c3_Err = templ.JoinStringErrs(c.Email)
 						if templ_7745c5c3_Err != nil {
-							return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/mailview.templ`, Line: 415, Col: 66}
+							return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/mailview.templ`, Line: 415, Col: 76}
 						}
 						_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var49))
 						if templ_7745c5c3_Err != nil {
@@ -1325,7 +1325,7 @@ func MailViewThreadItemSender(email *models.Email, item *models.ThreadItem) temp
 					}
 				}
 				if item.DateFull != "" {
-					templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 87, "<div class=\"pt-2 border-t border-ink/6\"><div class=\"flex items-center gap-2 text-xs text-ink/45\">")
+					templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 87, "<div class=\"pt-2 border-t border-ink/6\"><div class=\"flex items-center gap-2 text-xs text-muted-foreground\">")
 					if templ_7745c5c3_Err != nil {
 						return templ_7745c5c3_Err
 					}
@@ -1410,7 +1410,7 @@ func MailViewThreadItemAttachments(item *models.ThreadItem) templ.Component {
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
-				templ_7745c5c3_Err = icon.File(icon.Props{Class: "size-4 text-ink/30"}).Render(ctx, templ_7745c5c3_Buffer)
+				templ_7745c5c3_Err = icon.File(icon.Props{Class: "size-4 text-muted-foreground"}).Render(ctx, templ_7745c5c3_Buffer)
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
@@ -1427,14 +1427,14 @@ func MailViewThreadItemAttachments(item *models.ThreadItem) templ.Component {
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
-				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 95, "</p><p class=\"text-[11px] text-ink/30\">")
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 95, "</p><p class=\"text-[11px] text-muted-foreground\">")
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
 				var templ_7745c5c3_Var53 string
 				templ_7745c5c3_Var53, templ_7745c5c3_Err = templ.JoinStringErrs(humanize.Bytes(uint64(att.SizeBytes)))
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/mailview.templ`, Line: 445, Col: 80}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/mailview.templ`, Line: 445, Col: 90}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var53))
 				if templ_7745c5c3_Err != nil {
@@ -1486,7 +1486,7 @@ func MailViewThreadItemAttachments(item *models.ThreadItem) templ.Component {
 				templ_7745c5c3_Err = button.Button(button.Props{
 					Variant: button.VariantOutline,
 					Size:    button.SizeSm,
-					Class:   "shrink-0 border-ink/10 text-ink/60 hover:text-ink",
+					Class:   "shrink-0 border-ink/10 text-muted-foreground hover:text-ink",
 				}).Render(templ.WithChildren(ctx, templ_7745c5c3_Var55), templ_7745c5c3_Buffer)
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
@@ -1572,7 +1572,7 @@ func MailViewThreadItemMiniHeader(item *models.ThreadItem) templ.Component {
 							return templ_7745c5c3_Err
 						}
 					} else {
-						templ_7745c5c3_Err = icon.Star(icon.Props{Class: "size-3.5 text-ink/30"}).Render(ctx, templ_7745c5c3_Buffer)
+						templ_7745c5c3_Err = icon.Star(icon.Props{Class: "size-3.5 text-muted-foreground"}).Render(ctx, templ_7745c5c3_Buffer)
 						if templ_7745c5c3_Err != nil {
 							return templ_7745c5c3_Err
 						}
@@ -1674,7 +1674,7 @@ func MailViewThreadItemMiniHeader(item *models.ThreadItem) templ.Component {
 				templ_7745c5c3_Err = button.Button(button.Props{
 					Variant:    button.VariantGhost,
 					Size:       button.SizeIcon,
-					Class:      mailDeleteActionClass("h-7 w-7", "text-ink/40 hover:text-ink/70 hover:bg-ink/5", mailThreadItemIsTrash(item)),
+					Class:      mailDeleteActionClass("h-7 w-7", "text-muted-foreground hover:text-ink hover:bg-ink/5", mailThreadItemIsTrash(item)),
 					Attributes: templ.Attributes{"data-on-click": onAction("deleteMessage", item.ID)},
 				}).Render(templ.WithChildren(ctx, templ_7745c5c3_Var63), templ_7745c5c3_Buffer)
 				if templ_7745c5c3_Err != nil {
@@ -1780,7 +1780,7 @@ func MailViewThreadItemMiniHeader(item *models.ThreadItem) templ.Component {
 				templ_7745c5c3_Err = button.Button(button.Props{
 					Variant:    button.VariantGhost,
 					Size:       button.SizeIcon,
-					Class:      "h-7 w-7 text-ink/40 hover:text-ink/70 hover:bg-ink/5",
+					Class:      "h-7 w-7 text-muted-foreground hover:text-ink hover:bg-ink/5",
 					Attributes: templ.Attributes{"data-on-click": onAction("toggleRead", item.ID), "data-read-email": item.ID, "data-is-read": fmt.Sprintf("%t", item.IsRead)},
 				}).Render(templ.WithChildren(ctx, templ_7745c5c3_Var67), templ_7745c5c3_Buffer)
 				if templ_7745c5c3_Err != nil {
@@ -2134,7 +2134,7 @@ func mailViewThreadDraftButton(action string, label string, hover string) templ.
 		})
 		templ_7745c5c3_Err = button.Button(button.Props{
 			Variant:    button.VariantOutline,
-			Class:      "h-7 px-2 max-lg:w-7 max-lg:px-0 border-ink/10 text-ink/50 " + hover,
+			Class:      "h-7 px-2 max-lg:w-7 max-lg:px-0 border-ink/10 text-muted-foreground " + hover,
 			Attributes: templ.Attributes{"data-on-click": action, "aria-label": label, "title": label},
 		}).Render(templ.WithChildren(ctx, templ_7745c5c3_Var79), templ_7745c5c3_Buffer)
 		if templ_7745c5c3_Err != nil {
@@ -2206,7 +2206,7 @@ func mailViewThreadQuickReplyButton(mode string, label string) templ.Component {
 		})
 		templ_7745c5c3_Err = button.Button(button.Props{
 			Variant:    button.VariantOutline,
-			Class:      "h-7 px-2 max-lg:w-7 max-lg:px-0 border-ink/10 text-ink/50 hover:text-ink hover:border-ink/20",
+			Class:      "h-7 px-2 max-lg:w-7 max-lg:px-0 border-ink/10 text-muted-foreground hover:text-ink hover:border-ink/20",
 			Attributes: templ.Attributes{"data-on-click": onAction("handleReply", actionElement, mode), "aria-label": label, "title": label},
 		}).Render(templ.WithChildren(ctx, templ_7745c5c3_Var82), templ_7745c5c3_Buffer)
 		if templ_7745c5c3_Err != nil {
@@ -2455,7 +2455,7 @@ func EmailBodyStyleCycleButton(emailID string) templ.Component {
 		templ_7745c5c3_Err = button.Button(button.Props{
 			Variant: button.VariantGhost,
 			Size:    button.SizeIcon,
-			Class:   "email-body-mode-cycle h-7 w-7 text-ink/40 hover:text-ink/70 hover:bg-ink/5",
+			Class:   "email-body-mode-cycle h-7 w-7 text-muted-foreground hover:text-ink hover:bg-ink/5",
 			Attributes: templ.Attributes{
 				"data-on-click":              onAction("toggleEmailBodySchemeById", emailID),
 				"data-email-body-mode-cycle": emailID,
@@ -2507,7 +2507,7 @@ func EmailTranslateIconButton(emailID string) templ.Component {
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 139, "\" data-translated=\"false\" class=\"inline-flex h-7 overflow-hidden rounded-md text-ink/40 transition-colors data-[translated=true]:bg-copper/10 data-[translated=true]:text-copper\"><button type=\"button\" data-translate-email-icon=\"")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 139, "\" data-translated=\"false\" class=\"inline-flex h-7 overflow-hidden rounded-md text-muted-foreground transition-colors data-[translated=true]:bg-copper/10 data-[translated=true]:text-copper\"><button type=\"button\" data-translate-email-icon=\"")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -2520,7 +2520,7 @@ func EmailTranslateIconButton(emailID string) templ.Component {
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 140, "\" data-translated=\"false\" aria-pressed=\"false\" aria-label=\"Translate\" class=\"inline-flex h-full items-center pl-1.5 pr-0.5 transition-colors hover:text-ink/70\">")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 140, "\" data-translated=\"false\" aria-pressed=\"false\" aria-label=\"Translate\" class=\"inline-flex h-full items-center pl-1.5 pr-0.5 transition-colors hover:text-ink\">")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -2556,7 +2556,7 @@ func EmailTranslateIconButton(emailID string) templ.Component {
 					}()
 				}
 				ctx = templ.InitializeContext(ctx)
-				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 142, "<button type=\"button\" class=\"email-translation-language-trigger inline-flex h-full w-5 items-center justify-center pr-0.5 transition-colors hover:text-ink/70\" aria-label=\"Choose translation language\">")
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 142, "<button type=\"button\" class=\"email-translation-language-trigger inline-flex h-full w-5 items-center justify-center pr-0.5 transition-colors hover:text-ink\" aria-label=\"Choose translation language\">")
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
@@ -2700,7 +2700,7 @@ func MailViewHeader(email *models.Email, thread []models.ThreadItem) templ.Compo
 			templ_7745c5c3_Var101 = templ.NopComponent
 		}
 		ctx = templ.ClearChildren(ctx)
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 149, "<div class=\"mail-view-toolbar flex items-center justify-between px-6 py-2.5\"><div class=\"mail-view-actions flex items-center gap-1 min-w-0\"><button type=\"button\" class=\"mobile-back-button h-9 w-9 shrink-0 items-center justify-center rounded-md text-ink/60 hover:bg-ink/5\" data-on-click='[\"closeMobileMailView\"]' aria-label=\"Back to list\">")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 149, "<div class=\"mail-view-toolbar flex items-center justify-between px-6 py-2.5\"><div class=\"mail-view-actions flex items-center gap-1 min-w-0\"><button type=\"button\" class=\"mobile-back-button h-9 w-9 shrink-0 items-center justify-center rounded-md text-muted-foreground hover:bg-ink/5\" data-on-click='[\"closeMobileMailView\"]' aria-label=\"Back to list\">")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -2758,7 +2758,7 @@ func MailViewHeader(email *models.Email, thread []models.ThreadItem) templ.Compo
 					templ_7745c5c3_Err = button.Button(button.Props{
 						Variant:    button.VariantGhost,
 						Size:       button.SizeIcon,
-						Class:      "h-8 w-8 text-ink/40 hover:text-ink/70 hover:bg-ink/5",
+						Class:      "h-8 w-8 text-muted-foreground hover:text-ink hover:bg-ink/5",
 						Attributes: templ.Attributes{"data-on-click": onAction("unarchiveThread", email.ID)},
 					}).Render(templ.WithChildren(ctx, templ_7745c5c3_Var104), templ_7745c5c3_Buffer)
 					if templ_7745c5c3_Err != nil {
@@ -2786,7 +2786,7 @@ func MailViewHeader(email *models.Email, thread []models.ThreadItem) templ.Compo
 					templ_7745c5c3_Err = button.Button(button.Props{
 						Variant:    button.VariantGhost,
 						Size:       button.SizeIcon,
-						Class:      "h-8 w-8 text-ink/40 hover:text-ink/70 hover:bg-ink/5",
+						Class:      "h-8 w-8 text-muted-foreground hover:text-ink hover:bg-ink/5",
 						Attributes: templ.Attributes{"data-on-click": onAction("archiveThread", email.ID)},
 					}).Render(templ.WithChildren(ctx, templ_7745c5c3_Var105), templ_7745c5c3_Buffer)
 					if templ_7745c5c3_Err != nil {
@@ -2896,7 +2896,7 @@ func MailViewHeader(email *models.Email, thread []models.ThreadItem) templ.Compo
 				templ_7745c5c3_Err = button.Button(button.Props{
 					Variant:    button.VariantGhost,
 					Size:       button.SizeIcon,
-					Class:      mailDeleteActionClass("h-8 w-8", "text-ink/40 hover:text-ink/70 hover:bg-ink/5", mailEmailIsTrash(email)),
+					Class:      mailDeleteActionClass("h-8 w-8", "text-muted-foreground hover:text-ink hover:bg-ink/5", mailEmailIsTrash(email)),
 					Attributes: templ.Attributes{"data-on-click": threadAwareAction("deleteMessage", "deleteThread", email)},
 				}).Render(templ.WithChildren(ctx, templ_7745c5c3_Var111), templ_7745c5c3_Buffer)
 				if templ_7745c5c3_Err != nil {
@@ -3034,7 +3034,7 @@ func MailViewHeader(email *models.Email, thread []models.ThreadItem) templ.Compo
 					templ_7745c5c3_Err = button.Button(button.Props{
 						Variant:    button.VariantGhost,
 						Size:       button.SizeIcon,
-						Class:      "h-8 w-8 text-ink/40 hover:text-ink/70 hover:bg-ink/5",
+						Class:      "h-8 w-8 text-muted-foreground hover:text-ink hover:bg-ink/5",
 						Attributes: templ.Attributes{"data-on-click": threadAwareAction("markSpam", "markThreadSpam", email), "data-mail-action": "spam"},
 					}).Render(templ.WithChildren(ctx, templ_7745c5c3_Var118), templ_7745c5c3_Buffer)
 					if templ_7745c5c3_Err != nil {
@@ -3141,7 +3141,7 @@ func MailViewHeader(email *models.Email, thread []models.ThreadItem) templ.Compo
 							return templ_7745c5c3_Err
 						}
 					} else {
-						templ_7745c5c3_Err = icon.Star(icon.Props{Class: "size-4 text-ink/30"}).Render(ctx, templ_7745c5c3_Buffer)
+						templ_7745c5c3_Err = icon.Star(icon.Props{Class: "size-4 text-muted-foreground"}).Render(ctx, templ_7745c5c3_Buffer)
 						if templ_7745c5c3_Err != nil {
 							return templ_7745c5c3_Err
 						}
@@ -3255,7 +3255,7 @@ func MailViewHeader(email *models.Email, thread []models.ThreadItem) templ.Compo
 				templ_7745c5c3_Err = button.Button(button.Props{
 					Variant:    button.VariantGhost,
 					Size:       button.SizeIcon,
-					Class:      "h-8 w-8 text-ink/40 hover:text-ink/70 hover:bg-ink/5",
+					Class:      "h-8 w-8 text-muted-foreground hover:text-ink hover:bg-ink/5",
 					Attributes: mailViewReadAttributes(email, thread),
 				}).Render(templ.WithChildren(ctx, templ_7745c5c3_Var129), templ_7745c5c3_Buffer)
 				if templ_7745c5c3_Err != nil {
@@ -3391,14 +3391,14 @@ func MailViewHeader(email *models.Email, thread []models.ThreadItem) templ.Compo
 				}
 			}
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 163, "<span class=\"mail-view-date text-xs text-ink/40 tabular-nums\">")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 163, "<span class=\"mail-view-date text-xs text-muted-foreground tabular-nums\">")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
 		var templ_7745c5c3_Var137 string
 		templ_7745c5c3_Var137, templ_7745c5c3_Err = templ.JoinStringErrs(email.DateFull)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/mailview.templ`, Line: 846, Col: 81}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/mailview.templ`, Line: 846, Col: 91}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var137))
 		if templ_7745c5c3_Err != nil {
@@ -3453,7 +3453,7 @@ func MailViewHeader(email *models.Email, thread []models.ThreadItem) templ.Compo
 				templ_7745c5c3_Err = button.Button(button.Props{
 					Variant: button.VariantGhost,
 					Size:    button.SizeIcon,
-					Class:   "h-8 w-8 text-ink/40 hover:text-ink/70",
+					Class:   "h-8 w-8 text-muted-foreground hover:text-ink",
 				}).Render(templ.WithChildren(ctx, templ_7745c5c3_Var140), templ_7745c5c3_Buffer)
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
@@ -3922,20 +3922,20 @@ func MailViewSender(email *models.Email) templ.Component {
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 202, "</span> <span class=\"mail-view-address text-xs text-ink/40\">&lt;")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 202, "</span> <span class=\"mail-view-address text-xs text-muted-foreground\">&lt;")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
 		var templ_7745c5c3_Var155 string
 		templ_7745c5c3_Var155, templ_7745c5c3_Err = templ.JoinStringErrs(email.From.Email)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/mailview.templ`, Line: 937, Col: 78}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/mailview.templ`, Line: 937, Col: 88}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var155))
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 203, "&gt;</span></div><div class=\"text-xs text-ink/40 mt-0.5\">")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 203, "&gt;</span></div><div class=\"text-xs text-muted-foreground mt-0.5\">")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -4003,14 +4003,14 @@ func MailViewSender(email *models.Email) templ.Component {
 				}
 			}
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 209, "</div><div class=\"mail-view-mobile-date text-xs text-ink/40 mt-0.5 tabular-nums\">")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 209, "</div><div class=\"mail-view-mobile-date text-xs text-muted-foreground mt-0.5 tabular-nums\">")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
 		var templ_7745c5c3_Var160 string
 		templ_7745c5c3_Var160, templ_7745c5c3_Err = templ.JoinStringErrs(email.DateFull)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/mailview.templ`, Line: 953, Col: 94}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/mailview.templ`, Line: 953, Col: 104}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var160))
 		if templ_7745c5c3_Err != nil {
@@ -4044,7 +4044,7 @@ func MailViewSender(email *models.Email) templ.Component {
 					}()
 				}
 				ctx = templ.InitializeContext(ctx)
-				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 211, "<button type=\"button\" class=\"shrink-0 size-7 rounded flex items-center justify-center text-ink/30 hover:text-ink/60 hover:bg-ink/5 transition-colors mt-0.5\">")
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 211, "<button type=\"button\" class=\"shrink-0 size-7 rounded flex items-center justify-center text-muted-foreground hover:text-ink hover:bg-ink/5 transition-colors mt-0.5\">")
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
@@ -4110,14 +4110,14 @@ func MailViewSender(email *models.Email) templ.Component {
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
-				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 217, "</div><p id=\"detail-from-email\" class=\"text-xs text-ink/50 truncate\">")
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 217, "</div><p id=\"detail-from-email\" class=\"text-xs text-muted-foreground truncate\">")
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
 				var templ_7745c5c3_Var165 string
 				templ_7745c5c3_Var165, templ_7745c5c3_Err = templ.JoinStringErrs(email.From.Email)
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/mailview.templ`, Line: 977, Col: 88}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/mailview.templ`, Line: 977, Col: 98}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var165))
 				if templ_7745c5c3_Err != nil {
@@ -4128,7 +4128,7 @@ func MailViewSender(email *models.Email) templ.Component {
 					return templ_7745c5c3_Err
 				}
 				if len(email.To) > 0 {
-					templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 219, "<div><span class=\"text-[11px] font-medium text-ink/30 uppercase tracking-wider\">To</span><div class=\"mt-1 space-y-0.5\">")
+					templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 219, "<div><span class=\"text-[11px] font-medium text-muted-foreground uppercase tracking-wider\">To</span><div class=\"mt-1 space-y-0.5\">")
 					if templ_7745c5c3_Err != nil {
 						return templ_7745c5c3_Err
 					}
@@ -4146,14 +4146,14 @@ func MailViewSender(email *models.Email) templ.Component {
 						if templ_7745c5c3_Err != nil {
 							return templ_7745c5c3_Err
 						}
-						templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 221, "</span> <span class=\"text-xs text-ink/35 truncate\">&lt;")
+						templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 221, "</span> <span class=\"text-xs text-muted-foreground truncate\">&lt;")
 						if templ_7745c5c3_Err != nil {
 							return templ_7745c5c3_Err
 						}
 						var templ_7745c5c3_Var167 string
 						templ_7745c5c3_Var167, templ_7745c5c3_Err = templ.JoinStringErrs(c.Email)
 						if templ_7745c5c3_Err != nil {
-							return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/mailview.templ`, Line: 987, Col: 66}
+							return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/mailview.templ`, Line: 987, Col: 76}
 						}
 						_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var167))
 						if templ_7745c5c3_Err != nil {
@@ -4170,7 +4170,7 @@ func MailViewSender(email *models.Email) templ.Component {
 					}
 				}
 				if len(email.CC) > 0 {
-					templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 224, "<div><span class=\"text-[11px] font-medium text-ink/30 uppercase tracking-wider\">Cc</span><div class=\"mt-1 space-y-0.5\">")
+					templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 224, "<div><span class=\"text-[11px] font-medium text-muted-foreground uppercase tracking-wider\">Cc</span><div class=\"mt-1 space-y-0.5\">")
 					if templ_7745c5c3_Err != nil {
 						return templ_7745c5c3_Err
 					}
@@ -4188,14 +4188,14 @@ func MailViewSender(email *models.Email) templ.Component {
 						if templ_7745c5c3_Err != nil {
 							return templ_7745c5c3_Err
 						}
-						templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 226, "</span> <span class=\"text-xs text-ink/35 truncate\">&lt;")
+						templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 226, "</span> <span class=\"text-xs text-muted-foreground truncate\">&lt;")
 						if templ_7745c5c3_Err != nil {
 							return templ_7745c5c3_Err
 						}
 						var templ_7745c5c3_Var169 string
 						templ_7745c5c3_Var169, templ_7745c5c3_Err = templ.JoinStringErrs(c.Email)
 						if templ_7745c5c3_Err != nil {
-							return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/mailview.templ`, Line: 1000, Col: 66}
+							return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/mailview.templ`, Line: 1000, Col: 76}
 						}
 						_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var169))
 						if templ_7745c5c3_Err != nil {
@@ -4212,7 +4212,7 @@ func MailViewSender(email *models.Email) templ.Component {
 					}
 				}
 				if email.DateFull != "" {
-					templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 229, "<div class=\"pt-2 border-t border-ink/6\"><div class=\"flex items-center gap-2 text-xs text-ink/45\">")
+					templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 229, "<div class=\"pt-2 border-t border-ink/6\"><div class=\"flex items-center gap-2 text-xs text-muted-foreground\">")
 					if templ_7745c5c3_Err != nil {
 						return templ_7745c5c3_Err
 					}
@@ -4323,7 +4323,7 @@ func MailViewAttachments(email *models.Email) templ.Component {
 					if templ_7745c5c3_Err != nil {
 						return templ_7745c5c3_Err
 					}
-					templ_7745c5c3_Err = icon.File(icon.Props{Class: "size-4 text-ink/30"}).Render(ctx, templ_7745c5c3_Buffer)
+					templ_7745c5c3_Err = icon.File(icon.Props{Class: "size-4 text-muted-foreground"}).Render(ctx, templ_7745c5c3_Buffer)
 					if templ_7745c5c3_Err != nil {
 						return templ_7745c5c3_Err
 					}
@@ -4340,14 +4340,14 @@ func MailViewAttachments(email *models.Email) templ.Component {
 					if templ_7745c5c3_Err != nil {
 						return templ_7745c5c3_Err
 					}
-					templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 239, "</p><p class=\"text-[11px] text-ink/30\">")
+					templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 239, "</p><p class=\"text-[11px] text-muted-foreground\">")
 					if templ_7745c5c3_Err != nil {
 						return templ_7745c5c3_Err
 					}
 					var templ_7745c5c3_Var174 string
 					templ_7745c5c3_Var174, templ_7745c5c3_Err = templ.JoinStringErrs(humanize.Bytes(uint64(att.SizeBytes)))
 					if templ_7745c5c3_Err != nil {
-						return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/mailview.templ`, Line: 1036, Col: 81}
+						return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/mailview.templ`, Line: 1036, Col: 91}
 					}
 					_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var174))
 					if templ_7745c5c3_Err != nil {
@@ -4399,7 +4399,7 @@ func MailViewAttachments(email *models.Email) templ.Component {
 					templ_7745c5c3_Err = button.Button(button.Props{
 						Variant: button.VariantOutline,
 						Size:    button.SizeSm,
-						Class:   "shrink-0 border-ink/10 text-ink/60 hover:text-ink",
+						Class:   "shrink-0 border-ink/10 text-muted-foreground hover:text-ink",
 					}).Render(templ.WithChildren(ctx, templ_7745c5c3_Var176), templ_7745c5c3_Buffer)
 					if templ_7745c5c3_Err != nil {
 						return templ_7745c5c3_Err
@@ -4490,7 +4490,7 @@ func MailViewBodyByID(emailID string) templ.Component {
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 248, "</div><span class=\"min-w-0 flex-1 text-xs text-ink/60\">Remote content is blocked to protect your privacy</span><div class=\"flex shrink-0 items-center\"><button type=\"button\" data-load-remote=\"")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 248, "</div><span class=\"min-w-0 flex-1 text-xs text-muted-foreground\">Remote content is blocked to protect your privacy</span><div class=\"flex shrink-0 items-center\"><button type=\"button\" data-load-remote=\"")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -4681,7 +4681,7 @@ func MailViewBodyByID(emailID string) templ.Component {
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 261, "\" data-translated=\"false\" class=\"inline-flex h-7 overflow-hidden rounded-md border border-ink/10 bg-background text-xs font-medium text-ink/50 shadow-xs transition-colors hover:border-ink/20 hover:bg-accent hover:text-ink dark:border-input dark:bg-input/30 dark:hover:bg-input/50 data-[translated=true]:border-copper/40 data-[translated=true]:bg-copper/10 data-[translated=true]:text-copper data-[translated=true]:hover:border-copper/50 data-[translated=true]:hover:bg-copper/15\"><button type=\"button\" data-translate-email=\"")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 261, "\" data-translated=\"false\" class=\"inline-flex h-7 overflow-hidden rounded-md border border-ink/10 bg-background text-xs font-medium text-muted-foreground shadow-xs transition-colors hover:border-ink/20 hover:bg-accent hover:text-ink dark:border-input dark:bg-input/30 dark:hover:bg-input/50 data-[translated=true]:border-copper/40 data-[translated=true]:bg-copper/10 data-[translated=true]:text-copper data-[translated=true]:hover:border-copper/50 data-[translated=true]:hover:bg-copper/15\"><button type=\"button\" data-translate-email=\"")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -5088,7 +5088,7 @@ func MailViewReplyBar(email *models.Email) templ.Component {
 		})
 		templ_7745c5c3_Err = button.Button(button.Props{
 			Variant:    button.VariantOutline,
-			Class:      "flex-1 h-9 border-ink/10 text-ink/60 hover:text-ink hover:border-ink/20",
+			Class:      "flex-1 h-9 border-ink/10 text-muted-foreground hover:text-ink hover:border-ink/20",
 			Attributes: templ.Attributes{"data-on-click": onAction("handleReply", actionElement, "reply")},
 		}).Render(templ.WithChildren(ctx, templ_7745c5c3_Var210), templ_7745c5c3_Buffer)
 		if templ_7745c5c3_Err != nil {
@@ -5122,7 +5122,7 @@ func MailViewReplyBar(email *models.Email) templ.Component {
 		})
 		templ_7745c5c3_Err = button.Button(button.Props{
 			Variant:    button.VariantOutline,
-			Class:      "flex-1 h-9 border-ink/10 text-ink/60 hover:text-ink hover:border-ink/20",
+			Class:      "flex-1 h-9 border-ink/10 text-muted-foreground hover:text-ink hover:border-ink/20",
 			Attributes: templ.Attributes{"data-on-click": onAction("handleReply", actionElement, "reply-all")},
 		}).Render(templ.WithChildren(ctx, templ_7745c5c3_Var211), templ_7745c5c3_Buffer)
 		if templ_7745c5c3_Err != nil {
@@ -5156,7 +5156,7 @@ func MailViewReplyBar(email *models.Email) templ.Component {
 		})
 		templ_7745c5c3_Err = button.Button(button.Props{
 			Variant:    button.VariantOutline,
-			Class:      "flex-1 h-9 border-ink/10 text-ink/60 hover:text-ink hover:border-ink/20",
+			Class:      "flex-1 h-9 border-ink/10 text-muted-foreground hover:text-ink hover:border-ink/20",
 			Attributes: templ.Attributes{"data-on-click": onAction("handleReply", actionElement, "forward")},
 		}).Render(templ.WithChildren(ctx, templ_7745c5c3_Var212), templ_7745c5c3_Buffer)
 		if templ_7745c5c3_Err != nil {
@@ -5223,7 +5223,7 @@ func MailViewDraftBar(email *models.Email) templ.Component {
 		})
 		templ_7745c5c3_Err = button.Button(button.Props{
 			Variant:    button.VariantOutline,
-			Class:      "flex-1 h-9 border-ink/10 text-ink/60 hover:text-ink hover:border-ink/20",
+			Class:      "flex-1 h-9 border-ink/10 text-muted-foreground hover:text-ink hover:border-ink/20",
 			Attributes: templ.Attributes{"data-on-click": onAction("continueEditingDraft", email.ID)},
 		}).Render(templ.WithChildren(ctx, templ_7745c5c3_Var214), templ_7745c5c3_Buffer)
 		if templ_7745c5c3_Err != nil {
@@ -5257,7 +5257,7 @@ func MailViewDraftBar(email *models.Email) templ.Component {
 		})
 		templ_7745c5c3_Err = button.Button(button.Props{
 			Variant:    button.VariantOutline,
-			Class:      "flex-1 h-9 border-ink/10 text-ink/60 hover:text-destructive hover:border-destructive/20",
+			Class:      "flex-1 h-9 border-ink/10 text-muted-foreground hover:text-destructive hover:border-destructive/20",
 			Attributes: templ.Attributes{"data-on-click": onAction("discardReadPaneDraft", email.ID)},
 		}).Render(templ.WithChildren(ctx, templ_7745c5c3_Var215), templ_7745c5c3_Buffer)
 		if templ_7745c5c3_Err != nil {

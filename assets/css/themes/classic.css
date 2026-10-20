@@ -9,23 +9,23 @@
   --card-foreground: #2c2418;
   --popover: #efe8dc;
   --popover-foreground: #2c2418;
-  --primary: #c77b30;
+  --primary: #8f4c14;
   --primary-foreground: #ffffff;
   --secondary: #e0d8cc;
   --secondary-foreground: #2c2418;
   --muted: #d8d0c4;
-  --muted-foreground: #7a6f60;
+  --muted-foreground: #594f42;
   --accent: #e8dcc8;
   --accent-foreground: #2c2418;
-  --destructive: #c44040;
-  --success: #7d8358;
-  --border: #c4b9a8;
-  --input: #c4b9a8;
-  --ring: #c77b30;
+  --destructive: #9e2e2b;
+  --success: #555c38;
+  --border: #a8997f;
+  --input: #a8997f;
+  --ring: #8f4c14;
   --sidebar: #3d352a;
   --sidebar-foreground: #c4b89e;
-  --sidebar-primary: #c77b30;
-  --sidebar-primary-foreground: #ffffff;
+  --sidebar-primary: #eaae6a;
+  --sidebar-primary-foreground: #1a1408;
   --sidebar-accent: #4a4034;
   --sidebar-accent-foreground: #e0d4c0;
   --sidebar-border: #544838;
@@ -50,21 +50,21 @@
   --secondary: #252018;
   --secondary-foreground: #e0d4c0;
   --muted: #1e1a14;
-  --muted-foreground: #7a6f60;
+  --muted-foreground: #a89c88;
   --accent: #28221a;
   --accent-foreground: #e0d4c0;
-  --destructive: #e05050;
+  --destructive: #ec6a62;
   --success: #a3a870;
-  --border: #3a3228;
-  --input: #3a3228;
+  --border: #52473a;
+  --input: #52473a;
   --ring: #d49040;
   --sidebar: #12100c;
-  --sidebar-foreground: #8a7e6c;
+  --sidebar-foreground: #a39783;
   --sidebar-primary: #d49040;
   --sidebar-primary-foreground: #1a1408;
   --sidebar-accent: #1e1a14;
   --sidebar-accent-foreground: #d8ccb4;
-  --sidebar-border: #2a241c;
+  --sidebar-border: #3a3228;
   --sidebar-ring: #d49040;
   --paper: #2a2520;
   --paper-foreground: #d8ccb4;
@@ -78,4 +78,23 @@
   box-shadow: 0 2px 6px rgba(0,0,0,0.3), 0 4px 12px rgba(0,0,0,0.2);
 }
 
+/* The active folder's count sits on the dark sidebar, where a faint copper
+   tint left the copper digits too dim to read. */
+[data-theme="classic"]:not(.dark) .bg-sidebar-primary\/20.text-sidebar-primary {
+  background: var(--sidebar-primary);
+  color: var(--sidebar-primary-foreground);
+}
+
 /* Classic materials are the default — defined in input.css */
+
+/* Mail list rows use small type, so their secondary text and dates get a
+   stronger color than the rest of the app. */
+[data-theme="classic"] .mail-list-item {
+  --muted-foreground: #4a4135;
+  --primary: #7f430f;
+}
+
+[data-theme="classic"].dark .mail-list-item {
+  --muted-foreground: #bcb09b;
+  --primary: #d49040;
+}

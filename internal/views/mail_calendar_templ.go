@@ -45,18 +45,18 @@ func MailCalendarFooter(emailID string, events []MailCalendarEventData) templ.Co
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
-				templ_7745c5c3_Err = icon.CalendarDays(icon.Props{Class: "mt-0.5 size-5 shrink-0 text-ink/50"}).Render(ctx, templ_7745c5c3_Buffer)
+				templ_7745c5c3_Err = icon.CalendarDays(icon.Props{Class: "mt-0.5 size-5 shrink-0 text-muted-foreground"}).Render(ctx, templ_7745c5c3_Buffer)
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
-				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 3, "<div class=\"min-w-0 flex-1\"><p class=\"text-[11px] font-medium text-ink/50\">")
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 3, "<div class=\"min-w-0 flex-1\"><p class=\"text-[11px] font-medium text-muted-foreground\">")
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
 				var templ_7745c5c3_Var2 string
 				templ_7745c5c3_Var2, templ_7745c5c3_Err = templ.JoinStringErrs(event.Kind)
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/mail_calendar.templ`, Line: 17, Col: 66}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/mail_calendar.templ`, Line: 17, Col: 76}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var2))
 				if templ_7745c5c3_Err != nil {
@@ -75,20 +75,20 @@ func MailCalendarFooter(emailID string, events []MailCalendarEventData) templ.Co
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
-				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 5, "</h2></div><button type=\"button\" class=\"shrink-0 text-xs text-ink/50 hover:text-ink\" hx-get=\"")
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 5, "</h2></div><button type=\"button\" class=\"shrink-0 text-xs text-muted-foreground hover:text-ink\" hx-get=\"")
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
 				var templ_7745c5c3_Var4 string
 				templ_7745c5c3_Var4, templ_7745c5c3_Err = templ.JoinStringErrs("/api/mail/" + emailID + "/calendar?refresh=1")
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/mail_calendar.templ`, Line: 20, Col: 135}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/mail_calendar.templ`, Line: 20, Col: 145}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var4))
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
-				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 6, "\" hx-target=\"closest [data-mail-calendar-footer]\" hx-swap=\"innerHTML\" hx-sync=\"closest [data-mail-calendar-footer]:replace\" hx-disabled-elt=\"this\" aria-label=\"Refresh event information\">Refresh</button></div><div class=\"space-y-1 text-xs text-ink/60 break-words\">")
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 6, "\" hx-target=\"closest [data-mail-calendar-footer]\" hx-swap=\"innerHTML\" hx-sync=\"closest [data-mail-calendar-footer]:replace\" hx-disabled-elt=\"this\" aria-label=\"Refresh event information\">Refresh</button></div><div class=\"space-y-1 text-xs text-muted-foreground break-words\">")
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
@@ -260,14 +260,14 @@ func MailCalendarFooter(emailID string, events []MailCalendarEventData) templ.Co
 						return templ_7745c5c3_Err
 					}
 					if event.Invitation.Note != "" {
-						templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 26, "<p class=\"text-ink/60\">")
+						templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 26, "<p class=\"text-muted-foreground\">")
 						if templ_7745c5c3_Err != nil {
 							return templ_7745c5c3_Err
 						}
 						var templ_7745c5c3_Var13 string
 						templ_7745c5c3_Var13, templ_7745c5c3_Err = templ.JoinStringErrs(event.Invitation.Note)
 						if templ_7745c5c3_Err != nil {
-							return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/mail_calendar.templ`, Line: 59, Col: 54}
+							return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/mail_calendar.templ`, Line: 59, Col: 64}
 						}
 						_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var13))
 						if templ_7745c5c3_Err != nil {
@@ -336,14 +336,14 @@ func MailCalendarFooter(emailID string, events []MailCalendarEventData) templ.Co
 						return templ_7745c5c3_Err
 					}
 				} else if event.Note != "" {
-					templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 34, "<p class=\"text-xs text-ink/50\">")
+					templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 34, "<p class=\"text-xs text-muted-foreground\">")
 					if templ_7745c5c3_Err != nil {
 						return templ_7745c5c3_Err
 					}
 					var templ_7745c5c3_Var17 string
 					templ_7745c5c3_Var17, templ_7745c5c3_Err = templ.JoinStringErrs(event.Note)
 					if templ_7745c5c3_Err != nil {
-						return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/mail_calendar.templ`, Line: 69, Col: 49}
+						return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/mail_calendar.templ`, Line: 69, Col: 59}
 					}
 					_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var17))
 					if templ_7745c5c3_Err != nil {
@@ -490,7 +490,7 @@ func MailCalendarResponseForm(data CalendarResponseData) templ.Component {
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 47, "</p><button type=\"button\" class=\"text-xs text-ink/60 underline underline-offset-2\" data-mail-calendar-response-edit")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 47, "</p><button type=\"button\" class=\"text-xs text-muted-foreground underline underline-offset-2\" data-mail-calendar-response-edit")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -559,7 +559,7 @@ func MailCalendarResponseForm(data CalendarResponseData) templ.Component {
 			}
 		}
 		if mailCalendarResponseMessage(data.Status) != "" {
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 56, "<button type=\"button\" class=\"text-xs text-ink/60 underline underline-offset-2\" data-mail-calendar-response-cancel")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 56, "<button type=\"button\" class=\"text-xs text-muted-foreground underline underline-offset-2\" data-mail-calendar-response-cancel")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
@@ -635,12 +635,12 @@ func MailCalendarResponseForm(data CalendarResponseData) templ.Component {
 				return templ_7745c5c3_Err
 			}
 		} else if data.Scope == "series" {
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 68, "<p class=\"text-xs text-ink/60\">Your response applies to the entire series.</p>")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 68, "<p class=\"text-xs text-muted-foreground\">Your response applies to the entire series.</p>")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 69, "</div><p class=\"text-xs text-ink/50\" data-calendar-response-progress role=\"status\" aria-live=\"polite\"")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 69, "</div><p class=\"text-xs text-muted-foreground\" data-calendar-response-progress role=\"status\" aria-live=\"polite\"")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -655,14 +655,14 @@ func MailCalendarResponseForm(data CalendarResponseData) templ.Component {
 			return templ_7745c5c3_Err
 		}
 		if !data.Ready {
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 72, "<button type=\"button\" data-calendar-response-load class=\"text-xs text-ink/50 underline underline-offset-2\" hx-get=\"")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 72, "<button type=\"button\" data-calendar-response-load class=\"text-xs text-muted-foreground underline underline-offset-2\" hx-get=\"")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
 			var templ_7745c5c3_Var29 string
 			templ_7745c5c3_Var29, templ_7745c5c3_Err = templ.JoinStringErrs(calendarEventDetailsURL(data.EventID) + "/response?scope=" + data.Scope + "&mail_id=" + data.MailMessageID + mailCalendarResponseEditQuery(data.MailResponseEditing))
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/mail_calendar.templ`, Line: 122, Col: 283}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/mail_calendar.templ`, Line: 122, Col: 293}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var29))
 			if templ_7745c5c3_Err != nil {

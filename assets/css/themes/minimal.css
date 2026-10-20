@@ -4,30 +4,30 @@
   --radius: 0px;
   --background: #ffffff;
   --foreground: #0a0a0a;
-  --card: #f5f5f5;
+  --card: #f2f2f2;
   --card-foreground: #0a0a0a;
-  --popover: #f5f5f5;
+  --popover: #f2f2f2;
   --popover-foreground: #0a0a0a;
   --primary: #0a0a0a;
   --primary-foreground: #ffffff;
-  --secondary: #f0f0f0;
+  --secondary: #ebebeb;
   --secondary-foreground: #0a0a0a;
-  --muted: #f0f0f0;
-  --muted-foreground: #737373;
-  --accent: #f5f5f5;
+  --muted: #ebebeb;
+  --muted-foreground: #5c5c5c;
+  --accent: #eeeeee;
   --accent-foreground: #0a0a0a;
-  --destructive: #dc2626;
+  --destructive: #c81e1e;
   --success: #2f6f4e;
-  --border: #e5e5e5;
-  --input: #e5e5e5;
+  --border: #cccccc;
+  --input: #cccccc;
   --ring: #0a0a0a;
   --sidebar: #fafafa;
-  --sidebar-foreground: #525252;
+  --sidebar-foreground: #4a4a4a;
   --sidebar-primary: #0a0a0a;
   --sidebar-primary-foreground: #ffffff;
-  --sidebar-accent: #f0f0f0;
+  --sidebar-accent: #ebebeb;
   --sidebar-accent-foreground: #0a0a0a;
-  --sidebar-border: #e5e5e5;
+  --sidebar-border: #d9d9d9;
   --sidebar-ring: #0a0a0a;
   --paper: #ffffff;
   --paper-foreground: #0a0a0a;
@@ -47,30 +47,30 @@
 [data-theme="minimal"].dark {
   --background: #0a0a0a;
   --foreground: #fafafa;
-  --card: #141414;
+  --card: #161616;
   --card-foreground: #fafafa;
-  --popover: #141414;
+  --popover: #161616;
   --popover-foreground: #fafafa;
   --primary: #fafafa;
   --primary-foreground: #0a0a0a;
-  --secondary: #1a1a1a;
+  --secondary: #1f1f1f;
   --secondary-foreground: #fafafa;
-  --muted: #1a1a1a;
-  --muted-foreground: #a3a3a3;
-  --accent: #1a1a1a;
+  --muted: #1f1f1f;
+  --muted-foreground: #a8a8a8;
+  --accent: #1f1f1f;
   --accent-foreground: #fafafa;
-  --destructive: #ef4444;
+  --destructive: #f87171;
   --success: #7ba88a;
-  --border: #262626;
-  --input: #262626;
+  --border: #3a3a3a;
+  --input: #3a3a3a;
   --ring: #fafafa;
   --sidebar: #0f0f0f;
   --sidebar-foreground: #a3a3a3;
   --sidebar-primary: #fafafa;
   --sidebar-primary-foreground: #0a0a0a;
-  --sidebar-accent: #1a1a1a;
+  --sidebar-accent: #1f1f1f;
   --sidebar-accent-foreground: #fafafa;
-  --sidebar-border: #262626;
+  --sidebar-border: #2e2e2e;
   --sidebar-ring: #fafafa;
   --paper: #0a0a0a;
   --paper-foreground: #fafafa;
@@ -346,4 +346,14 @@
 
 [data-theme="minimal"] label:has(input[data-mail-filter-input][role="switch"]:checked) > div::after {
   translate: 1rem 0;
+}
+
+/* Mail list rows use small type, so their secondary text gets a stronger
+   color than the rest of the app. */
+[data-theme="minimal"] .mail-list-item {
+  --muted-foreground: #4d4d4d;
+}
+
+[data-theme="minimal"].dark .mail-list-item {
+  --muted-foreground: #bababa;
 }

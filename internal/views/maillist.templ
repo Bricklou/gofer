@@ -450,7 +450,7 @@ templ MailFiltersPopover(accounts []models.Account) {
 												</div>
 											}
 										}
-										<p class="text-[11px] font-normal text-muted-foreground/80">Matches messages sent by or addressed to the selected email across all mail.</p>
+										<p class="text-[11px] font-normal text-muted-foreground">Matches messages sent by or addressed to the selected email across all mail.</p>
 									</label>
 									if len(accounts) > 0 {
 										<label class="space-y-1.5 text-xs font-medium text-muted-foreground">
@@ -854,7 +854,7 @@ templ MailCardLayoutDialog() {
 							<div class="mail-list-card-zone mail-list-card-zone-body" data-mail-card-zone="body" data-mail-card-layout-zone-items="body" data-mail-card-layout-dropzone="body">
 								<p data-mail-card-field="subject" class="truncate text-[13px] font-medium text-foreground">Layout editor review</p>
 								<p data-mail-card-field="to" class="truncate text-[11px] leading-snug text-muted-foreground">
-									<span class="font-medium text-muted-foreground/80">To</span>
+									<span class="font-medium text-muted-foreground">To</span>
 									Team
 								</p>
 							</div>
@@ -930,7 +930,7 @@ templ MailListCardItem(accounts []models.Account, email models.Email, position i
 			</div>
 			<div class="mail-list-card-zone mail-list-card-zone-rail-bottom" data-mail-card-zone="railBottom">
 				if email.ThreadCount > 1 {
-					<button type="button" data-thread-toggle={ email.ID } data-mail-card-field="thread" class="flex items-center gap-0.5 text-[11px] text-muted-foreground shrink-0 hover:text-foreground/70 transition-colors cursor-pointer">
+					<button type="button" data-thread-toggle={ email.ID } data-mail-card-field="thread" class="flex items-center gap-0.5 text-[11px] text-muted-foreground shrink-0 hover:text-foreground transition-colors cursor-pointer">
 						@icon.MessagesSquare(icon.Props{Class: "size-3"})
 						{ fmt.Sprintf("%d", email.ThreadCount) }
 						@icon.ChevronRight(icon.Props{Class: "size-3 transition-transform thread-toggle-chevron"})
@@ -944,7 +944,7 @@ templ MailListCardItem(accounts []models.Account, email models.Email, position i
 					class={
 						"text-sm truncate",
 						templ.KV("font-semibold text-foreground", !email.IsRead),
-						templ.KV("text-foreground/70", email.IsRead),
+						templ.KV("text-muted-foreground", email.IsRead),
 					}
 					data-mail-card-field="from"
 				>
@@ -987,13 +987,13 @@ templ MailListCardItem(accounts []models.Account, email models.Email, position i
 					class={
 						"text-[13px] truncate",
 						templ.KV("font-medium text-foreground", !email.IsRead),
-						templ.KV("text-foreground/60", email.IsRead),
+						templ.KV("text-muted-foreground", email.IsRead),
 					}
 					data-mail-card-field="subject"
 				>{ email.Subject }</p>
 				if len(email.To) > 0 {
 					<p data-mail-card-field="to" class="text-[11px] text-muted-foreground truncate leading-snug">
-						<span class="font-medium text-muted-foreground/80">To</span>
+						<span class="font-medium text-muted-foreground">To</span>
 						{ contactsDisplay(email.To, senderDisplayMode) }
 					</p>
 				}
@@ -1016,7 +1016,7 @@ templ MailListCardItem(accounts []models.Account, email models.Email, position i
 					</button>
 				} else {
 					<button class="opacity-0 group-hover:opacity-100 transition-opacity star-btn shrink-0" data-email-id={ email.ID } data-mail-card-field="starred">
-						@icon.Star(icon.Props{Class: "size-3.5 text-muted-foreground/30"})
+						@icon.Star(icon.Props{Class: "size-3.5 text-muted-foreground/70"})
 					</button>
 				}
 			</div>
@@ -1048,7 +1048,7 @@ templ MailListTableItem(email models.Email, position int, selectedEmail *models.
 					</button>
 				} else {
 					<button class="opacity-0 group-hover:opacity-100 transition-opacity star-btn" data-email-id={ email.ID }>
-						@icon.Star(icon.Props{Class: "size-3.5 text-muted-foreground/30"})
+						@icon.Star(icon.Props{Class: "size-3.5 text-muted-foreground/70"})
 					</button>
 				}
 			</div>
@@ -1059,7 +1059,7 @@ templ MailListTableItem(email models.Email, position int, selectedEmail *models.
 			</div>
 			<div class="flex items-center justify-start min-w-0" data-mail-table-cell="thread">
 				if email.ThreadCount > 1 {
-					<button type="button" data-thread-toggle={ email.ID } class="flex items-center gap-0.5 text-[11px] text-muted-foreground shrink-0 hover:text-foreground/70 transition-colors cursor-pointer">
+					<button type="button" data-thread-toggle={ email.ID } class="flex items-center gap-0.5 text-[11px] text-muted-foreground shrink-0 hover:text-foreground transition-colors cursor-pointer">
 						@icon.MessagesSquare(icon.Props{Class: "size-3"})
 						{ fmt.Sprintf("%d", email.ThreadCount) }
 						@icon.ChevronRight(icon.Props{Class: "size-3 transition-transform thread-toggle-chevron"})
@@ -1071,7 +1071,7 @@ templ MailListTableItem(email models.Email, position int, selectedEmail *models.
 					class={
 						"truncate",
 						templ.KV("font-semibold text-foreground", !email.IsRead),
-						templ.KV("text-foreground/70", email.IsRead),
+						templ.KV("text-muted-foreground", email.IsRead),
 					}
 				>{ senderDisplay(email.From, senderDisplayMode) }</span>
 			</div>
@@ -1079,8 +1079,8 @@ templ MailListTableItem(email models.Email, position int, selectedEmail *models.
 				<span
 					class={
 						"truncate",
-						templ.KV("font-medium text-foreground/80", !email.IsRead),
-						templ.KV("text-foreground/55", email.IsRead),
+						templ.KV("font-medium text-muted-foreground", !email.IsRead),
+						templ.KV("text-muted-foreground", email.IsRead),
 					}
 				>{ contactsDisplay(email.To, senderDisplayMode) }</span>
 			</div>
@@ -1089,7 +1089,7 @@ templ MailListTableItem(email models.Email, position int, selectedEmail *models.
 					class={
 						"truncate",
 						templ.KV("font-medium text-foreground", !email.IsRead),
-						templ.KV("text-foreground/65", email.IsRead),
+						templ.KV("text-muted-foreground", email.IsRead),
 					}
 				>{ email.Subject }</span>
 				if len(email.Labels) > 0 {
@@ -1157,15 +1157,15 @@ templ MailListThreadSubItems(items []models.ThreadItem, senderDisplayMode string
 								class={
 									"text-xs truncate",
 									templ.KV("font-medium text-foreground", !item.IsRead),
-									templ.KV("text-foreground/60", item.IsRead),
+									templ.KV("text-muted-foreground", item.IsRead),
 								}
 								data-mail-table-cell="from"
 							>{ senderDisplay(item.From, senderDisplayMode) }</span>
 							<span
 								class={
 									"text-xs truncate",
-									templ.KV("font-medium text-foreground/75", !item.IsRead),
-									templ.KV("text-foreground/55", item.IsRead),
+									templ.KV("font-medium text-muted-foreground", !item.IsRead),
+									templ.KV("text-muted-foreground", item.IsRead),
 								}
 								data-mail-table-cell="to"
 							>{ contactsDisplay(item.To, senderDisplayMode) }</span>
@@ -1181,7 +1181,7 @@ templ MailListThreadSubItems(items []models.ThreadItem, senderDisplayMode string
 									</button>
 								} else {
 									<button class="opacity-0 group-hover:opacity-100 transition-opacity star-btn" data-email-id={ item.ID }>
-										@icon.Star(icon.Props{Class: "size-3 text-muted-foreground/30"})
+										@icon.Star(icon.Props{Class: "size-3 text-muted-foreground/70"})
 									</button>
 								}
 							</div>

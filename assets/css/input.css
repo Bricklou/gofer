@@ -701,7 +701,7 @@
 
 [data-signature-editor]:empty::before {
   content: attr(data-placeholder);
-  color: color-mix(in srgb, var(--muted-foreground) 70%, transparent);
+  color: var(--muted-foreground);
   font-style: italic;
   pointer-events: none;
 }
@@ -1843,7 +1843,7 @@ html[data-theme="classic"] .mail-list-search-input-wrap {
 
 .mail-card-layout-field-group-items:empty::before {
   content: "None";
-  color: color-mix(in srgb, var(--color-muted-foreground) 62%, transparent);
+  color: var(--color-muted-foreground);
   font-size: 0.6875rem;
   line-height: 1rem;
 }
@@ -4301,7 +4301,7 @@ body.mail-list-column-resizing {
     display: inline-flex;
     align-items: center;
     min-height: 2rem;
-    color: color-mix(in srgb, var(--sidebar-foreground) 75%, transparent);
+    color: var(--sidebar-foreground);
   }
 
   .mobile-topbar[data-mobile-sync="error"] .mobile-topbar-sync {

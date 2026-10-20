@@ -3548,7 +3548,7 @@ window.addEventListener("popstate", function (e) {
       var badge = sidebarLinks[i].querySelector("[data-folder-unread]")
       if (badge) {
         badge.classList.remove("bg-sidebar-primary/20", "text-sidebar-primary")
-        badge.classList.add("bg-sidebar-accent", "text-sidebar-foreground/80")
+        badge.classList.add("bg-sidebar-accent", "text-sidebar-foreground")
       }
     }
     var folderRows = sidebar.querySelectorAll("[data-sidebar-folder-row]")
@@ -3558,7 +3558,7 @@ window.addEventListener("popstate", function (e) {
       var rowBadge = folderRows[r].querySelector("[data-folder-unread]")
       if (rowBadge) {
         rowBadge.classList.remove("bg-sidebar-primary/20", "text-sidebar-primary")
-        rowBadge.classList.add("bg-sidebar-accent", "text-sidebar-foreground/80")
+        rowBadge.classList.add("bg-sidebar-accent", "text-sidebar-foreground")
       }
     }
     var activeLink = null
@@ -3586,7 +3586,7 @@ window.addEventListener("popstate", function (e) {
       }
       var activeBadge = activeLink.querySelector("[data-folder-unread]")
       if (activeBadge) {
-        activeBadge.classList.remove("bg-sidebar-accent", "text-sidebar-foreground/80")
+        activeBadge.classList.remove("bg-sidebar-accent", "text-sidebar-foreground")
         activeBadge.classList.add("bg-sidebar-primary/20", "text-sidebar-primary")
       }
       if (activeLink.hasAttribute("data-sidebar-tag-filter")) {

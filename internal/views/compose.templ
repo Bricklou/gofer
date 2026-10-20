@@ -33,7 +33,7 @@ templ ComposeDialog(accounts []models.Account) {
 				}
 			}
 			<div class="compose-dialog-corner absolute top-4 right-4 flex items-center gap-1">
-				<button type="button" data-on-click='["expandToPane"]' class="hidden lg:inline-flex items-center gap-1.5 text-sm text-muted-foreground/60 hover:text-foreground transition-colors px-3 py-1.5 rounded-md hover:bg-accent" aria-label="Compose inline">
+				<button type="button" data-on-click='["expandToPane"]' class="hidden lg:inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors px-3 py-1.5 rounded-md hover:bg-accent" aria-label="Compose inline">
 					@icon.PanelLeftOpen(icon.Props{Class: "size-3.5"})
 					Compose inline
 				</button>
@@ -162,13 +162,13 @@ templ ComposeCcBccButtons() {
 		<button
 			id="cc-btn"
 			type="button"
-			class="text-[11px] text-muted-foreground/60 hover:text-foreground transition-colors px-1.5 py-0.5 rounded hover:bg-accent"
+			class="text-[11px] text-muted-foreground hover:text-foreground transition-colors px-1.5 py-0.5 rounded hover:bg-accent"
 			data-on-click='["goferShowComposeRecipientField","cc-field","cc-btn"]'
 		>Cc</button>
 		<button
 			id="bcc-btn"
 			type="button"
-			class="text-[11px] text-muted-foreground/60 hover:text-foreground transition-colors px-1.5 py-0.5 rounded hover:bg-accent"
+			class="text-[11px] text-muted-foreground hover:text-foreground transition-colors px-1.5 py-0.5 rounded hover:bg-accent"
 			data-on-click='["goferShowComposeRecipientField","bcc-field","bcc-btn"]'
 		>Bcc</button>
 	</div>
@@ -220,7 +220,7 @@ templ ComposeToolbar() {
 	<div class="flex items-center gap-0.5 border-t border-b py-1 -mx-1" data-compose-toolbar>
 		@tooltip.Tooltip() {
 			@tooltip.Trigger() {
-				<button type="button" class="flex items-center justify-center size-7 rounded text-muted-foreground/60 hover:text-foreground hover:bg-accent transition-colors" data-compose-command="bold" data-on-click='["composeExec","$this","bold"]'>
+				<button type="button" class="flex items-center justify-center size-7 rounded text-muted-foreground hover:text-foreground hover:bg-accent transition-colors" data-compose-command="bold" data-on-click='["composeExec","$this","bold"]'>
 					@icon.Bold(icon.Props{Class: "size-3.5"})
 				</button>
 			}
@@ -233,7 +233,7 @@ templ ComposeToolbar() {
 		}
 		@tooltip.Tooltip() {
 			@tooltip.Trigger() {
-				<button type="button" class="flex items-center justify-center size-7 rounded text-muted-foreground/60 hover:text-foreground hover:bg-accent transition-colors" data-compose-command="italic" data-on-click='["composeExec","$this","italic"]'>
+				<button type="button" class="flex items-center justify-center size-7 rounded text-muted-foreground hover:text-foreground hover:bg-accent transition-colors" data-compose-command="italic" data-on-click='["composeExec","$this","italic"]'>
 					@icon.Italic(icon.Props{Class: "size-3.5"})
 				</button>
 			}
@@ -246,7 +246,7 @@ templ ComposeToolbar() {
 		}
 		@tooltip.Tooltip() {
 			@tooltip.Trigger() {
-				<button type="button" class="flex items-center justify-center size-7 rounded text-muted-foreground/60 hover:text-foreground hover:bg-accent transition-colors" data-compose-command="underline" data-on-click='["composeExec","$this","underline"]'>
+				<button type="button" class="flex items-center justify-center size-7 rounded text-muted-foreground hover:text-foreground hover:bg-accent transition-colors" data-compose-command="underline" data-on-click='["composeExec","$this","underline"]'>
 					@icon.Underline(icon.Props{Class: "size-3.5"})
 				</button>
 			}
@@ -259,7 +259,7 @@ templ ComposeToolbar() {
 		}
 		@tooltip.Tooltip() {
 			@tooltip.Trigger() {
-				<button type="button" class="flex items-center justify-center size-7 rounded text-muted-foreground/60 hover:text-foreground hover:bg-accent transition-colors" data-compose-command="strikeThrough" data-on-click='["composeExec","$this","strikeThrough"]'>
+				<button type="button" class="flex items-center justify-center size-7 rounded text-muted-foreground hover:text-foreground hover:bg-accent transition-colors" data-compose-command="strikeThrough" data-on-click='["composeExec","$this","strikeThrough"]'>
 					@icon.Strikethrough(icon.Props{Class: "size-3.5"})
 				</button>
 			}
@@ -273,7 +273,7 @@ templ ComposeToolbar() {
 		<div class="w-px h-4 bg-border mx-0.5"></div>
 		@tooltip.Tooltip() {
 			@tooltip.Trigger() {
-				<button type="button" class="flex items-center justify-center size-7 rounded text-muted-foreground/60 hover:text-foreground hover:bg-accent transition-colors" data-compose-command="insertUnorderedList" data-on-click='["composeExec","$this","insertUnorderedList"]'>
+				<button type="button" class="flex items-center justify-center size-7 rounded text-muted-foreground hover:text-foreground hover:bg-accent transition-colors" data-compose-command="insertUnorderedList" data-on-click='["composeExec","$this","insertUnorderedList"]'>
 					@icon.List(icon.Props{Class: "size-3.5"})
 				</button>
 			}
@@ -286,7 +286,7 @@ templ ComposeToolbar() {
 		}
 		@tooltip.Tooltip() {
 			@tooltip.Trigger() {
-				<button type="button" class="flex items-center justify-center size-7 rounded text-muted-foreground/60 hover:text-foreground hover:bg-accent transition-colors" data-compose-command="insertOrderedList" data-on-click='["composeExec","$this","insertOrderedList"]'>
+				<button type="button" class="flex items-center justify-center size-7 rounded text-muted-foreground hover:text-foreground hover:bg-accent transition-colors" data-compose-command="insertOrderedList" data-on-click='["composeExec","$this","insertOrderedList"]'>
 					@icon.ListOrdered(icon.Props{Class: "size-3.5"})
 				</button>
 			}
@@ -300,7 +300,7 @@ templ ComposeToolbar() {
 		<div class="w-px h-4 bg-border mx-0.5"></div>
 		@tooltip.Tooltip() {
 			@tooltip.Trigger() {
-				<button type="button" class="flex items-center justify-center size-7 rounded text-muted-foreground/60 hover:text-foreground hover:bg-accent transition-colors" data-on-click='["triggerComposeAttachmentUpload","$this"]' data-compose-toolbar-attach>
+				<button type="button" class="flex items-center justify-center size-7 rounded text-muted-foreground hover:text-foreground hover:bg-accent transition-colors" data-on-click='["triggerComposeAttachmentUpload","$this"]' data-compose-toolbar-attach>
 					@icon.Paperclip(icon.Props{Class: "size-3.5"})
 				</button>
 			}
@@ -313,7 +313,7 @@ templ ComposeToolbar() {
 		}
 		@tooltip.Tooltip() {
 			@tooltip.Trigger() {
-				<button type="button" class="flex items-center justify-center size-7 rounded text-muted-foreground/60 hover:text-foreground hover:bg-accent transition-colors" data-on-click='["triggerComposeInlineImageUpload","$this"]'>
+				<button type="button" class="flex items-center justify-center size-7 rounded text-muted-foreground hover:text-foreground hover:bg-accent transition-colors" data-on-click='["triggerComposeInlineImageUpload","$this"]'>
 					@icon.Image(icon.Props{Class: "size-3.5"})
 				</button>
 			}
@@ -326,7 +326,7 @@ templ ComposeToolbar() {
 		}
 		@tooltip.Tooltip() {
 			@tooltip.Trigger() {
-				<button type="button" class="flex items-center justify-center size-7 rounded text-muted-foreground/60 hover:text-foreground hover:bg-accent transition-colors" data-on-click='["composeCreateLink","$this"]'>
+				<button type="button" class="flex items-center justify-center size-7 rounded text-muted-foreground hover:text-foreground hover:bg-accent transition-colors" data-on-click='["composeCreateLink","$this"]'>
 					@icon.Link(icon.Props{Class: "size-3.5"})
 				</button>
 			}
@@ -339,7 +339,7 @@ templ ComposeToolbar() {
 		}
 		@tooltip.Tooltip() {
 			@tooltip.Trigger() {
-				<button type="button" class="flex items-center justify-center size-7 rounded text-muted-foreground/60 hover:text-foreground hover:bg-accent transition-colors" data-on-click='["showComposeSignaturePicker","$this"]'>
+				<button type="button" class="flex items-center justify-center size-7 rounded text-muted-foreground hover:text-foreground hover:bg-accent transition-colors" data-on-click='["showComposeSignaturePicker","$this"]'>
 					@icon.Signature(icon.Props{Class: "size-3.5"})
 				</button>
 			}
@@ -353,7 +353,7 @@ templ ComposeToolbar() {
 		<div class="w-px h-4 bg-border mx-0.5"></div>
 		@tooltip.Tooltip() {
 			@tooltip.Trigger() {
-				<button type="button" class="flex items-center justify-center size-7 rounded text-muted-foreground/60 hover:text-foreground hover:bg-accent transition-colors" data-on-click='["composeExec","$this","formatBlock","blockquote"]' aria-label="Quote">
+				<button type="button" class="flex items-center justify-center size-7 rounded text-muted-foreground hover:text-foreground hover:bg-accent transition-colors" data-on-click='["composeExec","$this","formatBlock","blockquote"]' aria-label="Quote">
 					@icon.Quote(icon.Props{Class: "size-3.5"})
 				</button>
 			}
@@ -366,7 +366,7 @@ templ ComposeToolbar() {
 		}
 		@tooltip.Tooltip() {
 			@tooltip.Trigger() {
-				<button type="button" class="flex items-center justify-center size-7 rounded text-muted-foreground/60 hover:text-foreground hover:bg-accent transition-colors" data-on-click='["composeExec","$this","formatBlock","pre"]' aria-label="Code block">
+				<button type="button" class="flex items-center justify-center size-7 rounded text-muted-foreground hover:text-foreground hover:bg-accent transition-colors" data-on-click='["composeExec","$this","formatBlock","pre"]' aria-label="Code block">
 					@icon.Code(icon.Props{Class: "size-3.5"})
 				</button>
 			}
@@ -404,7 +404,7 @@ templ ComposeAttachments() {
 	<div class="hidden rounded-md border border-border/60 bg-background/40 p-2" data-compose-attachments>
 		<input type="file" multiple class="hidden" data-compose-attachment-input data-on-change='["uploadComposeAttachments","$files","$this"]'/>
 		<input type="file" accept="image/png,image/jpeg,image/gif,image/webp,image/svg+xml,image/bmp,image/x-icon" class="hidden" data-compose-inline-input data-on-change='["uploadComposeInlineImages","$files","$this"]'/>
-		<div class="mb-2 flex items-center justify-between gap-2 text-[11px] font-medium text-muted-foreground/70" data-compose-attachment-header>
+		<div class="mb-2 flex items-center justify-between gap-2 text-[11px] font-medium text-muted-foreground" data-compose-attachment-header>
 			<span data-compose-attachment-summary>Max 25 MB per file, 35 MB total</span>
 			<button type="button" class="rounded px-1.5 py-0.5 text-muted-foreground hover:bg-accent hover:text-foreground" data-on-click='["toggleComposeAttachments","$this"]' data-compose-attachment-toggle>Hide</button>
 		</div>
@@ -494,7 +494,7 @@ templ ComposeField(label string, name string, placeholder string) {
 		<label class="text-xs text-muted-foreground font-medium w-8 shrink-0">{ label }</label>
 		<input type="hidden" name={ name } data-compose-recipient-value/>
 		<div class="compose-recipient-field relative min-h-9 flex flex-1 items-center gap-1.5 rounded-md border px-2 py-1.5 text-sm" data-compose-recipient-field data-recipient-name={ name } data-on-click='["focusComposeRecipientField","$this"]'>
-			<span class="min-w-24 flex-1 outline-none empty:before:content-[attr(data-placeholder)] empty:before:text-muted-foreground/45" contenteditable="true" role="textbox" data-compose-recipient-input data-placeholder={ placeholder } data-on-keydown='["handleComposeRecipientKeydown","$event"]' data-on-input='["handleComposeRecipientInput","$this"]' data-on-blur='["finalizeComposeRecipientInput","$this"]'></span>
+			<span class="min-w-24 flex-1 outline-none empty:before:content-[attr(data-placeholder)] empty:before:text-muted-foreground" contenteditable="true" role="textbox" data-compose-recipient-input data-placeholder={ placeholder } data-on-keydown='["handleComposeRecipientKeydown","$event"]' data-on-input='["handleComposeRecipientInput","$this"]' data-on-blur='["finalizeComposeRecipientInput","$this"]'></span>
 		</div>
 	</div>
 }
@@ -509,7 +509,7 @@ templ ComposePane(accounts []models.Account) {
 				<div class="flex items-center gap-1" id="compose-pane-size-buttons">
 					@popover.Root(popover.RootProps{ID: "compose-pane-close-choice-popover"}) {
 						@popover.Trigger(popover.TriggerProps{TriggerType: popover.TriggerTypeManual}) {
-							<button type="button" data-on-click='["discardComposePane","$this"]' class="flex items-center justify-center size-8 rounded text-ink/40 hover:text-destructive hover:bg-destructive/5 transition-colors" aria-label="Discard draft" title="Discard draft">
+							<button type="button" data-on-click='["discardComposePane","$this"]' class="flex items-center justify-center size-8 rounded text-muted-foreground hover:text-destructive hover:bg-destructive/5 transition-colors" aria-label="Discard draft" title="Discard draft">
 								@icon.Trash2(icon.Props{Class: "size-4"})
 							</button>
 						}
@@ -526,18 +526,18 @@ templ ComposePane(accounts []models.Account) {
 						}
 					}
 					<span id="pane-btns-normal" class="flex items-center gap-1">
-						<button type="button" data-on-click='["expandComposeFullWidth"]' class="flex items-center justify-center size-8 rounded text-ink/40 hover:text-ink/70 hover:bg-ink/5 transition-colors" title="Full width">
+						<button type="button" data-on-click='["expandComposeFullWidth"]' class="flex items-center justify-center size-8 rounded text-muted-foreground hover:text-ink hover:bg-ink/5 transition-colors" title="Full width">
 							@icon.UnfoldHorizontal(icon.Props{Class: "size-4 compose-pane-size-icon transition-transform"})
 						</button>
-						<button type="button" data-on-click='["collapseToDialog"]' class="flex items-center justify-center size-8 rounded text-ink/40 hover:text-ink/70 hover:bg-ink/5 transition-colors" title="Compose in dialog">
+						<button type="button" data-on-click='["collapseToDialog"]' class="flex items-center justify-center size-8 rounded text-muted-foreground hover:text-ink hover:bg-ink/5 transition-colors" title="Compose in dialog">
 							@icon.SquareArrowOutUpLeft(icon.Props{Class: "size-4"})
 						</button>
 					</span>
 					<span id="pane-btns-full" class="flex items-center gap-1" style="display:none">
-						<button type="button" data-on-click='["collapseComposeFullWidth"]' class="flex items-center justify-center size-8 rounded text-ink/40 hover:text-ink/70 hover:bg-ink/5 transition-colors" title="Normal width">
+						<button type="button" data-on-click='["collapseComposeFullWidth"]' class="flex items-center justify-center size-8 rounded text-muted-foreground hover:text-ink hover:bg-ink/5 transition-colors" title="Normal width">
 							@icon.FoldHorizontal(icon.Props{Class: "size-4 compose-pane-size-icon transition-transform"})
 						</button>
-						<button type="button" data-on-click='["collapseToDialog"]' class="flex items-center justify-center size-8 rounded text-ink/40 hover:text-ink/70 hover:bg-ink/5 transition-colors" title="Compose in dialog">
+						<button type="button" data-on-click='["collapseToDialog"]' class="flex items-center justify-center size-8 rounded text-muted-foreground hover:text-ink hover:bg-ink/5 transition-colors" title="Compose in dialog">
 							@icon.SquareArrowOutUpLeft(icon.Props{Class: "size-4"})
 						</button>
 					</span>
@@ -594,13 +594,13 @@ templ ComposePane(accounts []models.Account) {
 								<button
 									id="pane-cc-btn"
 									type="button"
-									class="text-[11px] text-muted-foreground/60 hover:text-foreground transition-colors px-1.5 py-0.5 rounded hover:bg-accent"
+									class="text-[11px] text-muted-foreground hover:text-foreground transition-colors px-1.5 py-0.5 rounded hover:bg-accent"
 									data-on-click='["goferShowComposeRecipientField","pane-cc-field","pane-cc-btn"]'
 								>Cc</button>
 								<button
 									id="pane-bcc-btn"
 									type="button"
-									class="text-[11px] text-muted-foreground/60 hover:text-foreground transition-colors px-1.5 py-0.5 rounded hover:bg-accent"
+									class="text-[11px] text-muted-foreground hover:text-foreground transition-colors px-1.5 py-0.5 rounded hover:bg-accent"
 									data-on-click='["goferShowComposeRecipientField","pane-bcc-field","pane-bcc-btn"]'
 								>Bcc</button>
 							</div>
@@ -629,7 +629,7 @@ templ ComposePane(accounts []models.Account) {
 						</button>
 					</div>
 						<div class="flex items-center gap-2">
-							@ComposeSchedulePopover(true, "inline-flex items-center gap-1.5 text-sm font-medium px-3 py-1.5 rounded-lg border border-border text-ink/50 hover:text-ink/80 hover:bg-ink/5 transition-colors")
+							@ComposeSchedulePopover(true, "inline-flex items-center gap-1.5 text-sm font-medium px-3 py-1.5 rounded-lg border border-border text-muted-foreground hover:text-ink hover:bg-ink/5 transition-colors")
 							<button type="button"
 								class="btn-skeuo inline-flex items-center gap-1.5 text-sm font-semibold px-4 py-1.5 rounded-lg"
 								id="compose-pane-send-btn"

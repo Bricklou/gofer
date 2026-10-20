@@ -2821,7 +2821,7 @@ templ AccountWizardAddSidebar() {
 	<aside class="rounded-lg border border-border bg-muted/25 p-2 md:min-h-[28rem]">
 		<div class="mb-2 px-2">
 			<div class="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Setup sections</div>
-			<p class="mt-0.5 text-[11px] leading-snug text-muted-foreground/80">Enable/disable the services you need</p>
+			<p class="mt-0.5 text-[11px] leading-snug text-muted-foreground">Enable/disable the services you need</p>
 		</div>
 		@AccountWizardAddEmailSection()
 		@AccountWizardTopStep("wizardGo", 4, "2", "Contacts", "Sync contacts", true, true, "", "contacts", false, false, templ.Attributes{"data-add-contact-sync-switch": ""})
@@ -2833,7 +2833,7 @@ templ AccountWizardEditSidebar(data models.EditAccountData) {
 	<aside class="rounded-lg border border-border bg-muted/25 p-2 md:min-h-[28rem]">
 		<div class="mb-2 px-2">
 			<div class="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Settings sections</div>
-			<p class="mt-0.5 text-[11px] leading-snug text-muted-foreground/80">Enable/disable the services you need</p>
+			<p class="mt-0.5 text-[11px] leading-snug text-muted-foreground">Enable/disable the services you need</p>
 		</div>
 		{{ emailEnabled := data.EmailSyncEnabled || data.ReconnectPending }}
 		if accountEditUsesProviderAPI(data.Provider) {

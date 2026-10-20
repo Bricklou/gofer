@@ -85,9 +85,9 @@ templ CalendarSidebarContent(accounts []models.Account, loading bool) {
 		</div>
 		<hr class="divider-etched mx-4"/>
 		<nav class="flex min-h-0 flex-1 flex-col overflow-y-auto px-3 pt-3 pb-3">
-			<div class="px-2.5 pb-2 text-[10px] font-bold uppercase tracking-[0.16em] text-sidebar-foreground/45">Connected accounts</div>
+			<div class="px-2.5 pb-2 text-[10px] font-bold uppercase tracking-[0.16em] text-sidebar-foreground">Connected accounts</div>
 			if len(configuredAccounts) == 0 {
-				<div class="rounded-md border border-sidebar-border/60 bg-sidebar-accent/20 px-2.5 py-3 text-[11px] leading-relaxed text-sidebar-foreground/55">
+				<div class="rounded-md border border-sidebar-border/60 bg-sidebar-accent/20 px-2.5 py-3 text-[11px] leading-relaxed text-sidebar-foreground">
 					<p>No calendar accounts configured yet.</p>
 					<a href="/settings/accounts" class="mt-2 inline-flex items-center gap-1.5 font-semibold text-sidebar-primary hover:text-sidebar-accent-foreground">
 						Open account setup
@@ -96,16 +96,16 @@ templ CalendarSidebarContent(accounts []models.Account, loading bool) {
 				</div>
 			} else {
 				for _, account := range configuredAccounts {
-					<div class="flex items-center gap-2.5 rounded-md px-2.5 py-2 text-[13px] text-sidebar-foreground/70">
+					<div class="flex items-center gap-2.5 rounded-md px-2.5 py-2 text-[13px] text-sidebar-foreground">
 						<div class="account-color-marker size-2.5 shrink-0" style={ accountColorStyle(account.Color) }></div>
 						<div class="min-w-0 flex-1">
 							<div class="truncate font-medium">{ calendarAccountDisplayName(account) }</div>
-							<div class="truncate text-[11px] text-sidebar-foreground/50">{ calendarAccountProviderLabel(account) } account</div>
+							<div class="truncate text-[11px] text-sidebar-foreground">{ calendarAccountProviderLabel(account) } account</div>
 						</div>
 					</div>
 					<div class="mb-2 space-y-0.5" role="group" aria-label={ "Calendars for " + calendarAccountDisplayName(account) }>
 						for _, source := range account.CalendarSources {
-							<label class="group flex min-h-8 cursor-pointer items-center gap-2.5 rounded-md py-1.5 pl-7 pr-2.5 text-[12px] text-sidebar-foreground/80 transition-colors hover:bg-sidebar-accent/60 has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-sidebar-ring" data-calendar-source-row>
+							<label class="group flex min-h-8 cursor-pointer items-center gap-2.5 rounded-md py-1.5 pl-7 pr-2.5 text-[12px] text-sidebar-foreground transition-colors hover:bg-sidebar-accent/60 has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-sidebar-ring" data-calendar-source-row>
 								<span class="inline-flex shrink-0">
 									@checkbox.Checkbox(checkbox.Props{
 										ID:      "calendar-visible-" + source.ID,
@@ -154,7 +154,7 @@ templ CalendarSourceSyncIndicator(source models.AccountCalendarSource, loading b
 </span>
 			<span data-calendar-source-sync-icon="ok" hidden?={ source.SyncState != "ok" || source.LastSyncedAt == "" } class="text-emerald-600 dark:text-emerald-400">@icon.Check(icon.Props{Class: "size-3"})
 </span>
-			<span data-calendar-source-sync-icon="pending" hidden?={ source.SyncState == "syncing" || source.SyncState == "failed" || (source.SyncState == "ok" && source.LastSyncedAt != "") } class="text-sidebar-foreground/45">@icon.Clock3(icon.Props{Class: "size-3"})
+			<span data-calendar-source-sync-icon="pending" hidden?={ source.SyncState == "syncing" || source.SyncState == "failed" || (source.SyncState == "ok" && source.LastSyncedAt != "") } class="text-sidebar-foreground">@icon.Clock3(icon.Props{Class: "size-3"})
 </span>
 		}
 	</span>
@@ -364,7 +364,7 @@ templ CalendarAgendaPane(month CalendarMonthData) {
 											@CalendarEventResponseIndicator(event, false)
 										</div>
 										if calendarEventMeta(event) != "" {
-											<p class="mt-1 truncate text-[11px] text-muted-foreground/75">{ calendarEventMeta(event) }</p>
+											<p class="mt-1 truncate text-[11px] text-muted-foreground">{ calendarEventMeta(event) }</p>
 										}
 									</div>
 								</div>

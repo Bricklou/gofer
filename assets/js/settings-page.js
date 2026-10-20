@@ -373,7 +373,7 @@
     var existing = zone.querySelector('.sync-empty-state');
     if (pills.length === 0 && !existing) {
       var el = document.createElement('span');
-      el.className = 'sync-empty-state inline-flex items-center px-2.5 rounded-md border border-dashed border-border text-[11px] text-muted-foreground/50';
+      el.className = 'sync-empty-state inline-flex items-center px-2.5 rounded-md border border-dashed border-border text-[11px] text-muted-foreground';
       el.style.height = '26px';
       el.textContent = 'None selected';
       zone.appendChild(el);

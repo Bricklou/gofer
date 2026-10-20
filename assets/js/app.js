@@ -677,7 +677,7 @@ document.addEventListener("DOMContentLoaded", function () {
         }
         if (status) {
           status.textContent = "New picture ready"
-          status.classList.remove("hidden", "text-ink/45")
+          status.classList.remove("hidden", "text-muted-foreground")
           status.classList.add("text-emerald-700")
         }
         if (chooseLabel) chooseLabel.textContent = "Replace"
@@ -692,7 +692,7 @@ document.addEventListener("DOMContentLoaded", function () {
           status.textContent = "Picture will be removed"
           status.classList.remove("hidden")
           status.classList.remove("text-emerald-700")
-          status.classList.add("text-ink/45")
+          status.classList.add("text-muted-foreground")
         }
         if (chooseLabel) chooseLabel.textContent = "Choose image"
       }
@@ -875,7 +875,7 @@ document.addEventListener("DOMContentLoaded", function () {
           label.classList.toggle("dark:text-emerald-300", enabled)
           label.classList.toggle("border-ink/10", !enabled)
           label.classList.toggle("bg-ink/[0.03]", !enabled)
-          label.classList.toggle("text-ink/35", !enabled)
+          label.classList.toggle("text-muted-foreground", !enabled)
         }
         return
       }
@@ -5563,7 +5563,7 @@ document.addEventListener("DOMContentLoaded", function () {
               if (span) {
                 var badge = document.createElement("span")
                 badge.dataset.folderUnread = id
-                badge.className = "min-w-5 h-5 px-1.5 flex items-center justify-center rounded-full text-[11px] font-semibold tabular-nums bg-sidebar-accent text-sidebar-foreground/80"
+                badge.className = "min-w-5 h-5 px-1.5 flex items-center justify-center rounded-full text-[11px] font-semibold tabular-nums bg-sidebar-accent text-sidebar-foreground"
                 badge.textContent = String(counts[id])
                 link.appendChild(badge)
               }
@@ -5652,7 +5652,7 @@ document.addEventListener("DOMContentLoaded", function () {
         var badge = sidebarLinks[i].querySelector("[data-folder-unread]")
         if (badge) {
           badge.classList.remove("bg-sidebar-primary/20", "text-sidebar-primary")
-          badge.classList.add("bg-sidebar-accent", "text-sidebar-foreground/80")
+          badge.classList.add("bg-sidebar-accent", "text-sidebar-foreground")
         }
       }
       var folderRows = sidebar.querySelectorAll("[data-sidebar-folder-row]")
@@ -5662,7 +5662,7 @@ document.addEventListener("DOMContentLoaded", function () {
         var rowBadge = folderRows[r].querySelector("[data-folder-unread]")
         if (rowBadge) {
           rowBadge.classList.remove("bg-sidebar-primary/20", "text-sidebar-primary")
-          rowBadge.classList.add("bg-sidebar-accent", "text-sidebar-foreground/80")
+          rowBadge.classList.add("bg-sidebar-accent", "text-sidebar-foreground")
         }
       }
     }
@@ -5814,7 +5814,7 @@ document.addEventListener("DOMContentLoaded", function () {
       }
       var activeBadge = link.querySelector("[data-folder-unread]")
       if (activeBadge) {
-        activeBadge.classList.remove("bg-sidebar-accent", "text-sidebar-foreground/80")
+        activeBadge.classList.remove("bg-sidebar-accent", "text-sidebar-foreground")
         activeBadge.classList.add("bg-sidebar-primary/20", "text-sidebar-primary")
       }
 
@@ -6451,7 +6451,7 @@ document.addEventListener("DOMContentLoaded", function () {
 
   function readPanePendingHTML(mode) {
     var label = mode === "contacts" ? "Loading contacts..." : "Loading message..."
-    return '<div class="flex flex-col h-full p-2"><div class="surface-paper rounded-md flex flex-col h-full overflow-hidden"><div class="flex items-center justify-between px-6 py-2.5"><div class="flex items-center gap-1"><div class="size-8 rounded-md bg-ink/[0.03] border border-ink/6"></div><div class="size-8 rounded-md bg-ink/[0.03] border border-ink/6"></div></div><div class="h-4 w-20 rounded bg-ink/5 animate-pulse"></div></div><div class="h-px bg-gradient-to-r from-transparent via-amber-900/10 to-transparent"></div><div class="flex-1 overflow-y-auto"><div class="mx-auto px-8 py-6"><div class="flex items-center gap-2 text-sm text-ink/45"><div class="size-4 border-2 border-ink/15 border-t-ink/45 rounded-full animate-spin"></div><span>' + label + '</span></div><div class="space-y-3 mt-5"><div class="h-4 w-full rounded bg-ink/5 animate-pulse"></div><div class="h-4 w-11/12 rounded bg-ink/5 animate-pulse"></div><div class="h-4 w-4/5 rounded bg-ink/5 animate-pulse"></div></div></div></div></div></div>'
+    return '<div class="flex flex-col h-full p-2"><div class="surface-paper rounded-md flex flex-col h-full overflow-hidden"><div class="flex items-center justify-between px-6 py-2.5"><div class="flex items-center gap-1"><div class="size-8 rounded-md bg-ink/[0.03] border border-ink/6"></div><div class="size-8 rounded-md bg-ink/[0.03] border border-ink/6"></div></div><div class="h-4 w-20 rounded bg-ink/5 animate-pulse"></div></div><div class="h-px bg-gradient-to-r from-transparent via-amber-900/10 to-transparent"></div><div class="flex-1 overflow-y-auto"><div class="mx-auto px-8 py-6"><div class="flex items-center gap-2 text-sm text-muted-foreground"><div class="size-4 border-2 border-ink/15 border-t-ink/45 rounded-full animate-spin"></div><span>' + label + '</span></div><div class="space-y-3 mt-5"><div class="h-4 w-full rounded bg-ink/5 animate-pulse"></div><div class="h-4 w-11/12 rounded bg-ink/5 animate-pulse"></div><div class="h-4 w-4/5 rounded bg-ink/5 animate-pulse"></div></div></div></div></div></div>'
   }
 
   // Small screens move between Mail, Contacts and Calendar with one transition: the
@@ -6789,7 +6789,7 @@ document.addEventListener("DOMContentLoaded", function () {
 
   function contactDetailSkeletonField(label, widthClass, className) {
     return '<div class="min-w-0 border-b border-ink/10 py-3 last:border-b-0 lg:[&:nth-last-child(-n+2)]:border-b-0 xl:last:border-b-0 ' + (className || "") + '">' +
-      '<div class="text-[10px] font-semibold uppercase tracking-wider text-ink/35">' + label + '</div>' +
+      '<div class="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">' + label + '</div>' +
       '<div class="mt-1 flex min-h-5 items-center">' +
         '<div class="h-3 ' + widthClass + ' max-w-full rounded bg-ink/5 animate-pulse"></div>' +
       '</div>' +
@@ -6797,9 +6797,9 @@ document.addEventListener("DOMContentLoaded", function () {
   }
 
   function contactDetailSkeletonSectionHeader(label) {
-    return '<div class="flex items-center gap-2 border-b border-ink/10 px-4 py-3 text-ink/40">' +
+    return '<div class="flex items-center gap-2 border-b border-ink/10 px-4 py-3 text-muted-foreground">' +
       pendingIcon("size-3.5") +
-      '<h2 class="text-xs font-semibold uppercase tracking-wider text-ink/45">' + label + '</h2>' +
+      '<h2 class="text-xs font-semibold uppercase tracking-wider text-muted-foreground">' + label + '</h2>' +
     '</div>'
   }
 
@@ -6820,11 +6820,11 @@ document.addEventListener("DOMContentLoaded", function () {
     return '<div class="w-full rounded-lg border border-ink/10 bg-ink/[0.025] p-4">' +
       '<div class="mb-3 flex items-center justify-between gap-3">' +
         '<div>' +
-          '<h2 class="text-xs font-semibold uppercase tracking-wider text-ink/45">Recent activity</h2>' +
-          '<p class="mt-1 text-xs text-ink/35">Latest emails involving this contact.</p>' +
+          '<h2 class="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Recent activity</h2>' +
+          '<p class="mt-1 text-xs text-muted-foreground">Latest emails involving this contact.</p>' +
         '</div>' +
         '<div class="flex shrink-0 items-center gap-2">' +
-          '<span class="rounded bg-ink/[0.05] px-2 py-1 text-[10px] font-semibold uppercase tracking-wider text-ink/40">Top 10</span>' +
+          '<span class="rounded bg-ink/[0.05] px-2 py-1 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Top 10</span>' +
           '<div class="h-7 w-16 rounded-md border border-ink/10 bg-paper/45"></div>' +
         '</div>' +
       '</div>' +
@@ -6852,7 +6852,7 @@ document.addEventListener("DOMContentLoaded", function () {
               avatarHTML +
               '<div class="min-w-0 pt-0.5">' +
                 '<h1 class="min-w-0 truncate text-2xl font-bold leading-tight tracking-tight text-ink" style="font-family: var(--font-serif)">' + name + '</h1>' +
-                '<div class="mt-1 text-sm text-ink/45">Contact entry</div>' +
+                '<div class="mt-1 text-sm text-muted-foreground">Contact entry</div>' +
               '</div>' +
             '</div>' +
             '<div class="flex flex-wrap items-center gap-2 xl:justify-end" aria-hidden="true">' +
@@ -6880,9 +6880,9 @@ document.addEventListener("DOMContentLoaded", function () {
             '</section>' +
             '<section class="rounded-lg border border-ink/10 bg-ink/[0.02]">' +
               '<div class="flex flex-wrap items-center justify-between gap-3 border-b border-ink/10 px-4 py-3">' +
-                '<div class="flex flex-wrap items-center gap-2 text-ink/40">' +
+                '<div class="flex flex-wrap items-center gap-2 text-muted-foreground">' +
                   pendingIcon("size-3.5") +
-                  '<h2 class="text-xs font-semibold uppercase tracking-wider text-ink/55">Gofer Sync</h2>' +
+                  '<h2 class="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Gofer Sync</h2>' +
                   '<div class="h-6 w-16 rounded-md border border-ink/10 bg-ink/[0.03] animate-pulse"></div>' +
                 '</div>' +
                 '<div class="h-7 w-24 rounded-md border border-ink/10 bg-ink/[0.025] animate-pulse"></div>' +
@@ -6957,15 +6957,15 @@ document.addEventListener("DOMContentLoaded", function () {
         '<div class="surface-paper rounded-md flex flex-col h-full overflow-hidden">' +
           '<div class="mail-view-toolbar flex items-center justify-between px-6 py-2.5">' +
             '<div class="mail-view-actions flex items-center gap-1 min-w-0">' +
-              '<button type="button" class="mobile-back-button h-9 w-9 shrink-0 items-center justify-center rounded-md text-ink/60 hover:bg-ink/5" data-on-click=\'["closeMobileMailView"]\' aria-label="Back to list">' + mailViewSkeletonIcon("arrow-left", "size-5") + '</button>' +
+              '<button type="button" class="mobile-back-button h-9 w-9 shrink-0 items-center justify-center rounded-md text-muted-foreground hover:bg-ink/5" data-on-click=\'["closeMobileMailView"]\' aria-label="Back to list">' + mailViewSkeletonIcon("arrow-left", "size-5") + '</button>' +
               mailViewSkeletonToolbarButton("archive") +
               mailViewSkeletonToolbarButton("trash-2") +
               '<div>' + mailViewSkeletonToolbarButton("shield-alert").replace('<button ', '<button data-mail-action="spam" ') + '</div>' +
-              mailViewSkeletonToolbarButton("star", "size-4 text-ink/30") +
+              mailViewSkeletonToolbarButton("star", "size-4 text-muted-foreground") +
               mailViewSkeletonToolbarButton("mail") +
             '</div>' +
             '<div class="mail-view-meta flex items-center gap-2">' +
-              (time ? '<span class="mail-view-date text-xs text-ink/40 tabular-nums">' + time + '</span>' : '<span class="mail-view-date h-3 w-32 rounded bg-ink/5 animate-pulse"></span>') +
+              (time ? '<span class="mail-view-date text-xs text-muted-foreground tabular-nums">' + time + '</span>' : '<span class="mail-view-date h-3 w-32 rounded bg-ink/5 animate-pulse"></span>') +
               mailViewSkeletonToolbarButton("ellipsis-vertical") +
             '</div>' +
           '</div>' +
@@ -8298,7 +8298,7 @@ function updateSettingsAccountSyncError(data) {
 
 function mailSyncErrorSummaryHTML(issues) {
   if (!issues.length) {
-    return '<div class="text-xs text-sidebar-foreground/70">No current mail sync issues.</div>'
+    return '<div class="text-xs text-sidebar-foreground">No current mail sync issues.</div>'
   }
   var html = '<div class="font-semibold">Mail sync issues</div><div class="space-y-2">'
   for (var i = 0; i < issues.length; i++) {
@@ -15868,7 +15868,7 @@ function setStarButtonIcon(button, starred) {
   if (starred) {
     svg.setAttribute('class', size + ' text-amber-500 fill-amber-500 drop-shadow-[0_1px_1px_rgba(180,120,0,0.3)]')
   } else {
-    svg.setAttribute('class', size + ' text-ink/30')
+    svg.setAttribute('class', size + ' text-muted-foreground')
   }
 }
 
@@ -16691,13 +16691,13 @@ function showEmailBodyError(failure) {
     failure.kind === "large" ? "Large message" :
     failure.kind === "oversize" ? "Message too large" : "Couldn't load this message"
   var message = document.createElement("p")
-  message.className = "mt-1 text-xs leading-relaxed text-ink/60"
+  message.className = "mt-1 text-xs leading-relaxed text-muted-foreground"
   message.textContent = failure.message || ""
   card.appendChild(title)
   card.appendChild(message)
   if (failure.detail) {
     var detail = document.createElement("p")
-    detail.className = "mt-1 break-words text-xs leading-relaxed text-ink/45"
+    detail.className = "mt-1 break-words text-xs leading-relaxed text-muted-foreground"
     detail.textContent = failure.detail
     card.appendChild(detail)
   }

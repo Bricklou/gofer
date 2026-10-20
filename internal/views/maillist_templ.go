@@ -1997,7 +1997,7 @@ func MailFiltersPopover(accounts []models.Account) templ.Component {
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
-				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 111, "<p class=\"text-[11px] font-normal text-muted-foreground/80\">Matches messages sent by or addressed to the selected email across all mail.</p></label> ")
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 111, "<p class=\"text-[11px] font-normal text-muted-foreground\">Matches messages sent by or addressed to the selected email across all mail.</p></label> ")
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
@@ -3727,7 +3727,7 @@ func MailCardLayoutDialog() templ.Component {
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
-				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 214, "</span> <span data-mail-card-field=\"unread\" class=\"inline-flex size-4 shrink-0 items-center justify-center\"><span class=\"size-2 rounded-full bg-primary shadow-[0_0_6px_rgba(199,123,48,0.4)]\"></span></span></div><div class=\"mail-list-card-zone mail-list-card-zone-body\" data-mail-card-zone=\"body\" data-mail-card-layout-zone-items=\"body\" data-mail-card-layout-dropzone=\"body\"><p data-mail-card-field=\"subject\" class=\"truncate text-[13px] font-medium text-foreground\">Layout editor review</p><p data-mail-card-field=\"to\" class=\"truncate text-[11px] leading-snug text-muted-foreground\"><span class=\"font-medium text-muted-foreground/80\">To</span> Team</p></div><div class=\"mail-list-card-zone mail-list-card-zone-footer\" data-mail-card-zone=\"footer\" data-mail-card-layout-zone-items=\"footer\" data-mail-card-layout-dropzone=\"footer\"><p data-mail-card-field=\"preview\" class=\"min-w-0 flex-1 truncate text-xs leading-relaxed text-muted-foreground\">Preview text stays attached to the selected card section.</p><span data-mail-card-field=\"labels\" class=\"shrink-0 rounded bg-primary/10 px-1.5 py-0.5 text-[10px] font-medium text-primary shadow-[0_1px_2px_rgba(0,0,0,0.08)]\">Design</span></div><div class=\"mail-list-card-zone mail-list-card-zone-status\" data-mail-card-zone=\"status\" data-mail-card-layout-zone-items=\"status\" data-mail-card-layout-dropzone=\"status\"></div><div class=\"mail-list-card-zone mail-list-card-zone-corner\" data-mail-card-zone=\"corner\" data-mail-card-layout-zone-items=\"corner\" data-mail-card-layout-dropzone=\"corner\"><span data-mail-card-field=\"starred\">")
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 214, "</span> <span data-mail-card-field=\"unread\" class=\"inline-flex size-4 shrink-0 items-center justify-center\"><span class=\"size-2 rounded-full bg-primary shadow-[0_0_6px_rgba(199,123,48,0.4)]\"></span></span></div><div class=\"mail-list-card-zone mail-list-card-zone-body\" data-mail-card-zone=\"body\" data-mail-card-layout-zone-items=\"body\" data-mail-card-layout-dropzone=\"body\"><p data-mail-card-field=\"subject\" class=\"truncate text-[13px] font-medium text-foreground\">Layout editor review</p><p data-mail-card-field=\"to\" class=\"truncate text-[11px] leading-snug text-muted-foreground\"><span class=\"font-medium text-muted-foreground\">To</span> Team</p></div><div class=\"mail-list-card-zone mail-list-card-zone-footer\" data-mail-card-zone=\"footer\" data-mail-card-layout-zone-items=\"footer\" data-mail-card-layout-dropzone=\"footer\"><p data-mail-card-field=\"preview\" class=\"min-w-0 flex-1 truncate text-xs leading-relaxed text-muted-foreground\">Preview text stays attached to the selected card section.</p><span data-mail-card-field=\"labels\" class=\"shrink-0 rounded bg-primary/10 px-1.5 py-0.5 text-[10px] font-medium text-primary shadow-[0_1px_2px_rgba(0,0,0,0.08)]\">Design</span></div><div class=\"mail-list-card-zone mail-list-card-zone-status\" data-mail-card-zone=\"status\" data-mail-card-layout-zone-items=\"status\" data-mail-card-layout-dropzone=\"status\"></div><div class=\"mail-list-card-zone mail-list-card-zone-corner\" data-mail-card-zone=\"corner\" data-mail-card-layout-zone-items=\"corner\" data-mail-card-layout-dropzone=\"corner\"><span data-mail-card-field=\"starred\">")
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
@@ -4093,7 +4093,7 @@ func MailListCardItem(accounts []models.Account, email models.Email, position in
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 237, "\" data-mail-card-field=\"thread\" class=\"flex items-center gap-0.5 text-[11px] text-muted-foreground shrink-0 hover:text-foreground/70 transition-colors cursor-pointer\">")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 237, "\" data-mail-card-field=\"thread\" class=\"flex items-center gap-0.5 text-[11px] text-muted-foreground shrink-0 hover:text-foreground transition-colors cursor-pointer\">")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
@@ -4130,7 +4130,7 @@ func MailListCardItem(accounts []models.Account, email models.Email, position in
 		}
 		var templ_7745c5c3_Var170 = []any{"text-sm truncate",
 			templ.KV("font-semibold text-foreground", !email.IsRead),
-			templ.KV("text-foreground/70", email.IsRead),
+			templ.KV("text-muted-foreground", email.IsRead),
 		}
 		templ_7745c5c3_Err = templ.RenderCSSItems(ctx, templ_7745c5c3_Buffer, templ_7745c5c3_Var170...)
 		if templ_7745c5c3_Err != nil {
@@ -4289,7 +4289,7 @@ func MailListCardItem(accounts []models.Account, email models.Email, position in
 		}
 		var templ_7745c5c3_Var179 = []any{"text-[13px] truncate",
 			templ.KV("font-medium text-foreground", !email.IsRead),
-			templ.KV("text-foreground/60", email.IsRead),
+			templ.KV("text-muted-foreground", email.IsRead),
 		}
 		templ_7745c5c3_Err = templ.RenderCSSItems(ctx, templ_7745c5c3_Buffer, templ_7745c5c3_Var179...)
 		if templ_7745c5c3_Err != nil {
@@ -4326,7 +4326,7 @@ func MailListCardItem(accounts []models.Account, email models.Email, position in
 			return templ_7745c5c3_Err
 		}
 		if len(email.To) > 0 {
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 261, "<p data-mail-card-field=\"to\" class=\"text-[11px] text-muted-foreground truncate leading-snug\"><span class=\"font-medium text-muted-foreground/80\">To</span> ")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 261, "<p data-mail-card-field=\"to\" class=\"text-[11px] text-muted-foreground truncate leading-snug\"><span class=\"font-medium text-muted-foreground\">To</span> ")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
@@ -4448,7 +4448,7 @@ func MailListCardItem(accounts []models.Account, email models.Email, position in
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			templ_7745c5c3_Err = icon.Star(icon.Props{Class: "size-3.5 text-muted-foreground/30"}).Render(ctx, templ_7745c5c3_Buffer)
+			templ_7745c5c3_Err = icon.Star(icon.Props{Class: "size-3.5 text-muted-foreground/70"}).Render(ctx, templ_7745c5c3_Buffer)
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
@@ -4689,7 +4689,7 @@ func MailListTableItem(email models.Email, position int, selectedEmail *models.E
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			templ_7745c5c3_Err = icon.Star(icon.Props{Class: "size-3.5 text-muted-foreground/30"}).Render(ctx, templ_7745c5c3_Buffer)
+			templ_7745c5c3_Err = icon.Star(icon.Props{Class: "size-3.5 text-muted-foreground/70"}).Render(ctx, templ_7745c5c3_Buffer)
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
@@ -4726,7 +4726,7 @@ func MailListTableItem(email models.Email, position int, selectedEmail *models.E
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 298, "\" class=\"flex items-center gap-0.5 text-[11px] text-muted-foreground shrink-0 hover:text-foreground/70 transition-colors cursor-pointer\">")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 298, "\" class=\"flex items-center gap-0.5 text-[11px] text-muted-foreground shrink-0 hover:text-foreground transition-colors cursor-pointer\">")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
@@ -4758,7 +4758,7 @@ func MailListTableItem(email models.Email, position int, selectedEmail *models.E
 		}
 		var templ_7745c5c3_Var206 = []any{"truncate",
 			templ.KV("font-semibold text-foreground", !email.IsRead),
-			templ.KV("text-foreground/70", email.IsRead),
+			templ.KV("text-muted-foreground", email.IsRead),
 		}
 		templ_7745c5c3_Err = templ.RenderCSSItems(ctx, templ_7745c5c3_Buffer, templ_7745c5c3_Var206...)
 		if templ_7745c5c3_Err != nil {
@@ -4795,8 +4795,8 @@ func MailListTableItem(email models.Email, position int, selectedEmail *models.E
 			return templ_7745c5c3_Err
 		}
 		var templ_7745c5c3_Var209 = []any{"truncate",
-			templ.KV("font-medium text-foreground/80", !email.IsRead),
-			templ.KV("text-foreground/55", email.IsRead),
+			templ.KV("font-medium text-muted-foreground", !email.IsRead),
+			templ.KV("text-muted-foreground", email.IsRead),
 		}
 		templ_7745c5c3_Err = templ.RenderCSSItems(ctx, templ_7745c5c3_Buffer, templ_7745c5c3_Var209...)
 		if templ_7745c5c3_Err != nil {
@@ -4834,7 +4834,7 @@ func MailListTableItem(email models.Email, position int, selectedEmail *models.E
 		}
 		var templ_7745c5c3_Var212 = []any{"truncate",
 			templ.KV("font-medium text-foreground", !email.IsRead),
-			templ.KV("text-foreground/65", email.IsRead),
+			templ.KV("text-muted-foreground", email.IsRead),
 		}
 		templ_7745c5c3_Err = templ.RenderCSSItems(ctx, templ_7745c5c3_Buffer, templ_7745c5c3_Var212...)
 		if templ_7745c5c3_Err != nil {
@@ -5224,7 +5224,7 @@ func MailListThreadSubItems(items []models.ThreadItem, senderDisplayMode string)
 			}
 			var templ_7745c5c3_Var236 = []any{"text-xs truncate",
 				templ.KV("font-medium text-foreground", !item.IsRead),
-				templ.KV("text-foreground/60", item.IsRead),
+				templ.KV("text-muted-foreground", item.IsRead),
 			}
 			templ_7745c5c3_Err = templ.RenderCSSItems(ctx, templ_7745c5c3_Buffer, templ_7745c5c3_Var236...)
 			if templ_7745c5c3_Err != nil {
@@ -5261,8 +5261,8 @@ func MailListThreadSubItems(items []models.ThreadItem, senderDisplayMode string)
 				return templ_7745c5c3_Err
 			}
 			var templ_7745c5c3_Var239 = []any{"text-xs truncate",
-				templ.KV("font-medium text-foreground/75", !item.IsRead),
-				templ.KV("text-foreground/55", item.IsRead),
+				templ.KV("font-medium text-muted-foreground", !item.IsRead),
+				templ.KV("text-muted-foreground", item.IsRead),
 			}
 			templ_7745c5c3_Err = templ.RenderCSSItems(ctx, templ_7745c5c3_Buffer, templ_7745c5c3_Var239...)
 			if templ_7745c5c3_Err != nil {
@@ -5352,7 +5352,7 @@ func MailListThreadSubItems(items []models.ThreadItem, senderDisplayMode string)
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
-				templ_7745c5c3_Err = icon.Star(icon.Props{Class: "size-3 text-muted-foreground/30"}).Render(ctx, templ_7745c5c3_Buffer)
+				templ_7745c5c3_Err = icon.Star(icon.Props{Class: "size-3 text-muted-foreground/70"}).Render(ctx, templ_7745c5c3_Buffer)
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
