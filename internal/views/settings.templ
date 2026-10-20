@@ -2,6 +2,7 @@ package views
 
 import (
 	"fmt"
+	"github.com/cristianadrielbraun/gofer/internal/buildinfo"
 	"github.com/cristianadrielbraun/gofer/internal/models"
 	"github.com/cristianadrielbraun/gofer/internal/providers"
 	"slices"
@@ -46,6 +47,8 @@ templ SettingsPage(accounts []models.Account, syncSettings models.SyncSettings, 
 					@SettingsAdvancedTab(uiSettings)
 				} else if activeTab == "export-import" {
 					@SettingsExportImportTab()
+				} else if activeTab == "about" {
+					@SettingsAboutTab(buildinfo.Get())
 				}
 			</div>
 		</div>
@@ -76,6 +79,8 @@ func settingsSectionHeading(section string) (string, string) {
 			return "Advanced", "Configure prefetching, notifications, and email link handling."
 		case "export-import":
 			return "Export and import", "Move your Gofer profile to another installation, and your mail in and out of your accounts."
+		case "about":
+			return "About", "Which version of Gofer is running, and where it comes from."
 		default:
 			return "Settings", "Manage your accounts and preferences."
 	}

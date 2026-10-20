@@ -275,6 +275,7 @@ templ SettingsSidebar(activeTab string, width string) {
 			@SettingsSidebarItem(activeTab, "security", "Security")
 			@SettingsSidebarItem(activeTab, "advanced", "Advanced")
 			@SettingsSidebarItem(activeTab, "export-import", "Export and import")
+			@SettingsSidebarItem(activeTab, "about", "About")
 		</nav>
 		<div class="shrink-0 px-4 pb-3">
 			@WebmailSidebarLogout()
@@ -328,6 +329,8 @@ templ SettingsSidebarItemIcon(value string) {
 			@icon.SlidersHorizontal(icon.Props{Class: "size-4"})
 		case "export-import":
 			@icon.ArchiveRestore(icon.Props{Class: "size-4"})
+		case "about":
+			@icon.Info(icon.Props{Class: "size-4"})
 		default:
 			@icon.Settings(icon.Props{Class: "size-4"})
 	}

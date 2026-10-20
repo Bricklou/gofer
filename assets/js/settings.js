@@ -1033,6 +1033,7 @@ var settingsTabs = [
   "security",
   "advanced",
   "export-import",
+  "about",
 ]
 
 function normalizeSettingsTab(tab) {

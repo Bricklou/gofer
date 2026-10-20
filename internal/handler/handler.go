@@ -3363,7 +3363,7 @@ func (h *Handler) handleSettings(w http.ResponseWriter, r *http.Request) {
 
 func (h *Handler) handleSettingsTab(w http.ResponseWriter, r *http.Request) {
 	tab := r.PathValue("tab")
-	if tab != "accounts" && tab != "sync" && tab != "operations" && tab != "contacts" && tab != "appearance" && tab != "regional" && tab != "compose-display" && tab != "security" && tab != "advanced" && tab != "export-import" {
+	if tab != "accounts" && tab != "sync" && tab != "operations" && tab != "contacts" && tab != "appearance" && tab != "regional" && tab != "compose-display" && tab != "security" && tab != "advanced" && tab != "export-import" && tab != "about" {
 		http.NotFound(w, r)
 		return
 	}
