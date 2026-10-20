@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/cristianadrielbraun/gofer/internal/providers"
 	"github.com/google/uuid"
 )
 
@@ -531,8 +532,13 @@ func (db *DB) claimDueMessageMutations(ctx context.Context, accountID string, no
 	defer tx.Rollback()
 	accountClause := ""
 	args := []any{MessageMutationPending, MessageMutationFailed, now.UTC()}
+	if !providers.JMAPEnabled() {
+		// JMAP accounts' changes wait, unclaimed, while JMAP is turned off.
+		accountClause = " AND provider_type != ?"
+		args = append(args, MessageMutationProviderJMAP)
+	}
 	if accountID != "" {
-		accountClause = " AND account_id = ?"
+		accountClause += " AND account_id = ?"
 		args = append(args, accountID)
 		// A bounded label pass may leave initial spam training behind. Train
 		// before moving its source; failed training may still use the existing

@@ -192,6 +192,9 @@ func (h *Handler) queueOutgoingMessage(ctx context.Context, accountID string, lo
 		return storage.OutgoingSend{}, fmt.Errorf("account not found")
 	}
 	transport := outgoingTransportForConfig(cfg)
+	if transport == storage.OutgoingTransportJMAP && !providers.JMAPEnabled() {
+		return storage.OutgoingSend{}, providers.ErrJMAPDisabled
+	}
 	raw, err := buildOutgoingMIME(transport, msg)
 	if err != nil {
 		return storage.OutgoingSend{}, fmt.Errorf("build outgoing message: %w", err)

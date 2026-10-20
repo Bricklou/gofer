@@ -5050,7 +5050,9 @@ func (h *Handler) saveComposeDraftFromForm(ctx context.Context, r *http.Request)
 			return composeDraftSaveResult{}, &composeRequestError{status: http.StatusInternalServerError, message: "failed to save Outlook draft"}
 		}
 	case providers.ProviderJMAP:
-		if err := h.saveJMAPDraft(ctx, accountID, msgID, providerDraft); err != nil {
+		if err := h.saveJMAPDraft(ctx, accountID, msgID, providerDraft); errors.Is(err, providers.ErrJMAPDisabled) {
+			return composeDraftSaveResult{}, &composeRequestError{status: http.StatusConflict, message: err.Error()}
+		} else if err != nil {
 			log.Printf("jmap draft save account=%s message=%d: %v", accountID, msgID, err)
 			return composeDraftSaveResult{}, &composeRequestError{status: http.StatusInternalServerError, message: "failed to save JMAP draft"}
 		}
@@ -5518,6 +5520,10 @@ func (h *Handler) handleCompose(w http.ResponseWriter, r *http.Request) {
 		localDraftMessageID, _ = h.db.GetMessageLocalIDByInternetIDInternal(ctx, accountID, draftID)
 	}
 	queued, err := h.queueOutgoingMessage(ctx, accountID, localDraftMessageID, draftID, msg, time.Now().UTC(), false)
+	if errors.Is(err, providers.ErrJMAPDisabled) {
+		writeComposeJSONError(w, http.StatusConflict, err.Error())
+		return
+	}
 	if err != nil {
 		writeComposeJSONError(w, http.StatusInternalServerError, "failed to queue message")
 		return
@@ -5568,6 +5574,10 @@ func (h *Handler) handleComposeSchedule(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 	scheduled, err := h.queueOutgoingMessage(r.Context(), saved.AccountID, saved.MessageID, saved.DraftID, msg, scheduledFor, true)
+	if errors.Is(err, providers.ErrJMAPDisabled) {
+		writeComposeJSONError(w, http.StatusConflict, err.Error())
+		return
+	}
 	if err != nil {
 		writeComposeJSONError(w, http.StatusInternalServerError, "failed to schedule message")
 		return
