@@ -18,6 +18,7 @@ import (
 
 	"github.com/cristianadrielbraun/gofer/internal/mail/message"
 	"github.com/cristianadrielbraun/gofer/internal/providerquota"
+	"github.com/cristianadrielbraun/gofer/internal/providers"
 	"github.com/cristianadrielbraun/gofer/internal/retry"
 	"github.com/cristianadrielbraun/gofer/internal/storage"
 	"github.com/cristianadrielbraun/gofer/internal/store"
@@ -65,7 +66,7 @@ func (s *UserIMAP) EnsureAttachment(ctx context.Context, owner string, id int64)
 			result = &copy
 			return nil
 		}
-		scope, err := s.snapshot(ctx, owner, snapshot.Info.AccountID)
+		scope, err := s.snapshotAccount(ctx, owner, snapshot.Info.AccountID, true)
 		if err != nil {
 			return err
 		}
@@ -104,6 +105,17 @@ func (s *UserIMAP) EnsureAttachment(ctx context.Context, owner string, id int64)
 		providerID := snapshot.Info.ProviderMessageID
 		loadProvider := func() error {
 			raw, content, localMIME = nil, nil, false
+			if snapshot.NetworkAllowed && scope.config.Provider == providers.ProviderJMAP && providerID != "" {
+				// The attachment is taken from the original message.
+				if !providers.JMAPEnabled() {
+					return providers.ErrJMAPDisabled
+				}
+				raw, err = FetchJMAPRawMessage(ctx, scope.config, scope.password, providerID)
+				if err == nil && len(raw) > userAttachmentMaxBytes {
+					raw, err = nil, errors.New("attachment MIME exceeds the size limit")
+				}
+				return err
+			}
 			if !snapshot.NetworkAllowed || scope.tokens == nil || (scope.config.Provider != "gmail" && scope.config.Provider != "outlook") {
 				return errors.New("attachment has no available recovery source")
 			}

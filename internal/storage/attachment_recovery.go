@@ -111,7 +111,9 @@ func (db *DB) PublishRecoveredAttachment(ctx context.Context, owner string, expe
 			return errors.New("saved MIME identity is required")
 		}
 	} else {
-		if !allowed || providerID == "" || (expected.Info.AccountProvider != "gmail" && expected.Info.AccountProvider != "outlook") || expected.AuthMethod != "oauth2" {
+		oauthProvider := (expected.Info.AccountProvider == "gmail" || expected.Info.AccountProvider == "outlook") && expected.AuthMethod == "oauth2"
+		jmapAccount := expected.Info.AccountProvider == "jmap" && expected.AuthMethod == "plain"
+		if !allowed || providerID == "" || (!oauthProvider && !jmapAccount) {
 			return ErrMessageMutationSuperseded
 		}
 		if expected.Info.ProviderMessageID != "" && providerID != expected.Info.ProviderMessageID {
