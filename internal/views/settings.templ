@@ -1362,6 +1362,9 @@ templ SettingsAccountCard(account models.Account) {
 					<div class="min-w-0">
 						<div class="flex min-w-0 items-center gap-1.5">
 							<p class="min-w-0 truncate text-sm font-semibold text-foreground">{ account.Name }</p>
+							if jmapAccountPaused(account) {
+								@SettingsAccountJMAPPausedPopover(account)
+							}
 							@SettingsAccountSyncErrorPopover(account, syncError, syncErrorAt)
 						</div>
 						<p class="mt-0.5 truncate text-xs text-muted-foreground">{ account.Email }</p>
@@ -1573,6 +1576,25 @@ templ SettingsAccountSyncErrorPopover(account models.Account, syncError string, 
 						<p class="mt-2 break-words text-xs leading-relaxed text-muted-foreground" data-settings-account-sync-error-message>{ syncError }</p>
 					</div>
 				</div>
+			}
+		}
+	</span>
+}
+
+templ SettingsAccountJMAPPausedPopover(account models.Account) {
+	<span data-settings-account-jmap-paused={ account.ID } class="inline-flex shrink-0">
+		@popover.Root(popover.RootProps{ID: fmt.Sprintf("account-jmap-paused-%s", account.ID), Class: "shrink-0"}) {
+			@popover.Trigger(popover.TriggerProps{TriggerType: popover.TriggerTypeHover}) {
+				<button
+					type="button"
+					class="inline-flex size-6 items-center justify-center rounded-md text-amber-600 transition-colors hover:bg-amber-500/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-500/40 dark:text-amber-400"
+					aria-label={ fmt.Sprintf("%s is paused: JMAP is turned off", account.Name) }
+				>
+					@icon.TriangleAlert(icon.Props{Class: "size-4"})
+				</button>
+			}
+			@popover.Content(popover.ContentProps{Placement: popover.PlacementBottomStart, ShowArrow: true, Class: "mobile-sheet w-80 p-3 text-xs leading-relaxed text-popover-foreground"}) {
+				@JMAPPausedExplanation()
 			}
 		}
 	</span>
