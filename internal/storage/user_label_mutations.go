@@ -84,8 +84,8 @@ func (db *DB) QueueUserLabels(ctx context.Context, owner string, infos []ThreadM
 	return tx.Commit()
 }
 
-// IMAP spam actions persist both training keywords and the folder move, even
-// when the message is already in the requested destination.
+// IMAP and JMAP spam actions persist both training keywords and the folder
+// move, even when the message is already in the requested destination.
 func (db *DB) QueueUserIMAPSpam(ctx context.Context, owner string, infos []ThreadMessageMutationInfo, destination string, spam bool) error {
 	if owner == "" || destination == "" || len(infos) == 0 {
 		return errors.New("invalid spam action")
@@ -102,7 +102,7 @@ func (db *DB) QueueUserIMAPSpam(ctx context.Context, owner string, infos []Threa
 			return err
 		}
 		if provider != LabelProviderKeyword {
-			return errors.New("IMAP spam action requires IMAP")
+			return errors.New("spam keywords need an IMAP or JMAP account")
 		}
 		for _, flag := range []struct {
 			name string

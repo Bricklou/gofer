@@ -95,13 +95,18 @@ func (o *SyncOrchestrator) applyQueuedJMAPLabelMutation(ctx context.Context, cfg
 	if err != nil || info == nil {
 		return err
 	}
-	keyword, err := o.keywordForAccountLabel(ctx, entry.AccountID, entry.LabelName)
-	if err != nil {
-		return err
-	}
 	add := entry.Operation == storage.LabelMutationAdd
 	if !add && entry.Operation != storage.LabelMutationRemove {
 		return fmt.Errorf("unsupported label mutation operation %q", entry.Operation)
+	}
+	if keyword, spam := JMAPSpamKeyword(entry.LabelName); spam {
+		// Spam training keywords are status, not labels shown on the message.
+		_, err := SetJMAPKeyword(ctx, cfg, password, info.RemoteMessageID, keyword, add)
+		return err
+	}
+	keyword, err := o.keywordForAccountLabel(ctx, entry.AccountID, entry.LabelName)
+	if err != nil {
+		return err
 	}
 	if _, err := SetJMAPKeyword(ctx, cfg, password, info.RemoteMessageID, keyword, add); err != nil {
 		return err

@@ -3062,6 +3062,36 @@ func (db *DB) EnqueueLabelMutation(ctx context.Context, accountID string, messag
 	return err
 }
 
+// ReplaceLabelMutation queues a label change in place of any change of the
+// same label on the message still queued, so that the latest request is the
+// one sent, last.
+func (db *DB) ReplaceLabelMutation(ctx context.Context, accountID string, messageID int64, folderID, providerType, operation, labelName string) error {
+	accountID = strings.TrimSpace(accountID)
+	providerType = strings.TrimSpace(providerType)
+	labelName = strings.TrimSpace(labelName)
+	operation, ok := normalizeLabelMutationOperation(operation)
+	if accountID == "" || messageID == 0 || providerType == "" || labelName == "" || !ok {
+		return fmt.Errorf("invalid label change")
+	}
+	tx, err := db.Write().BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	if _, err := tx.ExecContext(ctx, `DELETE FROM label_mutation_queue WHERE message_id = ? AND provider_type = ? AND label_name = ? COLLATE NOCASE`,
+		messageID, providerType, labelName); err != nil {
+		return err
+	}
+	if _, err := tx.ExecContext(ctx, `
+		INSERT INTO label_mutation_queue (
+			account_id, message_id, folder_id, provider_type, operation, label_name, next_attempt_at, updated_at
+		) VALUES (?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)`,
+		accountID, messageID, strings.TrimSpace(folderID), providerType, operation, labelName); err != nil {
+		return err
+	}
+	return tx.Commit()
+}
+
 // ListDueLabelMutations is an internal sync-worker boundary. Its callers receive
 // accountID from the active account sync path, which excludes deleting accounts
 // and accounts whose user is not active. This method repeats that check.

@@ -85,6 +85,18 @@ func openJMAPMail(ctx context.Context, cfg *models.AccountConfig, password strin
 	return client, session, account, nil
 }
 
+// JMAPSpamKeyword gives the JMAP spelling of a spam training keyword, which
+// IMAP spells $Junk and $NotJunk, and reports whether name is one.
+func JMAPSpamKeyword(name string) (string, bool) {
+	switch strings.ToLower(strings.TrimSpace(name)) {
+	case "$junk":
+		return "$junk", true
+	case "$notjunk":
+		return "$notjunk", true
+	}
+	return "", false
+}
+
 // SetJMAPKeyword adds a keyword label to a JMAP email, or removes it. Servers
 // may match keywords exactly, so a removal reads the email's keywords first
 // and clears the keyword in every casing the email carries. It reports gone

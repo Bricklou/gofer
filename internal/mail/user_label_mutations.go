@@ -138,6 +138,9 @@ func (s *UserIMAP) applyUserLabelMutation(ctx context.Context, scope *userIMAPSc
 		}
 		label.ProviderID = keyword
 		if scope.config.Provider == providers.ProviderJMAP {
+			if spam, ok := JMAPSpamKeyword(keyword); ok {
+				keyword = spam
+			}
 			// A label on an email the server no longer has is done: the next
 			// sync removes the email.
 			if _, err := SetJMAPKeyword(ctx, scope.config, scope.password, info.RemoteMessageID, keyword, entry.Operation == storage.LabelMutationAdd); err != nil {

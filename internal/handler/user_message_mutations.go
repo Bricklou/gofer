@@ -167,7 +167,7 @@ func (h *Handler) queueUserSpamTargets(w http.ResponseWriter, r *http.Request, t
 			failed += len(target.Infos)
 			continue
 		}
-		if target.Infos[0].AccountProvider == "imap" {
+		if provider := target.Infos[0].AccountProvider; provider == "imap" || provider == providers.ProviderJMAP {
 			if err := h.db.QueueUserIMAPSpam(r.Context(), h.userMutationState.owner, target.Infos, destination, disposition == spamDispositionSpam); err != nil {
 				log.Printf("queue user IMAP spam %s: %v", target.Infos[0].AccountID, err)
 				failed += len(target.Infos)

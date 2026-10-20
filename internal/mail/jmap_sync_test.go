@@ -13,6 +13,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/cristianadrielbraun/gofer/internal/config"
 	"github.com/cristianadrielbraun/gofer/internal/mail/jmap"
 	"github.com/cristianadrielbraun/gofer/internal/mail/message"
 	"github.com/cristianadrielbraun/gofer/internal/models"
@@ -882,6 +883,127 @@ func TestSyncReplaysJMAPLabelChanges(t *testing.T) {
 	})
 	if pending != 0 {
 		t.Fatalf("%d label changes still queued", pending)
+	}
+}
+
+// Marking a JMAP message as spam moves it into Junk and sends the training
+// keywords, which clear the opposite one in whatever casing the server has it
+// and never show as labels; not spam does the reverse.
+func TestSyncSendsJMAPSpamKeywords(t *testing.T) {
+	f := newUserGmailFixture(t)
+	server := newFakeJMAPServer(t)
+	server.emailState = "c0"
+	server.setMailboxes(
+		jmap.Mailbox{ID: "mb-in", Name: "Inbox", Role: "inbox", MyRights: readable()},
+		jmap.Mailbox{ID: "mb-junk", Name: "Junk", Role: "junk", MyRights: readable()},
+	)
+	offer := testJMAPEmail("e1", "A great offer", 1, "mb-in")
+	offer.Keywords = map[string]bool{"$NotJunk": true}
+	server.emails = []jmap.Email{offer}
+	useFakeJMAPAccount(t, f, server)
+	if err := f.worker.Sync(t.Context(), "alice", f.ids["alice"]); err != nil {
+		t.Fatalf("first Sync() error = %v", err)
+	}
+	inbox, junk := jmapLocalFolderID(f.ids["alice"], "mb-in"), jmapLocalFolderID(f.ids["alice"], "mb-junk")
+	mark := func(spam bool, from, to string) {
+		t.Helper()
+		f.local(t, "alice", func(db *storage.DB) error {
+			var id int64
+			if err := db.Read().QueryRow(`SELECT id FROM messages WHERE account_id=? AND remote_message_id='e1'`, f.ids["alice"]).Scan(&id); err != nil {
+				return err
+			}
+			info, err := db.GetMessageMutationInfoForFolder(t.Context(), id, from)
+			if err != nil {
+				return err
+			}
+			return db.QueueUserIMAPSpam(t.Context(), "alice", []storage.ThreadMessageMutationInfo{{MessageID: id, MessageMutationInfo: *info}}, to, spam)
+		})
+		if err := f.worker.Sync(t.Context(), "alice", f.ids["alice"]); err != nil {
+			t.Fatalf("Sync() error = %v", err)
+		}
+	}
+	mark(true, inbox, junk)
+	if e1, _ := server.email("e1"); len(e1.Keywords) != 1 || !e1.Keywords["$junk"] || !e1.MailboxIDs["mb-junk"] || e1.MailboxIDs["mb-in"] {
+		t.Fatalf("e1 after spam = keywords %v, mailboxes %v", e1.Keywords, e1.MailboxIDs)
+	}
+	mark(false, junk, inbox)
+	if e1, _ := server.email("e1"); len(e1.Keywords) != 1 || !e1.Keywords["$notjunk"] || !e1.MailboxIDs["mb-in"] {
+		t.Fatalf("e1 after not spam = keywords %v, mailboxes %v", e1.Keywords, e1.MailboxIDs)
+	}
+	if got := jmapLabels(t, f, "e1"); got != "" {
+		t.Fatalf("spam keywords showed as labels %q", got)
+	}
+	var pending int
+	f.local(t, "alice", func(db *storage.DB) error {
+		return db.Read().QueryRow(`SELECT COUNT(*) FROM label_mutation_queue`).Scan(&pending)
+	})
+	if pending != 0 {
+		t.Fatalf("%d label changes still queued", pending)
+	}
+}
+
+// In single-user mode, the next sync sends the spam keywords the spam action
+// queued, without showing them as labels.
+func TestSharedSyncSendsJMAPSpamKeywords(t *testing.T) {
+	t.Setenv("GOFER_JMAP_EXPERIMENT", "true")
+	ctx := t.Context()
+	server := newFakeJMAPServer(t)
+	server.emailState = "c0"
+	server.setMailboxes(jmap.Mailbox{ID: "mb-in", Name: "Inbox", Role: "inbox", MyRights: readable()})
+	offer := testJMAPEmail("e1", "A great offer", 1, "mb-in")
+	offer.Keywords = map[string]bool{"$NotJunk": true}
+	server.emails = []jmap.Email{offer}
+	db := newLabelSyncTestDB(t)
+	endpoint, err := jmap.ParseEndpoint(server.URL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := db.AddPlaintextTransportException(ctx, "http", endpoint.Host, endpoint.Port, "default"); err != nil {
+		t.Fatal(err)
+	}
+	if err := db.AddPrivateTargetException(ctx, "http", endpoint.Host, endpoint.Port, "default"); err != nil {
+		t.Fatal(err)
+	}
+	accounts, err := config.NewAccountStore(db, []byte("0123456789abcdef0123456789abcdef"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	account, err := accounts.CreateAccount(ctx, "default", &models.CreateAccountRequest{
+		Provider: "jmap", EmailAddress: "robin@example.test", JMAPSessionURL: server.URL + "/.well-known/jmap",
+		Username: "robin@example.test", Password: "secret",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	orchestrator := NewSyncOrchestrator(db, accounts, nil, nil)
+	if err := orchestrator.syncAccount(ctx, account.ID, true); err != nil {
+		t.Fatal(err)
+	}
+	var id int64
+	if err := db.Read().QueryRow(`SELECT id FROM messages WHERE account_id=? AND remote_message_id='e1'`, account.ID).Scan(&id); err != nil {
+		t.Fatal(err)
+	}
+	inbox := jmapLocalFolderID(account.ID, "mb-in")
+	for _, change := range [][2]string{{storage.LabelMutationAdd, "$junk"}, {storage.LabelMutationRemove, "$notjunk"}} {
+		if err := db.ReplaceLabelMutation(ctx, account.ID, id, inbox, storage.LabelProviderKeyword, change[0], change[1]); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := orchestrator.syncAccount(ctx, account.ID, true); err != nil {
+		t.Fatal(err)
+	}
+	if e1, _ := server.email("e1"); len(e1.Keywords) != 1 || !e1.Keywords["$junk"] {
+		t.Fatalf("e1 keywords on the server = %v", e1.Keywords)
+	}
+	var labels, pending int
+	if err := db.Read().QueryRow(`SELECT COUNT(*) FROM message_labels WHERE message_id=?`, id).Scan(&labels); err != nil {
+		t.Fatal(err)
+	}
+	if err := db.Read().QueryRow(`SELECT COUNT(*) FROM label_mutation_queue`).Scan(&pending); err != nil {
+		t.Fatal(err)
+	}
+	if labels != 0 || pending != 0 {
+		t.Fatalf("labels = %d, still queued = %d", labels, pending)
 	}
 }
 

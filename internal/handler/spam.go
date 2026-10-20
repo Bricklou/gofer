@@ -90,6 +90,7 @@ func (h *Handler) handleMarkMessagesSpamState(w http.ResponseWriter, r *http.Req
 					continue
 				}
 			}
+			h.queueJMAPSpamKeywords(ctx, infos, destFolderID, disposition)
 			updatedTargets++
 			updatedMessages += len(infos)
 			h.publishSpamMutation(infos, destFolderID)
@@ -142,6 +143,26 @@ func (h *Handler) handleMarkMessagesSpamState(w http.ResponseWriter, r *http.Req
 		"failed":        failedMessages,
 		"remote_failed": remoteFailedMessages,
 	})
+}
+
+// queueJMAPSpamKeywords queues the spam training keywords for the next sync
+// to send, $junk for spam and $notjunk for not spam, each clearing the other.
+// They teach the server's filter; the move has already been queued, so a
+// keyword that can't be queued is only logged.
+func (h *Handler) queueJMAPSpamKeywords(ctx context.Context, infos []storage.ThreadMessageMutationInfo, destFolderID string, disposition spamDisposition) {
+	add, remove := "$junk", "$notjunk"
+	if disposition == spamDispositionNotSpam {
+		add, remove = remove, add
+	}
+	for _, info := range infos {
+		for _, change := range []struct{ operation, keyword string }{
+			{storage.LabelMutationAdd, add}, {storage.LabelMutationRemove, remove},
+		} {
+			if err := h.db.ReplaceLabelMutation(ctx, info.AccountID, info.MessageID, destFolderID, storage.LabelProviderKeyword, change.operation, change.keyword); err != nil {
+				log.Printf("spam action %s: queue %s for account=%s message=%d: %v", disposition, change.keyword, info.AccountID, info.MessageID, err)
+			}
+		}
+	}
 }
 
 func (h *Handler) spamDestinationFolder(ctx context.Context, accountID string, disposition spamDisposition) (string, string, error) {
