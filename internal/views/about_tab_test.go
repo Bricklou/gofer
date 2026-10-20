@@ -40,6 +40,7 @@ func TestSettingsAboutTabShowsSourceBuild(t *testing.T) {
 		Commit:     "7e36941abcdef0123456789",
 		CommitTime: time.Date(2026, 10, 19, 12, 0, 0, 0, time.UTC),
 		Modified:   true,
+		Branch:     "about-settings",
 	})
 	for _, want := range []string{
 		"built from source",
@@ -47,6 +48,7 @@ func TestSettingsAboutTabShowsSourceBuild(t *testing.T) {
 		`href="https://github.com/cristianadrielbraun/gofer/commit/7e36941abcdef0123456789"`,
 		"with uncommitted changes",
 		"October 19, 2026",
+		`data-about-branch>about-settings</span>`,
 	} {
 		if !strings.Contains(html, want) {
 			t.Fatalf("about tab missing %q: %s", want, html)
@@ -77,7 +79,7 @@ func TestAboutUpdateCheckStates(t *testing.T) {
 		{"failed", nil, "Could not check for updates. Try again later.", []string{"Could not check for updates.", "Check again"}},
 		{"release available", &updatecheck.Result{Available: true, Latest: updatecheck.Release{Tag: "v0.11.0", URL: "https://example.test/v0.11.0", Notes: "Faster sync."}}, "", []string{">v0.11.0</a> is available.", "Faster sync."}},
 		{"up to date", &updatecheck.Result{Latest: updatecheck.Release{Tag: "v0.10.0"}}, "", []string{"Gofer is up to date."}},
-		{"commits behind", &updatecheck.Result{Source: true, Available: true, Behind: 12, Commits: []updatecheck.Commit{{SHA: "2222333344445555", Title: "Newer change", URL: "https://example.test/2222"}}}, "", []string{"12 newer commits on master.", ">2222333</a>", "Newer change"}},
+		{"commits behind", &updatecheck.Result{Source: true, Available: true, Behind: 12, Commits: []updatecheck.Commit{{SHA: "2222333344445555", Title: "Newer change", URL: "https://example.test/2222"}}}, "", []string{"Compared with master:", "12 newer commits.", ">2222333</a>", "Newer change"}},
 		{"unknown commit", &updatecheck.Result{Source: true, Unknown: true, Head: updatecheck.Commit{SHA: "3333444455556666", Title: "Latest change", URL: "https://example.test/3333"}}, "", []string{"local commits that are not on GitHub", "Latest on master:", ">3333444</a>", "Latest change"}},
 	} {
 		html := renderUpdateCheck(t, tc.result, tc.errMsg)

@@ -18,9 +18,12 @@ import (
 	"github.com/cristianadrielbraun/gofer/internal/netguard"
 )
 
+// Base is the branch a build from source is compared with, whatever branch
+// it was built on: it is where updates land.
+const Base = "master"
+
 const (
 	repository = "cristianadrielbraun/gofer"
-	branch     = "master"
 	// cacheFor keeps repeated checks from using up GitHub's limit of 60
 	// unauthenticated requests an hour.
 	cacheFor = 10 * time.Minute
@@ -195,11 +198,11 @@ func (c *Checker) checkSource(ctx context.Context, commit string) (Result, error
 	// The compare runs from the running commit to master, so master's
 	// commits that the build lacks are the ones "ahead".
 	var cmp githubCompare
-	status, err := c.get(ctx, "/repos/"+repository+"/compare/"+commit+"..."+branch, &cmp)
+	status, err := c.get(ctx, "/repos/"+repository+"/compare/"+commit+"..."+Base, &cmp)
 	if status == http.StatusNotFound {
 		r.Unknown = true
 		var head githubCommit
-		if _, err := c.get(ctx, "/repos/"+repository+"/commits/"+branch, &head); err != nil {
+		if _, err := c.get(ctx, "/repos/"+repository+"/commits/"+Base, &head); err != nil {
 			return Result{}, err
 		}
 		r.Head = head.toCommit()

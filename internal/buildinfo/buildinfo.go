@@ -10,19 +10,24 @@ import (
 	"time"
 )
 
-// Version and Commit are set at build time with
+// Version, Commit and Branch are set at build time with
 // -ldflags "-X github.com/cristianadrielbraun/gofer/internal/buildinfo.Version=v1.2.3".
 // Commit is only needed where the build has no git checkout, such as a
-// container build; otherwise Go records the commit itself.
+// container build; otherwise Go records the commit itself. Go never records
+// the branch, so task dev passes it.
 var (
 	Version string
 	Commit  string
+	Branch  string
 )
 
 // Info describes the running build.
 type Info struct {
 	// Version is the release version, empty for a build from source.
-	Version    string
+	Version string
+	// Branch is the git branch a build from source was made on, when the
+	// build passed it.
+	Branch     string
 	Commit     string
 	CommitTime time.Time
 	// Modified reports a build from a checkout with uncommitted changes.
@@ -66,7 +71,7 @@ var (
 func Get() Info {
 	once.Do(func() {
 		bi, _ := debug.ReadBuildInfo()
-		info = from(bi, Version, Commit)
+		info = from(bi, Version, Commit, Branch)
 	})
 	return info
 }
@@ -75,8 +80,12 @@ func Get() Info {
 // as v0.9.2-0.20261019120000-7e36941abcde.
 var pseudoVersion = regexp.MustCompile(`\d{14}-[0-9a-f]{12}$`)
 
-func from(bi *debug.BuildInfo, version, commit string) Info {
+func from(bi *debug.BuildInfo, version, commit, branch string) Info {
 	i := Info{Version: strings.TrimSpace(version), Commit: strings.TrimSpace(commit)}
+	// git names a detached checkout "HEAD", which is no branch at all.
+	if branch = strings.TrimSpace(branch); branch != "HEAD" {
+		i.Branch = branch
+	}
 	if bi == nil {
 		return i
 	}

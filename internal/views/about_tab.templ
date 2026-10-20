@@ -38,6 +38,11 @@ templ SettingsAboutTab(info buildinfo.Info) {
 						<span class="font-medium text-foreground" data-about-version>Development build</span>
 					}
 				}
+				if info.Branch != "" {
+					@aboutField("Branch") {
+						<span class="font-mono" data-about-branch>{ info.Branch }</span>
+					}
+				}
 				if info.Commit != "" {
 					@aboutField("Commit") {
 						<a href={ templ.SafeURL(goferRepositoryURL + "/commit/" + info.Commit) } target="_blank" rel="noopener noreferrer" class="font-mono text-foreground hover:text-primary" title={ info.Commit } data-about-commit>{ info.ShortCommit() }</a>
@@ -72,7 +77,7 @@ templ SettingsAboutTab(info buildinfo.Info) {
 					if info.Release() {
 						Gofer never checks on its own. Checking asks GitHub for the latest release.
 					} else {
-						Gofer never checks on its own. Checking asks GitHub for commits on master that this build does not have.
+						Gofer never checks on its own. Checking asks GitHub for commits on { updatecheck.Base } that this build does not have, whichever branch it was built from.
 					}
 				</p>
 			</div>
@@ -201,10 +206,10 @@ templ aboutReleaseStatus(r updatecheck.Result) {
 
 templ aboutSourceStatus(r updatecheck.Result) {
 	if r.Unknown {
-		<p class="text-foreground">This build has local commits that are not on GitHub, so it cannot be compared with master.</p>
+		<p class="text-foreground">This build has local commits that are not on GitHub, so it cannot be compared with { updatecheck.Base }.</p>
 		if r.Head.SHA != "" {
 			<p class="text-xs text-muted-foreground mt-1" data-about-master-head>
-				Latest on master:
+				Latest on { updatecheck.Base }:
 				<a href={ templ.URL(r.Head.URL) } target="_blank" rel="noopener noreferrer" class="font-mono hover:text-primary">{ shortSHA(r.Head.SHA) }</a>
 				{ r.Head.Title }
 				if !r.Head.Date.IsZero() {
@@ -214,22 +219,23 @@ templ aboutSourceStatus(r updatecheck.Result) {
 		}
 	} else if r.Available {
 		<p class="font-medium text-foreground">
+			Compared with { updatecheck.Base }:
 			if r.Behind == 1 {
-				1 newer commit on master.
+				1 newer commit.
 			} else {
-				{ strconv.Itoa(r.Behind) } newer commits on master.
+				{ strconv.Itoa(r.Behind) } newer commits.
 			}
 			if r.CompareURL != "" {
 				<a href={ templ.URL(r.CompareURL) } target="_blank" rel="noopener noreferrer" class="ml-1 font-normal text-primary hover:underline">See all changes</a>
 			}
 		</p>
 		if r.Diverged {
-			<p class="text-xs text-muted-foreground mt-0.5">This build also has commits that are not on master.</p>
+			<p class="text-xs text-muted-foreground mt-0.5">This build also has commits that are not on { updatecheck.Base }.</p>
 		}
 	} else if r.Diverged {
-		<p class="text-foreground">This build has commits that are not on master.</p>
+		<p class="text-foreground">Compared with { updatecheck.Base }: this build has commits that are not on it, and nothing new there.</p>
 	} else {
-		<p class="text-foreground">This build has everything on master.</p>
+		<p class="text-foreground">Compared with { updatecheck.Base }: this build has everything on it.</p>
 	}
 }
 
