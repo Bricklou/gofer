@@ -16,6 +16,7 @@ import (
 	"time"
 
 	mailimap "github.com/cristianadrielbraun/gofer/internal/mail/imap"
+	"github.com/cristianadrielbraun/gofer/internal/mail/keywords"
 	"github.com/cristianadrielbraun/gofer/internal/providerquota"
 	"github.com/cristianadrielbraun/gofer/internal/providers"
 	"github.com/cristianadrielbraun/gofer/internal/retry"
@@ -501,7 +502,7 @@ func (o *SyncOrchestrator) syncGmailHistoryMessageLabelsWithAuthRetry(ctx contex
 
 func (o *SyncOrchestrator) applyGmailMessageState(ctx context.Context, msg storage.ProviderLabelSyncMessage, providerMessageID string, state gmailMessageState, labelsByID map[string]gmailLabel) (gmailLabelSyncResult, error) {
 	if strings.TrimSpace(state.ID) != "" && strings.TrimSpace(state.ID) != strings.TrimSpace(msg.ProviderMessageID) {
-		if err := o.db.SetMessageProviderMessageID(ctx, msg.ID, strings.TrimSpace(state.ID)); err != nil {
+		if err := o.db.ReplaceProviderMessageID(ctx, msg.ID, msg.ProviderMessageID, strings.TrimSpace(state.ID)); err != nil {
 			log.Printf("cache gmail message id failed: %v", err)
 		}
 	} else if strings.TrimSpace(msg.ProviderMessageID) == "" && strings.TrimSpace(providerMessageID) != "" {
@@ -946,7 +947,7 @@ func (o *SyncOrchestrator) syncOutlookMessageCategories(ctx context.Context, tok
 		return err
 	}
 	if strings.TrimSpace(state.ID) != "" && state.ID != providerMessageID {
-		if err := o.db.SetMessageProviderMessageID(ctx, msg.ID, strings.TrimSpace(state.ID)); err != nil {
+		if err := o.db.ReplaceProviderMessageID(ctx, msg.ID, providerMessageID, strings.TrimSpace(state.ID)); err != nil {
 			log.Printf("cache outlook message id failed: %v", err)
 		}
 	}
@@ -1036,7 +1037,7 @@ func (o *SyncOrchestrator) syncOutlookMessageCategoriesBatchChunk(ctx context.Co
 			continue
 		}
 		if strings.TrimSpace(state.ID) != "" && strings.TrimSpace(state.ID) != strings.TrimSpace(msg.ProviderMessageID) {
-			if err := o.db.SetMessageProviderMessageID(ctx, msg.ID, strings.TrimSpace(state.ID)); err != nil {
+			if err := o.db.ReplaceProviderMessageID(ctx, msg.ID, msg.ProviderMessageID, strings.TrimSpace(state.ID)); err != nil {
 				log.Printf("cache outlook message id failed: %v", err)
 			}
 		}
@@ -1422,7 +1423,7 @@ func (o *SyncOrchestrator) replayIMAPLabelMutationQueue(ctx context.Context, acc
 	if o.db == nil || o.accountStore == nil {
 		return
 	}
-	entries, err := o.db.ListDueLabelMutations(ctx, accountID, storage.LabelProviderIMAPKeyword, providerLabelMutationReplayLimit)
+	entries, err := o.db.ListDueLabelMutations(ctx, accountID, storage.LabelProviderKeyword, providerLabelMutationReplayLimit)
 	if err != nil {
 		log.Printf("imap label mutation queue list account=%s: %v", accountID, err)
 		return
@@ -1467,7 +1468,7 @@ func (o *SyncOrchestrator) applyQueuedIMAPLabelMutation(ctx context.Context, cli
 	if err != nil || info == nil {
 		return err
 	}
-	keyword, err := o.imapKeywordForAccountLabel(ctx, entry.AccountID, entry.LabelName)
+	keyword, err := o.keywordForAccountLabel(ctx, entry.AccountID, entry.LabelName)
 	if err != nil {
 		return err
 	}
@@ -1495,7 +1496,7 @@ func (o *SyncOrchestrator) applyQueuedIMAPLabelMutation(ctx context.Context, cli
 			AccountID:    entry.AccountID,
 			Name:         entry.LabelName,
 			ProviderID:   keyword,
-			ProviderType: storage.LabelProviderIMAPKeyword,
+			ProviderType: storage.LabelProviderKeyword,
 		}); err != nil {
 			return err
 		}
@@ -1504,7 +1505,7 @@ func (o *SyncOrchestrator) applyQueuedIMAPLabelMutation(ctx context.Context, cli
 		if err := client.StoreKeyword(ctx, remoteName, uid, goimap.StoreFlagsDel, keyword); err != nil {
 			return err
 		}
-		if err := o.db.RemoveMessageLabelForProvider(ctx, entry.MessageID, entry.AccountID, storage.LabelProviderIMAPKeyword, keyword, keyword); err != nil {
+		if err := o.db.RemoveMessageLabelForProvider(ctx, entry.MessageID, entry.AccountID, storage.LabelProviderKeyword, keyword, keyword); err != nil {
 			return err
 		}
 		return o.db.RemoveMessageLabelForProvider(ctx, entry.MessageID, entry.AccountID, storage.LabelProviderLocal, "", entry.LabelName)
@@ -1531,21 +1532,21 @@ func (o *SyncOrchestrator) markLabelMutationBatchError(ctx context.Context, entr
 	}
 }
 
-func imapKeywordFromLabel(labelName string) (string, error) {
-	return mailimap.ValidateKeyword(labelName)
+func keywordFromLabel(labelName string) (string, error) {
+	return keywords.Validate(labelName)
 }
 
-func (o *SyncOrchestrator) imapKeywordForAccountLabel(ctx context.Context, accountID, labelName string) (string, error) {
+func (o *SyncOrchestrator) keywordForAccountLabel(ctx context.Context, accountID, labelName string) (string, error) {
 	if o.db != nil {
-		providerID, ok, err := o.db.ResolveLabelAliasProviderID(ctx, accountID, storage.LabelProviderIMAPKeyword, labelName)
+		providerID, ok, err := o.db.ResolveLabelAliasProviderID(ctx, accountID, storage.LabelProviderKeyword, labelName)
 		if err != nil {
 			return "", err
 		}
 		if ok {
-			return mailimap.ValidateKeyword(providerID)
+			return keywords.Validate(providerID)
 		}
 	}
-	return imapKeywordFromLabel(labelName)
+	return keywordFromLabel(labelName)
 }
 
 func appendUniqueFold(values []string, value string) []string {

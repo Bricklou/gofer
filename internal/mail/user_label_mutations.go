@@ -11,6 +11,8 @@ import (
 	"time"
 
 	mailimap "github.com/cristianadrielbraun/gofer/internal/mail/imap"
+	"github.com/cristianadrielbraun/gofer/internal/mail/keywords"
+	"github.com/cristianadrielbraun/gofer/internal/providers"
 	"github.com/cristianadrielbraun/gofer/internal/storage"
 	goimap "github.com/emersion/go-imap/v2"
 )
@@ -56,8 +58,8 @@ func (s *UserIMAP) replayLabelMutations(ctx context.Context, scope *userIMAPScop
 }
 func labelProviderForUserAccount(provider string) (string, error) {
 	switch provider {
-	case "imap":
-		return storage.LabelProviderIMAPKeyword, nil
+	case "imap", "jmap":
+		return storage.LabelProviderKeyword, nil
 	case "gmail":
 		return storage.LabelProviderGmail, nil
 	case "outlook":
@@ -113,7 +115,7 @@ func (s *UserIMAP) applyUserLabelMutation(ctx context.Context, scope *userIMAPSc
 	}
 	label := storage.LabelInput{AccountID: scope.id, Name: entry.LabelName, ProviderType: entry.ProviderType}
 	resolvedID := info.RemoteMessageID
-	if entry.ProviderType == storage.LabelProviderIMAPKeyword {
+	if entry.ProviderType == storage.LabelProviderKeyword {
 		keyword := entry.LabelName
 		if err := scope.call(ctx, func(db *storage.DB) error {
 			providerID, ok, err := db.ResolveLabelAliasProviderID(ctx, scope.id, entry.ProviderType, entry.LabelName)
@@ -129,12 +131,25 @@ func (s *UserIMAP) applyUserLabelMutation(ctx context.Context, scope *userIMAPSc
 			// ordinary label requests reject them before queuing.
 			keyword = entry.LabelName
 		} else {
-			keyword, err = mailimap.ValidateKeyword(keyword)
+			keyword, err = keywords.Validate(keyword)
 			if err != nil {
 				return err
 			}
 		}
 		label.ProviderID = keyword
+		if scope.config.Provider == providers.ProviderJMAP {
+			if spam, ok := JMAPSpamKeyword(keyword); ok {
+				keyword = spam
+			}
+			// A label on an email the server no longer has is done: the next
+			// sync removes the email.
+			if _, err := SetJMAPKeyword(ctx, scope.config, scope.password, info.RemoteMessageID, keyword, entry.Operation == storage.LabelMutationAdd); err != nil {
+				return err
+			}
+			return scope.call(ctx, func(db *storage.DB) error {
+				return db.CompleteUserLabelMutation(ctx, entry, *info, scope.config.ProviderAccountID, resolvedID, validity, label)
+			})
+		}
 		client, err := mailimap.DefaultPool.Get(ctx, scope.config, scope.password)
 		if err != nil {
 			return err

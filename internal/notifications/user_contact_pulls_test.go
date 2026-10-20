@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"strconv"
 	"strings"
 	"sync"
 	"testing"
@@ -173,6 +174,20 @@ func (t ownedContactPullTransport) RoundTrip(r *http.Request) (*http.Response, e
 	return t.base.RoundTrip(copy)
 }
 
+// approvePlainDAV approves a local plain HTTP DAV server the way an
+// administrator would, with an HTTP plaintext exception for its address.
+func approvePlainDAV(t *testing.T, f *userStorageFixture, server *httptest.Server) {
+	t.Helper()
+	address, err := url.Parse(server.URL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	port, _ := strconv.Atoi(address.Port())
+	if err := f.system.AddPlaintextTransportException(t.Context(), "http", address.Hostname(), port, "administrator"); err != nil {
+		t.Fatal(err)
+	}
+}
+
 func newOwnedContactPullFixture(t *testing.T, provider string, oauthOverride ...*mailauth.Config) (*userStorageFixture, *ownedContactPullAPI, *httptest.Server) {
 	t.Helper()
 	api := &ownedContactPullAPI{provider: provider, calls: map[string]int{}, entered: make(chan struct{}), release: make(chan struct{})}
@@ -190,6 +205,7 @@ func newOwnedContactPullFixture(t *testing.T, provider string, oauthOverride ...
 		oauth = oauthOverride[0]
 	}
 	f := newUserStorageFixtureConfigured(t, true, oauth)
+	approvePlainDAV(t, f, server)
 	for _, owner := range []string{"alice", "bob"} {
 		if provider == "carddav" {
 			if err := f.accountStore.WithAccountForUser(t.Context(), owner, f.accounts[owner].ID, func(local *config.AccountStore, _ *storage.DB) error {

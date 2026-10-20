@@ -3,7 +3,6 @@ package storage
 import (
 	"bytes"
 	"context"
-	"fmt"
 	"log"
 	"strings"
 	"testing"
@@ -44,8 +43,8 @@ func newAvatarListFixture(t *testing.T) (*DB, map[string]string) {
 	}
 	id := 1
 	for kind, email := range senders {
-		if _, err := db.Write().Exec(`INSERT INTO messages(id, account_id, remote_message_id, subject, from_name, from_email, date_received)
-			VALUES (?, 'acct', ?, ?, ?, ?, datetime('2024-01-01', '+' || ? || ' minutes'))`, id, fmt.Sprint("r", id), "From "+kind, kind, email, id); err != nil {
+		if _, err := db.Write().Exec(`INSERT INTO messages(id, account_id, subject, from_name, from_email, date_received)
+			VALUES (?, 'acct', ?, ?, ?, datetime('2024-01-01', '+' || ? || ' minutes'))`, id, "From "+kind, kind, email, id); err != nil {
 			t.Fatal(err)
 		}
 		if _, err := db.Write().Exec(`INSERT INTO message_folder_state(message_id, folder_id) VALUES (?, 'box-inbox')`, id); err != nil {

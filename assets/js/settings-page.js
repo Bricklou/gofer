@@ -627,8 +627,8 @@ function setWizardFooter(root, step, immediate) {
   }
   _wizardFooterTimers[key] = window.setTimeout(applyFooterStep, 180);
 }
-// Accounts that send with their mail sync connection (Gmail, Outlook and
-// iCloud) have no sending step (2): moving onto it goes on past it, in the
+// Accounts that send with their mail sync connection (Gmail, Outlook, iCloud
+// and JMAP) have no sending step (2): moving onto it goes on past it, in the
 // direction the wizard was moving.
 function wizardSkipSending(step, from, skip) {
   if (step !== 2 || !skip) return step;
@@ -640,7 +640,7 @@ function wizardGo(step, immediate) {
   if (!track || !root) return;
   if (step < 0) step = 0;
   if (step > 5) step = 5;
-  step = wizardSkipSending(step, _wizStep, root.dataset.mailService === 'icloud');
+  step = wizardSkipSending(step, _wizStep, root.dataset.mailService === 'icloud' || root.dataset.mailService === 'jmap');
   syncAddContactStep();
   // The Email steps end by creating the account. Going back to them would
   // create it again, so after that its settings belong to Edit account.
@@ -765,6 +765,7 @@ function accountWizardTest(options) {
           if (!response.ok) throw new Error((body || '').trim() || 'Could not test the connection.');
           var box = results();
           if (box) box.innerHTML = body;
+          if (options.onResponse) options.onResponse(response);
           setState(response.headers.get('X-Gofer-Connection-Test') === 'ok' ? 'passed' : 'failed');
         });
       }).catch(function(error) {
@@ -816,8 +817,19 @@ function newAddAccountTest() {
     anywayFailedLabel: 'Create anyway',
     // Going back would create the account a second time.
     lockWhenDone: true,
-    request: function(key) { return { url: '/api/accounts/test', body: key }; }
+    request: function(key) { return { url: '/api/accounts/test', body: key }; },
+    onResponse: function(response) {
+      setAddAccountJMAPSessionURL(response.headers.get('X-Gofer-JMAP-Session-URL') || '');
+    }
   });
+}
+// A JMAP account is created with the session URL its connection test found.
+// Any change to the form drops it, so creating without testing again finds
+// the server anew instead of using a URL found for other settings.
+function setAddAccountJMAPSessionURL(value) {
+  var form = document.getElementById('account-form');
+  var field = form && form.querySelector('input[name="jmap_session_url"]');
+  if (field) field.value = value;
 }
 var addAccountTest = newAddAccountTest();
 // A newly rendered dialog starts at its first step with a new test.
@@ -854,6 +866,7 @@ document.body.addEventListener('htmx:afterSwap', function(event) {
 document.addEventListener('input', function(event) {
   if (!event.target || !event.target.closest || !event.target.closest('#account-form') || addAccountCreated()) return;
   addAccountTest.invalidate();
+  setAddAccountJMAPSessionURL('');
 });
 function setWizardStepDisabled(step, disabled) {
   if (!step) return;
@@ -1196,15 +1209,22 @@ function setAddAccountMailService(service) {
   var form = document.getElementById('account-form');
   if (!root || !form) return;
   var icloud = service === 'icloud';
+  var jmap = service === 'jmap';
   var wasICloud = root.dataset.mailService === 'icloud';
-  if (icloud) root.dataset.mailService = 'icloud'; else delete root.dataset.mailService;
+  if (icloud || jmap) root.dataset.mailService = service; else delete root.dataset.mailService;
   var marker = form.querySelector('input[name="mail_service"]');
-  if (marker) marker.value = icloud ? 'icloud' : '';
+  if (marker) marker.value = icloud || jmap ? service : '';
   var username = form.querySelector('input[name="username"]');
   if (username) {
-    username.required = !icloud;
-    username.placeholder = icloud ? 'Same as the email address' : 'you@example.com';
+    username.required = !icloud && !jmap;
+    username.placeholder = icloud || jmap ? 'Same as the email address' : 'you@example.com';
   }
+  // JMAP has no IMAP or SMTP servers; their hidden fields must not block the form.
+  ['imap_host', 'smtp_host'].forEach(function(name) {
+    var field = form.querySelector('input[name="' + name + '"]');
+    if (field) field.required = !jmap;
+  });
+  setAddAccountJMAPSessionURL('');
   if (icloud || wasICloud) {
     var servers = icloud ? addAccountICloudServers : addAccountDefaultServers;
     Object.keys(servers).forEach(function(name) { mailDiscoverySetField(form, name, servers[name]); });
@@ -1621,6 +1641,13 @@ function newEditAccountTest() {
       var results = document.getElementById('edit-account-test-results');
       var typed = results && results.dataset.testTyped === 'true';
       return { url: results ? results.dataset.testUrl : '', body: typed ? key : '' };
+    },
+    // A JMAP account's test reports the session URL it found; saving then
+    // stores that instead of looking for the server again.
+    onResponse: function(response) {
+      var found = response.headers.get('X-Gofer-JMAP-Session-URL');
+      var field = found && document.querySelector('#edit-account-form input[name="jmap_session_url"]');
+      if (field) field.value = found;
     },
     onState: function() {
       var label = document.querySelector('#edit-wizard-footer [data-edit-account-save-label]');

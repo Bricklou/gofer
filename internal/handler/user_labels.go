@@ -11,8 +11,8 @@ func (h *Handler) queueUserLabels(ctx context.Context, targets []ownedMessageTar
 	for _, target := range targets {
 		for _, info := range target.Infos {
 			// Reject invalid keyword names before saving any part of the request.
-			if info.AccountProvider == "imap" {
-				if _, err := h.imapKeywordForAccountLabel(ctx, info.AccountID, name); err != nil {
+			if info.AccountProvider == "imap" || info.AccountProvider == "jmap" {
+				if _, err := h.keywordForAccountLabel(ctx, info.AccountID, name); err != nil {
 					return labelMutationResult{Failed: len(targets)}
 				}
 			}

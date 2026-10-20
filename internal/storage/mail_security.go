@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/cristianadrielbraun/gofer/internal/mail/jmap"
 	"github.com/cristianadrielbraun/gofer/internal/models"
 	"github.com/google/uuid"
 )
@@ -38,8 +39,8 @@ func (db *DB) AddHTTPDiscoveryException(ctx context.Context, domain, createdBy s
 func (db *DB) AddPlaintextTransportException(ctx context.Context, protocol, host string, port int, createdBy string) error {
 	protocol = strings.ToLower(strings.TrimSpace(protocol))
 	host = normalizeMailSecurityHost(host)
-	if protocol != "imap" && protocol != "smtp" {
-		return fmt.Errorf("protocol must be IMAP or SMTP")
+	if protocol != "http" && protocol != "imap" && protocol != "smtp" {
+		return fmt.Errorf("protocol must be HTTP, IMAP, or SMTP")
 	}
 	if host == "" {
 		return fmt.Errorf("server host is required")
@@ -183,35 +184,44 @@ func (db *DB) loadMailSecurityExceptionAccounts(ctx context.Context, item *model
 	if item == nil || (item.Kind != models.MailSecurityExceptionPlaintextTransport && item.Kind != models.MailSecurityExceptionPrivateTarget) {
 		return nil
 	}
-	if item.Protocol != "imap" && item.Protocol != "smtp" {
-		return nil
-	}
-	columnPrefix := item.Protocol
-	// A private target is used by every account on that server, whatever its
-	// connection security; a plaintext exception only by unencrypted ones.
-	modeFilter := ""
-	if item.Kind == models.MailSecurityExceptionPlaintextTransport {
-		modeFilter = fmt.Sprintf("AND LOWER(TRIM(%s_tls_mode)) = 'plaintext'", columnPrefix)
-	}
-	query := fmt.Sprintf(`
-		SELECT id, email_address
-		FROM accounts
-		WHERE COALESCE(is_deleting, 0) = 0
-		  AND LOWER(TRIM(%[1]s_host)) = ?
-		  AND %[1]s_port = ?
-		  %[2]s
-		ORDER BY email_address COLLATE NOCASE`, columnPrefix, modeFilter)
-	rows, err := db.read.QueryContext(ctx, query, item.Host, item.Port)
+	accounts, err := db.listTransportAccounts(ctx, "")
 	if err != nil {
 		return err
 	}
-	defer rows.Close()
-	for rows.Next() {
-		var account models.MailSecurityExceptionAccount
-		if err := rows.Scan(&account.ID, &account.Email); err != nil {
-			return err
+	for _, account := range accounts {
+		if MailSecurityExceptionUsedBy(*item, account) {
+			item.Accounts = append(item.Accounts, models.MailSecurityExceptionAccount{ID: account.ID, Email: account.Email})
 		}
-		item.Accounts = append(item.Accounts, account)
 	}
-	return rows.Err()
+	return nil
+}
+
+// MailSecurityExceptionUsedBy reports whether an account connects through an
+// exception's endpoint. A private target is used by every account on that
+// server whatever its connection security; a plaintext exception only by
+// unencrypted ones. HTTP and HTTPS exceptions match JMAP accounts by their
+// session URL's scheme, host and port.
+func MailSecurityExceptionUsedBy(item models.MailSecurityException, account DiagnosticTransportAccount) bool {
+	if item.Kind != models.MailSecurityExceptionPlaintextTransport && item.Kind != models.MailSecurityExceptionPrivateTarget {
+		return false
+	}
+	private := item.Kind == models.MailSecurityExceptionPrivateTarget
+	switch item.Protocol {
+	case "imap":
+		return account.IMAPHost == item.Host && account.IMAPPort == item.Port && (private || account.IMAPTLSMode == "plaintext")
+	case "smtp":
+		return account.SMTPHost == item.Host && account.SMTPPort == item.Port && (private || account.SMTPTLSMode == "plaintext")
+	case "http", "https":
+		// The JMAP server, and the CardDAV and CalDAV servers, go over HTTP.
+		for _, address := range []string{account.JMAPSessionURL, account.CardDAVURL, account.CalDAVURL} {
+			if address == "" {
+				continue
+			}
+			endpoint, err := jmap.ParseEndpoint(address)
+			if err == nil && endpoint.Scheme == item.Protocol && endpoint.Host == item.Host && endpoint.Port == item.Port {
+				return true
+			}
+		}
+	}
+	return false
 }

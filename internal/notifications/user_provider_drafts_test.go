@@ -599,7 +599,7 @@ func TestUserProviderDraftReceivedIdentityIsPreservedDuringReplacement(t *testin
 			}
 			if err := f.routing.WithUser(t.Context(), "alice", func(db *storage.DB) error {
 				var remote string
-				if err := db.Read().QueryRow(`SELECT remote_message_id FROM messages WHERE id=?`, id).Scan(&remote); err != nil {
+				if err := db.Read().QueryRow(`SELECT COALESCE(MAX(remote_message_id), '') FROM message_folder_state WHERE message_id = ?`, id).Scan(&remote); err != nil {
 					return err
 				}
 				if remote == messageID {
@@ -771,7 +771,7 @@ func TestUserProviderDraftMailboxChangeRejectsLateAcceptance(t *testing.T) {
 			}
 			if err := f.routing.WithUser(t.Context(), "alice", func(db *storage.DB) error {
 				var bound, candidates int
-				if err := db.Read().QueryRow(`SELECT count(*) FROM messages WHERE id=? AND COALESCE(remote_message_id,'')!=''`, id).Scan(&bound); err != nil {
+				if err := db.Read().QueryRow(`SELECT count(DISTINCT message_id) FROM message_folder_state WHERE message_id=? AND COALESCE(remote_message_id,'')!=''`, id).Scan(&bound); err != nil {
 					return err
 				}
 				if err := db.Read().QueryRow(`SELECT count(*) FROM gofer_provider_draft_operations WHERE candidate_id!=''`).Scan(&candidates); err != nil {

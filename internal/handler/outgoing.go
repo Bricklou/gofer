@@ -156,12 +156,17 @@ func outgoingTransportForConfig(cfg *models.AccountConfig) string {
 			return storage.OutgoingTransportGmail
 		case providers.ProviderOutlook:
 			return storage.OutgoingTransportOutlook
+		case providers.ProviderJMAP:
+			return storage.OutgoingTransportJMAP
 		}
 	}
 	return storage.OutgoingTransportSMTP
 }
 
 func buildOutgoingMIME(transport string, msg *message.OutgoingMessage) ([]byte, error) {
+	if transport == storage.OutgoingTransportJMAP {
+		return message.BuildMIMEMessageForJMAP(msg)
+	}
 	if transport == storage.OutgoingTransportGmail || transport == storage.OutgoingTransportOutlook {
 		return message.BuildMIMEMessageForGraph(msg)
 	}
@@ -187,6 +192,9 @@ func (h *Handler) queueOutgoingMessage(ctx context.Context, accountID string, lo
 		return storage.OutgoingSend{}, fmt.Errorf("account not found")
 	}
 	transport := outgoingTransportForConfig(cfg)
+	if transport == storage.OutgoingTransportJMAP && !providers.JMAPEnabled() {
+		return storage.OutgoingSend{}, providers.ErrJMAPDisabled
+	}
 	raw, err := buildOutgoingMIME(transport, msg)
 	if err != nil {
 		return storage.OutgoingSend{}, fmt.Errorf("build outgoing message: %w", err)
@@ -352,6 +360,8 @@ func (h *Handler) deliverOutgoingSend(parent context.Context, send storage.Outgo
 		providerMessageID, providerToken, err = h.sendGmailAPIRaw(sendCtx, cfg, send.MIMEData)
 	case storage.OutgoingTransportOutlook:
 		providerToken, err = h.sendOutlookGraphRaw(sendCtx, cfg, send.MIMEData)
+	case storage.OutgoingTransportJMAP:
+		providerMessageID, err = h.sendJMAPOutgoingRaw(sendCtx, cfg, send)
 	case storage.OutgoingTransportSMTP:
 		err = h.sendSMTPOutgoingRaw(sendCtx, cfg, send)
 	default:
@@ -379,6 +389,9 @@ func (h *Handler) deliverOutgoingSend(parent context.Context, send storage.Outgo
 	}
 	if send.Transport == storage.OutgoingTransportOutlook {
 		h.cacheOutlookSentMessageID(parent, send.AccountID, msg, providerToken)
+	}
+	if send.Transport == storage.OutgoingTransportJMAP {
+		h.cacheJMAPSentMessageID(parent, send.AccountID, msg, providerMessageID)
 	}
 	needsSentCopy := send.Transport == storage.OutgoingTransportSMTP
 	if err := h.db.CompleteOutgoingSend(parent, send.ID, msg.MessageID, needsSentCopy); err != nil {
@@ -760,6 +773,8 @@ func (h *Handler) cleanupDeliveredDraft(ctx context.Context, send storage.Outgoi
 		deleteErr = h.deleteGmailAPIDraft(ctx, send.AccountID, draftProvider.ProviderMessageID)
 	case storage.OutgoingTransportOutlook:
 		deleteErr = h.deleteOutlookGraphDraft(ctx, send.AccountID, draftProvider.ProviderMessageID)
+	case storage.OutgoingTransportJMAP:
+		deleteErr = h.deleteJMAPDraft(ctx, send.AccountID, send.DraftID, draftProvider.ProviderMessageID)
 	}
 	if deleteErr != nil {
 		log.Printf("outgoing-send: delete provider draft account=%s draft=%s: %v", send.AccountID, send.DraftID, deleteErr)

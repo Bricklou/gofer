@@ -91,7 +91,7 @@ func (h *Handler) forwardCalendarInvitation(ctx context.Context, source storage.
 	case source.Provider == providers.ProviderOutlook && target.Outlook != nil:
 		return "provider", forwardOutlookInvitation(ctx, target, recipients, comment)
 	case source.Provider == storage.CalendarSourceProviderCalDAV && target.CalDAV != nil:
-		return "email", h.emailCalendarForward(ctx, source, target.CalDAV.Calendar, storage.OutgoingTransportSMTP, target.Event.Summary, recipients, comment, queue)
+		return "email", h.emailCalendarForward(ctx, source, target.CalDAV.Calendar, h.calendarSourceEmailTransport(ctx, source), target.Event.Summary, recipients, comment, queue)
 	case source.Provider == providers.ProviderGmail && target.Google != nil:
 		var exceptions []googleCalendarUpdateEvent
 		if len(target.Google.Recurrence) > 0 {
@@ -307,7 +307,7 @@ func (h *Handler) handleCalendarForward(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 	if source.Provider == storage.CalendarSourceProviderCalDAV {
-		if cfg, err := h.accountStore.GetConfig(ctx, source.AccountID); err != nil || cfg.SMTPHost == "" || cfg.SMTPPort <= 0 {
+		if cfg, err := h.accountStore.GetConfig(ctx, source.AccountID); err != nil || !accountSendsEmail(cfg) {
 			calendarUpdateFailure(w, http.StatusBadRequest, "Forwarding sends the invitation by email. Configure SMTP for this account first.", false, false)
 			return
 		}

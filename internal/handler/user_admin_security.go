@@ -39,14 +39,7 @@ func (h *Handler) mailSecurityExceptions(ctx context.Context) ([]models.MailSecu
 			for _, account := range data.Transports {
 				for i := range items {
 					item := &items[i]
-					if item.Kind != models.MailSecurityExceptionPlaintextTransport && item.Kind != models.MailSecurityExceptionPrivateTarget {
-						continue
-					}
-					host, port, mode := account.IMAPHost, account.IMAPPort, account.IMAPTLSMode
-					if item.Protocol == "smtp" {
-						host, port, mode = account.SMTPHost, account.SMTPPort, account.SMTPTLSMode
-					}
-					if host == item.Host && port == item.Port && (mode == "plaintext" || item.Kind == models.MailSecurityExceptionPrivateTarget) {
+					if storage.MailSecurityExceptionUsedBy(*item, account) {
 						item.Accounts = append(item.Accounts, models.MailSecurityExceptionAccount{ID: account.ID, Email: account.Email})
 					}
 				}

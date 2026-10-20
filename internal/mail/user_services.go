@@ -30,7 +30,9 @@ func (s *UserIMAP) RunMessageWork(ctx context.Context, owner string, messageID i
 		return err
 	}
 	return s.operation(ctx, owner, account, messageID, 2*time.Minute, func(ctx context.Context) error {
-		scope, err := s.snapshot(ctx, owner, account)
+		// The work uses only cached content, so any account Gofer syncs will
+		// do, JMAP included.
+		scope, err := s.snapshotAccount(ctx, owner, account, true)
 		if err != nil {
 			return err
 		}

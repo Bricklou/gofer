@@ -131,10 +131,10 @@ func newSummaryListFixture(t *testing.T) *DB {
 		if random.Intn(3) > 0 {
 			thread = fmt.Sprintf("%s-thread-%d", account, random.Intn(60))
 		}
-		if _, err := db.Write().Exec(`INSERT INTO messages(id, account_id, remote_message_id, thread_id, subject, from_name, from_email,
+		if _, err := db.Write().Exec(`INSERT INTO messages(id, account_id, thread_id, subject, from_name, from_email,
 				date_received, has_attachments)
-			VALUES (?, ?, ?, NULLIF(?, ''), ?, ?, ?, datetime('2024-01-01', '+' || ? || ' minutes'), ?)`,
-			id, account, fmt.Sprint("r", id), thread, fmt.Sprintf("Subject %d", random.Intn(30)),
+			VALUES (?, ?, NULLIF(?, ''), ?, ?, ?, datetime('2024-01-01', '+' || ? || ' minutes'), ?)`,
+			id, account, thread, fmt.Sprintf("Subject %d", random.Intn(30)),
 			senders[random.Intn(len(senders))], fmt.Sprintf("s%d@example.test", random.Intn(9)), random.Intn(100000), random.Intn(4) == 0); err != nil {
 			t.Fatal(err)
 		}
@@ -145,8 +145,8 @@ func newSummaryListFixture(t *testing.T) *DB {
 	}
 	// The same conversation key in another account: a match there must not
 	// bring the first account's conversation into a search.
-	if _, err := db.Write().Exec(`INSERT INTO messages(id, account_id, remote_message_id, thread_id, subject, from_name, from_email, date_received)
-		SELECT 401, 'second', 'r401', thread_id, 'Shared key', 'Dora', 'dora@example.test', datetime('2024-01-02')
+	if _, err := db.Write().Exec(`INSERT INTO messages(id, account_id, thread_id, subject, from_name, from_email, date_received)
+		SELECT 401, 'second', thread_id, 'Shared key', 'Dora', 'dora@example.test', datetime('2024-01-02')
 		FROM messages WHERE account_id = 'acct' AND thread_id IS NOT NULL ORDER BY id LIMIT 1;
 		INSERT INTO message_folder_state(message_id, folder_id, is_read) VALUES (401, 'second-inbox', 1);`); err != nil {
 		t.Fatal(err)

@@ -146,7 +146,7 @@ func TestUserAttachmentRecoverySavedMIMEWorksDuringDraftAndCooldown(t *testing.T
 				t.Fatal(err)
 			}
 			if err := f.routing.WithUser(t.Context(), "alice", func(db *storage.DB) error {
-				if _, err := db.Write().Exec(`UPDATE messages SET raw_path=?,remote_message_id='' WHERE id=1`, path); err != nil {
+				if _, err := db.Write().Exec(`UPDATE messages SET raw_path=? WHERE id=1; UPDATE message_folder_state SET remote_message_id='' WHERE message_id=1`, path); err != nil {
 					return err
 				}
 				if _, err := db.Write().Exec(`INSERT INTO gofer_provider_draft_states(account_id,draft_key,provider,mailbox_subject,local_message_id,folder_id,local_revision) VALUES(?, '<alice@provider.test>',?,'same-subject',1,?,'pending')`, f.accounts["alice"].ID, provider, f.accounts["alice"].ID+"-inbox"); err != nil {
@@ -287,7 +287,7 @@ func TestUserAttachmentRecoveryLateResponseCannotChangeIdentity(t *testing.T) {
 					if err := f.routing.WithUser(t.Context(), "alice", func(db *storage.DB) error {
 						q := `UPDATE accounts SET provider_account_id='replacement'`
 						if change == "message" {
-							q = `UPDATE messages SET remote_message_id='replacement' WHERE id=1`
+							q = `UPDATE message_folder_state SET remote_message_id='replacement' WHERE message_id=1`
 						}
 						if change == "part" {
 							q = `UPDATE attachments SET filename='replacement.txt' WHERE id=1`
@@ -321,7 +321,7 @@ func TestUserAttachmentRecoveryLookupAndInvalidContent(t *testing.T) {
 			t.Run(fmt.Sprintf("%s/direct=%v", provider, direct), func(t *testing.T) {
 				f, api := newUserAttachmentFixture(t, provider, direct)
 				if err := f.routing.WithUser(t.Context(), "alice", func(db *storage.DB) error {
-					_, err := db.Write().Exec(`UPDATE messages SET remote_message_id='' WHERE id=1`)
+					_, err := db.Write().Exec(`UPDATE message_folder_state SET remote_message_id='' WHERE message_id=1`)
 					return err
 				}); err != nil {
 					t.Fatal(err)
@@ -348,7 +348,7 @@ func TestUserAttachmentRecoveryLookupAndInvalidContent(t *testing.T) {
 				}
 				if err := f.routing.WithUser(t.Context(), "alice", func(db *storage.DB) error {
 					var id string
-					if err := db.Read().QueryRow(`SELECT remote_message_id FROM messages WHERE id=1`).Scan(&id); err != nil {
+					if err := db.Read().QueryRow(`SELECT COALESCE(MAX(remote_message_id), '') FROM message_folder_state WHERE message_id = 1`).Scan(&id); err != nil {
 						return err
 					}
 					if id != "m1" {

@@ -131,7 +131,7 @@ func InspectUserStorageMigration(ctx context.Context, sourcePath string) (UserSt
 }
 
 func migrationSharedVersionSupported(version int) bool {
-	return version >= 105 && version <= 113
+	return version >= 105 && version <= 119
 }
 
 // These recognized shared schemas differ only in the explicitly handled push
@@ -382,6 +382,11 @@ func migrationSourceColumns(ctx context.Context, tx *sql.Tx, table *UserStorageM
 	if err := rows.Err(); err != nil {
 		return err
 	}
+	// Before 119 message rows kept a provider id, which each folder state
+	// keeps now; it isn't copied.
+	if table.Name == "messages" && version < 119 {
+		delete(actual, "remote_message_id")
+	}
 	if table.Name == "calendar_response_requests" && actual["claim_id"] {
 		var kind, defaultValue string
 		var required int
@@ -411,6 +416,10 @@ func migrationSourceColumns(ctx context.Context, tx *sql.Tx, table *UserStorageM
 		missing = []string{"is_private", "event_type"}
 	} else if table.Name == "calendar_events" && version < 112 {
 		missing = []string{"event_type"}
+	} else if table.Name == "accounts" && version < 114 {
+		missing = []string{"jmap_session_url"}
+	} else if table.Name == "message_folder_state" && version < 118 {
+		missing = []string{"remote_message_id"}
 	}
 	for _, name := range missing {
 		if actual[name] {

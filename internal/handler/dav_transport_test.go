@@ -25,12 +25,21 @@ func TestDAVRequestsRefuseUnapprovedPrivateServers(t *testing.T) {
 	defer server.Close()
 	u, _ := url.Parse(server.URL)
 	port, _ := strconv.Atoi(u.Port())
-	previous := davPrivateTargetPolicy.Load()
-	t.Cleanup(func() { davPrivateTargetPolicy.Store(previous) })
+	previous, previousPlaintext := davPrivateTargetPolicy.Load(), davPlaintextPolicy.Load()
+	t.Cleanup(func() { davPrivateTargetPolicy.Store(previous); davPlaintextPolicy.Store(previousPlaintext) })
 	cfg := models.ContactSyncConfig{BaseURL: server.URL + "/", AddressBookURL: server.URL + "/books/default/", Username: "lena@example.test"}
 
-	setDAVPrivateTargetPolicy(nil)
+	// Plain HTTP needs its own approval, whatever the address.
+	setDAVPrivateTargetPolicy(func(context.Context, string, string, int) bool { return true })
+	setDAVPlaintextPolicy(nil)
 	err := testCardDAVAddressBook(t.Context(), cfg, "secret")
+	if err == nil || !strings.Contains(err.Error(), "HTTP plaintext exception") || hits.Load() != 0 {
+		t.Fatalf("unapproved plain HTTP DAV server: err=%v hits=%d", err, hits.Load())
+	}
+
+	setDAVPlaintextPolicy(func(_ context.Context, host string, p int) bool { return host == "127.0.0.1" && p == port })
+	setDAVPrivateTargetPolicy(nil)
+	err = testCardDAVAddressBook(t.Context(), cfg, "secret")
 	if err == nil || !strings.Contains(err.Error(), "private network") || hits.Load() != 0 {
 		t.Fatalf("unapproved private DAV server: err=%v hits=%d", err, hits.Load())
 	}

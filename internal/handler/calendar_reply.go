@@ -16,6 +16,7 @@ import (
 	mailpkg "github.com/cristianadrielbraun/gofer/internal/mail"
 	"github.com/cristianadrielbraun/gofer/internal/mail/message"
 	"github.com/cristianadrielbraun/gofer/internal/models"
+	"github.com/cristianadrielbraun/gofer/internal/providers"
 	"github.com/cristianadrielbraun/gofer/internal/storage"
 	"github.com/cristianadrielbraun/gofer/internal/views"
 )
@@ -29,6 +30,41 @@ type calendarReplyPayload struct {
 type calendarReplyConfigurationError string
 
 func (e calendarReplyConfigurationError) Error() string { return string(e) }
+
+// accountSendsEmail reports whether an account can send the email a calendar
+// reply needs: over SMTP, or over JMAP for a JMAP account.
+func accountSendsEmail(cfg *models.AccountConfig) bool {
+	if cfg == nil {
+		return false
+	}
+	if cfg.Provider == providers.ProviderJMAP {
+		return cfg.AuthMethod == "plain" && providers.JMAPEnabled()
+	}
+	return cfg.SMTPHost != "" && cfg.SMTPPort > 0
+}
+
+// calendarEmailTransport is how an account sends calendar email: JMAP
+// accounts over JMAP, others over SMTP.
+func calendarEmailTransport(provider string) string {
+	if provider == providers.ProviderJMAP {
+		return storage.OutgoingTransportJMAP
+	}
+	return storage.OutgoingTransportSMTP
+}
+
+// calendarSourceEmailTransport is how the account a calendar belongs to sends
+// calendar email, in either storage mode.
+func (h *Handler) calendarSourceEmailTransport(ctx context.Context, source storage.CalendarSource) string {
+	if p, owned := ctx.Value(userCalendarProviderKey{}).(*userCalendarRequest); owned {
+		return p.service().EmailTransport()
+	}
+	if h.accountStore != nil {
+		if cfg, err := h.accountStore.GetConfig(ctx, source.AccountID); err == nil {
+			return calendarEmailTransport(cfg.Provider)
+		}
+	}
+	return storage.OutgoingTransportSMTP
+}
 
 func calendarReplyResource(event storage.CalendarEvent) string {
 	if event.SeriesRemoteID != "" {
@@ -66,9 +102,10 @@ func (h *Handler) queueCalDAVResponse(ctx context.Context, source storage.Calend
 		return fail(calendarReplyConfigurationError("Email replies require this account's sending address to match the invited attendee."))
 	}
 	cfg, err := h.accountStore.GetConfig(ctx, source.AccountID)
-	if err != nil || cfg.SMTPHost == "" || cfg.SMTPPort <= 0 {
+	if err != nil || !accountSendsEmail(cfg) {
 		return fail(calendarReplyConfigurationError("This server needs replies by email. Configure SMTP for this account before responding."))
 	}
+	transport := calendarEmailTransport(cfg.Provider)
 	desired, reply, err := prepareCalDAVResponse(target, response)
 	if err != nil {
 		return fail(err)
@@ -82,7 +119,7 @@ func (h *Handler) queueCalDAVResponse(ctx context.Context, source storage.Calend
 	msg := &message.OutgoingMessage{FromName: account.Name, FromEmail: account.Email, To: []*mail.Address{{Address: organizer}},
 		Subject: label + ": " + strings.NewReplacer("\r", " ", "\n", " ").Replace(target.Event.Summary), TextBody: "My response to this invitation: " + response + ".",
 		CalendarReply: reply, MessageID: message.NewMessageID(), Date: time.Now().UTC()}
-	raw, err := buildOutgoingMIME(storage.OutgoingTransportSMTP, msg)
+	raw, err := buildOutgoingMIME(transport, msg)
 	if err != nil {
 		return fail(err)
 	}
@@ -94,7 +131,7 @@ func (h *Handler) queueCalDAVResponse(ctx context.Context, source storage.Calend
 	if err != nil {
 		return fail(err)
 	}
-	id, err := h.db.QueueCalendarReply(ctx, storage.CalendarReplyJob{UserID: source.UserID, SourceID: source.ID, ResourceID: target.Endpoint, RemoteID: target.Event.RemoteID, Version: target.HTTPETag, Response: response, Payload: string(payload)}, storage.QueueOutgoingSendInput{AccountID: source.AccountID, Transport: storage.OutgoingTransportSMTP, EnvelopeFrom: msg.FromEmail, EnvelopeRecipients: []string{organizer}, MIMEData: raw, MessageJSON: snapshot})
+	id, err := h.db.QueueCalendarReply(ctx, storage.CalendarReplyJob{UserID: source.UserID, SourceID: source.ID, ResourceID: target.Endpoint, RemoteID: target.Event.RemoteID, Version: target.HTTPETag, Response: response, Payload: string(payload)}, storage.QueueOutgoingSendInput{AccountID: source.AccountID, Transport: transport, EnvelopeFrom: msg.FromEmail, EnvelopeRecipients: []string{organizer}, MIMEData: raw, MessageJSON: snapshot})
 	if err != nil {
 		return fail(err)
 	}
@@ -199,7 +236,7 @@ func (h *Handler) finishCalendarReply(parent context.Context, job storage.Calend
 			if endpointErr != nil || decodeErr != nil {
 				state = "conflict"
 			} else {
-				current, headers, readErr := calendarUpdateCalDAVGet(ctx, calendarDeleteClient(davHTTPTransport), endpoint, credentials.username, credentials.password)
+				current, headers, readErr := calendarUpdateCalDAVGet(ctx, calendarDeleteClient(calDAVHTTPTransport), endpoint, credentials.username, credentials.password)
 				if readErr != nil {
 					if errors.Is(readErr, errCalendarUpdateConflict) || !calendarCreateUncertain(readErr) {
 						state = "conflict"

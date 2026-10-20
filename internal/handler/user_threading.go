@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log"
 	"sync"
+	"time"
 
 	"github.com/cristianadrielbraun/gofer/internal/mail"
 	"github.com/cristianadrielbraun/gofer/internal/storage"
@@ -150,12 +151,21 @@ func (w *userThreadingWorker) run(ctx context.Context) {
 			w.mu.RLock()
 			beforeProcessed, beforeTotal := w.state.Processed, w.state.Total
 			w.mu.RUnlock()
+			var started time.Time
 			err := w.h.userStorage.EnsureUserThreadingForStartup(ctx, owner, func(state storage.ThreadingState) {
+				// Gofer starts serving only after this, so say why it waits.
+				if started.IsZero() && state.Total > 0 {
+					started = time.Now()
+					log.Printf("threading: rebuilding conversations of %d messages for user %s; Gofer starts once this finishes", state.Total, owner)
+				}
 				w.update(func(s *UserThreadingStatus) {
 					s.Processed = beforeProcessed + state.Processed
 					s.Total = beforeTotal + state.Total
 				})
 			})
+			if err == nil && ctx.Err() == nil && !started.IsZero() {
+				log.Printf("threading: conversations rebuilt for user %s in %s", owner, time.Since(started).Round(time.Second))
+			}
 			if ctx.Err() != nil {
 				w.fail(ctx.Err(), false)
 				return

@@ -32,6 +32,10 @@ type DiagnosticTransportAccount struct {
 	ID, Email                                    string
 	IMAPHost, IMAPTLSMode, SMTPHost, SMTPTLSMode string
 	IMAPPort, SMTPPort                           int
+	JMAPSessionURL                               string
+	// CardDAVURL and CalDAVURL are the account's contact and calendar
+	// servers, when it syncs them over DAV.
+	CardDAVURL, CalDAVURL string
 }
 
 type UserDiagnostics struct {
@@ -112,10 +116,20 @@ func (r *AccountRouting) ReadUserDiagnostics(ctx context.Context, actor Diagnost
 }
 
 func (db *DB) listDiagnosticTransports(ctx context.Context, owner string) ([]DiagnosticTransportAccount, error) {
-	rows, err := db.Read().QueryContext(ctx, `SELECT id,email_address,
- lower(trim(COALESCE(imap_host,''))),COALESCE(imap_port,0),lower(trim(COALESCE(imap_tls_mode,''))),
- lower(trim(COALESCE(smtp_host,''))),COALESCE(smtp_port,0),lower(trim(COALESCE(smtp_tls_mode,'')))
- FROM accounts WHERE user_id=? AND COALESCE(is_deleting,0)=0`, owner)
+	return db.listTransportAccounts(ctx, `AND a.user_id=?`, owner)
+}
+
+// listTransportAccounts reads how accounts connect, for matching them with
+// mail security exceptions.
+func (db *DB) listTransportAccounts(ctx context.Context, filter string, args ...any) ([]DiagnosticTransportAccount, error) {
+	rows, err := db.Read().QueryContext(ctx, `SELECT a.id,a.email_address,
+ lower(trim(COALESCE(a.imap_host,''))),COALESCE(a.imap_port,0),lower(trim(COALESCE(a.imap_tls_mode,''))),
+ lower(trim(COALESCE(a.smtp_host,''))),COALESCE(a.smtp_port,0),lower(trim(COALESCE(a.smtp_tls_mode,''))),
+ COALESCE(a.jmap_session_url,''),
+ COALESCE((SELECT c.base_url FROM account_contact_sync_configs c WHERE c.account_id=a.id AND c.provider='carddav' AND c.enabled=1),''),
+ COALESCE((SELECT d.base_url FROM account_caldav_configs d WHERE d.account_id=a.id),'')
+ FROM accounts a WHERE COALESCE(a.is_deleting,0)=0 `+filter+`
+ ORDER BY a.email_address COLLATE NOCASE`, args...)
 	if err != nil {
 		return nil, err
 	}
@@ -123,7 +137,7 @@ func (db *DB) listDiagnosticTransports(ctx context.Context, owner string) ([]Dia
 	var result []DiagnosticTransportAccount
 	for rows.Next() {
 		var account DiagnosticTransportAccount
-		if err := rows.Scan(&account.ID, &account.Email, &account.IMAPHost, &account.IMAPPort, &account.IMAPTLSMode, &account.SMTPHost, &account.SMTPPort, &account.SMTPTLSMode); err != nil {
+		if err := rows.Scan(&account.ID, &account.Email, &account.IMAPHost, &account.IMAPPort, &account.IMAPTLSMode, &account.SMTPHost, &account.SMTPPort, &account.SMTPTLSMode, &account.JMAPSessionURL, &account.CardDAVURL, &account.CalDAVURL); err != nil {
 			return nil, err
 		}
 		result = append(result, account)

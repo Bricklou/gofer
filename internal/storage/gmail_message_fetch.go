@@ -184,7 +184,7 @@ func (db *DB) MarkProviderMessageDeleted(ctx context.Context, accountID, provide
 		SELECT DISTINCT mfs.folder_id
 		FROM message_folder_state mfs
 		JOIN messages m ON m.id = mfs.message_id
-		WHERE m.account_id = ? AND m.remote_message_id = ? AND mfs.is_deleted = 0`+db.userProviderDraftProtectionSQL("m"), accountID, providerMessageID)
+		WHERE m.account_id = ? AND `+providerCopyIDSQL("mfs")+` = ? AND mfs.is_deleted = 0`+db.userProviderDraftProtectionSQL("m"), accountID, providerMessageID)
 	if err != nil {
 		return nil, err
 	}
@@ -206,15 +206,20 @@ func (db *DB) MarkProviderMessageDeleted(ctx context.Context, accountID, provide
 	if _, err := tx.ExecContext(ctx, `
 		UPDATE message_folder_state
 		SET is_deleted = 1, synced_at = CURRENT_TIMESTAMP
-		WHERE message_id IN (
-			SELECT m.id FROM messages m WHERE m.account_id = ? AND m.remote_message_id = ?
-		`+db.userProviderDraftProtectionSQL("m")+`)`, accountID, providerMessageID); err != nil {
+		WHERE `+providerCopyIDSQL("message_folder_state")+` = ?
+		  AND message_id IN (
+			SELECT m.id FROM messages m WHERE m.account_id = ?
+		`+db.userProviderDraftProtectionSQL("m")+`)`, providerMessageID, accountID); err != nil {
 		return nil, err
 	}
+	// A delete is confirmed once no copy of the message is left.
 	if _, err := tx.ExecContext(ctx, `
 		DELETE FROM message_mutations
 		WHERE kind = ? AND status = ? AND message_id IN (
-			SELECT id FROM messages WHERE account_id = ? AND remote_message_id = ?
+			SELECT m.id FROM messages m
+			WHERE m.account_id = ?
+			  AND EXISTS (SELECT 1 FROM message_folder_state mfs WHERE mfs.message_id = m.id AND `+providerCopyIDSQL("mfs")+` = ?)
+			  AND NOT EXISTS (SELECT 1 FROM message_folder_state mfs WHERE mfs.message_id = m.id AND mfs.is_deleted = 0)
 		)`, MessageMutationDelete, MessageMutationApplied, accountID, providerMessageID); err != nil {
 		return nil, err
 	}

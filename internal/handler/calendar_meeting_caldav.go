@@ -44,7 +44,7 @@ func (h *Handler) calendarMeetingAgent(ctx context.Context, source storage.Calen
 		return "", "", "", calendarUpdateUnsupported("Automatic scheduling is no longer available; refresh this account before changing the meeting.")
 	}
 	if p, owned := ctx.Value(userCalendarProviderKey{}).(*userCalendarRequest); owned {
-		if !p.service().SMTPConfigured() {
+		if !p.service().SendsEmail() {
 			return "", "", "", calendarReplyConfigurationError("This calendar server needs invitations by email. Configure SMTP for this account first.")
 		}
 		return "CLIENT", organizer, account.Name, nil
@@ -53,7 +53,7 @@ func (h *Handler) calendarMeetingAgent(ctx context.Context, source storage.Calen
 		return "", "", "", fmt.Errorf("configure SMTP before inviting guests")
 	}
 	cfg, err := h.accountStore.GetConfig(ctx, source.AccountID)
-	if err != nil || cfg.SMTPHost == "" || cfg.SMTPPort <= 0 {
+	if err != nil || !accountSendsEmail(cfg) {
 		return "", "", "", calendarReplyConfigurationError("This calendar server needs invitations by email. Configure SMTP for this account first.")
 	}
 	return "CLIENT", organizer, account.Name, nil
@@ -219,7 +219,7 @@ func (h *Handler) readCalDAVMeeting(ctx context.Context, source storage.Calendar
 	if err != nil {
 		return nil, nil, calendar.RemoteEvent{}, err
 	}
-	cal, headers, err := calendarUpdateCalDAVGet(ctx, calendarDeleteClient(davHTTPTransport), endpoint, credentials.username, credentials.password)
+	cal, headers, err := calendarUpdateCalDAVGet(ctx, calendarDeleteClient(calDAVHTTPTransport), endpoint, credentials.username, credentials.password)
 	if err != nil {
 		return nil, nil, calendar.RemoteEvent{}, err
 	}
@@ -431,7 +431,7 @@ func (h *Handler) updateCalDAVMeeting(ctx context.Context, source storage.Calend
 		}
 		req.Header.Set("If-Schedule-Tag-Match", tag)
 	}
-	res, err := calendarProviderDo(calendarDeleteClient(davHTTPTransport), req)
+	res, err := calendarProviderDo(calendarDeleteClient(calDAVHTTPTransport), req)
 	if err != nil {
 		return calendar.RemoteEvent{}, err
 	}
@@ -443,7 +443,7 @@ func (h *Handler) updateCalDAVMeeting(ctx context.Context, source storage.Calend
 	if status != http.StatusOK && status != http.StatusNoContent {
 		return calendar.RemoteEvent{}, fmt.Errorf("CalDAV did not confirm the update")
 	}
-	confirmed, responseHeaders, err := calendarUpdateCalDAVGet(ctx, calendarDeleteClient(davHTTPTransport), existing.RemoteID, credentials.username, credentials.password)
+	confirmed, responseHeaders, err := calendarUpdateCalDAVGet(ctx, calendarDeleteClient(calDAVHTTPTransport), existing.RemoteID, credentials.username, credentials.password)
 	if err != nil {
 		return calendar.RemoteEvent{}, fmt.Errorf("could not confirm meeting update: %v", err)
 	}
@@ -490,7 +490,7 @@ func (h *Handler) deleteCalDAVMeeting(ctx context.Context, source storage.Calend
 		}
 		req.Header.Set("If-Schedule-Tag-Match", tag)
 	}
-	err = calendarDeleteHTTP(calendarDeleteClient(davHTTPTransport), req, true)
+	err = calendarDeleteHTTP(calendarDeleteClient(calDAVHTTPTransport), req, true)
 	h.wakeCalendarNotificationWorker(ctx, source)
 	return err
 }

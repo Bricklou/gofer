@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/cristianadrielbraun/gofer/internal/providers"
 	"github.com/google/uuid"
 )
 
@@ -21,6 +22,7 @@ const (
 	MessageMutationProviderGmail   = "gmail"
 	MessageMutationProviderOutlook = "outlook"
 	MessageMutationProviderIMAP    = "imap"
+	MessageMutationProviderJMAP    = "jmap"
 )
 
 const (
@@ -101,8 +103,16 @@ func (db *DB) permanentlyDeleteMessagesAndQueue(ctx context.Context, messageIDs 
 			return fmt.Errorf("load message %d for permanent delete: %w", messageID, err)
 		}
 		providerType := messageMutationProviderType(provider)
+		// Each copy has its own delete; deleting the other copy of mail sent
+		// to oneself doesn't take this one over.
+		copyFolders, err := copyFoldersTx(ctx, tx, messageID, folderID, "")
+		if err != nil {
+			return err
+		}
+		copyList, copyArgs := folderListSQL(copyFolders)
 		var mutationID string
-		err := tx.QueryRowContext(ctx, `SELECT id FROM message_mutations WHERE message_id = ? AND kind = ? ORDER BY created_at LIMIT 1`, messageID, MessageMutationDelete).Scan(&mutationID)
+		err = tx.QueryRowContext(ctx, `SELECT id FROM message_mutations WHERE message_id = ? AND kind = ? AND folder_id IN (`+copyList+`) ORDER BY created_at LIMIT 1`,
+			append([]any{messageID, MessageMutationDelete}, copyArgs...)...).Scan(&mutationID)
 		if err != nil && err != sql.ErrNoRows {
 			return err
 		}
@@ -133,7 +143,9 @@ func (db *DB) permanentlyDeleteMessagesAndQueue(ctx context.Context, messageIDs 
 			}
 			refreshFolders[folderID] = struct{}{}
 		} else {
-			rows, err := tx.QueryContext(ctx, `SELECT folder_id FROM message_folder_state WHERE message_id = ? AND is_deleted = 0`, messageID)
+			// Deleting a copy leaves the message's other copies.
+			copyIDs := `SELECT ` + providerCopyIDSQL("source") + ` FROM message_folder_state source WHERE source.message_id = ? AND source.folder_id = ?`
+			rows, err := tx.QueryContext(ctx, `SELECT folder_id FROM message_folder_state WHERE message_id = ? AND is_deleted = 0 AND `+providerCopyIDSQL("message_folder_state")+` = (`+copyIDs+`)`, messageID, messageID, folderID)
 			if err != nil {
 				return err
 			}
@@ -148,7 +160,7 @@ func (db *DB) permanentlyDeleteMessagesAndQueue(ctx context.Context, messageIDs 
 			if err := rows.Close(); err != nil {
 				return err
 			}
-			if _, err := tx.ExecContext(ctx, `UPDATE message_folder_state SET is_deleted = 1, synced_at = CURRENT_TIMESTAMP WHERE message_id = ?`, messageID); err != nil {
+			if _, err := tx.ExecContext(ctx, `UPDATE message_folder_state SET is_deleted = 1, synced_at = CURRENT_TIMESTAMP WHERE message_id = ? AND `+providerCopyIDSQL("message_folder_state")+` = (`+copyIDs+`)`, messageID, messageID, folderID); err != nil {
 				return err
 			}
 		}
@@ -258,12 +270,14 @@ func moveMessagesAndQueueTx(ctx context.Context, tx *sql.Tx, messageIDs []int64,
 		}
 
 		providerType := messageMutationProviderType(provider)
+		// A move continues the one that brought the message to its source
+		// folder; a move out of another folder is a change of its own.
 		var mutationID, remoteFolderID, status string
 		err := tx.QueryRowContext(ctx, `
 			SELECT id, folder_id, status
 			FROM message_mutations
-			WHERE message_id = ? AND kind = ?
-			ORDER BY created_at LIMIT 1`, messageID, MessageMutationMove).
+			WHERE message_id = ? AND kind = ? AND (folder_id = ? OR destination_folder_id = ?)
+			ORDER BY created_at LIMIT 1`, messageID, MessageMutationMove, sourceFolderID, sourceFolderID).
 			Scan(&mutationID, &remoteFolderID, &status)
 		if err != nil && err != sql.ErrNoRows {
 			return nil, err
@@ -303,15 +317,17 @@ func moveMessagesAndQueueTx(ctx context.Context, tx *sql.Tx, messageIDs []int64,
 		preserveRemoteUID := remoteFolderID == destinationFolderID
 		if _, err := tx.ExecContext(ctx, `
 			INSERT INTO message_folder_state (
-				message_id, folder_id, remote_uid, is_read, is_starred, is_flagged, is_draft, is_deleted, synced_at
-			) VALUES (?, ?, NULL, ?, ?, 0, 0, 0, CURRENT_TIMESTAMP)
+				message_id, folder_id, remote_uid, is_read, is_starred, is_flagged, is_draft, is_deleted, synced_at, remote_message_id
+			) VALUES (?, ?, NULL, ?, ?, 0, 0, 0, CURRENT_TIMESTAMP,
+				(SELECT NULLIF(source.remote_message_id, '') FROM message_folder_state source WHERE source.message_id = ? AND source.folder_id = ?))
 			ON CONFLICT(message_id, folder_id) DO UPDATE SET
 				remote_uid = CASE WHEN ? THEN message_folder_state.remote_uid ELSE NULL END,
 				is_read = excluded.is_read,
 				is_starred = excluded.is_starred,
 				is_deleted = 0,
-				synced_at = CURRENT_TIMESTAMP`,
-			messageID, destinationFolderID, isRead, isStarred, boolInt(preserveRemoteUID)); err != nil {
+				synced_at = CURRENT_TIMESTAMP,
+				remote_message_id = COALESCE(excluded.remote_message_id, message_folder_state.remote_message_id)`,
+			messageID, destinationFolderID, isRead, isStarred, messageID, sourceFolderID, boolInt(preserveRemoteUID)); err != nil {
 			return nil, fmt.Errorf("show destination folder for message %d: %w", messageID, err)
 		}
 	}
@@ -388,6 +404,20 @@ func (db *DB) setMessageStateAndQueue(ctx context.Context, messageIDs []int64, k
 		}
 		providerType := messageMutationProviderType(provider)
 		scopes := []string{""}
+		if providerType != MessageMutationProviderIMAP {
+			// A message with copies under different provider ids gets the
+			// change once per copy, each through a folder it is in.
+			copyScopes, err := providerCopyFolderScopesTx(ctx, tx, messageID)
+			if err != nil {
+				return err
+			}
+			if len(copyScopes) > 0 {
+				scopes = copyScopes
+				if _, err := tx.ExecContext(ctx, `DELETE FROM message_mutations WHERE message_id = ? AND kind = ? AND folder_id = ''`, messageID, kind); err != nil {
+					return err
+				}
+			}
+		}
 		if providerType == MessageMutationProviderIMAP {
 			scopes, err = messageMutationFolderScopesTx(ctx, tx, messageID)
 			if err != nil {
@@ -480,6 +510,8 @@ func messageMutationProviderType(provider string) string {
 		return MessageMutationProviderGmail
 	case MessageMutationProviderOutlook:
 		return MessageMutationProviderOutlook
+	case MessageMutationProviderJMAP:
+		return MessageMutationProviderJMAP
 	default:
 		return MessageMutationProviderIMAP
 	}
@@ -528,8 +560,13 @@ func (db *DB) claimDueMessageMutations(ctx context.Context, accountID string, no
 	defer tx.Rollback()
 	accountClause := ""
 	args := []any{MessageMutationPending, MessageMutationFailed, now.UTC()}
+	if !providers.JMAPEnabled() {
+		// JMAP accounts' changes wait, unclaimed, while JMAP is turned off.
+		accountClause = " AND provider_type != ?"
+		args = append(args, MessageMutationProviderJMAP)
+	}
 	if accountID != "" {
-		accountClause = " AND account_id = ?"
+		accountClause += " AND account_id = ?"
 		args = append(args, accountID)
 		// A bounded label pass may leave initial spam training behind. Train
 		// before moving its source; failed training may still use the existing
@@ -637,11 +674,12 @@ func (db *DB) CompleteMessageDeleteMutation(ctx context.Context, id string) erro
 	}
 	defer tx.Rollback()
 	var messageID int64
-	if err := tx.QueryRowContext(ctx, `SELECT message_id FROM message_mutations WHERE id = ? AND kind = ? AND status = ?`, id, MessageMutationDelete, MessageMutationProcessing).
-		Scan(&messageID); err != nil {
+	var folderID string
+	if err := tx.QueryRowContext(ctx, `SELECT message_id, folder_id FROM message_mutations WHERE id = ? AND kind = ? AND status = ?`, id, MessageMutationDelete, MessageMutationProcessing).
+		Scan(&messageID, &folderID); err != nil {
 		return err
 	}
-	if _, err := tx.ExecContext(ctx, `DELETE FROM message_mutations WHERE message_id = ? AND id != ?`, messageID, id); err != nil {
+	if err := deleteCopyMutationsTx(ctx, tx, messageID, id, folderID); err != nil {
 		return err
 	}
 	if _, err := tx.ExecContext(ctx, `
@@ -659,11 +697,20 @@ func (db *DB) ConfirmProviderMessageDeleted(ctx context.Context, accountID, prov
 	if accountID == "" || providerMessageID == "" {
 		return nil
 	}
+	// A delete belongs to the copy in the folder it was made in.
 	_, err := db.Write().ExecContext(ctx, `
 		DELETE FROM message_mutations
-		WHERE kind = ? AND status = ? AND message_id IN (
-			SELECT id FROM messages WHERE account_id = ? AND remote_message_id = ?
-		)`, MessageMutationDelete, MessageMutationApplied, accountID, providerMessageID)
+		WHERE kind = ? AND status = ? AND account_id = ? AND (
+			EXISTS (
+				SELECT 1 FROM message_folder_state mfs
+				WHERE mfs.message_id = message_mutations.message_id AND mfs.folder_id = message_mutations.folder_id
+				  AND `+providerCopyIDSQL("mfs")+` = ?
+			)
+			OR (folder_id = '' AND EXISTS (
+				SELECT 1 FROM message_folder_state mfs
+				WHERE mfs.message_id = message_mutations.message_id AND mfs.remote_message_id = ?
+			))
+		)`, MessageMutationDelete, MessageMutationApplied, accountID, providerMessageID, providerMessageID)
 	return err
 }
 
@@ -697,7 +744,7 @@ func advanceMessageMoveMutationTx(ctx context.Context, tx *sql.Tx, id, destinati
 		return err
 	}
 	if providerMessageID = strings.TrimSpace(providerMessageID); providerMessageID != "" {
-		if _, err := tx.ExecContext(ctx, `UPDATE messages SET remote_message_id = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`, providerMessageID, messageID); err != nil {
+		if err := replaceProviderCopyIDTx(ctx, tx, messageID, previousFolderID, destinationFolderID, providerMessageID); err != nil {
 			return err
 		}
 	}
@@ -748,9 +795,15 @@ func (db *DB) GetMessageMutationInternal(ctx context.Context, id string) (Messag
 	return scanMessageMutation(db.Read().QueryRowContext(ctx, messageMutationSelect+` WHERE id = ?`, id))
 }
 
-func resolveMessageMutationTargetsTx(ctx context.Context, tx *sql.Tx, messageID int64, folderID string, read, starred *bool) error {
+// resolveMessageMutationTargetsTx keeps queued read and starred changes over
+// what a sync saw. A change queued in another folder of the same provider copy
+// counts too.
+func resolveMessageMutationTargetsTx(ctx context.Context, tx *sql.Tx, messageID int64, folderID, providerMessageID string, read, starred *bool) error {
 	rows, err := tx.QueryContext(ctx, messageMutationSelect+`
-		WHERE message_id = ? AND (folder_id = '' OR folder_id = ?)`, messageID, folderID)
+		WHERE message_id = ? AND (folder_id = '' OR folder_id = ? OR (? != '' AND folder_id IN (
+			SELECT copy_state.folder_id FROM message_folder_state copy_state
+			WHERE copy_state.message_id = ? AND copy_state.remote_message_id = ?
+		)))`, messageID, folderID, providerMessageID, messageID, providerMessageID)
 	if err != nil {
 		return err
 	}
@@ -798,20 +851,31 @@ func resolveMessageMutationTargetsTx(ctx context.Context, tx *sql.Tx, messageID 
 	return nil
 }
 
-func protectProviderMoveFolderTx(ctx context.Context, tx *sql.Tx, messageID int64, folderID string) (bool, error) {
+// protectProviderMoveFolderTx reports whether a synced copy may show in a
+// folder while changes queued for it are pending: not while it is being
+// deleted, nor in a folder it is being moved out of. An empty
+// providerMessageID is read from the folder's state.
+func protectProviderMoveFolderTx(ctx context.Context, tx *sql.Tx, messageID int64, folderID, providerMessageID string) (bool, error) {
+	copyFolders, err := copyFoldersTx(ctx, tx, messageID, folderID, providerMessageID)
+	if err != nil {
+		return false, err
+	}
+	copyList, copyArgs := folderListSQL(copyFolders)
 	var deletePending int
-	if err := tx.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM message_mutations WHERE message_id = ? AND kind = ?)`, messageID, MessageMutationDelete).Scan(&deletePending); err != nil {
+	if err := tx.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM message_mutations WHERE message_id = ? AND kind = ? AND folder_id IN (`+copyList+`))`,
+		append([]any{messageID, MessageMutationDelete}, copyArgs...)...).Scan(&deletePending); err != nil {
 		return false, err
 	}
 	if deletePending != 0 {
 		return false, nil
 	}
 	var destinationFolderID string
-	err := tx.QueryRowContext(ctx, `
+	moveArgs := append([]any{messageID, MessageMutationMove}, copyArgs...)
+	err = tx.QueryRowContext(ctx, `
 		SELECT destination_folder_id
 		FROM message_mutations
-		WHERE message_id = ? AND kind = ?
-		ORDER BY created_at LIMIT 1`, messageID, MessageMutationMove).Scan(&destinationFolderID)
+		WHERE message_id = ? AND kind = ? AND (folder_id IN (`+copyList+`) OR destination_folder_id IN (`+copyList+`))
+		ORDER BY created_at LIMIT 1`, append(moveArgs, copyArgs...)...).Scan(&destinationFolderID)
 	if err == sql.ErrNoRows {
 		return true, nil
 	}
@@ -843,16 +907,43 @@ func refreshIMAPDeleteUIDValidityTx(ctx context.Context, tx *sql.Tx, messageID i
 	return err
 }
 
-func resolveProviderMoveFoldersTx(ctx context.Context, tx *sql.Tx, messageID int64, observed, desired map[string]bool) error {
-	mutation, err := scanMessageMutation(tx.QueryRowContext(ctx, messageMutationSelect+`
-		WHERE message_id = ? AND kind = ? ORDER BY created_at LIMIT 1`, messageID, MessageMutationMove))
-	if err == sql.ErrNoRows {
-		return nil
-	}
+// resolveProviderMoveFoldersTx settles the queued moves of one provider copy
+// against the folders a sync saw it in: a move the server shows done is
+// confirmed, and one still pending keeps the copy where Gofer moved it.
+func resolveProviderMoveFoldersTx(ctx context.Context, tx *sql.Tx, messageID int64, providerMessageID string, observed, desired map[string]bool) error {
+	copyFolders, err := copyFoldersTx(ctx, tx, messageID, "", providerMessageID)
 	if err != nil {
 		return err
 	}
-	rows, err := tx.QueryContext(ctx, `SELECT folder_id FROM message_folder_state WHERE message_id = ? AND is_deleted = 1`, messageID)
+	for folderID := range observed {
+		copyFolders = append(copyFolders, folderID)
+	}
+	list, folderArgs := folderListSQL(copyFolders)
+	args := append([]any{messageID, MessageMutationMove}, folderArgs...)
+	args = append(args, folderArgs...)
+	rows, err := tx.QueryContext(ctx, messageMutationSelect+`
+		WHERE message_id = ? AND kind = ? AND (folder_id IN (`+list+`) OR destination_folder_id IN (`+list+`))
+		ORDER BY created_at`, args...)
+	if err != nil {
+		return err
+	}
+	var mutations []MessageMutation
+	for rows.Next() {
+		mutation, err := scanMessageMutation(rows)
+		if err != nil {
+			rows.Close()
+			return err
+		}
+		mutations = append(mutations, mutation)
+	}
+	if err := rows.Close(); err != nil {
+		return err
+	}
+	if len(mutations) == 0 {
+		return nil
+	}
+	rows, err = tx.QueryContext(ctx, `SELECT folder_id FROM message_folder_state WHERE message_id = ? AND is_deleted = 1 AND folder_id IN (`+list+`)`,
+		append([]any{messageID}, folderArgs...)...)
 	if err != nil {
 		return err
 	}
@@ -868,19 +959,23 @@ func resolveProviderMoveFoldersTx(ctx context.Context, tx *sql.Tx, messageID int
 	if err := rows.Close(); err != nil {
 		return err
 	}
-	confirmed := mutation.Status == MessageMutationApplied && observed[mutation.DestinationFolderID]
-	for _, folderID := range tombstones {
-		if observed[folderID] {
-			confirmed = false
+	for _, mutation := range mutations {
+		confirmed := mutation.Status == MessageMutationApplied && observed[mutation.DestinationFolderID]
+		for _, folderID := range tombstones {
+			if observed[folderID] {
+				confirmed = false
+			}
 		}
-	}
-	if confirmed {
-		_, err := tx.ExecContext(ctx, `DELETE FROM message_mutations WHERE id = ? AND status = ?`, mutation.ID, MessageMutationApplied)
-		return err
-	}
-	desired[mutation.DestinationFolderID] = true
-	for _, folderID := range tombstones {
-		delete(desired, folderID)
+		if confirmed {
+			if _, err := tx.ExecContext(ctx, `DELETE FROM message_mutations WHERE id = ? AND status = ?`, mutation.ID, MessageMutationApplied); err != nil {
+				return err
+			}
+			continue
+		}
+		desired[mutation.DestinationFolderID] = true
+		for _, folderID := range tombstones {
+			delete(desired, folderID)
+		}
 	}
 	return nil
 }

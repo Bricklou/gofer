@@ -203,6 +203,13 @@ func New(db *storage.DB, accountStore *config.AccountStore, syncer *mail.SyncOrc
 		providerAvatarHTTPClient: &http.Client{Timeout: 15 * time.Second, Transport: netguard.NewHTTPTransport(nil)},
 	}
 	setDAVPrivateTargetPolicy(privateTargetAllowed(db))
+	setDAVPlaintextPolicy(func(ctx context.Context, host string, port int) bool {
+		allowed, err := db.IsPlaintextTransportAllowed(ctx, "http", host, port)
+		if err != nil {
+			log.Printf("check HTTP plaintext exception for %s:%d: %v", host, port, err)
+		}
+		return err == nil && allowed
+	})
 	db.SetContactActivityHook(func(event storage.ContactActivityNotification) {
 		if h.syncer == nil {
 			return
@@ -2125,6 +2132,9 @@ func (h *Handler) fetchBodyRemote(ctx context.Context, msgID int64, info *storag
 	var graphErr error
 	var gmailErr error
 	var tooLarge *message.TooLargeError
+	if bodyData, attempted, err := h.fetchJMAPMessageMIME(ctx, msgID); attempted {
+		return bodyData, err
+	}
 	if bodyData, attempted, err := h.fetchOutlookGraphMessageMIME(ctx, msgID); attempted {
 		if err == nil || errors.As(err, &tooLarge) {
 			return bodyData, err
@@ -2726,7 +2736,13 @@ func (h *Handler) handleCreateAccount(w http.ResponseWriter, r *http.Request) {
 
 	req := accountRequestFromForm(r)
 
-	if req.EmailAddress == "" || req.IMAPHost == "" || req.SMTPHost == "" || req.Username == "" {
+	if req.Provider == providers.ProviderJMAP {
+		if err := h.prepareJMAPAccount(r, &req); err != nil {
+			w.Header().Set("Content-Type", "text/html")
+			views.AccountFormError(err.Error()).Render(r.Context(), w)
+			return
+		}
+	} else if req.EmailAddress == "" || req.IMAPHost == "" || req.SMTPHost == "" || req.Username == "" {
 		w.Header().Set("Content-Type", "application/html")
 		views.AccountFormError("All required fields must be filled in").Render(r.Context(), w)
 		return
@@ -2817,6 +2833,12 @@ func (h *Handler) handleUpdateAccount(w http.ResponseWriter, r *http.Request) {
 		if strings.TrimSpace(req.EmailAddress) == "" {
 			w.Header().Set("Content-Type", "text/html")
 			views.AccountFormError("Email address is required").Render(r.Context(), w)
+			return
+		}
+	} else if req.Provider == providers.ProviderJMAP {
+		if err := h.resolveJMAPAccountChanges(r, accountID, &req); err != nil {
+			w.Header().Set("Content-Type", "text/html")
+			views.AccountFormError(err.Error()).Render(r.Context(), w)
 			return
 		}
 	} else if req.EmailAddress == "" || req.IMAPHost == "" || req.SMTPHost == "" || req.Username == "" {
@@ -3216,6 +3238,20 @@ func (h *Handler) handleTestAccount(w http.ResponseWriter, r *http.Request) {
 		return
 	case providers.ProviderOutlook:
 		h.writeConnectionTestResults(w, r, h.testOutlookGraphMail(r.Context(), accountID), accountID)
+		return
+	case providers.ProviderJMAP:
+		if !providers.JMAPEnabled() {
+			h.writeConnectionTestResults(w, r, []models.ConnectionTestResult{{Service: "jmap", Error: providers.ErrJMAPDisabled.Error()}}, accountID)
+			return
+		}
+		password, err := h.accountStore.DecryptPassword(r.Context(), accountID)
+		if err != nil {
+			http.Error(w, fmt.Sprintf("get credentials: %v", err), http.StatusInternalServerError)
+			return
+		}
+		ctx, cancel := context.WithTimeout(r.Context(), 2*time.Minute)
+		defer cancel()
+		h.writeConnectionTestResults(w, r, []models.ConnectionTestResult{mail.JMAPConnectionTestResult(ctx, cfg, password)}, accountID)
 		return
 	}
 
@@ -4705,12 +4741,38 @@ func (h *Handler) handleSidebarAccount(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+// pausedJMAPAccounts gives the user's JMAP accounts while JMAP is turned
+// off, when they don't sync.
+func (h *Handler) pausedJMAPAccounts(ctx context.Context, userID string) (map[string]bool, error) {
+	paused := map[string]bool{}
+	if providers.JMAPEnabled() {
+		return paused, nil
+	}
+	accounts, err := h.db.GetAccounts(ctx, userID)
+	for _, account := range accounts {
+		if account.Provider == providers.ProviderJMAP {
+			paused[account.ID] = true
+		}
+	}
+	return paused, err
+}
+
 func (h *Handler) handleSyncMail(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	userID := h.userID(ctx)
 	accountIDs, err := h.db.GetEmailSyncAccountIDs(ctx, userID)
 	if err != nil {
 		htmlStatus(w, http.StatusInternalServerError, "Could not find email-sync accounts.")
+		return
+	}
+	paused, err := h.pausedJMAPAccounts(ctx, userID)
+	if err != nil {
+		htmlStatus(w, http.StatusInternalServerError, "Could not find email-sync accounts.")
+		return
+	}
+	accountIDs = slices.DeleteFunc(accountIDs, func(id string) bool { return paused[id] })
+	if len(accountIDs) == 0 && len(paused) > 0 {
+		htmlStatus(w, http.StatusConflict, providers.ErrJMAPDisabled.Error())
 		return
 	}
 	if len(accountIDs) == 0 {
@@ -4758,6 +4820,15 @@ func (h *Handler) handleSyncMailAccount(w http.ResponseWriter, r *http.Request) 
 	}
 	if !found {
 		htmlStatus(w, http.StatusNotFound, "That account is not available for mail sync.")
+		return
+	}
+	paused, err := h.pausedJMAPAccounts(ctx, userID)
+	if err != nil {
+		htmlStatus(w, http.StatusInternalServerError, "Could not find email-sync accounts.")
+		return
+	}
+	if paused[accountID] {
+		htmlStatus(w, http.StatusConflict, providers.ErrJMAPDisabled.Error())
 		return
 	}
 
@@ -5013,6 +5084,13 @@ func (h *Handler) saveComposeDraftFromForm(ctx context.Context, r *http.Request)
 			log.Printf("outlook draft save account=%s message=%d: %v", accountID, msgID, err)
 			return composeDraftSaveResult{}, &composeRequestError{status: http.StatusInternalServerError, message: "failed to save Outlook draft"}
 		}
+	case providers.ProviderJMAP:
+		if err := h.saveJMAPDraft(ctx, accountID, msgID, providerDraft); errors.Is(err, providers.ErrJMAPDisabled) {
+			return composeDraftSaveResult{}, &composeRequestError{status: http.StatusConflict, message: err.Error()}
+		} else if err != nil {
+			log.Printf("jmap draft save account=%s message=%d: %v", accountID, msgID, err)
+			return composeDraftSaveResult{}, &composeRequestError{status: http.StatusInternalServerError, message: "failed to save JMAP draft"}
+		}
 	case providers.ProviderGmail:
 		if gmailAPIMailRuntimeEnabled() {
 			if err := h.saveGmailAPIDraft(ctx, accountID, msgID, providerDraft); err != nil {
@@ -5076,6 +5154,11 @@ func (h *Handler) handleDiscardComposeDraft(w http.ResponseWriter, r *http.Reque
 	if draftProvider != nil && strings.TrimSpace(draftProvider.AccountProvider) == providers.ProviderGmail {
 		if err := h.deleteGmailAPIDraft(ctx, accountID, draftProvider.ProviderMessageID); err != nil {
 			log.Printf("gmail draft discard account=%s draft=%s: %v", accountID, draftID, err)
+		}
+	}
+	if draftProvider != nil && strings.TrimSpace(draftProvider.AccountProvider) == providers.ProviderJMAP {
+		if err := h.deleteJMAPDraft(ctx, accountID, draftID, draftProvider.ProviderMessageID); err != nil {
+			log.Printf("jmap draft discard account=%s draft=%s: %v", accountID, draftID, err)
 		}
 	}
 	h.deleteComposeAttachmentPaths(draftPaths)
@@ -5374,6 +5457,11 @@ func (h *Handler) handleDeleteDraft(w http.ResponseWriter, r *http.Request) {
 			log.Printf("gmail draft delete account=%s draft=%s: %v", email.AccountID, email.InternetMessageID, err)
 		}
 	}
+	if draftProvider != nil && strings.TrimSpace(draftProvider.AccountProvider) == providers.ProviderJMAP {
+		if err := h.deleteJMAPDraft(r.Context(), email.AccountID, email.InternetMessageID, draftProvider.ProviderMessageID); err != nil {
+			log.Printf("jmap draft delete account=%s draft=%s: %v", email.AccountID, email.InternetMessageID, err)
+		}
+	}
 	h.deleteComposeAttachmentPaths(draftPaths)
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]string{"status": "discarded"})
@@ -5467,6 +5555,10 @@ func (h *Handler) handleCompose(w http.ResponseWriter, r *http.Request) {
 		localDraftMessageID, _ = h.db.GetMessageLocalIDByInternetIDInternal(ctx, accountID, draftID)
 	}
 	queued, err := h.queueOutgoingMessage(ctx, accountID, localDraftMessageID, draftID, msg, time.Now().UTC(), false)
+	if errors.Is(err, providers.ErrJMAPDisabled) {
+		writeComposeJSONError(w, http.StatusConflict, err.Error())
+		return
+	}
 	if err != nil {
 		writeComposeJSONError(w, http.StatusInternalServerError, "failed to queue message")
 		return
@@ -5517,6 +5609,10 @@ func (h *Handler) handleComposeSchedule(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 	scheduled, err := h.queueOutgoingMessage(r.Context(), saved.AccountID, saved.MessageID, saved.DraftID, msg, scheduledFor, true)
+	if errors.Is(err, providers.ErrJMAPDisabled) {
+		writeComposeJSONError(w, http.StatusConflict, err.Error())
+		return
+	}
 	if err != nil {
 		writeComposeJSONError(w, http.StatusInternalServerError, "failed to schedule message")
 		return

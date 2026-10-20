@@ -181,6 +181,8 @@ func (h *Handler) applyRemoteMessageMutation(ctx context.Context, mutation stora
 		return h.applyOutlookMessageMutation(ctx, mutation, *info)
 	case storage.MessageMutationProviderIMAP:
 		return h.applyIMAPMessageMutation(ctx, mutation, *info)
+	case storage.MessageMutationProviderJMAP:
+		return h.applyJMAPMessageMutation(ctx, mutation, *info)
 	default:
 		return fmt.Errorf("unsupported message mutation provider %q", mutation.ProviderType)
 	}
@@ -192,6 +194,8 @@ func messageMutationProvider(provider string) string {
 		return storage.MessageMutationProviderGmail
 	case providers.ProviderOutlook:
 		return storage.MessageMutationProviderOutlook
+	case providers.ProviderJMAP:
+		return storage.MessageMutationProviderJMAP
 	default:
 		return storage.MessageMutationProviderIMAP
 	}

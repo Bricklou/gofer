@@ -3,7 +3,10 @@ package storage
 import (
 	"context"
 	"path/filepath"
+	"strings"
 	"testing"
+
+	"github.com/cristianadrielbraun/gofer/internal/models"
 )
 
 func TestMailSecurityExceptionsAreExactAndTrackAffectedAccounts(t *testing.T) {
@@ -148,5 +151,155 @@ func TestMigrateV67ExpandsPrivateTargetExceptions(t *testing.T) {
 	allowed, err := db.IsPrivateTargetAllowed(context.Background(), "http", "127.0.0.1", 8080)
 	if err != nil || !allowed {
 		t.Fatalf("private target after migration = %v, %v; want true", allowed, err)
+	}
+}
+
+func TestPlaintextTransportExceptionAcceptsHTTP(t *testing.T) {
+	ctx := context.Background()
+	db, err := New(filepath.Join(t.TempDir(), "gofer.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	if err := db.AddPlaintextTransportException(ctx, "HTTP", "JMAP.Lab.Test.", 8080, "admin"); err != nil {
+		t.Fatalf("AddPlaintextTransportException(http) error = %v", err)
+	}
+	if allowed, err := db.IsPlaintextTransportAllowed(ctx, "http", "jmap.lab.test", 8080); err != nil || !allowed {
+		t.Fatalf("IsPlaintextTransportAllowed(http) = %v, %v; want true", allowed, err)
+	}
+	if allowed, err := db.IsPlaintextTransportAllowed(ctx, "imap", "jmap.lab.test", 8080); err != nil || allowed {
+		t.Fatalf("HTTP exception allowed IMAP = %v, %v", allowed, err)
+	}
+	if err := db.AddPlaintextTransportException(ctx, "https", "jmap.lab.test", 8443, "admin"); err == nil {
+		t.Fatal("plaintext exception accepted https")
+	}
+}
+
+// Exceptions made before schema 115 survive the table rebuild, and the
+// rebuilt table accepts HTTP plaintext exceptions.
+func TestMigrateV115KeepsExceptionsAndAllowsHTTPPlaintext(t *testing.T) {
+	ctx := context.Background()
+	db, err := New(filepath.Join(t.TempDir(), "gofer.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	if _, err := db.Write().Exec(`DROP TABLE mail_security_exceptions;
+CREATE TABLE mail_security_exceptions (
+	id TEXT PRIMARY KEY,
+	kind TEXT NOT NULL CHECK (kind IN ('http_discovery', 'plaintext_transport', 'private_target')),
+	protocol TEXT NOT NULL DEFAULT '',
+	host TEXT NOT NULL CHECK (host <> ''),
+	port INTEGER NOT NULL DEFAULT 0,
+	created_by TEXT NOT NULL DEFAULT '',
+	created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+	CHECK (
+		(kind = 'http_discovery' AND protocol = '' AND port = 0)
+		OR
+		(kind = 'plaintext_transport' AND protocol IN ('imap', 'smtp') AND port BETWEEN 1 AND 65535)
+		OR
+		(kind = 'private_target' AND protocol IN ('http', 'https', 'imap', 'smtp') AND port BETWEEN 1 AND 65535)
+	),
+	UNIQUE(kind, protocol, host, port)
+);
+INSERT INTO mail_security_exceptions (id, kind, protocol, host, port, created_by) VALUES ('old-imap', 'plaintext_transport', 'imap', 'mail.lab.test', 143, 'admin');
+DELETE FROM schema_version; INSERT INTO schema_version(version) VALUES(114);`); err != nil {
+		t.Fatal(err)
+	}
+	if err := db.AddPlaintextTransportException(ctx, "http", "jmap.lab.test", 8080, "admin"); err == nil {
+		t.Fatal("old table accepted an HTTP plaintext exception")
+	}
+	if err := migrateV114ToV115(db.Write()); err != nil {
+		t.Fatal(err)
+	}
+	if allowed, err := db.IsPlaintextTransportAllowed(ctx, "imap", "mail.lab.test", 143); err != nil || !allowed {
+		t.Fatalf("old exception after migration = %v, %v", allowed, err)
+	}
+	if err := db.AddPlaintextTransportException(ctx, "http", "jmap.lab.test", 8080, "admin"); err != nil {
+		t.Fatalf("HTTP plaintext exception after migration: %v", err)
+	}
+}
+
+func TestMailSecurityExceptionUsedBy(t *testing.T) {
+	imapPlain := DiagnosticTransportAccount{IMAPHost: "mail.lab.test", IMAPPort: 143, IMAPTLSMode: "plaintext", SMTPHost: "mail.lab.test", SMTPPort: 465, SMTPTLSMode: "tls"}
+	jmapPlain := DiagnosticTransportAccount{JMAPSessionURL: "http://JMAP.lab.test:8080/.well-known/jmap"}
+	jmapTLS := DiagnosticTransportAccount{JMAPSessionURL: "https://jmap.lab.test/.well-known/jmap"}
+	// An IMAP account on the same host and port as an HTTP exception.
+	imapOnHTTPPort := DiagnosticTransportAccount{IMAPHost: "jmap.lab.test", IMAPPort: 8080, IMAPTLSMode: "tls"}
+	// An IMAP account whose contacts and calendars sync over DAV.
+	davPlain := DiagnosticTransportAccount{IMAPHost: "mail.lab.test", IMAPPort: 993, CardDAVURL: "http://dav.lab.test:5232/", CalDAVURL: "https://cal.lab.test/dav/"}
+	plaintext := func(protocol, host string, port int) models.MailSecurityException {
+		return models.MailSecurityException{Kind: models.MailSecurityExceptionPlaintextTransport, Protocol: protocol, Host: host, Port: port}
+	}
+	private := func(protocol, host string, port int) models.MailSecurityException {
+		return models.MailSecurityException{Kind: models.MailSecurityExceptionPrivateTarget, Protocol: protocol, Host: host, Port: port}
+	}
+	cases := []struct {
+		name    string
+		item    models.MailSecurityException
+		account DiagnosticTransportAccount
+		want    bool
+	}{
+		{"plaintext IMAP", plaintext("imap", "mail.lab.test", 143), imapPlain, true},
+		{"plaintext SMTP over TLS", plaintext("smtp", "mail.lab.test", 465), imapPlain, false},
+		{"private SMTP over TLS", private("smtp", "mail.lab.test", 465), imapPlain, true},
+		{"plaintext HTTP JMAP", plaintext("http", "jmap.lab.test", 8080), jmapPlain, true},
+		{"private HTTP JMAP", private("http", "jmap.lab.test", 8080), jmapPlain, true},
+		{"private HTTPS for an HTTP URL", private("https", "jmap.lab.test", 8080), jmapPlain, false},
+		{"private HTTPS default port", private("https", "jmap.lab.test", 443), jmapTLS, true},
+		{"plaintext HTTP for an HTTPS URL", plaintext("http", "jmap.lab.test", 443), jmapTLS, false},
+		{"HTTPS target is not IMAP", private("https", "jmap.lab.test", 8080), imapOnHTTPPort, false},
+		{"plaintext HTTP CardDAV", plaintext("http", "dav.lab.test", 5232), davPlain, true},
+		{"private HTTPS CalDAV", private("https", "cal.lab.test", 443), davPlain, true},
+		{"plaintext HTTP for an HTTPS CalDAV URL", plaintext("http", "cal.lab.test", 443), davPlain, false},
+		{"HTTP discovery uses no account", models.MailSecurityException{Kind: models.MailSecurityExceptionHTTPDiscovery, Host: "jmap.lab.test"}, jmapPlain, false},
+	}
+	for _, tc := range cases {
+		if got := MailSecurityExceptionUsedBy(tc.item, tc.account); got != tc.want {
+			t.Errorf("%s: got %v, want %v", tc.name, got, tc.want)
+		}
+	}
+}
+
+func TestMailSecurityExceptionsListHTTPAccounts(t *testing.T) {
+	ctx := context.Background()
+	db, err := New(filepath.Join(t.TempDir(), "gofer.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	if _, err := db.Write().ExecContext(ctx, `INSERT INTO users(id,username,username_normalized) VALUES('owner','owner','owner');
+INSERT INTO accounts(id,user_id,provider,email_address,imap_host,imap_port,jmap_session_url) VALUES
+ ('jmap','owner','jmap','robin@example.test','',0,'http://jmap.lab.test:8080/.well-known/jmap'),
+ ('imap','owner','imap','sam@example.test','jmap.lab.test',8080,''),
+ ('dav','owner','imap','lena@example.test','mail.lab.test',993,'');
+INSERT INTO account_contact_sync_configs(account_id,user_id,provider,enabled,base_url) VALUES('dav','owner','carddav',1,'http://jmap.lab.test:8080/dav/');`); err != nil {
+		t.Fatal(err)
+	}
+	if err := db.AddPlaintextTransportException(ctx, "http", "jmap.lab.test", 8080, "admin"); err != nil {
+		t.Fatal(err)
+	}
+	if err := db.AddPrivateTargetException(ctx, "https", "jmap.lab.test", 8080, "admin"); err != nil {
+		t.Fatal(err)
+	}
+	items, err := db.ListMailSecurityExceptions(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, item := range items {
+		var ids []string
+		for _, account := range item.Accounts {
+			ids = append(ids, account.ID)
+		}
+		switch item.Protocol {
+		case "http":
+			if strings.Join(ids, ",") != "dav,jmap" {
+				t.Errorf("HTTP plaintext exception accounts = %v, want the CardDAV and JMAP accounts", ids)
+			}
+		case "https":
+			if len(ids) != 0 {
+				t.Errorf("HTTPS private target accounts = %v, want none", ids)
+			}
+		}
 	}
 }

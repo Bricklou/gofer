@@ -260,7 +260,7 @@ func (f *userGmailFixture) messageID(t *testing.T, owner, providerID string) int
 	t.Helper()
 	var id int64
 	f.local(t, owner, func(db *storage.DB) error {
-		return db.Read().QueryRow(`SELECT id FROM messages WHERE account_id=? AND remote_message_id=?`, f.ids[owner], providerID).Scan(&id)
+		return db.Read().QueryRow(`SELECT DISTINCT s.message_id FROM message_folder_state s JOIN folders f ON f.id=s.folder_id WHERE f.account_id=? AND s.remote_message_id=?`, f.ids[owner], providerID).Scan(&id)
 	})
 	return id
 }
@@ -593,7 +593,7 @@ func TestUserGmailRejectsChangedOrInvalidBodies(t *testing.T) {
 				var query string
 				switch change {
 				case "message-id":
-					query = `UPDATE messages SET remote_message_id='replacement' WHERE id=` + strconv.FormatInt(id, 10)
+					query = `UPDATE message_folder_state SET remote_message_id='replacement' WHERE message_id=` + strconv.FormatInt(id, 10)
 				case "account-subject":
 					query = `UPDATE accounts SET provider_account_id='changed-subject'`
 				case "deleted":

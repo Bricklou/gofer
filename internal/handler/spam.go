@@ -72,6 +72,31 @@ func (h *Handler) handleMarkMessagesSpamState(w http.ResponseWriter, r *http.Req
 			continue
 		}
 
+		if strings.EqualFold(h.spamAccountProvider(ctx, infos[0].MessageMutationInfo), providers.ProviderJMAP) {
+			// On JMAP, spam is a move into Junk, or back to the inbox, sent to
+			// the server through the queued changes like any other move.
+			var moving []storage.ThreadMessageMutationInfo
+			for _, info := range infos {
+				if info.FolderID != destFolderID {
+					moving = append(moving, info)
+				}
+			}
+			if len(moving) > 0 {
+				if err := h.queueMessageMoves(ctx, moving, destFolderID); err != nil {
+					if firstErr == nil {
+						firstErr = err
+					}
+					failedMessages += len(moving)
+					continue
+				}
+			}
+			h.queueJMAPSpamKeywords(ctx, infos, destFolderID, disposition)
+			updatedTargets++
+			updatedMessages += len(infos)
+			h.publishSpamMutation(infos, destFolderID)
+			continue
+		}
+
 		targetUpdated := false
 		for _, info := range infos {
 			accountProvider := h.spamAccountProvider(ctx, info.MessageMutationInfo)
@@ -118,6 +143,26 @@ func (h *Handler) handleMarkMessagesSpamState(w http.ResponseWriter, r *http.Req
 		"failed":        failedMessages,
 		"remote_failed": remoteFailedMessages,
 	})
+}
+
+// queueJMAPSpamKeywords queues the spam training keywords for the next sync
+// to send, $junk for spam and $notjunk for not spam, each clearing the other.
+// They teach the server's filter; the move has already been queued, so a
+// keyword that can't be queued is only logged.
+func (h *Handler) queueJMAPSpamKeywords(ctx context.Context, infos []storage.ThreadMessageMutationInfo, destFolderID string, disposition spamDisposition) {
+	add, remove := "$junk", "$notjunk"
+	if disposition == spamDispositionNotSpam {
+		add, remove = remove, add
+	}
+	for _, info := range infos {
+		for _, change := range []struct{ operation, keyword string }{
+			{storage.LabelMutationAdd, add}, {storage.LabelMutationRemove, remove},
+		} {
+			if err := h.db.ReplaceLabelMutation(ctx, info.AccountID, info.MessageID, destFolderID, storage.LabelProviderKeyword, change.operation, change.keyword); err != nil {
+				log.Printf("spam action %s: queue %s for account=%s message=%d: %v", disposition, change.keyword, info.AccountID, info.MessageID, err)
+			}
+		}
+	}
 }
 
 func (h *Handler) spamDestinationFolder(ctx context.Context, accountID string, disposition spamDisposition) (string, string, error) {
@@ -336,7 +381,7 @@ func (h *Handler) reportOutlookMessageSpam(ctx context.Context, disposition spam
 		return err
 	}
 	if strings.TrimSpace(moved.ID) != "" && strings.TrimSpace(moved.ID) != providerMessageID {
-		if err := h.db.SetMessageProviderMessageID(ctx, messageID, strings.TrimSpace(moved.ID)); err != nil {
+		if err := h.db.ReplaceProviderMessageID(ctx, messageID, providerMessageID, strings.TrimSpace(moved.ID)); err != nil {
 			log.Printf("cache outlook message id failed: %v", err)
 		}
 	}

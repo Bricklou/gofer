@@ -98,7 +98,7 @@ func TestUserGmailHTTPBodiesAttachmentsAndSyncControls(t *testing.T) {
 		}
 		var messageID int64
 		if err := f.routing.WithUser(t.Context(), owner, func(db *storage.DB) error {
-			return db.Read().QueryRow(`SELECT id FROM messages WHERE account_id=? AND remote_message_id='m1'`, account.ID).Scan(&messageID)
+			return db.Read().QueryRow(`SELECT DISTINCT s.message_id FROM message_folder_state s JOIN folders f ON f.id=s.folder_id WHERE f.account_id=? AND s.remote_message_id='m1'`, account.ID).Scan(&messageID)
 		}); err != nil {
 			t.Fatal(err)
 		}

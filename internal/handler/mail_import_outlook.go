@@ -18,13 +18,15 @@ import (
 	gomail "github.com/emersion/go-message/mail"
 
 	mailmessage "github.com/cristianadrielbraun/gofer/internal/mail/message"
+	"github.com/cristianadrielbraun/gofer/internal/providers"
 	"github.com/cristianadrielbraun/gofer/internal/storage"
 )
 
 // mailImportFolderRemote is how an upload names a destination folder: the
-// Gmail label or Outlook folder behind it, or the IMAP folder name.
+// Gmail label, Outlook folder or JMAP mailbox behind it, or the IMAP folder
+// name.
 func mailImportFolderRemote(provider string, folder storage.MailExportFolder) string {
-	if provider == "gmail" || provider == "outlook" {
+	if provider == "gmail" || provider == "outlook" || provider == providers.ProviderJMAP {
 		return folder.ProviderRemoteID
 	}
 	return folder.RemoteID

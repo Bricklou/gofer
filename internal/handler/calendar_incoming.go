@@ -195,7 +195,7 @@ func applyCalendarIncomingCalDAV(ctx context.Context, source storage.CalendarSou
 	if err != nil {
 		return err
 	}
-	client := calendarDeleteClient(davHTTPTransport)
+	client := calendarDeleteClient(calDAVHTTPTransport)
 	current, headers, err := calendarUpdateCalDAVGet(ctx, client, endpoint, credentials.username, credentials.password)
 	if err != nil {
 		if calendarNotificationMissing(err) {

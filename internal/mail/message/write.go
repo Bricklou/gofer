@@ -66,6 +66,13 @@ func BuildMIMEMessageForGraph(msg *OutgoingMessage) ([]byte, error) {
 	return buildMIMEMessage(msg, true, nil)
 }
 
+// BuildMIMEMessageForJMAP preserves Bcc in the stored email. RFC 8621 section
+// 7.5 requires the submission server to remove Bcc during delivery, while the
+// imported original becomes the sender's Sent copy.
+func BuildMIMEMessageForJMAP(msg *OutgoingMessage) ([]byte, error) {
+	return buildMIMEMessage(msg, true, nil)
+}
+
 func BuildMIMEMessageForIMAPDraft(msg *OutgoingMessage, revisionToken string) ([]byte, error) {
 	revisionToken = strings.TrimSpace(revisionToken)
 	if revisionToken == "" || strings.ContainsAny(revisionToken, "\r\n") {

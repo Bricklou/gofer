@@ -3,6 +3,7 @@ package mail
 import (
 	"context"
 	"encoding/json"
+	"maps"
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
@@ -507,7 +508,7 @@ func TestSyncOutlookGraphAccountImportsFoldersMessagesAndDeltaCursor(t *testing.
 		t.Fatalf("GetMessageLocalIDByInternetIDInternal() = %d, %v", msgID, err)
 	}
 	var providerID string
-	if err := db.Read().QueryRowContext(ctx, `SELECT COALESCE(remote_message_id, '') FROM messages WHERE id = ?`, msgID).Scan(&providerID); err != nil {
+	if err := db.Read().QueryRowContext(ctx, `SELECT COALESCE(MAX(remote_message_id), '') FROM message_folder_state WHERE message_id = ?`, msgID).Scan(&providerID); err != nil {
 		t.Fatalf("query remote_message_id: %v", err)
 	}
 	if providerID != "graph-message-1" {
@@ -518,7 +519,7 @@ func TestSyncOutlookGraphAccountImportsFoldersMessagesAndDeltaCursor(t *testing.
 		t.Fatalf("GetMessageLocalIDByInternetIDInternal(legacy) = %d, %v", legacyID, err)
 	}
 	var legacyProviderID string
-	if err := db.Read().QueryRowContext(ctx, `SELECT COALESCE(remote_message_id, '') FROM messages WHERE id = ?`, legacyID).Scan(&legacyProviderID); err != nil {
+	if err := db.Read().QueryRowContext(ctx, `SELECT COALESCE(MAX(remote_message_id), '') FROM message_folder_state WHERE message_id = ?`, legacyID).Scan(&legacyProviderID); err != nil {
 		t.Fatalf("query legacy remote_message_id: %v", err)
 	}
 	if legacyProviderID != "graph-legacy-1" {
@@ -595,6 +596,81 @@ func TestSyncOutlookGraphFolderFullBaselinePrunesMissingProviderMessages(t *test
 	}
 	if got := queryOutlookGraphFolderCursor(t, ctx, db); got != deltaLink {
 		t.Fatalf("sync_cursor = %q, want %q", got, deltaLink)
+	}
+}
+
+// Outlook keeps mail sent to oneself as two messages with one
+// internetMessageId: the Sent Items copy and the received one. Syncing the
+// Inbox adds the received copy without taking the Sent one over, and pruning
+// the Inbox later leaves the Sent copy alone.
+func TestSyncOutlookGraphFolderKeepsSentCopyOfMailSentToOneself(t *testing.T) {
+	ctx := context.Background()
+	db := newLabelSyncTestDB(t)
+	seedOutlookGraphFolder(t, ctx, db)
+	if err := db.UpsertFolders(ctx, []storage.UpsertFolderInput{{
+		ID: "acc_sent", AccountID: "acc", RemoteID: "Sent Items", ProviderRemoteID: "folder-sent", Name: "Sent Items", Role: "sent", Selectable: true,
+	}}); err != nil {
+		t.Fatalf("UpsertFolders() error = %v", err)
+	}
+	if _, err := db.UpsertProviderSyncMessages(ctx, []storage.ProviderSyncMessage{{
+		AccountID: "acc", FolderID: "acc_sent", ProviderMessageID: "graph-sent", InternetMessageID: "<self@example.com>",
+		Subject: "Packing list", FromEmail: "user@example.com", DateSent: time.Now(), IsRead: true,
+	}}); err != nil {
+		t.Fatalf("UpsertProviderSyncMessages(sent) error = %v", err)
+	}
+
+	inboxMessages := []map[string]any{{
+		"id":                "graph-received",
+		"internetMessageId": "<self@example.com>",
+		"subject":           "Packing list",
+		"from":              map[string]any{"emailAddress": map[string]string{"address": "user@example.com"}},
+	}}
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet || r.URL.Path != "/me/mailFolders/folder-inbox/messages/delta" {
+			t.Fatalf("unexpected Graph request %s %s", r.Method, r.URL.String())
+		}
+		_ = json.NewEncoder(w).Encode(map[string]any{"value": inboxMessages, "@odata.deltaLink": "https://graph.test/delta/inbox"})
+	}))
+	defer server.Close()
+	previousBaseURL := outlookGraphBaseURL
+	outlookGraphBaseURL = server.URL
+	t.Cleanup(func() { outlookGraphBaseURL = previousBaseURL })
+
+	copies := func() map[string]string {
+		t.Helper()
+		rows, err := db.Read().QueryContext(ctx, `
+			SELECT mfs.folder_id, COALESCE(mfs.remote_message_id, '')
+			FROM messages m JOIN message_folder_state mfs ON mfs.message_id = m.id AND mfs.is_deleted = 0
+			WHERE m.account_id = 'acc' AND m.internet_message_id = '<self@example.com>'`)
+		if err != nil {
+			t.Fatalf("query copies: %v", err)
+		}
+		defer rows.Close()
+		got := map[string]string{}
+		for rows.Next() {
+			var folderID, providerID string
+			if err := rows.Scan(&folderID, &providerID); err != nil {
+				t.Fatalf("scan copy: %v", err)
+			}
+			got[folderID] = providerID
+		}
+		return got
+	}
+
+	orchestrator := NewSyncOrchestrator(db, nil, nil, labelSyncTestTokens{})
+	if err := orchestrator.syncOutlookGraphFolder(ctx, "acc", "graph-token", outlookGraphInboxTarget(""), nil, 1, 1); err != nil {
+		t.Fatalf("syncOutlookGraphFolder() error = %v", err)
+	}
+	if got, want := copies(), map[string]string{"acc_sent": "graph-sent", "acc_inbox": "graph-received"}; !maps.Equal(got, want) {
+		t.Fatalf("copies after Inbox sync = %v, want %v", got, want)
+	}
+
+	inboxMessages = []map[string]any{}
+	if err := orchestrator.syncOutlookGraphFolder(ctx, "acc", "graph-token", outlookGraphInboxTarget(""), nil, 1, 1); err != nil {
+		t.Fatalf("syncOutlookGraphFolder(empty Inbox) error = %v", err)
+	}
+	if got, want := copies(), map[string]string{"acc_sent": "graph-sent"}; !maps.Equal(got, want) {
+		t.Fatalf("copies after the received copy left the Inbox = %v, want %v", got, want)
 	}
 }
 
@@ -1397,7 +1473,7 @@ func queryOutlookGraphDeletedByRemoteID(t *testing.T, ctx context.Context, db *s
 		SELECT mfs.is_deleted
 		FROM messages m
 		JOIN message_folder_state mfs ON mfs.message_id = m.id
-		WHERE m.account_id = 'acc' AND m.remote_message_id = ? AND mfs.folder_id = 'acc_inbox'`, providerMessageID).Scan(&deleted); err != nil {
+		WHERE m.account_id = 'acc' AND mfs.remote_message_id = ? AND mfs.folder_id = 'acc_inbox'`, providerMessageID).Scan(&deleted); err != nil {
 		t.Fatalf("query deleted state for %s: %v", providerMessageID, err)
 	}
 	return deleted
@@ -1424,7 +1500,7 @@ func queryOutlookGraphFolderProgress(t *testing.T, ctx context.Context, db *stor
 func queryOutlookGraphProviderMessageCount(t *testing.T, ctx context.Context, db *storage.DB) int {
 	t.Helper()
 	var count int
-	if err := db.Read().QueryRowContext(ctx, `SELECT COUNT(*) FROM messages WHERE account_id = 'acc' AND COALESCE(remote_message_id, '') != ''`).Scan(&count); err != nil {
+	if err := db.Read().QueryRowContext(ctx, `SELECT COUNT(DISTINCT s.message_id) FROM message_folder_state s JOIN folders f ON f.id = s.folder_id WHERE f.account_id = 'acc' AND COALESCE(s.remote_message_id, '') != ''`).Scan(&count); err != nil {
 		t.Fatalf("query provider message count: %v", err)
 	}
 	return count

@@ -43,7 +43,7 @@ func (s *userMailDeliveryScope) providerDraft(ctx context.Context) (bool, error)
 	}
 	text := sanitizeOutgoingErrorText(err.Error())
 	next := time.Now().Add(sentCopyRetryDelay(op.AttemptCount))
-	if s.providerMail.RetryAt().After(next) {
+	if s.providerMail != nil && s.providerMail.RetryAt().After(next) {
 		next = s.providerMail.RetryAt()
 	}
 	saveErr := s.call(ctx, func(db *storage.DB) error { return db.FailUserProviderDraft(ctx, *op, status, text, next, rejected) })
@@ -51,7 +51,10 @@ func (s *userMailDeliveryScope) providerDraft(ctx context.Context) (bool, error)
 }
 
 func (s *userMailDeliveryScope) syncProviderDraft(ctx context.Context, op storage.UserProviderDraftOperation) (bool, error) {
-	p := s.providerMail
+	p := s.drafts
+	if p == nil {
+		return false, errors.New("provider drafts are unavailable")
+	}
 	if op.Kind == "delete" {
 		found, err := p.FindDrafts(ctx, op.State.DraftKey)
 		if err != nil {

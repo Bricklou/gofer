@@ -149,6 +149,9 @@ type SyncOrchestrator struct {
 	dirtyIMAPFolders    map[string]map[string]dirtyIMAPFolder
 	dirtyIMAPDraining   map[string]bool
 	dirtyIMAPDrainDone  map[string]chan struct{}
+	// jmapPushSyncs holds the JMAP accounts syncing after a push; true means
+	// another push came in meanwhile and asks for one more sync.
+	jmapPushSyncs       map[string]bool
 	cancelFuncs         map[string]*accountWorker
 	lifecycleCtx        context.Context
 	syncAccountOverride func(context.Context, string, bool) error
@@ -696,6 +699,9 @@ func (o *SyncOrchestrator) startIDLEWatchers(ctx context.Context, accountID stri
 		log.Printf("idle %s: skipping IMAP IDLE for Graph-first Outlook sync", accountID)
 		return
 	}
+	if cfg.Provider == providers.ProviderJMAP && !providers.JMAPEnabled() {
+		return
+	}
 	if o.shouldUseGmailAPIMail(cfg) {
 		log.Printf("idle %s: skipping IMAP IDLE for Gmail API-first sync", accountID)
 		return
@@ -726,6 +732,19 @@ func (o *SyncOrchestrator) startIDLEWatchers(ctx context.Context, accountID stri
 	}
 
 	for _, folder := range folders {
+		if cfg.Provider == providers.ProviderJMAP {
+			// One push connection covers the whole JMAP account; its status
+			// shows on the Inbox, whichever folders are chosen for IDLE.
+			if folder.Role != "inbox" || len(watchers) > 0 {
+				continue
+			}
+			folderID, remoteName := folder.ID, folder.RemoteID
+			watchers = append(watchers, NewJMAPPushWatcher(cfg, password,
+				func() { o.requestJMAPPushSync(watcherCtx, accountID) },
+				func(status imap.IdleWatcherStatus) { o.updateIDLEFolderStatus(accountID, folderID, remoteName, status) }))
+			folderIDs[folderID] = true
+			continue
+		}
 		if !idleFolderIDs[folder.ID] || strings.TrimSpace(folder.RemoteID) == "" {
 			continue
 		}
@@ -770,6 +789,68 @@ func (o *SyncOrchestrator) startIDLEWatchers(ctx context.Context, accountID stri
 		wg.Wait()
 		close(group.done)
 	}()
+}
+
+// requestJMAPPushSync syncs a JMAP account after its server pushed a change.
+// Pushes that arrive while that sync runs ask for one more sync after it,
+// however many there are.
+func (o *SyncOrchestrator) requestJMAPPushSync(ctx context.Context, accountID string) {
+	o.mu.Lock()
+	if o.jmapPushSyncs == nil {
+		o.jmapPushSyncs = make(map[string]bool)
+	}
+	if _, syncing := o.jmapPushSyncs[accountID]; syncing {
+		o.jmapPushSyncs[accountID] = true
+		o.mu.Unlock()
+		return
+	}
+	o.jmapPushSyncs[accountID] = false
+	o.mu.Unlock()
+	go func() {
+		for {
+			o.syncJMAPAfterPush(ctx, accountID)
+			o.mu.Lock()
+			again := o.jmapPushSyncs[accountID] && ctx.Err() == nil
+			if !again {
+				delete(o.jmapPushSyncs, accountID)
+				o.mu.Unlock()
+				return
+			}
+			o.jmapPushSyncs[accountID] = false
+			o.mu.Unlock()
+		}
+	}()
+}
+
+// syncJMAPAfterPush runs one account sync for a push. A sync already running
+// may have read the server before the pushed change, so it waits for that one
+// to end and then syncs anyway.
+func (o *SyncOrchestrator) syncJMAPAfterPush(ctx context.Context, accountID string) {
+	for ctx.Err() == nil {
+		o.mu.Lock()
+		run := o.running[accountID]
+		o.mu.Unlock()
+		if run != nil {
+			select {
+			case <-ctx.Done():
+				return
+			case <-run.done:
+			}
+			continue
+		}
+		syncCtx, finish, ok := o.beginAccountSync(ctx, accountID, accountSyncBackground)
+		if !ok {
+			continue
+		}
+		if err := o.syncAccount(syncCtx, accountID, false); err != nil {
+			log.Printf("sync account %s after a push: %v", accountID, err)
+			o.markAccountSyncError(syncCtx, accountID, err)
+		} else {
+			o.clearAccountSyncError(syncCtx, accountID)
+		}
+		finish()
+		return
+	}
 }
 
 func (o *SyncOrchestrator) getInterval() int {
@@ -2128,7 +2209,7 @@ func convertFlagUpdates(imapUpdates []imap.FlagUpdate) []storage.FlagUpdate {
 			IsStarred:     u.IsStarred,
 			Labels:        u.Labels,
 			LabelsKnown:   true,
-			LabelProvider: storage.LabelProviderIMAPKeyword,
+			LabelProvider: storage.LabelProviderKeyword,
 		}
 	}
 	return updates
@@ -2165,6 +2246,14 @@ func (o *SyncOrchestrator) syncAccount(ctx context.Context, accountID string, in
 	cfg, err := o.imapAccountConfig(ctx, accountID)
 	if err != nil {
 		return err
+	}
+	if cfg.Provider == providers.ProviderJMAP {
+		if !providers.JMAPEnabled() {
+			// Paused while JMAP is turned off, with no error: the account
+			// shows why on its own.
+			return nil
+		}
+		return o.syncJMAPAccount(ctx, accountID, cfg)
 	}
 
 	if o.shouldUseOutlookGraphMail(cfg) {

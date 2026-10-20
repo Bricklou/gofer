@@ -12,6 +12,7 @@ const (
 	FolderDiscoveryIMAP    = "imap"
 	FolderDiscoveryGmail   = "gmail"
 	FolderDiscoveryOutlook = "outlook"
+	FolderDiscoveryJMAP    = "jmap"
 
 	folderRemovalGracePeriod = 24 * time.Hour
 )
@@ -39,7 +40,7 @@ func (db *DB) ReconcileDiscoveredFolders(ctx context.Context, accountID, provide
 	if accountID == "" {
 		return FolderDiscoveryResult{}, nil
 	}
-	if providerKind != FolderDiscoveryGmail && providerKind != FolderDiscoveryOutlook {
+	if providerKind != FolderDiscoveryGmail && providerKind != FolderDiscoveryOutlook && providerKind != FolderDiscoveryJMAP {
 		providerKind = FolderDiscoveryIMAP
 	}
 	if completedAt.IsZero() {
@@ -50,7 +51,7 @@ func (db *DB) ReconcileDiscoveredFolders(ctx context.Context, accountID, provide
 
 	seen := uniqueFolderDiscoveryIdentities(seenIdentities)
 	identityExpr := "COALESCE(remote_id, '')"
-	if providerKind == FolderDiscoveryGmail || providerKind == FolderDiscoveryOutlook {
+	if providerKind == FolderDiscoveryGmail || providerKind == FolderDiscoveryOutlook || providerKind == FolderDiscoveryJMAP {
 		identityExpr = "COALESCE(provider_remote_id, '')"
 	}
 

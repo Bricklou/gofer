@@ -71,7 +71,7 @@ func (s *UserAccountStore) QueueCalendarReply(ctx context.Context, claim *UserCa
 	if err := s.checkServiceSnapshot(snapshot.service); err != nil {
 		return "", err
 	}
-	if !snapshot.service.SMTPConfigured() || !strings.EqualFold(input.EnvelopeFrom, snapshot.service.Identity().EmailAddress) {
+	if !snapshot.service.SendsEmail() || input.Transport != snapshot.service.EmailTransport() || !strings.EqualFold(input.EnvelopeFrom, snapshot.service.Identity().EmailAddress) {
 		return "", ErrAccountServicesChanged
 	}
 	// Freeze caller-owned slices before routing/cache/writer waits.

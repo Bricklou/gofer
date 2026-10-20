@@ -2,8 +2,10 @@ package handler
 
 import (
 	"context"
+	"fmt"
 	"net/http"
 	"net/url"
+	"strconv"
 	"strings"
 	"sync/atomic"
 
@@ -28,6 +30,64 @@ func setDAVPrivateTargetPolicy(policy netguard.PrivatePolicy) {
 func davPrivateTargetAllowed(ctx context.Context, protocol, host string, port int) bool {
 	policy := davPrivateTargetPolicy.Load()
 	return policy != nil && *policy != nil && (*policy)(ctx, protocol, host, port)
+}
+
+// calDAVHTTPTransport and cardDAVHTTPTransport carry every CalDAV and
+// CardDAV request. Requests go out over HTTPS, or over plain HTTP only to a
+// host and port an administrator approved with an HTTP plaintext exception,
+// as JMAP servers do. The check runs on each request, so it covers redirects
+// as well.
+var (
+	calDAVHTTPTransport  http.RoundTripper = davPlaintextGuard{service: "CalDAV"}
+	cardDAVHTTPTransport http.RoundTripper = davPlaintextGuard{service: "CardDAV"}
+)
+
+var davPlaintextPolicy atomic.Pointer[func(context.Context, string, int) bool]
+
+// setDAVPlaintextPolicy points the DAV plain HTTP check at the instance's
+// mail security exceptions, once, when the handler is built.
+func setDAVPlaintextPolicy(allowed func(ctx context.Context, host string, port int) bool) {
+	davPlaintextPolicy.Store(&allowed)
+}
+
+func davPlaintextAllowed(ctx context.Context, host string, port int) bool {
+	policy := davPlaintextPolicy.Load()
+	return policy != nil && *policy != nil && (*policy)(ctx, host, port)
+}
+
+// calDAVURLScheme reports whether a CalDAV URL may use scheme at all; whether
+// a plain HTTP server is approved is checked when connecting.
+func calDAVURLScheme(scheme string) bool {
+	return strings.EqualFold(scheme, "https") || strings.EqualFold(scheme, "http")
+}
+
+// davPlaintextGuard refuses plain HTTP to a DAV server nobody approved.
+type davPlaintextGuard struct{ service string }
+
+func (g davPlaintextGuard) RoundTrip(req *http.Request) (*http.Response, error) {
+	switch strings.ToLower(req.URL.Scheme) {
+	case "https":
+	case "http":
+		host := req.URL.Hostname()
+		port, _ := strconv.Atoi(davURLPort(req.URL))
+		if !davPlaintextAllowed(req.Context(), host, port) {
+			return nil, fmt.Errorf("Gofer won't connect to %s server %s without encryption; an administrator can add an HTTP plaintext exception for %s:%d under Mail security", g.service, req.URL.Host, host, port)
+		}
+	default:
+		return nil, fmt.Errorf("%s does not support %q URLs", g.service, req.URL.Scheme)
+	}
+	return davHTTPTransport.RoundTrip(req)
+}
+
+// jmapServerAddress is a JMAP account's server address, its scheme, host and
+// port, from the session URL. DAV discovery tries it when no address was
+// entered: many JMAP servers serve CardDAV and CalDAV on the same address.
+func jmapServerAddress(sessionURL string) string {
+	u, err := url.Parse(strings.TrimSpace(sessionURL))
+	if err != nil || u.Host == "" || (!strings.EqualFold(u.Scheme, "https") && !strings.EqualFold(u.Scheme, "http")) {
+		return ""
+	}
+	return strings.ToLower(u.Scheme + "://" + u.Host)
 }
 
 // validPushEndpoint accepts the HTTPS address of a browser's push service.

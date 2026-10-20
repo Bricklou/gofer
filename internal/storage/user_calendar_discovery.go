@@ -36,7 +36,8 @@ func calendarDiscoverySnapshotTx(ctx context.Context, tx *sql.Tx, owner, account
 	if err := tx.QueryRowContext(ctx, `SELECT provider FROM accounts WHERE id=? AND user_id=?`, account, owner).Scan(&snapshot.provider); err != nil {
 		return nil, err
 	}
-	if snapshot.provider == "imap" {
+	if snapshot.provider == "imap" || snapshot.provider == "jmap" {
+		// Their calendars come from a CalDAV server.
 		snapshot.provider = CalendarSourceProviderCalDAV
 	}
 	if snapshot.provider != "gmail" && snapshot.provider != "outlook" && snapshot.provider != CalendarSourceProviderCalDAV {

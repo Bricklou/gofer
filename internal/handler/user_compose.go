@@ -213,7 +213,7 @@ func (h *Handler) saveUserComposeDraft(ctx context.Context, r *http.Request) (co
 			if len(message.AllRecipients(&delivery)) == 0 {
 				return c, fmt.Errorf("queued draft needs a recipient")
 			}
-			mime, err := message.BuildMIMEMessage(&delivery)
+			mime, err := buildOutgoingMIME(pending.Transport, &delivery)
 			if err != nil {
 				return c, err
 			}

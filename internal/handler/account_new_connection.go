@@ -2,16 +2,21 @@ package handler
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net/http"
 	"strings"
 	"time"
 
 	"github.com/cristianadrielbraun/gofer/internal/config"
+	"github.com/cristianadrielbraun/gofer/internal/mail"
+	mailautodiscover "github.com/cristianadrielbraun/gofer/internal/mail/autodiscover"
 	"github.com/cristianadrielbraun/gofer/internal/mail/imap"
+	"github.com/cristianadrielbraun/gofer/internal/mail/jmap"
 	smtpclient "github.com/cristianadrielbraun/gofer/internal/mail/smtp"
 	mailtransport "github.com/cristianadrielbraun/gofer/internal/mail/transport"
 	"github.com/cristianadrielbraun/gofer/internal/models"
+	"github.com/cristianadrielbraun/gofer/internal/providers"
 	"github.com/cristianadrielbraun/gofer/internal/storage"
 	"github.com/cristianadrielbraun/gofer/internal/views"
 )
@@ -69,6 +74,20 @@ func parseTypedAccountTest(w http.ResponseWriter, r *http.Request) (models.Creat
 		return models.CreateAccountRequest{}, false
 	}
 	req := accountRequestFromForm(r)
+	if req.Provider == providers.ProviderJMAP {
+		if !providers.JMAPEnabled() {
+			http.Error(w, providers.ErrJMAPDisabled.Error(), http.StatusBadRequest)
+			return req, false
+		}
+		if req.EmailAddress == "" {
+			http.Error(w, "all required fields must be filled in", http.StatusBadRequest)
+			return req, false
+		}
+		if req.Username == "" {
+			req.Username = req.EmailAddress
+		}
+		return req, true
+	}
 	if req.EmailAddress == "" || req.IMAPHost == "" || req.SMTPHost == "" || req.Username == "" {
 		http.Error(w, "all required fields must be filled in", http.StatusBadRequest)
 		return req, false
@@ -86,7 +105,7 @@ func parseTypedAccountTest(w http.ResponseWriter, r *http.Request) (models.Creat
 func (h *Handler) savedAccountPasswords(r *http.Request, id string) (password, smtpPassword string, found bool, err error) {
 	read := func(store *config.AccountStore) error {
 		data, err := store.GetEditData(r.Context(), id)
-		if err != nil || data == nil || data.Provider != "imap" || data.AuthMethod != "plain" {
+		if err != nil || data == nil || (data.Provider != "imap" && data.Provider != providers.ProviderJMAP) || data.AuthMethod != "plain" {
 			return err
 		}
 		if password, err = store.DecryptPassword(r.Context(), id); err != nil {
@@ -116,6 +135,10 @@ func (h *Handler) savedAccountPasswords(r *http.Request, id string) (password, s
 func (h *Handler) writeTypedAccountTest(w http.ResponseWriter, r *http.Request, req models.CreateAccountRequest) {
 	ctx, cancel := context.WithTimeout(r.Context(), 2*time.Minute)
 	defer cancel()
+	if req.Provider == providers.ProviderJMAP {
+		h.writeJMAPAccountTest(ctx, w, r, req)
+		return
+	}
 	cfg := &models.AccountConfig{
 		Provider: "imap", AuthMethod: "plain", Username: req.Username, SmtpUsername: req.SmtpUsername,
 		IMAPHost: req.IMAPHost, IMAPPort: req.IMAPPort,
@@ -130,6 +153,130 @@ func (h *Handler) writeTypedAccountTest(w http.ResponseWriter, r *http.Request, 
 		h.testNewAccountService(ctx, "smtp", cfg, req.SMTPTLSMode, smtpPassword),
 	}
 	writeAccountTestResults(w, r, results)
+}
+
+// jmapSessionURLHeader carries the session URL a JMAP connection test found,
+// for the wizard to save with the account.
+const jmapSessionURLHeader = "X-Gofer-JMAP-Session-URL"
+
+// writeJMAPAccountTest discovers the session URL from the server address
+// typed into the wizard, or from the email's domain when it is blank, and
+// signs in there. A session URL already known, when editing, is tried as is.
+func (h *Handler) writeJMAPAccountTest(ctx context.Context, w http.ResponseWriter, r *http.Request, req models.CreateAccountRequest) {
+	result := models.ConnectionTestResult{Service: "jmap"}
+	if req.Password == "" {
+		http.Error(w, "all required fields must be filled in", http.StatusBadRequest)
+		return
+	}
+	server := strings.TrimSpace(r.FormValue("jmap_server"))
+	if server == "" {
+		server = req.JMAPSessionURL
+	}
+	candidates, err := mailautodiscover.JMAPSessionCandidates(ctx, req.EmailAddress, server, nil)
+	if err == nil {
+		var sessionURL string
+		var session *jmap.Session
+		sessionURL, session, err = mail.DiscoverJMAPSession(ctx, candidates, req.Username, req.Password, h.jmapEndpointPolicy)
+		if err == nil {
+			w.Header().Set(jmapSessionURLHeader, sessionURL)
+			result.Success = true
+			result.Message = fmt.Sprintf("Connected to %s (mail account %s)", sessionURL, session.PrimaryAccount(jmap.CapabilityMail))
+		}
+	}
+	if err != nil {
+		result.Message = server
+		if result.Message == "" {
+			result.Message = req.EmailAddress
+		}
+		result.Error = err.Error()
+	}
+	writeAccountTestResults(w, r, []models.ConnectionTestResult{result})
+}
+
+// prepareJMAPAccount checks a new JMAP account's form and fills in its session
+// URL. The wizard sends the URL its connection test found; without one, as
+// when the test was skipped, discovery runs here as it does in the test.
+func (h *Handler) prepareJMAPAccount(r *http.Request, req *models.CreateAccountRequest) error {
+	if !providers.JMAPEnabled() {
+		return providers.ErrJMAPDisabled
+	}
+	if req.Username == "" {
+		req.Username = req.EmailAddress
+	}
+	if req.EmailAddress == "" || req.Password == "" {
+		return errors.New("All required fields must be filled in")
+	}
+	if strings.TrimSpace(req.JMAPSessionURL) != "" {
+		return nil
+	}
+	ctx, cancel := context.WithTimeout(r.Context(), 2*time.Minute)
+	defer cancel()
+	candidates, err := mailautodiscover.JMAPSessionCandidates(ctx, req.EmailAddress, strings.TrimSpace(r.FormValue("jmap_server")), nil)
+	if err != nil {
+		return err
+	}
+	sessionURL, _, err := mail.DiscoverJMAPSession(ctx, candidates, req.Username, req.Password, h.jmapEndpointPolicy)
+	if err != nil {
+		return err
+	}
+	req.JMAPSessionURL = sessionURL
+	return nil
+}
+
+// resolveJMAPAccountChanges checks the edited settings of a JMAP account. The
+// server field keeps a session URL as entered; a host, or nothing, is looked
+// up with the typed password, or the saved one when it was left blank.
+func (h *Handler) resolveJMAPAccountChanges(r *http.Request, accountID string, req *models.CreateAccountRequest) error {
+	if !providers.JMAPEnabled() {
+		return providers.ErrJMAPDisabled
+	}
+	if req.EmailAddress == "" {
+		return errors.New("Email address is required")
+	}
+	if req.Username == "" {
+		req.Username = req.EmailAddress
+	}
+	server := strings.TrimSpace(req.JMAPSessionURL)
+	if strings.Contains(server, "://") {
+		return nil
+	}
+	password := req.Password
+	if password == "" {
+		saved, _, found, err := h.savedAccountPasswords(r, accountID)
+		if err != nil {
+			return err
+		}
+		if !found {
+			return errors.New("account not found")
+		}
+		password = saved
+	}
+	ctx, cancel := context.WithTimeout(r.Context(), 2*time.Minute)
+	defer cancel()
+	candidates, err := mailautodiscover.JMAPSessionCandidates(ctx, req.EmailAddress, server, nil)
+	if err != nil {
+		return err
+	}
+	sessionURL, _, err := mail.DiscoverJMAPSession(ctx, candidates, req.Username, password, h.jmapEndpointPolicy)
+	if err != nil {
+		return err
+	}
+	req.JMAPSessionURL = sessionURL
+	return nil
+}
+
+// jmapEndpointPolicy reads the mail security exceptions for one JMAP
+// endpoint, as they apply when a saved account connects.
+func (h *Handler) jmapEndpointPolicy(ctx context.Context, endpoint jmap.Endpoint) (allowPlaintext, allowPrivate bool, err error) {
+	if endpoint.Scheme == "http" {
+		if allowPlaintext, err = h.db.IsPlaintextTransportAllowed(ctx, "http", endpoint.Host, endpoint.Port); err != nil {
+			return false, false, fmt.Errorf("check HTTP security exception: %w", err)
+		}
+	}
+	if allowPrivate, err = h.db.IsPrivateTargetAllowed(ctx, endpoint.Scheme, endpoint.Host, endpoint.Port); err != nil {
+		return false, false, fmt.Errorf("check %s private target exception: %w", strings.ToUpper(endpoint.Scheme), err)
+	}
+	return allowPlaintext, allowPrivate, nil
 }
 
 // writeAccountTestResults renders connection test results for the account

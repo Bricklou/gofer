@@ -20,10 +20,10 @@ func seedUserLabelTest(t *testing.T, provider string) (*DB, ThreadMessageMutatio
 	if _, err := db.Write().Exec(`INSERT INTO folders(id,account_id,remote_id,name,role,uid_validity) VALUES('inbox','acc','INBOX','Inbox','inbox',42),('junk','acc','Junk','Junk','junk',42)`); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := db.Write().Exec(`INSERT INTO messages(id,account_id,remote_message_id,internet_message_id,subject) VALUES(1,'acc','m1','<label@test.invalid>','Label')`); err != nil {
+	if _, err := db.Write().Exec(`INSERT INTO messages(id,account_id,internet_message_id,subject) VALUES(1,'acc','<label@test.invalid>','Label')`); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := db.Write().Exec(`INSERT INTO message_folder_state(message_id,folder_id,remote_uid) VALUES(1,'inbox',2)`); err != nil {
+	if _, err := db.Write().Exec(`INSERT INTO message_folder_state(message_id,folder_id,remote_uid,remote_message_id) VALUES(1,'inbox',2,'m1')`); err != nil {
 		t.Fatal(err)
 	}
 	info, err := db.GetMessageMutationInfoForUser(t.Context(), 1, "alice")
@@ -120,12 +120,12 @@ func TestUserLabelsRejectChangedIdentityAndUIDEpoch(t *testing.T) {
 			if err := db.QueueUserLabels(t.Context(), "alice", []ThreadMessageMutationInfo{info}, "Projects", LabelMutationAdd); err != nil {
 				t.Fatal(err)
 			}
-			entry := labelEntry(t, db, LabelProviderIMAPKeyword)
+			entry := labelEntry(t, db, LabelProviderKeyword)
 			statements := map[string]string{"message": `UPDATE messages SET internet_message_id='<replacement@test.invalid>'`, "subject": `UPDATE accounts SET provider_account_id='replacement'`, "folder": `UPDATE folders SET remote_id='Other' WHERE id='inbox'`, "epoch": `UPDATE folders SET uid_validity=43 WHERE id='inbox'`, "membership": `UPDATE message_folder_state SET is_deleted=1`, "auth": `UPDATE accounts SET auth_method='oauth2'`}
 			if _, err := db.Write().Exec(statements[mutation]); err != nil {
 				t.Fatal(err)
 			}
-			if err := db.CompleteUserLabelMutation(t.Context(), entry, info.MessageMutationInfo, "", "m1", 42, LabelInput{Name: "Projects", ProviderID: "Projects", ProviderType: LabelProviderIMAPKeyword}); err == nil {
+			if err := db.CompleteUserLabelMutation(t.Context(), entry, info.MessageMutationInfo, "", "m1", 42, LabelInput{Name: "Projects", ProviderID: "Projects", ProviderType: LabelProviderKeyword}); err == nil {
 				t.Fatal("changed identity was published")
 			}
 			var pending, remote int
@@ -137,7 +137,7 @@ func TestUserLabelsRejectChangedIdentityAndUIDEpoch(t *testing.T) {
 }
 func TestUserLabelsMissingProviderIDPublicationRollsBackWithAssociations(t *testing.T) {
 	db, info := seedUserLabelTest(t, "outlook")
-	if _, err := db.Write().Exec(`UPDATE messages SET remote_message_id=NULL WHERE id=1`); err != nil {
+	if _, err := db.Write().Exec(`UPDATE message_folder_state SET remote_message_id=NULL WHERE message_id=1`); err != nil {
 		t.Fatal(err)
 	}
 	info.RemoteMessageID = ""
@@ -152,7 +152,7 @@ func TestUserLabelsMissingProviderIDPublicationRollsBackWithAssociations(t *test
 		t.Fatal("failure accepted")
 	}
 	var id string
-	if err := db.Read().QueryRow(`SELECT COALESCE(remote_message_id,'') FROM messages WHERE id=1`).Scan(&id); err != nil || id != "" {
+	if err := db.Read().QueryRow(`SELECT COALESCE(MAX(remote_message_id), '') FROM message_folder_state WHERE message_id = 1`).Scan(&id); err != nil || id != "" {
 		t.Fatalf("identity escaped rollback: %q %v", id, err)
 	}
 	if _, err := db.Write().Exec(`DROP TRIGGER fail_remote_label`); err != nil {
@@ -161,7 +161,7 @@ func TestUserLabelsMissingProviderIDPublicationRollsBackWithAssociations(t *test
 	if err := db.CompleteUserLabelMutation(t.Context(), entry, info.MessageMutationInfo, "subject", "resolved", 42, LabelInput{Name: "Projects", ProviderID: "Projects", ProviderType: LabelProviderOutlook}); err != nil {
 		t.Fatal(err)
 	}
-	if err := db.Read().QueryRow(`SELECT COALESCE(remote_message_id,'') FROM messages WHERE id=1`).Scan(&id); err != nil || id != "resolved" {
+	if err := db.Read().QueryRow(`SELECT COALESCE(MAX(remote_message_id), '') FROM message_folder_state WHERE message_id = 1`).Scan(&id); err != nil || id != "resolved" {
 		t.Fatalf("identity not published: %q %v", id, err)
 	}
 	if entries, err := db.ListDueLabelMutations(t.Context(), "acc", LabelProviderOutlook, 1); err != nil || len(entries) != 0 {
@@ -174,14 +174,14 @@ func TestUserLabelsIMAPAliasSurvivesServerKeywordCasing(t *testing.T) {
 	if err := db.QueueUserLabels(t.Context(), "alice", []ThreadMessageMutationInfo{info}, "Important", LabelMutationAdd); err != nil {
 		t.Fatal(err)
 	}
-	entry := labelEntry(t, db, LabelProviderIMAPKeyword)
-	if err := db.CompleteUserLabelMutation(t.Context(), entry, info.MessageMutationInfo, "", "", 42, LabelInput{Name: "Important", ProviderID: "$label1", ProviderType: LabelProviderIMAPKeyword}); err != nil {
+	entry := labelEntry(t, db, LabelProviderKeyword)
+	if err := db.CompleteUserLabelMutation(t.Context(), entry, info.MessageMutationInfo, "", "", 42, LabelInput{Name: "Important", ProviderID: "$label1", ProviderType: LabelProviderKeyword}); err != nil {
 		t.Fatal(err)
 	}
-	if err := db.ReplaceMessageLabelsForProvider(t.Context(), 1, "acc", LabelProviderIMAPKeyword, []LabelInput{{Name: "$LABEL1", ProviderID: "$LABEL1", ProviderType: LabelProviderIMAPKeyword}}); err != nil {
+	if err := db.ReplaceMessageLabelsForProvider(t.Context(), 1, "acc", LabelProviderKeyword, []LabelInput{{Name: "$LABEL1", ProviderID: "$LABEL1", ProviderType: LabelProviderKeyword}}); err != nil {
 		t.Fatal(err)
 	}
-	labels, err := db.GetProviderMessageLabels(t.Context(), 1, "acc", LabelProviderIMAPKeyword)
+	labels, err := db.GetProviderMessageLabels(t.Context(), 1, "acc", LabelProviderKeyword)
 	if err != nil || len(labels) != 1 || labels[0].Name != "Important" || labels[0].ProviderID != "$label1" {
 		t.Fatalf("server casing replaced alias: %#v %v", labels, err)
 	}
@@ -196,7 +196,7 @@ func TestUserLabelsSpamMoveWaitsForTrainingAttempt(t *testing.T) {
 		t.Fatalf("move overtook initial training: %#v %v", claimed, err)
 	}
 	// Explicit failed attempts preserve the historical folder-move fallback.
-	entries, err := db.ListDueLabelMutations(t.Context(), "acc", LabelProviderIMAPKeyword, 10)
+	entries, err := db.ListDueLabelMutations(t.Context(), "acc", LabelProviderKeyword, 10)
 	if err != nil || len(entries) != 2 {
 		t.Fatal(err)
 	}

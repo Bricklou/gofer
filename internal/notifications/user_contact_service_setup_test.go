@@ -67,6 +67,7 @@ func newOwnedDAVSetupFixture(t *testing.T) (*userStorageFixture, *ownedDAVSetupS
 	fake := &ownedDAVSetupServer{entered: make(chan struct{}), release: make(chan struct{})}
 	server := httptest.NewServer(fake)
 	t.Cleanup(server.Close)
+	approvePlainDAV(t, f, server)
 	// The fake DAV server is local, which outbound requests would refuse.
 	t.Cleanup(netguard.UseTransportForTests(http.DefaultTransport))
 	t.Cleanup(func() { f.stopIMAP(); f.imap.Wait() })

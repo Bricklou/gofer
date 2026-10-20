@@ -11,8 +11,8 @@ import (
 
 func userLabelProvider(provider string) (string, error) {
 	switch provider {
-	case "imap":
-		return LabelProviderIMAPKeyword, nil
+	case "imap", "jmap":
+		return LabelProviderKeyword, nil
 	case "gmail":
 		return LabelProviderGmail, nil
 	case "outlook":
@@ -84,8 +84,8 @@ func (db *DB) QueueUserLabels(ctx context.Context, owner string, infos []ThreadM
 	return tx.Commit()
 }
 
-// IMAP spam actions persist both training keywords and the folder move, even
-// when the message is already in the requested destination.
+// IMAP and JMAP spam actions persist both training keywords and the folder
+// move, even when the message is already in the requested destination.
 func (db *DB) QueueUserIMAPSpam(ctx context.Context, owner string, infos []ThreadMessageMutationInfo, destination string, spam bool) error {
 	if owner == "" || destination == "" || len(infos) == 0 {
 		return errors.New("invalid spam action")
@@ -101,8 +101,8 @@ func (db *DB) QueueUserIMAPSpam(ctx context.Context, owner string, infos []Threa
 		if err != nil {
 			return err
 		}
-		if provider != LabelProviderIMAPKeyword {
-			return errors.New("IMAP spam action requires IMAP")
+		if provider != LabelProviderKeyword {
+			return errors.New("spam keywords need an IMAP or JMAP account")
 		}
 		for _, flag := range []struct {
 			name string
@@ -186,14 +186,14 @@ func (db *DB) CompleteUserLabelMutation(ctx context.Context, e LabelMutationQueu
 	if count != 1 {
 		return ErrMessageMutationSuperseded
 	}
-	if err := tx.QueryRowContext(ctx, `SELECT count(*) FROM messages m JOIN accounts a ON a.id=m.account_id WHERE m.id=? AND m.account_id=? AND a.provider=? AND COALESCE(a.provider_account_id,'')=? AND COALESCE(a.is_deleting,0)=0 AND COALESCE(m.remote_message_id,'')=? AND COALESCE(m.internet_message_id,'')=?`, e.MessageID, e.AccountID, info.AccountProvider, subject, info.RemoteMessageID, info.InternetMessageID).Scan(&count); err != nil {
+	if err := tx.QueryRowContext(ctx, `SELECT count(*) FROM messages m JOIN accounts a ON a.id=m.account_id WHERE m.id=? AND m.account_id=? AND a.provider=? AND COALESCE(a.provider_account_id,'')=? AND COALESCE(a.is_deleting,0)=0 AND `+providerCopyOfRowSQL("m")+` AND COALESCE(m.internet_message_id,'')=?`, e.MessageID, e.AccountID, info.AccountProvider, subject, info.RemoteMessageID, info.RemoteMessageID, info.InternetMessageID).Scan(&count); err != nil {
 		return err
 	}
 	if count != 1 {
 		return errors.New("label message or mailbox identity changed")
 	}
 	auth := "oauth2"
-	if info.AccountProvider == "imap" {
+	if info.AccountProvider == "imap" || info.AccountProvider == "jmap" {
 		auth = "plain"
 	}
 	if err := tx.QueryRowContext(ctx, `SELECT count(*) FROM accounts WHERE id=? AND auth_method=?`, e.AccountID, auth).Scan(&count); err != nil {
@@ -202,7 +202,7 @@ func (db *DB) CompleteUserLabelMutation(ctx context.Context, e LabelMutationQueu
 	if count != 1 {
 		return errors.New("label mailbox authentication changed")
 	}
-	if e.ProviderType == LabelProviderIMAPKeyword {
+	if e.ProviderType == LabelProviderKeyword && info.AccountProvider == "imap" {
 		if err := tx.QueryRowContext(ctx, `SELECT count(*) FROM message_folder_state mfs JOIN folders f ON f.id=mfs.folder_id WHERE mfs.message_id=? AND mfs.folder_id=? AND f.account_id=? AND f.remote_id=? AND COALESCE(mfs.remote_uid,0)=? AND COALESCE(f.uid_validity,0)=?
   AND (mfs.is_deleted=0 OR EXISTS(SELECT 1 FROM message_mutations q WHERE q.account_id=f.account_id AND q.message_id=mfs.message_id AND q.folder_id=f.id AND q.kind='move' AND q.status!='applied'))`, e.MessageID, info.FolderID, e.AccountID, info.FolderRemoteID, info.RemoteUID, validity).Scan(&count); err != nil {
 			return err
@@ -211,11 +211,11 @@ func (db *DB) CompleteUserLabelMutation(ctx context.Context, e LabelMutationQueu
 			return errors.New("label IMAP folder or UID identity changed")
 		}
 	} else if info.RemoteMessageID == "" && resolvedID != "" {
-		if _, err := tx.ExecContext(ctx, `UPDATE messages SET remote_message_id=?,updated_at=CURRENT_TIMESTAMP WHERE id=?`, resolvedID, e.MessageID); err != nil {
+		if err := bindProviderCopyIDTx(ctx, tx, e.MessageID, info.FolderID, resolvedID); err != nil {
 			return err
 		}
 	}
-	if e.ProviderType == LabelProviderIMAPKeyword && (e.LabelName == "$Junk" || e.LabelName == "$NotJunk") {
+	if e.ProviderType == LabelProviderKeyword && (e.LabelName == "$Junk" || e.LabelName == "$NotJunk") {
 		// Training keywords are mailbox status, not labels shown in the UI.
 		if _, err := tx.ExecContext(ctx, `DELETE FROM label_mutation_queue WHERE `+userLabelAttemptPredicate, userLabelAttemptArgs(e)...); err != nil {
 			return err

@@ -29,13 +29,13 @@ func calDAVRequest(ctx context.Context, method, endpoint, username, password, de
 	if err != nil {
 		return davMultiStatus{}, err
 	}
-	if req.URL.Scheme != "https" || req.URL.User != nil {
-		return davMultiStatus{}, fmt.Errorf("CalDAV requires an HTTPS URL without embedded credentials")
+	if !calDAVURLScheme(req.URL.Scheme) || req.URL.User != nil {
+		return davMultiStatus{}, fmt.Errorf("CalDAV requires an HTTP(S) URL without embedded credentials")
 	}
 	req.Header.Set("Depth", depth)
 	req.Header.Set("Content-Type", "application/xml; charset=utf-8")
 	client := &http.Client{
-		Transport: davHTTPTransport,
+		Transport: calDAVHTTPTransport,
 		Timeout:   timeout,
 		CheckRedirect: func(req *http.Request, via []*http.Request) error {
 			if err := calendarDiscoveryDAVGuard(ctx); err != nil {

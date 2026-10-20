@@ -27,6 +27,7 @@ CREATE TABLE IF NOT EXISTS accounts (
     auth_method TEXT NOT NULL DEFAULT 'plain',
     smtp_username TEXT NOT NULL DEFAULT '',
     encrypted_smtp_password BLOB,
+    jmap_session_url TEXT NOT NULL DEFAULT '',
     email_sync_enabled INTEGER NOT NULL DEFAULT 1,
     email_sync_error TEXT NOT NULL DEFAULT '',
     email_sync_error_at DATETIME,
@@ -93,7 +94,6 @@ WHERE provider_remote_id = '' AND COALESCE(remote_id, '') != '';
 CREATE TABLE IF NOT EXISTS messages (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     account_id TEXT NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,
-    remote_message_id TEXT,
     internet_message_id TEXT,
     message_id_normalized TEXT NOT NULL DEFAULT '',
     thread_id TEXT,
@@ -163,6 +163,7 @@ CREATE TABLE IF NOT EXISTS message_folder_state (
     is_deleted INTEGER NOT NULL DEFAULT 0,
     is_archived INTEGER NOT NULL DEFAULT 0,
     synced_at DATETIME,
+    remote_message_id TEXT,
     PRIMARY KEY (message_id, folder_id)
 );
 
@@ -276,7 +277,7 @@ CREATE TABLE IF NOT EXISTS message_mutations (
     account_id TEXT NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,
     message_id INTEGER NOT NULL REFERENCES messages(id) ON DELETE CASCADE,
     folder_id TEXT NOT NULL DEFAULT '',
-    provider_type TEXT NOT NULL CHECK (provider_type IN ('gmail', 'outlook', 'imap')),
+    provider_type TEXT NOT NULL CHECK (provider_type IN ('gmail', 'outlook', 'imap', 'jmap')),
     kind TEXT NOT NULL CHECK (kind IN ('read', 'starred', 'move', 'delete')),
     target_value INTEGER NOT NULL CHECK (target_value IN (0, 1)),
     destination_folder_id TEXT NOT NULL DEFAULT '',
@@ -385,9 +386,6 @@ ON unresolved_references(account_id, referenced_message_id);
 CREATE INDEX IF NOT EXISTS idx_unresolved_references_child
 ON unresolved_references(child_message_id);
 
-CREATE UNIQUE INDEX IF NOT EXISTS idx_messages_remote_id
-ON messages(account_id, remote_message_id);
-
 CREATE UNIQUE INDEX IF NOT EXISTS idx_messages_account_internet_msg_id
 ON messages(account_id, internet_message_id);
 
@@ -493,6 +491,9 @@ END;
 
 CREATE UNIQUE INDEX IF NOT EXISTS idx_folder_uid
 ON message_folder_state(folder_id, remote_uid);
+
+CREATE INDEX IF NOT EXISTS idx_message_folder_state_remote_message
+ON message_folder_state(remote_message_id) WHERE remote_message_id IS NOT NULL;
 
 CREATE INDEX IF NOT EXISTS idx_recipients_email
 ON message_recipients(email);
@@ -1487,7 +1488,7 @@ CREATE TABLE IF NOT EXISTS outgoing_sends (
     account_id TEXT NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,
     message_id INTEGER REFERENCES messages(id) ON DELETE SET NULL,
     draft_id TEXT NOT NULL DEFAULT '',
-    transport TEXT NOT NULL CHECK (transport IN ('smtp', 'gmail', 'outlook')),
+    transport TEXT NOT NULL CHECK (transport IN ('smtp', 'gmail', 'outlook', 'jmap')),
     envelope_from TEXT NOT NULL,
     envelope_recipients TEXT NOT NULL DEFAULT '[]',
     mime_data BLOB,
@@ -1570,7 +1571,7 @@ CREATE TABLE IF NOT EXISTS mail_security_exceptions (
     CHECK (
         (kind = 'http_discovery' AND protocol = '' AND port = 0)
         OR
-        (kind = 'plaintext_transport' AND protocol IN ('imap', 'smtp') AND port BETWEEN 1 AND 65535)
+        (kind = 'plaintext_transport' AND protocol IN ('http', 'imap', 'smtp') AND port BETWEEN 1 AND 65535)
         OR
         (kind = 'private_target' AND protocol IN ('http', 'https', 'imap', 'smtp') AND port BETWEEN 1 AND 65535)
     ),
@@ -1652,4 +1653,4 @@ CREATE TABLE IF NOT EXISTS calendar_invitation_messages (
 );
 
 -- Schema version marker for fresh installs
-INSERT OR REPLACE INTO schema_version (version) VALUES (113);
+INSERT OR REPLACE INTO schema_version (version) VALUES (119);

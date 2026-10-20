@@ -20,8 +20,12 @@ func ensureUserMailDeliverySchema(ctx context.Context, db *DB) error {
 	return nil
 }
 
+// providerSendSignIn is how an account sending through its provider signs in:
+// Gmail and Outlook with OAuth, JMAP with the account's password.
+const providerSendSignIn = `(a.auth_method='oauth2' OR (o.transport='jmap' AND a.auth_method='plain'))`
+
 func checkUserSendAttempt(ctx context.Context, tx *sql.Tx, send OutgoingSend, subject string, copying bool) error {
-	if send.Transport != OutgoingTransportGmail && send.Transport != OutgoingTransportOutlook {
+	if send.Transport != OutgoingTransportGmail && send.Transport != OutgoingTransportOutlook && send.Transport != OutgoingTransportJMAP {
 		return errors.New("provider send transport is required")
 	}
 	var count int
@@ -31,7 +35,7 @@ func checkUserSendAttempt(ctx context.Context, tx *sql.Tx, send OutgoingSend, su
 	}
 	err := tx.QueryRowContext(ctx, `SELECT count(*) FROM outgoing_sends o JOIN accounts a ON a.id=o.account_id
 		WHERE o.id=? AND o.account_id=? AND o.transport=? AND o.status=?`+clause+`
-		AND a.provider=o.transport AND a.auth_method='oauth2' AND COALESCE(a.provider_account_id,'')=? AND COALESCE(a.is_deleting,0)=0`, send.ID, send.AccountID, send.Transport, status, attempt, subject).Scan(&count)
+		AND a.provider=o.transport AND `+providerSendSignIn+` AND COALESCE(a.provider_account_id,'')=? AND COALESCE(a.is_deleting,0)=0`, send.ID, send.AccountID, send.Transport, status, attempt, subject).Scan(&count)
 	if err != nil {
 		return err
 	}
@@ -68,7 +72,7 @@ func (db *DB) CompleteUserProviderSend(ctx context.Context, send OutgoingSend, s
 func (db *DB) UserProviderSendReceipt(ctx context.Context, sendID, accountID string) (string, error) {
 	var id string
 	err := db.Read().QueryRowContext(ctx, `SELECT r.provider_message_id FROM gofer_provider_send_receipts r JOIN outgoing_sends o ON o.id=r.send_id JOIN accounts a ON a.id=o.account_id
-		WHERE o.id=? AND o.account_id=? AND o.status='sent' AND r.provider=o.transport AND a.provider=r.provider AND a.auth_method='oauth2' AND a.provider_account_id=r.mailbox_subject AND COALESCE(a.is_deleting,0)=0`, sendID, accountID).Scan(&id)
+		WHERE o.id=? AND o.account_id=? AND o.status='sent' AND r.provider=o.transport AND a.provider=r.provider AND `+providerSendSignIn+` AND COALESCE(a.provider_account_id,'')=r.mailbox_subject AND COALESCE(a.is_deleting,0)=0`, sendID, accountID).Scan(&id)
 	return id, err
 }
 
@@ -94,7 +98,9 @@ func (db *DB) CompleteUserProviderSentCache(ctx context.Context, send OutgoingSe
 		return err
 	}
 	if providerID != "" {
-		if _, err := tx.ExecContext(ctx, `UPDATE messages SET remote_message_id=?,updated_at=CURRENT_TIMESTAMP WHERE id=?`, providerID, messageID); err != nil {
+		// The sent email is the Sent copy; mail sent to oneself also has a
+		// received copy with its own id.
+		if _, err := tx.ExecContext(ctx, `UPDATE message_folder_state SET remote_message_id=? WHERE message_id=? AND folder_id=?`, providerID, messageID, folder); err != nil {
 			return err
 		}
 	}
@@ -110,7 +116,7 @@ func (db *DB) CompleteUserProviderSentCache(ctx context.Context, send OutgoingSe
 
 const providerSendReceiptSchema = `CREATE TABLE IF NOT EXISTS gofer_provider_send_receipts (
 		send_id TEXT PRIMARY KEY REFERENCES outgoing_sends(id) ON DELETE CASCADE,
-		provider TEXT NOT NULL CHECK(provider IN ('gmail','outlook')),
+		provider TEXT NOT NULL CHECK(provider IN ('gmail','outlook','jmap')),
 		mailbox_subject TEXT NOT NULL,
 		provider_message_id TEXT NOT NULL DEFAULT ''
 	)`

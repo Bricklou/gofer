@@ -53,7 +53,7 @@ type ThreadingState struct {
 	Total      int  `json:"total"`
 }
 
-const CurrentSchemaVersion = 113
+const CurrentSchemaVersion = 119
 
 func New(dbPath string) (*DB, error) {
 	if err := os.MkdirAll(filepath.Dir(dbPath), 0755); err != nil {
@@ -1002,6 +1002,36 @@ func (db *DB) migrate() error {
 	if currentVersion <= 112 {
 		if err := migrateV112ToV113(db.write); err != nil {
 			return fmt.Errorf("migrate v112 to v113: %w", err)
+		}
+	}
+	if currentVersion <= 113 {
+		if err := migrateV113ToV114(db.write); err != nil {
+			return fmt.Errorf("migrate v113 to v114: %w", err)
+		}
+	}
+	if currentVersion <= 114 {
+		if err := migrateV114ToV115(db.write); err != nil {
+			return fmt.Errorf("migrate v114 to v115: %w", err)
+		}
+	}
+	if currentVersion <= 115 {
+		if err := migrateV115ToV116(db.write); err != nil {
+			return fmt.Errorf("migrate v115 to v116: %w", err)
+		}
+	}
+	if currentVersion <= 116 {
+		if err := migrateV116ToV117(db.write); err != nil {
+			return fmt.Errorf("migrate v116 to v117: %w", err)
+		}
+	}
+	if currentVersion <= 117 {
+		if err := migrateV117ToV118(db.write); err != nil {
+			return fmt.Errorf("migrate v117 to v118: %w", err)
+		}
+	}
+	if currentVersion <= 118 {
+		if err := migrateV118ToV119(db.write); err != nil {
+			return fmt.Errorf("migrate v118 to v119: %w", err)
 		}
 	}
 

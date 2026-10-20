@@ -60,10 +60,11 @@ func (db *DB) PublishDraft(ctx context.Context, draft DraftMessageInput, stage f
 			return 0, errors.New("provider draft sync identity mismatch")
 		}
 		p.State.LocalMessageID = id
-		if err := tx.QueryRowContext(ctx, `SELECT COALESCE(remote_message_id,'') FROM messages WHERE id=?`, id).Scan(&p.State.RemoteMessageID); err != nil {
+		if err := tx.QueryRowContext(ctx, `SELECT COALESCE(s.remote_message_id,'') FROM messages m LEFT JOIN message_folder_state s ON s.message_id=m.id AND s.folder_id=? WHERE m.id=?`, draft.FolderID, id).Scan(&p.State.RemoteMessageID); err != nil {
 			return 0, err
 		}
-		if p.State.Provider == "outlook" {
+		if p.State.Provider == "outlook" || p.State.Provider == "jmap" {
+			// The draft's message is the draft itself.
 			p.State.RemoteID = p.State.RemoteMessageID
 		}
 	} else {
@@ -141,7 +142,7 @@ func (db *DB) DiscardIMAPDraft(ctx context.Context, accountID, draftKey string) 
 	var folder, remote string
 	var provider, subject, providerID string
 	var uid, validity uint32
-	err = tx.QueryRowContext(ctx, `SELECT m.id,f.id,f.remote_id,COALESCE(s.remote_uid,0),COALESCE(f.uid_validity,0),a.provider,COALESCE(a.provider_account_id,''),COALESCE(m.remote_message_id,'') FROM messages m JOIN accounts a ON a.id=m.account_id JOIN message_folder_state s ON s.message_id=m.id JOIN folders f ON f.id=s.folder_id WHERE m.account_id=? AND m.internet_message_id=? AND s.is_draft=1 LIMIT 1`, accountID, draftKey).Scan(&id, &folder, &remote, &uid, &validity, &provider, &subject, &providerID)
+	err = tx.QueryRowContext(ctx, `SELECT m.id,f.id,f.remote_id,COALESCE(s.remote_uid,0),COALESCE(f.uid_validity,0),a.provider,COALESCE(a.provider_account_id,''),COALESCE(s.remote_message_id,'') FROM messages m JOIN accounts a ON a.id=m.account_id JOIN message_folder_state s ON s.message_id=m.id JOIN folders f ON f.id=s.folder_id WHERE m.account_id=? AND m.internet_message_id=? AND s.is_draft=1 LIMIT 1`, accountID, draftKey).Scan(&id, &folder, &remote, &uid, &validity, &provider, &subject, &providerID)
 	if err == sql.ErrNoRows {
 		return "", nil
 	}
@@ -153,7 +154,7 @@ func (db *DB) DiscardIMAPDraft(ctx context.Context, accountID, draftKey string) 
 			return "", errors.New("provider draft discard requires a marked user store")
 		}
 		state := UserProviderDraftState{AccountID: accountID, DraftKey: draftKey, LocalMessageID: id, FolderID: folder, Provider: provider, MailboxSubject: subject, RemoteMessageID: providerID}
-		if provider == "outlook" {
+		if provider == "outlook" || provider == "jmap" {
 			state.RemoteID = providerID
 		}
 		if err := queueUserProviderDraftTx(ctx, tx, QueueUserProviderDraftInput{State: state}, "delete"); err != nil {

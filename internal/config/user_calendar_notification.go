@@ -43,7 +43,9 @@ func calendarNotificationContent(send storage.OutgoingSend) ([32]byte, map[strin
 
 func notificationWithinSource(source storage.CalendarSource, resource string) bool {
 	base, err := url.Parse(source.RemoteID)
-	if err != nil || base.Scheme != "https" || base.Host == "" || base.User != nil || base.RawQuery != "" || base.Fragment != "" || base.Opaque != "" {
+	// Plain HTTP servers are reached only with an approved exception, which
+	// the connection itself checks.
+	if err != nil || (base.Scheme != "https" && base.Scheme != "http") || base.Host == "" || base.User != nil || base.RawQuery != "" || base.Fragment != "" || base.Opaque != "" {
 		return false
 	}
 	endpoint, err := url.Parse(resource)
@@ -81,7 +83,7 @@ func (s *UserAccountStore) QueueCalendarNotification(ctx context.Context, source
 		events = append(events, original.event)
 	}
 	identity := service.Identity()
-	if identity.Provider != "imap" || identity.AuthMethod != "plain" || !service.SMTPConfigured() || input.AccountID != service.id || !strings.EqualFold(input.EnvelopeFrom, identity.EmailAddress) || !notificationSourceWritable(collection) {
+	if !service.passwordMailbox() || !service.SendsEmail() || input.Transport != service.EmailTransport() || input.AccountID != service.id || !strings.EqualFold(input.EnvelopeFrom, identity.EmailAddress) || !notificationSourceWritable(collection) {
 		return storage.OutgoingSend{}, ErrAccountServicesChanged
 	}
 	input.MIMEData = append([]byte(nil), input.MIMEData...)
@@ -284,7 +286,7 @@ func (s *UserAccountStore) retryCalendarNotification(ctx context.Context, snapsh
 	if err != nil {
 		return storage.OutgoingSend{}, err
 	}
-	if source.Source().AccountID != proof.Account || source.Source().Provider != storage.CalendarSourceProviderCalDAV || !notificationSourceWritable(source.Source()) || source.service.Identity().Provider != "imap" || source.service.Identity().AuthMethod != "plain" || !source.service.SMTPConfigured() || identity != proof.SourceIdentity || principal != proof.CalendarPrincipal {
+	if source.Source().AccountID != proof.Account || source.Source().Provider != storage.CalendarSourceProviderCalDAV || !notificationSourceWritable(source.Source()) || !source.service.passwordMailbox() || !source.service.SendsEmail() || identity != proof.SourceIdentity || principal != proof.CalendarPrincipal {
 		return storage.OutgoingSend{}, ErrAccountServicesChanged
 	}
 	proof.CalendarIdentity, err = calendarReplyConfiguration(source.service)
@@ -345,7 +347,7 @@ func (s *UserAccountStore) RestoreCalendarNotification(ctx context.Context, snap
 	if err != nil {
 		return err
 	}
-	if source.Source().AccountID != proof.Account || source.Source().Provider != storage.CalendarSourceProviderCalDAV || source.service.Identity().Provider != "imap" || source.service.Identity().AuthMethod != "plain" || identity != proof.SourceIdentity || calendar != proof.CalendarIdentity || principal != proof.CalendarPrincipal || source.service.smtp != proof.SMTP {
+	if source.Source().AccountID != proof.Account || source.Source().Provider != storage.CalendarSourceProviderCalDAV || !source.service.passwordMailbox() || identity != proof.SourceIdentity || calendar != proof.CalendarIdentity || principal != proof.CalendarPrincipal || source.service.smtp != proof.SMTP {
 		return ErrAccountServicesChanged
 	}
 	snapshot.source = source

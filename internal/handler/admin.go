@@ -228,8 +228,8 @@ func (h *Handler) handleAddPlaintextTransportException(w http.ResponseWriter, r 
 	protocol := strings.ToLower(strings.TrimSpace(r.FormValue("protocol")))
 	host := normalizePlaintextExceptionHost(r.FormValue("host"))
 	port, err := strconv.Atoi(strings.TrimSpace(r.FormValue("port")))
-	if (protocol != "imap" && protocol != "smtp") || !validPlaintextExceptionHost(host) || err != nil || port < 1 || port > 65535 {
-		redirectAdminSecurity(w, r, "", "Enter IMAP or SMTP with an exact host and a port between 1 and 65535.")
+	if (protocol != "http" && protocol != "imap" && protocol != "smtp") || !validPlaintextExceptionHost(host) || err != nil || port < 1 || port > 65535 {
+		redirectAdminSecurity(w, r, "", "Enter HTTP, IMAP, or SMTP with an exact host and a port between 1 and 65535.")
 		return
 	}
 	if err := h.validateMailSecurityAdministrator(r.Context()); err != nil {
@@ -276,9 +276,7 @@ func (h *Handler) handleAddPrivateTargetException(w http.ResponseWriter, r *http
 		redirectAdminSecurity(w, r, "", "Could not add the private target exception.")
 		return
 	}
-	if protocol == "imap" || protocol == "smtp" {
-		h.restartAccountsUsingException(r.Context(), models.MailSecurityExceptionPrivateTarget, protocol, host, port)
-	}
+	h.restartAccountsUsingException(r.Context(), models.MailSecurityExceptionPrivateTarget, protocol, host, port)
 	redirectAdminSecurity(w, r, strings.ToUpper(protocol)+" private target is now allowed for "+host+":"+strconv.Itoa(port)+".", "")
 }
 

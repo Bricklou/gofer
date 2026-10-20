@@ -122,6 +122,7 @@ func newOwnedContactDeleteFixture(t *testing.T, provider string) (*userStorageFi
 	t.Cleanup(server.Close)
 	t.Cleanup(api.unblock)
 	if provider == "carddav" {
+		approvePlainDAV(t, f, server)
 		for _, owner := range []string{"alice", "bob"} {
 			if err := f.accountStore.WithAccountForUser(t.Context(), owner, f.accounts[owner].ID, func(local *config.AccountStore, _ *storage.DB) error {
 				return local.SaveContactSyncConfig(t.Context(), owner, f.accounts[owner].ID, models.ContactSyncConfig{Provider: provider, Enabled: true, Username: owner, BaseURL: server.URL, AddressBooks: []models.ContactAddressBook{{ID: owner + "-one", URL: server.URL + "/books/" + owner + "/one/", Default: true}}}, owner+"-dav-secret")

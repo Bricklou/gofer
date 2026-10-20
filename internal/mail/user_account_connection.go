@@ -11,6 +11,7 @@ import (
 	"github.com/cristianadrielbraun/gofer/internal/mail/imap"
 	smtpclient "github.com/cristianadrielbraun/gofer/internal/mail/smtp"
 	"github.com/cristianadrielbraun/gofer/internal/models"
+	"github.com/cristianadrielbraun/gofer/internal/providers"
 	"github.com/cristianadrielbraun/gofer/internal/storage"
 )
 
@@ -21,7 +22,7 @@ var ErrUserMailConnectionChanged = errors.New("mailbox configuration changed dur
 func (s *UserIMAP) TestAccount(ctx context.Context, owner, id string) ([]models.ConnectionTestResult, error) {
 	var results []models.ConnectionTestResult
 	err := s.operation(ctx, owner, id, 0, 2*time.Minute, func(ctx context.Context) error {
-		scope, err := s.snapshot(ctx, owner, id)
+		scope, err := s.snapshotAccount(ctx, owner, id, true)
 		if err != nil {
 			return err
 		}
@@ -42,7 +43,7 @@ func (s *UserIMAP) TestAccount(ctx context.Context, owner, id string) ([]models.
 			return err
 		}
 		validate := func() error {
-			current, err := s.snapshot(ctx, owner, id)
+			current, err := s.snapshotAccount(ctx, owner, id, true)
 			if err != nil {
 				return err
 			}
@@ -58,6 +59,7 @@ func (s *UserIMAP) TestAccount(ctx context.Context, owner, id string) ([]models.
 			}
 			return ctx.Err()
 		}
+		var jmapAccountID string
 		probe := func(service, message, success string, test func() error) {
 			result := models.ConnectionTestResult{Service: service, Message: message}
 			err := RetryConnectionTest(ctx, 250*time.Millisecond, func() error {
@@ -74,7 +76,20 @@ func (s *UserIMAP) TestAccount(ctx context.Context, owner, id string) ([]models.
 			}
 			results = append(results, result)
 		}
-		if scope.tokens == nil {
+		if scope.config.Provider == providers.ProviderJMAP && !providers.JMAPEnabled() {
+			results = append(results, models.ConnectionTestResult{Service: "jmap", Error: providers.ErrJMAPDisabled.Error()})
+		} else if scope.config.Provider == providers.ProviderJMAP {
+			probe("jmap", scope.config.JMAPSessionURL, "", func() error {
+				accountID, err := TestJMAPConnection(ctx, scope.config, scope.password)
+				if err == nil {
+					jmapAccountID = accountID
+				}
+				return err
+			})
+			if n := len(results); n > 0 && results[n-1].Success {
+				results[n-1].Message = fmt.Sprintf("Connected to %s (mail account %s)", scope.config.JMAPSessionURL, jmapAccountID)
+			}
+		} else if scope.tokens == nil {
 			probe("imap", fmt.Sprintf("%s:%d (%s)", scope.config.IMAPHost, scope.config.IMAPPort, scope.config.IMAPTLSMode), "Connection successful", func() error { return imap.TestConnection(ctx, scope.config, scope.password) })
 			probe("smtp", fmt.Sprintf("%s:%d (%s)", scope.config.SMTPHost, scope.config.SMTPPort, scope.config.SMTPTLSMode), "Connection successful", func() error { return smtpclient.TestConnection(ctx, scope.config, password) })
 		} else {

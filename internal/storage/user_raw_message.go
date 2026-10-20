@@ -18,6 +18,7 @@ type RawMessageSnapshot struct {
 
 type RawMessageInfo struct {
 	AccountID, Provider, Subject, AuthMethod, EmailAddress, RawPath, RemoteID, InternetMessageID string
+	JMAPSessionURL                                                                               string
 	FolderID, FolderRemoteID                                                                     string
 	RemoteUID, UIDValidity                                                                       uint32
 }
@@ -45,15 +46,15 @@ func (db *DB) rawMessageSnapshotTx(ctx context.Context, tx *sql.Tx, owner string
 	var port int
 	var password []byte
 	err := tx.QueryRowContext(ctx, `SELECT a.id,a.provider,a.provider_account_id,a.auth_method,a.email_address,
- COALESCE(m.raw_path,''),COALESCE(m.remote_message_id,''),COALESCE(m.internet_message_id,''),
- f.id,COALESCE(f.remote_id,''),COALESCE(ms.remote_uid,0),COALESCE(f.uid_validity,0),a.imap_host,a.imap_port,a.imap_tls_mode,a.username,a.encrypted_password
+ COALESCE(m.raw_path,''),`+anyProviderCopyIDSQL("m")+`,COALESCE(m.internet_message_id,''),
+ f.id,COALESCE(f.remote_id,''),COALESCE(ms.remote_uid,0),COALESCE(f.uid_validity,0),a.imap_host,a.imap_port,a.imap_tls_mode,a.username,a.encrypted_password,a.jmap_session_url
  FROM messages m JOIN accounts a ON a.id=m.account_id JOIN users u ON u.id=a.user_id
  JOIN message_folder_state ms ON ms.message_id=m.id JOIN folders f ON f.id=ms.folder_id AND f.account_id=a.id
  WHERE m.id=? AND a.user_id=? AND COALESCE(a.is_deleting,0)=0
  AND u.status='active' AND u.deletion_pending=0 AND ms.is_deleted=0`+db.userProviderDraftProtectionSQL("m")+`
  ORDER BY f.id LIMIT 1`, id, owner).Scan(&s.info.AccountID, &s.info.Provider, &s.info.Subject, &s.info.AuthMethod, &s.info.EmailAddress,
 		&s.info.RawPath, &s.info.RemoteID, &s.info.InternetMessageID, &s.info.FolderID, &s.info.FolderRemoteID, &s.info.RemoteUID, &s.info.UIDValidity,
-		&host, &port, &tlsMode, &username, &password)
+		&host, &port, &tlsMode, &username, &password, &s.info.JMAPSessionURL)
 	if err != nil {
 		return nil, err
 	}

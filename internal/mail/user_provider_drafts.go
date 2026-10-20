@@ -20,6 +20,9 @@ import (
 var ErrUserProviderDraftUncertain = errors.New("provider draft acceptance is uncertain")
 
 func IsUserProviderDraftMissing(err error) bool {
+	if errors.Is(err, errJMAPDraftMissing) {
+		return true
+	}
 	status, ok := providerAPIStatus(err)
 	return ok && status == http.StatusNotFound
 }

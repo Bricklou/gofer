@@ -64,7 +64,7 @@ func (s *UserAccountStore) PrepareCalendarReplyRetry(ctx context.Context, contro
 	if json.Unmarshal([]byte(job.Payload), &payload) != nil || payload.Scope != proof.Claim.Scope || payload.Event.ID != proof.Event ||
 		event.Event().ICalUID != payload.Event.ICalUID || event.Event().RemoteID != payload.Event.RemoteID || event.Event().SeriesRemoteID != payload.Event.SeriesRemoteID ||
 		!strings.EqualFold(payload.SelfEmail, source.service.Identity().EmailAddress) || !strings.EqualFold(snapshot.send.EnvelopeFrom, payload.SelfEmail) ||
-		len(snapshot.send.EnvelopeRecipients) != 1 || snapshot.send.EnvelopeRecipients[0] != payload.Organizer || !source.service.SMTPConfigured() {
+		len(snapshot.send.EnvelopeRecipients) != 1 || snapshot.send.EnvelopeRecipients[0] != payload.Organizer || !source.service.SendsEmail() {
 		return nil, storage.ErrCalendarEventChanged
 	}
 	snapshot.source, snapshot.event = source, event

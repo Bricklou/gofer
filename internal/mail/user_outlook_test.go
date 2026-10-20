@@ -284,7 +284,7 @@ func (f *userOutlookFixture) messageID(t *testing.T, owner, providerID string) i
 	t.Helper()
 	var id int64
 	f.local(t, owner, func(db *storage.DB) error {
-		return db.Read().QueryRow(`SELECT id FROM messages WHERE account_id=? AND remote_message_id=?`, f.ids[owner], providerID).Scan(&id)
+		return db.Read().QueryRow(`SELECT DISTINCT s.message_id FROM message_folder_state s JOIN folders f ON f.id=s.folder_id WHERE f.account_id=? AND s.remote_message_id=?`, f.ids[owner], providerID).Scan(&id)
 	})
 	return id
 }
@@ -581,7 +581,7 @@ func TestUserOutlookRejectsStaleOrFailedBodyPublication(t *testing.T) {
 				var err error
 				switch change {
 				case "message":
-					_, err = db.Write().Exec(`UPDATE messages SET remote_message_id='different' WHERE id=?`, id)
+					_, err = db.Write().Exec(`UPDATE message_folder_state SET remote_message_id='different' WHERE message_id=?; UPDATE message_folder_state SET remote_message_id='different' WHERE message_id=?`, id, id)
 				case "subject":
 					_, err = db.Write().Exec(`UPDATE accounts SET provider_account_id='different' WHERE id=?`, f.ids["alice"])
 				case "provider":
@@ -812,7 +812,7 @@ func TestUserOutlookFailedCheckpointReplaysWithoutDuplicateMessages(t *testing.T
 	}
 	f.local(t, "alice", func(db *storage.DB) error {
 		var n int
-		err := db.Read().QueryRow(`SELECT COUNT(*) FROM messages WHERE remote_message_id='m2'`).Scan(&n)
+		err := db.Read().QueryRow(`SELECT COUNT(DISTINCT message_id) FROM message_folder_state WHERE remote_message_id='m2'`).Scan(&n)
 		if err == nil && n != 1 {
 			return errors.New("duplicate messages after replay")
 		}

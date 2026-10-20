@@ -10,6 +10,7 @@ import (
 
 	mailtransport "github.com/cristianadrielbraun/gofer/internal/mail/transport"
 	"github.com/cristianadrielbraun/gofer/internal/models"
+	"github.com/cristianadrielbraun/gofer/internal/providers"
 	"github.com/cristianadrielbraun/gofer/internal/storage"
 )
 
@@ -32,17 +33,63 @@ func (s *AccountServiceSnapshot) AccountID() string { return s.id }
 
 type AccountServiceIdentity struct {
 	Provider, ProviderAccountID, EmailAddress, DisplayName, Username, AuthMethod, IMAPHost, SMTPHost string
+	JMAPSessionURL                                                                                   string
 }
 
 func (s *AccountServiceSnapshot) Identity() AccountServiceIdentity {
 	d := s.data
-	return AccountServiceIdentity{d.Provider, d.ProviderAccountID, d.EmailAddress, d.DisplayName, d.Username, d.AuthMethod, d.IMAPHost, d.SMTPHost}
+	return AccountServiceIdentity{d.Provider, d.ProviderAccountID, d.EmailAddress, d.DisplayName, d.Username, d.AuthMethod, d.IMAPHost, d.SMTPHost, d.JMAPSessionURL}
 }
 
 // SMTP readiness is copied with the Calendar authority so DAV email preflight
 // never consults shared account rows or adopts changed sending configuration.
 func (s *AccountServiceSnapshot) SMTPConfigured() bool {
 	return strings.TrimSpace(s.data.SMTPHost) != "" && s.data.SMTPPort > 0
+}
+
+// SendsEmail reports whether the account can send the email a calendar reply
+// needs: over SMTP, or over JMAP for a JMAP account signed in with a password.
+func (s *AccountServiceSnapshot) SendsEmail() bool {
+	if s.data.Provider == providers.ProviderJMAP {
+		return s.data.AuthMethod == "plain" && providers.JMAPEnabled()
+	}
+	return s.SMTPConfigured()
+}
+
+// EmailTransport is how the account sends calendar email: JMAP accounts over
+// JMAP, others over SMTP.
+func (s *AccountServiceSnapshot) EmailTransport() string {
+	if s.data.Provider == providers.ProviderJMAP {
+		return storage.OutgoingTransportJMAP
+	}
+	return storage.OutgoingTransportSMTP
+}
+
+// passwordMailbox reports whether the account is an IMAP or JMAP mailbox
+// signed in with a password, the accounts whose calendars come from CalDAV.
+func (s *AccountServiceSnapshot) passwordMailbox() bool {
+	return (s.data.Provider == providers.ProviderIMAP || s.data.Provider == providers.ProviderJMAP) && s.data.AuthMethod == "plain"
+}
+
+// JMAPConfig is a JMAP account's connection from the copied session URL, with
+// the central transport exceptions for its endpoint, as SMTPConfig is for SMTP.
+func (s *AccountServiceSnapshot) JMAPConfig(ctx context.Context) (*models.AccountConfig, error) {
+	if err := s.repository.checkServiceSnapshot(s); err != nil {
+		return nil, err
+	}
+	d := s.data
+	if d.Provider != providers.ProviderJMAP || d.AuthMethod != "plain" {
+		return nil, errors.New("the account does not send over JMAP")
+	}
+	if !providers.JMAPEnabled() {
+		return nil, providers.ErrJMAPDisabled
+	}
+	cfg := &models.AccountConfig{AccountID: s.id, Provider: d.Provider, ProviderAccountID: d.ProviderAccountID,
+		Username: d.Username, AuthMethod: d.AuthMethod, JMAPSessionURL: d.JMAPSessionURL}
+	if err := s.repository.base.applyJMAPTransportPolicy(ctx, cfg); err != nil {
+		return nil, err
+	}
+	return cfg, nil
 }
 
 // Read the central transport exception for the copied endpoint, without
@@ -164,13 +211,13 @@ func (s *UserAccountStore) serviceSnapshot(ctx context.Context, tx *sql.Tx, owne
 	var emailEnabled int
 	err := tx.QueryRowContext(ctx, `SELECT a.provider,a.provider_account_id,a.email_address,a.display_name,
  a.username,a.auth_method,a.imap_host,a.smtp_host,a.smtp_port,a.encrypted_password,COALESCE(a.email_sync_enabled,1),
- a.smtp_tls_mode,COALESCE(a.smtp_username,''),a.encrypted_smtp_password
+ a.smtp_tls_mode,COALESCE(a.smtp_username,''),a.encrypted_smtp_password,COALESCE(a.jmap_session_url,'')
  FROM accounts a JOIN users u ON u.id=a.user_id
  WHERE a.id=? AND a.user_id=? AND COALESCE(a.is_deleting,0)=0
  AND u.status='active' AND u.deletion_pending=0`, id, owner).Scan(
 		&data.Provider, &data.ProviderAccountID, &data.EmailAddress, &data.DisplayName,
 		&data.Username, &data.AuthMethod, &data.IMAPHost, &data.SMTPHost, &data.SMTPPort, &snapshot.password, &emailEnabled,
-		&data.SMTPTLSMode, &data.SmtpUsername, &snapshot.smtpPassword)
+		&data.SMTPTLSMode, &data.SmtpUsername, &snapshot.smtpPassword, &data.JMAPSessionURL)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, storage.ErrAccountRoute
 	}
@@ -180,7 +227,7 @@ func (s *UserAccountStore) serviceSnapshot(ctx context.Context, tx *sql.Tx, owne
 	data.EmailSyncEnabled = emailEnabled == 1
 	// Display metadata and mail-only sync controls are not service identity.
 	snapshot.connection, err = serviceStateHash([]any{data.Provider, data.ProviderAccountID, data.EmailAddress,
-		data.Username, data.AuthMethod, data.IMAPHost, data.SMTPHost, data.SMTPPort, snapshot.password})
+		data.Username, data.AuthMethod, data.IMAPHost, data.SMTPHost, data.SMTPPort, snapshot.password, data.JMAPSessionURL})
 	if err != nil {
 		return nil, err
 	}

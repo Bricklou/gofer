@@ -19,7 +19,6 @@ import (
 	"github.com/cristianadrielbraun/gofer/internal/mail"
 	"github.com/cristianadrielbraun/gofer/internal/mailauth"
 	"github.com/cristianadrielbraun/gofer/internal/models"
-	"github.com/cristianadrielbraun/gofer/internal/netguard"
 	"github.com/cristianadrielbraun/gofer/internal/providers"
 	"github.com/cristianadrielbraun/gofer/internal/storage"
 	"github.com/cristianadrielbraun/gofer/internal/store"
@@ -85,8 +84,8 @@ func TestUserContactPushGoogleOwnedCreateThenUpdate(t *testing.T) {
 	previous := http.DefaultTransport
 	target, _ := url.Parse(api.URL)
 	http.DefaultTransport = userContactPushTransport{base: previous, target: target}
-	defer netguard.UseTransportForTests(http.DefaultTransport)()
 	defer func() { http.DefaultTransport = previous }()
+	allowLocalDAVServers(t)
 	system, err := storage.New(filepath.Join(t.TempDir(), "system.db"))
 	if err != nil {
 		t.Fatal(err)
@@ -220,8 +219,8 @@ func newUserContactPushFixture(t *testing.T, provider string, api http.Handler) 
 	previous := http.DefaultTransport
 	target, _ := url.Parse(f.server.URL)
 	http.DefaultTransport = userContactPushTransport{base: previous, target: target}
-	t.Cleanup(netguard.UseTransportForTests(http.DefaultTransport))
 	t.Cleanup(func() { http.DefaultTransport = previous })
+	allowLocalDAVServers(t)
 	var err error
 	f.system, err = storage.New(filepath.Join(t.TempDir(), "system.db"))
 	if err != nil {

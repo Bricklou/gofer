@@ -15,6 +15,7 @@ import (
 	"github.com/cristianadrielbraun/gofer/internal/mail/message"
 	smtpclient "github.com/cristianadrielbraun/gofer/internal/mail/smtp"
 	"github.com/cristianadrielbraun/gofer/internal/models"
+	"github.com/cristianadrielbraun/gofer/internal/providers"
 	"github.com/cristianadrielbraun/gofer/internal/storage"
 	goimap "github.com/emersion/go-imap/v2"
 )
@@ -28,6 +29,9 @@ type userMailDeliveryScope struct {
 	cfg                    *models.AccountConfig
 	password, smtpPassword string
 	providerMail           *mail.UserProviderMail
+	// drafts syncs the account's drafts when they go through a provider:
+	// Gmail and Outlook through providerMail, JMAP with its own client.
+	drafts mail.ProviderDrafts
 }
 
 func (s *userMailDeliveryScope) call(ctx context.Context, fn func(*storage.DB) error) error {
@@ -47,6 +51,9 @@ func (s *userMailDeliveryScope) call(ctx context.Context, fn func(*storage.DB) e
 
 func (q *userMailDelivery) Run(ctx context.Context, owner, id string, providerMail *mail.UserProviderMail) error {
 	s := &userMailDeliveryScope{runner: q, owner: owner, id: id, providerMail: providerMail}
+	if providerMail != nil {
+		s.drafts = providerMail
+	}
 	hasWork := false
 	err := q.h.userAccounts.WithAccountForUser(ctx, owner, id, func(accounts *config.AccountStore, db *storage.DB) error {
 		next, err := db.NextAccountMailQueueAttempt(ctx, id)
@@ -76,6 +83,13 @@ func (q *userMailDelivery) Run(ctx context.Context, owner, id string, providerMa
 					s.smtpPassword = password
 				}
 			}
+		} else if s.cfg.Provider == providers.ProviderJMAP && s.cfg.AuthMethod == "plain" && providers.JMAPEnabled() {
+			// JMAP sends with the account's own login; it has no provider token.
+			s.password, err = accounts.DecryptPassword(ctx, id)
+			if err != nil {
+				return err
+			}
+			s.drafts = mail.NewJMAPDrafts(s.cfg, s.password)
 		} else if s.cfg.AuthMethod != "oauth2" || (s.cfg.Provider != "gmail" && s.cfg.Provider != "outlook") || providerMail == nil {
 			return errors.New("routed mail delivery provider is unavailable")
 		}
@@ -89,7 +103,7 @@ func (q *userMailDelivery) Run(ctx context.Context, owner, id string, providerMa
 	defer q.h.userIMAP.MaybeCleanupUserFiles(ctx, owner)
 	var failures error
 	for _, run := range []func(context.Context) (bool, error){s.send, s.sentCopy, s.draft} {
-		if s.cfg.Provider != "imap" && s.providerMail.RetryAt().After(time.Now()) {
+		if s.providerCoolingDown() {
 			return failures
 		}
 		for i := 0; i < 5; i++ {
@@ -101,7 +115,7 @@ func (q *userMailDelivery) Run(ctx context.Context, owner, id string, providerMa
 			if !more {
 				break
 			}
-			if s.cfg.Provider != "imap" && s.providerMail.RetryAt().After(time.Now()) {
+			if s.providerCoolingDown() {
 				return failures
 			}
 		}
@@ -136,6 +150,9 @@ func (s *userMailDeliveryScope) send(ctx context.Context) (bool, error) {
 	var calendarSnapshot outgoingMessageSnapshot
 	if json.Unmarshal(send.MessageJSON, &calendarSnapshot) == nil && calendarSnapshot.CalendarNotification != nil {
 		return s.sendCalendarNotification(ctx, send)
+	}
+	if s.cfg.Provider == providers.ProviderJMAP {
+		return s.sendJMAP(ctx, send)
 	}
 	if s.cfg.Provider != "imap" {
 		return s.sendProvider(ctx, send)
@@ -375,6 +392,12 @@ func (s *userMailDeliveryScope) cacheSent(ctx context.Context, send storage.Outg
 	err = s.call(ctx, func(db *storage.DB) error { return db.PublishSentBody(ctx, id, s.id, msg.MessageID, p, text, html) })
 	committed = err == nil
 	return err
+}
+
+// providerCoolingDown reports whether a Gmail or Outlook account is waiting
+// out its provider's retry deadline. IMAP and JMAP accounts have none.
+func (s *userMailDeliveryScope) providerCoolingDown() bool {
+	return s.providerMail != nil && s.cfg.Provider != "imap" && s.providerMail.RetryAt().After(time.Now())
 }
 
 func (s *userMailDeliveryScope) draft(ctx context.Context) (bool, error) {

@@ -14,7 +14,7 @@ func (db *DB) QueueUserCalendarNotification(ctx context.Context, source *UserCal
 	if len(event) > 1 || (len(event) == 1 && (event[0] == nil || source == nil || event[0].source.ID != source.source.ID || event[0].source.UserID != source.source.UserID || event[0].source.AccountID != source.source.AccountID)) {
 		return OutgoingSend{}, ErrCalendarSourceChanged
 	}
-	if source == nil || source.source.Provider != CalendarSourceProviderCalDAV || guard == nil || input.ID == "" || input.AccountID != source.source.AccountID || input.Transport != OutgoingTransportSMTP || input.EnvelopeFrom == "" || len(input.EnvelopeRecipients) == 0 || len(input.MIMEData) == 0 || !json.Valid(input.MessageJSON) || input.MessageID != 0 || input.DraftID != "" || input.IsScheduled || !input.SendAfter.IsZero() {
+	if source == nil || source.source.Provider != CalendarSourceProviderCalDAV || guard == nil || input.ID == "" || input.AccountID != source.source.AccountID || !calendarEmailTransport(input.Transport) || input.EnvelopeFrom == "" || len(input.EnvelopeRecipients) == 0 || len(input.MIMEData) == 0 || !json.Valid(input.MessageJSON) || input.MessageID != 0 || input.DraftID != "" || input.IsScheduled || !input.SendAfter.IsZero() {
 		return OutgoingSend{}, ErrCalendarSourceChanged
 	}
 	input.MIMEData = append([]byte(nil), input.MIMEData...)
@@ -72,7 +72,7 @@ func (db *DB) QueueUserCalendarNotification(ctx context.Context, source *UserCal
 }
 
 func validateUserCalendarNotificationAttemptTx(ctx context.Context, tx *sql.Tx, owner string, expected OutgoingSend, state [32]byte, guard func(*sql.Tx, string) error) (OutgoingSend, error) {
-	if guard == nil || owner == "" || expected.ID == "" || expected.AccountID == "" || expected.Transport != OutgoingTransportSMTP || expected.MessageID != 0 || expected.DraftID != "" || expected.IsScheduled {
+	if guard == nil || owner == "" || expected.ID == "" || expected.AccountID == "" || !calendarEmailTransport(expected.Transport) || expected.MessageID != 0 || expected.DraftID != "" || expected.IsScheduled {
 		return OutgoingSend{}, ErrCalendarSourceChanged
 	}
 	if err := guard(tx, expected.AccountID); err != nil {

@@ -14,13 +14,14 @@ import (
 	"github.com/cristianadrielbraun/gofer/internal/mail/message"
 	smtpclient "github.com/cristianadrielbraun/gofer/internal/mail/smtp"
 	"github.com/cristianadrielbraun/gofer/internal/models"
+	"github.com/cristianadrielbraun/gofer/internal/providers"
 	"github.com/cristianadrielbraun/gofer/internal/storage"
 )
 
 // The mail worker already holds its account mail gate. The distinct Calendar
-// gate and owner/source flight protect the invitation through SMTP. The local
-// result checks the original attempt again after its writer wait. No store lease
-// spans either provider HTTP or SMTP.
+// gate and owner/source flight protect the invitation through SMTP or JMAP. The
+// local result checks the original attempt again after its writer wait. No
+// store lease spans provider HTTP, SMTP or JMAP.
 func (s *userMailDeliveryScope) sendCalendarReply(ctx context.Context, claimed storage.OutgoingSend) (bool, error) {
 	var more bool
 	err := s.runner.h.userIMAP.RunUserServiceWork(ctx, s.owner, func(operation context.Context) error {
@@ -73,12 +74,16 @@ func (s *userMailDeliveryScope) deliverCalendarReply(ctx context.Context, claime
 				return errors.New("the invitation changed; refresh it before replying")
 			}
 			service := authority.Event().Service()
+			if service.Identity().Provider == providers.ProviderJMAP {
+				result, err = sendCalendarEmailOverJMAP(operation, service, func() error { return h.userAccounts.ValidateCalendarReply(operation, authority) }, send)
+				return err
+			}
 			cfg, err := service.SMTPConfig(operation)
 			if err != nil {
 				return err
 			}
-			// CalDAV is configured only for IMAP accounts. Gmail/Graph RSVP
-			// uses its native Calendar provider instead of this SMTP queue.
+			// CalDAV is configured only for IMAP and JMAP accounts. Gmail/Graph
+			// RSVP uses its native Calendar provider instead of this queue.
 			if cfg.AuthMethod != "plain" {
 				return errors.New("queued Calendar SMTP OAuth authority is unavailable")
 			}
@@ -138,10 +143,40 @@ func (s *userMailDeliveryScope) deliverCalendarReply(ctx context.Context, claime
 	return true, err
 }
 
+// sendCalendarEmailOverJMAP sends a queued calendar reply or invitation from a
+// JMAP account, after validate confirms it still stands. Email the server
+// refused or never received is not sent and may be retried if retrying can
+// help; any other failure may follow the server accepting it, so it is
+// ambiguous.
+func sendCalendarEmailOverJMAP(ctx context.Context, service *config.AccountServiceSnapshot, validate func() error, send storage.OutgoingSend) (models.SendResult, error) {
+	cfg, err := service.JMAPConfig(ctx)
+	if err != nil {
+		return models.SendFailed, err
+	}
+	password, err := service.MailboxPassword()
+	if err != nil {
+		return models.SendFailed, err
+	}
+	if err := validate(); err != nil {
+		return models.SendFailed, err
+	}
+	_, err = mail.SendJMAPMessage(ctx, cfg, password, send.EnvelopeFrom, send.EnvelopeRecipients, send.MIMEData, jmapEarlierAttempt(send))
+	var notSent *mail.JMAPNotSentError
+	switch {
+	case err == nil:
+		return models.SendSuccess, nil
+	case errors.As(err, &notSent) && notSent.Retryable:
+		return models.SendFailed, markOutgoingSendRetryable(err)
+	case errors.As(err, &notSent):
+		return models.SendFailed, err
+	}
+	return models.SendAmbiguous, err
+}
+
 // Build the native MIME and followup from a verified provider target, then let
 // the repository bind both rows to the private reservation in one transaction.
 func (p *userCalendarRequest) queueCalDAVReply(ctx context.Context, claim *config.UserCalendarResponseClaim, target calendarResponseTarget, response string) (calendarResponseResult, error) {
-	if p == nil || p.event == nil || target.CalDAV == nil || !p.service().SMTPConfigured() {
+	if p == nil || p.event == nil || target.CalDAV == nil || !p.service().SendsEmail() {
 		return calendarResponseResult{}, storage.ErrCalendarEventChanged
 	}
 	identity := p.service().Identity()
@@ -159,7 +194,8 @@ func (p *userCalendarRequest) queueCalDAVReply(ctx context.Context, claim *confi
 	organizer := calendarReplyAddress(target.CalDAV.Selected.Props.Get("ORGANIZER").Value)
 	label := map[string]string{"accepted": "Accepted", "tentative": "Tentative", "declined": "Declined"}[response]
 	msg := &message.OutgoingMessage{FromName: identity.DisplayName, FromEmail: identity.EmailAddress, To: []*netmail.Address{{Address: organizer}}, Subject: label + ": " + strings.NewReplacer("\r", " ", "\n", " ").Replace(target.Event.Summary), TextBody: "My response to this invitation: " + response + ".", CalendarReply: reply, MessageID: message.NewMessageID(), Date: time.Now().UTC()}
-	raw, err := buildOutgoingMIME(storage.OutgoingTransportSMTP, msg)
+	transport := calendarEmailTransport(identity.Provider)
+	raw, err := buildOutgoingMIME(transport, msg)
 	if err != nil {
 		return calendarResponseResult{}, err
 	}
@@ -171,7 +207,7 @@ func (p *userCalendarRequest) queueCalDAVReply(ctx context.Context, claim *confi
 	if err != nil {
 		return calendarResponseResult{}, err
 	}
-	id, err := p.h.userAccounts.QueueCalendarReply(ctx, claim, storage.CalendarReplyJob{ResourceID: target.Endpoint, RemoteID: target.Event.RemoteID, Version: target.HTTPETag, Response: response, Payload: string(payload)}, storage.QueueOutgoingSendInput{AccountID: p.service().AccountID(), Transport: storage.OutgoingTransportSMTP, EnvelopeFrom: msg.FromEmail, EnvelopeRecipients: []string{organizer}, MIMEData: raw, MessageJSON: outgoing})
+	id, err := p.h.userAccounts.QueueCalendarReply(ctx, claim, storage.CalendarReplyJob{ResourceID: target.Endpoint, RemoteID: target.Event.RemoteID, Version: target.HTTPETag, Response: response, Payload: string(payload)}, storage.QueueOutgoingSendInput{AccountID: p.service().AccountID(), Transport: transport, EnvelopeFrom: msg.FromEmail, EnvelopeRecipients: []string{organizer}, MIMEData: raw, MessageJSON: outgoing})
 	if err != nil {
 		return calendarResponseResult{}, err
 	}

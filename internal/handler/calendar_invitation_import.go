@@ -254,7 +254,7 @@ func applyCalDAVInvitation(ctx context.Context, source storage.CalendarSource, c
 	if invitation.forwardedBy != "" && existing.ID != "" {
 		return "", calendarInvitationRefusal("only the organizer can change an event that's already in your calendar")
 	}
-	client := calendarDeleteClient(davHTTPTransport)
+	client := calendarDeleteClient(calDAVHTTPTransport)
 	put := func(endpoint string, cal *ical.Calendar, match string) error {
 		body, err := encodeCalendarReply(cal)
 		if err != nil {

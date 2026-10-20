@@ -42,14 +42,14 @@ func (db *DB) CompleteProviderMutation(ctx context.Context, m MessageMutation, s
 	if matches != 1 {
 		return ErrMessageMutationSuperseded
 	}
-	if err := tx.QueryRowContext(ctx, `SELECT count(*) FROM messages m JOIN accounts a ON a.id=m.account_id WHERE m.id=? AND m.account_id=? AND COALESCE(m.remote_message_id,'')=? AND COALESCE(m.internet_message_id,'')=? AND a.provider=? AND a.provider_account_id=? AND a.auth_method='oauth2' AND COALESCE(a.is_deleting,0)=0`, m.MessageID, m.AccountID, originalID, originalInternetID, m.ProviderType, subject).Scan(&matches); err != nil {
+	if err := tx.QueryRowContext(ctx, `SELECT count(*) FROM messages m JOIN accounts a ON a.id=m.account_id WHERE m.id=? AND m.account_id=? AND `+providerCopyOfRowSQL("m")+` AND COALESCE(m.internet_message_id,'')=? AND a.provider=? AND a.provider_account_id=? AND a.auth_method='oauth2' AND COALESCE(a.is_deleting,0)=0`, m.MessageID, m.AccountID, originalID, originalID, originalInternetID, m.ProviderType, subject).Scan(&matches); err != nil {
 		return err
 	}
 	if matches != 1 {
 		return fmt.Errorf("message or mailbox identity changed during provider mutation")
 	}
 	if originalID == "" && movedID != "" && m.Kind != MessageMutationMove {
-		if _, err := tx.ExecContext(ctx, `UPDATE messages SET remote_message_id=?,updated_at=CURRENT_TIMESTAMP WHERE id=?`, movedID, m.MessageID); err != nil {
+		if err := bindProviderCopyIDTx(ctx, tx, m.MessageID, m.FolderID, movedID); err != nil {
 			return err
 		}
 	}
@@ -65,7 +65,7 @@ func (db *DB) CompleteProviderMutation(ctx context.Context, m MessageMutation, s
 		}
 	}
 	if m.Kind == MessageMutationDelete {
-		if _, err := tx.ExecContext(ctx, `DELETE FROM message_mutations WHERE message_id=? AND id!=?`, m.MessageID, m.ID); err != nil {
+		if err := deleteCopyMutationsTx(ctx, tx, m.MessageID, m.ID, m.FolderID); err != nil {
 			return err
 		}
 	}

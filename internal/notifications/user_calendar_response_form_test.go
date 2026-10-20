@@ -16,10 +16,12 @@ import (
 	"github.com/cristianadrielbraun/gofer/internal/storage"
 )
 
-func newOwnedCalendarResponseFormFixture(t *testing.T, provider string, before func(*http.Request), wrappers ...func(http.Handler) http.Handler) (*userStorageFixture, *atomic.Int32) {
+func newOwnedCalendarResponseFormFixture(t *testing.T, variant string, before func(*http.Request), wrappers ...func(http.Handler) http.Handler) (*userStorageFixture, *atomic.Int32) {
 	t.Helper()
+	// "caldav-jmap" is CalDAV on JMAP mail accounts; the calendar side is CalDAV.
+	provider := strings.TrimSuffix(variant, "-jmap")
 	calls := &atomic.Int32{}
-	f, _, server := newOwnedCalendarFixture(t, provider, func(base *ownedCalendarDiscoveryAPI) http.Handler {
+	f, _, server := newOwnedCalendarFixture(t, variant, func(base *ownedCalendarDiscoveryAPI) http.Handler {
 		var handler http.Handler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			if r.URL.Path == "/token" {
 				base.ServeHTTP(w, r)
@@ -108,10 +110,10 @@ func newOwnedCalendarResponseFormFixture(t *testing.T, provider string, before f
 			if _, err := db.Write().Exec(`INSERT INTO folders(id,account_id,remote_id,name,role,uid_validity) VALUES(?,?,'INBOX','Inbox','inbox',100)`, owner+"-response-mail", f.accounts[owner].ID); err != nil {
 				return err
 			}
-			if _, err := db.Write().Exec(`INSERT INTO messages(id,account_id,remote_message_id,internet_message_id,raw_path) VALUES(1,?,'m1',?,?)`, f.accounts[owner].ID, "<"+owner+"-invitation@example.com>", path); err != nil {
+			if _, err := db.Write().Exec(`INSERT INTO messages(id,account_id,internet_message_id,raw_path) VALUES(1,?,?,?)`, f.accounts[owner].ID, "<"+owner+"-invitation@example.com>", path); err != nil {
 				return err
 			}
-			if _, err := db.Write().Exec(`INSERT INTO message_folder_state(message_id,folder_id,remote_uid) VALUES(1,?,2)`, owner+"-response-mail"); err != nil {
+			if _, err := db.Write().Exec(`INSERT INTO message_folder_state(message_id,folder_id,remote_uid,remote_message_id) VALUES(1,?,2,'m1')`, owner+"-response-mail"); err != nil {
 				return err
 			}
 			start := time.Date(2026, 10, 3, 10, 0, 0, 0, time.UTC)
@@ -250,7 +252,7 @@ func TestUserCalendarResponseFormHTTPRejectsInFlightChanges(t *testing.T) {
 				}
 			case "mail-identity":
 				if err := f.routing.WithUser(t.Context(), "alice", func(db *storage.DB) error {
-					_, err := db.Write().Exec(`UPDATE messages SET remote_message_id='changed' WHERE id=1`)
+					_, err := db.Write().Exec(`UPDATE message_folder_state SET remote_message_id='changed' WHERE message_id=1`)
 					return err
 				}); err != nil {
 					t.Fatal(err)

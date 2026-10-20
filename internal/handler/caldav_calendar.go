@@ -7,6 +7,7 @@ import (
 	"io"
 	"net"
 	"net/http"
+	"net/netip"
 	"net/url"
 	"strconv"
 	"strings"
@@ -25,8 +26,8 @@ func normalizeCalDAVBaseURL(raw string) (string, error) {
 		raw = "https://" + raw
 	}
 	parsed, err := url.Parse(raw)
-	if err != nil || parsed.Host == "" || parsed.Scheme != "https" {
-		return "", fmt.Errorf("enter a valid https CalDAV server URL to protect the mailbox credentials")
+	if err != nil || parsed.Host == "" || !calDAVURLScheme(parsed.Scheme) {
+		return "", fmt.Errorf("enter a valid CalDAV server URL starting with https://, or http:// for a server an administrator approved")
 	}
 	if parsed.User != nil || parsed.RawQuery != "" {
 		return "", fmt.Errorf("do not include credentials or query parameters in the CalDAV server URL")
@@ -35,7 +36,9 @@ func normalizeCalDAVBaseURL(raw string) (string, error) {
 	return parsed.String(), nil
 }
 
-func calDAVAutodiscoveryCandidates(ctx context.Context, preferredURL string, identities ...string) []string {
+// calDAVAutodiscoveryCandidates lists the addresses to try: the given server
+// addresses first, in order, then guesses from the identities' domains.
+func calDAVAutodiscoveryCandidates(ctx context.Context, serverURLs []string, identities ...string) []string {
 	candidates := make([]string, 0, 16)
 	seenCandidates := make(map[string]bool)
 	addCandidate := func(raw string) {
@@ -46,12 +49,30 @@ func calDAVAutodiscoveryCandidates(ctx context.Context, preferredURL string, ide
 		seenCandidates[strings.ToLower(normalized)] = true
 		candidates = append(candidates, normalized)
 	}
-	addCandidate(preferredURL)
+	for _, server := range serverURLs {
+		if strings.TrimSpace(server) != "" {
+			addCandidate(server)
+		}
+	}
 
 	domains := make([]string, 0, len(identities)*2)
 	seenDomains := make(map[string]bool)
 	for _, identity := range identities {
 		domain := calDAVDiscoveryDomain(identity)
+		if ip, err := netip.ParseAddr(domain); err == nil {
+			// Literal addresses are direct candidates, never DNS names. Keep
+			// an explicit URL's scheme, port and path when one was supplied.
+			if _, err := netip.ParseAddr(strings.Trim(strings.TrimSpace(identity), "[]")); err != nil && !strings.Contains(identity, "@") {
+				addCandidate(identity)
+			} else {
+				host := ip.String()
+				if ip.Is6() {
+					host = "[" + host + "]"
+				}
+				addCandidate((&url.URL{Scheme: "https", Host: host}).String())
+			}
+			continue
+		}
 		for _, discoveryDomain := range calDAVDiscoveryDomains(domain) {
 			key := strings.ToLower(discoveryDomain)
 			if discoveryDomain == "" || seenDomains[key] {
@@ -109,6 +130,9 @@ func calDAVDiscoveryDomain(candidate string) string {
 	if candidate == "" {
 		return ""
 	}
+	if ip, err := netip.ParseAddr(strings.Trim(candidate, "[]")); err == nil {
+		return ip.String()
+	}
 	if strings.Contains(candidate, "@") && !strings.Contains(candidate, "://") {
 		parts := strings.Split(candidate, "@")
 		return strings.ToLower(strings.Trim(strings.TrimSpace(parts[len(parts)-1]), "."))
@@ -126,6 +150,9 @@ func calDAVDiscoveryDomain(candidate string) string {
 func calDAVDiscoveryDomains(domain string) []string {
 	domain = strings.ToLower(strings.Trim(strings.TrimSpace(domain), "."))
 	if domain == "" {
+		return nil
+	}
+	if _, err := netip.ParseAddr(domain); err == nil {
 		return nil
 	}
 	domains := []string{domain}
@@ -416,7 +443,7 @@ func calDAVPropfind(ctx context.Context, endpoint, username, password, depth, bo
 	req.Header.Set("Depth", depth)
 	req.Header.Set("Content-Type", `application/xml; charset="utf-8"`)
 	client := &http.Client{
-		Transport: davHTTPTransport,
+		Transport: calDAVHTTPTransport,
 		Timeout:   cardDAVDiscoveryHTTPTimeout,
 		CheckRedirect: func(req *http.Request, via []*http.Request) error {
 			if err := calendarDiscoveryDAVGuard(ctx); err != nil {

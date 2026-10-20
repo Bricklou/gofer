@@ -12,6 +12,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	netmail "net/mail"
+	"net/url"
 	"strconv"
 	"strings"
 	"sync"
@@ -204,6 +205,97 @@ func TestUserCalendarResponsePostHTTPDAVServerSchedulingAndUnknownWrites(t *test
 	}
 }
 
+// replyCalendarPart is the decoded text/calendar part of a reply email.
+func replyCalendarPart(t *testing.T, raw string) string {
+	t.Helper()
+	message, err := netmail.ReadMessage(strings.NewReader(raw))
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, params, err := mime.ParseMediaType(message.Header.Get("Content-Type"))
+	if err != nil || params["boundary"] == "" {
+		t.Fatal("invalid reply MIME", err)
+	}
+	parts := multipart.NewReader(message.Body, params["boundary"])
+	var calendarBody string
+	for {
+		part, err := parts.NextPart()
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			t.Fatal(err)
+		}
+		if strings.HasPrefix(part.Header.Get("Content-Type"), "text/calendar") {
+			data, err := io.ReadAll(part)
+			if err != nil {
+				t.Fatal(err)
+			}
+			calendarBody = string(data)
+		}
+		_ = part.Close()
+	}
+	return calendarBody
+}
+
+// A JMAP account replies to an invitation by email through its JMAP server,
+// which keeps the sent reply in Sent; no SMTP server is involved.
+func TestUserCalendarResponsePostHTTPDAVEmailRepliesOverJMAP(t *testing.T) {
+	api := &ownedResponseDAVSubmitAPI{t: t, mode: "email", bodies: map[string]string{}, accepted: map[string]bool{}, puts: map[string]int{}, reports: map[string]int{}}
+	f, _ := newOwnedCalendarResponseFormFixture(t, "caldav-jmap", nil, api.wrap)
+	server := newJMAPDraftServer(t)
+	server.login, server.password, server.identity = "alice", "synthetic-only", "alice@example.com"
+	address, _ := url.Parse(server.URL)
+	port, _ := strconv.Atoi(address.Port())
+	if err := f.system.AddPlaintextTransportException(t.Context(), "http", address.Hostname(), port, "alice"); err != nil {
+		t.Fatal(err)
+	}
+	if err := f.system.AddPrivateTargetException(t.Context(), "http", address.Hostname(), port, "alice"); err != nil {
+		t.Fatal(err)
+	}
+	if err := f.accountStore.WithAccountForUser(t.Context(), "alice", f.accounts["alice"].ID, func(_ *config.AccountStore, db *storage.DB) error {
+		_, err := db.Write().Exec(`UPDATE accounts SET jmap_session_url=?,email_sync_enabled=0 WHERE id=?`, server.URL+"/.well-known/jmap", f.accounts["alice"].ID)
+		return err
+	}); err != nil {
+		t.Fatal(err)
+	}
+	r := ownedResponseSubmit(t, f, "alice", `"v1"`)
+	var result map[string]any
+	_ = json.Unmarshal(r.Body.Bytes(), &result)
+	id, _ := result["delivery_id"].(string)
+	if r.Code != http.StatusOK || result["pending"] != true || result["delivery"] != "email" || id == "" {
+		t.Fatal("JMAP email response not queued", r.Code, r.Body.String())
+	}
+	deadline := time.Now().Add(8 * time.Second)
+	for {
+		var job storage.CalendarReplyJob
+		if err := f.routing.WithUser(t.Context(), "alice", func(db *storage.DB) error {
+			var err error
+			job, err = db.GetCalendarReply(t.Context(), "alice", id)
+			return err
+		}); err != nil {
+			t.Fatal(err)
+		}
+		if job.SendStatus == "sent" {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatal("JMAP email response was not sent", job)
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	sent := server.in("mb-sent")
+	if len(sent) != 1 {
+		t.Fatalf("JMAP server holds %d sent replies", len(sent))
+	}
+	if body := replyCalendarPart(t, sent[0]); !strings.Contains(body, "METHOD:REPLY") || !strings.Contains(body, "PARTSTAT=ACCEPTED") || !strings.Contains(body, "UID:private-uid") || !strings.Contains(body, "mailto:alice@example.com") {
+		t.Fatal("JMAP server received the wrong reply", body)
+	}
+	if drafts := server.in("mb-drafts"); len(drafts) != 0 {
+		t.Fatalf("%d drafts left on the JMAP server", len(drafts))
+	}
+}
+
 func TestUserCalendarResponsePostHTTPDAVEmailQueuesOriginalMIMEAndDelivers(t *testing.T) {
 	api := &ownedResponseDAVSubmitAPI{t: t, mode: "email", bodies: map[string]string{}, accepted: map[string]bool{}, puts: map[string]int{}, reports: map[string]int{}}
 	f, _ := newOwnedCalendarResponseFormFixture(t, "caldav", nil, api.wrap)
@@ -258,33 +350,7 @@ func TestUserCalendarResponsePostHTTPDAVEmailQueuesOriginalMIMEAndDelivers(t *te
 	if len(raw) != 1 || smtp.count("bob") != 0 {
 		t.Fatal("wrong or duplicate native RSVP MIME", raw)
 	}
-	message, err := netmail.ReadMessage(strings.NewReader(raw[0]))
-	if err != nil {
-		t.Fatal(err)
-	}
-	_, params, err := mime.ParseMediaType(message.Header.Get("Content-Type"))
-	if err != nil || params["boundary"] == "" {
-		t.Fatal("invalid reply MIME", err)
-	}
-	parts := multipart.NewReader(message.Body, params["boundary"])
-	var calendarBody string
-	for {
-		part, err := parts.NextPart()
-		if err == io.EOF {
-			break
-		}
-		if err != nil {
-			t.Fatal(err)
-		}
-		if strings.HasPrefix(part.Header.Get("Content-Type"), "text/calendar") {
-			data, err := io.ReadAll(part)
-			if err != nil {
-				t.Fatal(err)
-			}
-			calendarBody = string(data)
-		}
-		_ = part.Close()
-	}
+	calendarBody := replyCalendarPart(t, raw[0])
 	if !strings.Contains(calendarBody, "METHOD:REPLY") || !strings.Contains(calendarBody, "PARTSTAT=ACCEPTED") || !strings.Contains(calendarBody, "UID:private-uid") || !strings.Contains(calendarBody, "ORGANIZER:mailto:organizer@example.com") || !strings.Contains(calendarBody, "mailto:alice@example.com") || strings.Contains(calendarBody, "bob@example.com") {
 		t.Fatal("native SMTP received the wrong decoded reply", calendarBody)
 	}

@@ -128,6 +128,9 @@ func (s *UserIMAP) SupportsAccount(cfg *models.AccountConfig) bool {
 	if cfg.Provider == providers.ProviderIMAP && cfg.AuthMethod == "plain" {
 		return true
 	}
+	if cfg.Provider == providers.ProviderJMAP {
+		return cfg.AuthMethod == "plain" && providers.JMAPEnabled()
+	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	return (cfg.Provider == providers.ProviderGmail || cfg.Provider == providers.ProviderOutlook) && cfg.AuthMethod == "oauth2" && s.credentials != nil
@@ -340,6 +343,12 @@ func (s *UserIMAP) operationWithSlots(ctx context.Context, owner, id string, mes
 	})
 }
 func (s *UserIMAP) snapshot(ctx context.Context, owner, id string) (*userIMAPScope, error) {
+	return s.snapshotAccount(ctx, owner, id, false)
+}
+
+// snapshotAccount also accepts JMAP when the caller uses its native transport.
+// Callers that only support IMAP or provider OAuth keep refusing JMAP.
+func (s *UserIMAP) snapshotAccount(ctx context.Context, owner, id string, allowJMAP bool) (*userIMAPScope, error) {
 	r := &userIMAPScope{accounts: s.accounts, owner: owner, id: id, pollInterval: s.defaultPollInterval()}
 	s.mu.Lock()
 	credentials := s.credentials
@@ -359,6 +368,10 @@ func (s *UserIMAP) snapshot(ctx context.Context, owner, id string) (*userIMAPSco
 		}
 		if (r.config.Provider == providers.ProviderGmail || r.config.Provider == providers.ProviderOutlook) && r.config.AuthMethod == "oauth2" && credentials != nil {
 			r.tokens = credentials.Account(owner, id)
+		} else if allowJMAP && r.config.Provider == providers.ProviderJMAP && r.config.AuthMethod == "plain" {
+			// Signs in with its stored password, like plain IMAP.
+		} else if r.config.Provider == providers.ProviderJMAP {
+			return ErrJMAPSyncUnavailable
 		} else if r.config.Provider != providers.ProviderIMAP || r.config.AuthMethod != "plain" {
 			return errors.New("routed worker supports plain IMAP and configured Gmail/Outlook OAuth accounts only")
 		}
@@ -401,6 +414,9 @@ func (s *UserIMAP) sync(ctx context.Context, owner, id string, repair, backgroun
 		s.mu.Unlock()
 		var scope *userIMAPScope
 		queueFailed := false
+		// paused is a JMAP account while JMAP is turned off: nothing is sent or
+		// fetched, and its queued work waits for JMAP to be turned on again.
+		paused := false
 		var receiveErr error
 		defer func() {
 			if ctx.Err() != nil {
@@ -411,7 +427,7 @@ func (s *UserIMAP) sync(ctx context.Context, owner, id string, repair, backgroun
 				next = minTime(next, time.Now().Add(30*time.Second))
 				queueFailed = true
 			}
-			if scope != nil {
+			if scope != nil && !paused {
 				var queued time.Time
 				err := scope.call(ctx, func(db *storage.DB) error {
 					var err error
@@ -479,7 +495,7 @@ func (s *UserIMAP) sync(ctx context.Context, owner, id string, repair, backgroun
 				s.requestDiscovery()
 			}
 		}()
-		scope, err = s.snapshot(ctx, owner, id)
+		scope, err = s.snapshotAccount(ctx, owner, id, true)
 		if err != nil {
 			scope = nil
 			s.mu.Lock()
@@ -488,6 +504,13 @@ func (s *UserIMAP) sync(ctx context.Context, owner, id string, repair, backgroun
 			return err
 		}
 		interval = scope.pollInterval
+		if scope.config.Provider == providers.ProviderJMAP && !providers.JMAPEnabled() {
+			paused = true
+			s.mu.Lock()
+			s.stopWatchesLocked(id)
+			s.mu.Unlock()
+			return nil
+		}
 		if background && scope.config.Provider == providers.ProviderIMAP {
 			release, err := s.acquireServer(ctx, scope.config.IMAPHost)
 			if err != nil {
@@ -505,22 +528,33 @@ func (s *UserIMAP) sync(ctx context.Context, owner, id string, repair, backgroun
 			}
 		}
 		var mutationErr error
-		mutationErr = s.replayLabelMutations(ctx, scope)
-		if mutationErr != nil && scope.retryAt.After(time.Now()) {
-			queueFailed = true
-			return mutationErr
-		}
-		mutationErr = errors.Join(mutationErr, s.replayMutations(ctx, scope))
-		if queue != nil && !scope.retryAt.After(time.Now()) {
-			var providerMail *UserProviderMail
-			if scope.tokens != nil {
-				providerMail = &UserProviderMail{scope: scope, lifetime: ctx}
+		// JMAP accounts replay their label and message changes and send their
+		// queued mail, without the IMAP and OAuth retry gates.
+		jmapAccount := scope.config.Provider == providers.ProviderJMAP
+		if jmapAccount {
+			mutationErr = errors.Join(s.replayLabelMutations(ctx, scope), s.replayMutations(ctx, scope))
+			if queue != nil {
+				mutationErr = errors.Join(mutationErr, queue.Run(ctx, owner, id, nil))
 			}
-			mutationErr = errors.Join(mutationErr, queue.Run(ctx, owner, id, providerMail))
-		}
-		queueFailed = mutationErr != nil
-		if mutationErr != nil && scope.retryAt.After(time.Now()) {
-			return mutationErr
+			queueFailed = mutationErr != nil
+		} else {
+			mutationErr = s.replayLabelMutations(ctx, scope)
+			if mutationErr != nil && scope.retryAt.After(time.Now()) {
+				queueFailed = true
+				return mutationErr
+			}
+			mutationErr = errors.Join(mutationErr, s.replayMutations(ctx, scope))
+			if queue != nil && !scope.retryAt.After(time.Now()) {
+				var providerMail *UserProviderMail
+				if scope.tokens != nil {
+					providerMail = &UserProviderMail{scope: scope, lifetime: ctx}
+				}
+				mutationErr = errors.Join(mutationErr, queue.Run(ctx, owner, id, providerMail))
+			}
+			queueFailed = mutationErr != nil
+			if mutationErr != nil && scope.retryAt.After(time.Now()) {
+				return mutationErr
+			}
 		}
 		var enabled int
 		if err := scope.call(ctx, func(db *storage.DB) error {
@@ -550,7 +584,7 @@ func (s *UserIMAP) sync(ctx context.Context, owner, id string, repair, backgroun
 		if err == nil {
 			err = s.reconcileWatches(ctx, scope)
 		}
-		if scope.config.Provider == providers.ProviderIMAP && scope.config.AuthMethod == "plain" {
+		if (scope.config.Provider == providers.ProviderIMAP || scope.config.Provider == providers.ProviderJMAP) && scope.config.AuthMethod == "plain" {
 			interval = s.pollIntervalFor(owner, id, interval)
 		}
 		err = errors.Join(err, mutationErr)
@@ -672,7 +706,7 @@ func (s *UserIMAP) ensureBody(ctx context.Context, owner string, msgID int64, mo
 			if provider == nil || provider.AccountID != id {
 				return sql.ErrNoRows
 			}
-			if provider.AccountProvider == providers.ProviderGmail || provider.AccountProvider == providers.ProviderOutlook {
+			if provider.AccountProvider == providers.ProviderGmail || provider.AccountProvider == providers.ProviderOutlook || provider.AccountProvider == providers.ProviderJMAP {
 				providerID = provider.RemoteMessageID
 				if providerID == "" {
 					return errors.New("provider message identity is unavailable")
@@ -691,7 +725,7 @@ func (s *UserIMAP) ensureBody(ctx context.Context, owner string, msgID int64, mo
 		if err != nil || fetched {
 			return err
 		}
-		scope, err := s.snapshot(ctx, owner, id)
+		scope, err := s.snapshotAccount(ctx, owner, id, true)
 		if err != nil {
 			return err
 		}
@@ -713,6 +747,14 @@ func (s *UserIMAP) ensureBody(ctx context.Context, owner string, msgID int64, mo
 				}
 			} else if scope.config.Provider == providers.ProviderGmail {
 				raw, err = s.fetchGmailRaw(ctx, scope, providerID)
+				if err != nil {
+					return err
+				}
+			} else if scope.config.Provider == providers.ProviderJMAP {
+				if !providers.JMAPEnabled() {
+					return providers.ErrJMAPDisabled
+				}
+				raw, err = FetchJMAPRawMessage(ctx, scope.config, scope.password, providerID)
 				if err != nil {
 					return err
 				}
@@ -755,14 +797,14 @@ func (s *UserIMAP) ensureBody(ctx context.Context, owner string, msgID int64, mo
 		}
 		cache, err := prepareUserIMAPBody(ctx, candidate, id, msgID, parsed)
 		cache.FetchInfo, cache.UIDValidity = info, validity
-		if scope.config.Provider == providers.ProviderGmail || scope.config.Provider == providers.ProviderOutlook {
+		if userIMAPProviderBody(scope.config.Provider) {
 			cache.ProviderMessageID, cache.ProviderAccountID, cache.ProviderType = providerID, scope.config.ProviderAccountID, scope.config.Provider
 		}
 		if err != nil {
 			return err
 		}
 		err = scope.call(ctx, func(db *storage.DB) error {
-			if scope.config.Provider == providers.ProviderGmail || scope.config.Provider == providers.ProviderOutlook {
+			if userIMAPProviderBody(scope.config.Provider) {
 				return db.SaveMessageBodyCache(ctx, msgID, id, cache)
 			}
 			current, err := db.GetMessageFetchInfoForUser(ctx, msgID, owner)
@@ -861,3 +903,9 @@ func (s *UserIMAP) SetCredentials(credentials *mailauth.UserCredentials) error {
 
 func (s *UserIMAP) Accounts() *config.UserAccountStore { return s.accounts }
 func (s *UserIMAP) Events() *EventBus                  { return s.events }
+
+// userIMAPProviderBody reports whether an account's bodies come from its
+// provider's API by message id rather than from an IMAP folder and UID.
+func userIMAPProviderBody(provider string) bool {
+	return provider == providers.ProviderGmail || provider == providers.ProviderOutlook || provider == providers.ProviderJMAP
+}

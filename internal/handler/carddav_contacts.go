@@ -12,6 +12,7 @@ import (
 	"log"
 	"net"
 	"net/http"
+	"net/netip"
 	"net/url"
 	"path"
 	"strconv"
@@ -164,7 +165,7 @@ func (h *Handler) handleSaveAccountContactSync(w http.ResponseWriter, r *http.Re
 	cfg.Enabled = cfg.BaseURL != "" || len(cfg.AddressBooks) > 0 || cfg.Username != "" || password != ""
 	if cfg.Enabled {
 		if cfg.Username == "" || r.FormValue("use_account_credentials") == "1" {
-			accountEmail, accountUsername, _, _, err := h.contactSyncAccountIdentity(ctx, userID, accountID)
+			accountEmail, accountUsername, _, _, _, err := h.contactSyncAccountIdentity(ctx, userID, accountID)
 			if err != nil {
 				htmlStatus(w, http.StatusBadRequest, "Account is required.")
 				return
@@ -416,7 +417,7 @@ func (h *Handler) handleDiscoverAccountContactSync(w http.ResponseWriter, r *htt
 		baseURL = strings.TrimSpace(r.FormValue("addressbook_url"))
 	}
 	username := strings.TrimSpace(r.FormValue("username"))
-	accountEmail, accountUsername, imapHost, smtpHost, err := h.contactSyncAccountIdentity(ctx, userID, accountID)
+	accountEmail, accountUsername, imapHost, smtpHost, jmapSessionURL, err := h.contactSyncAccountIdentity(ctx, userID, accountID)
 	if err != nil {
 		writeJSONError(w, http.StatusBadRequest, "account is required")
 		return
@@ -430,7 +431,7 @@ func (h *Handler) handleDiscoverAccountContactSync(w http.ResponseWriter, r *htt
 	autodiscover := r.FormValue("autodiscover") == "1"
 	candidates := contactSyncDiscoveryCandidates(baseURL)
 	if autodiscover {
-		candidates = contactSyncDiscoveryCandidates(baseURL, imapHost, smtpHost, username, accountEmail)
+		candidates = contactSyncDiscoveryCandidates(baseURL, jmapServerAddress(jmapSessionURL), imapHost, smtpHost, username, accountEmail)
 	} else if len(candidates) == 0 {
 		writeJSONError(w, http.StatusBadRequest, "enter a CardDAV base URL, or use Attempt URL autodiscover")
 		return
@@ -487,13 +488,13 @@ func (h *Handler) streamCardDAVDiscovery(w http.ResponseWriter, ctx context.Cont
 	writeEvent(map[string]any{"type": "done", "address_books": books})
 }
 
-func (h *Handler) contactSyncAccountIdentity(ctx context.Context, userID, accountID string) (string, string, string, string, error) {
-	var email, username, imapHost, smtpHost string
+func (h *Handler) contactSyncAccountIdentity(ctx context.Context, userID, accountID string) (string, string, string, string, string, error) {
+	var email, username, imapHost, smtpHost, jmapSessionURL string
 	err := h.db.Read().QueryRowContext(ctx, `
-		SELECT email_address, username, imap_host, smtp_host
+		SELECT email_address, username, imap_host, smtp_host, COALESCE(jmap_session_url, '')
 		FROM accounts
-		WHERE id = ? AND user_id = ? AND COALESCE(is_deleting, 0) = 0`, accountID, userID).Scan(&email, &username, &imapHost, &smtpHost)
-	return strings.TrimSpace(email), strings.TrimSpace(username), strings.TrimSpace(imapHost), strings.TrimSpace(smtpHost), err
+		WHERE id = ? AND user_id = ? AND COALESCE(is_deleting, 0) = 0`, accountID, userID).Scan(&email, &username, &imapHost, &smtpHost, &jmapSessionURL)
+	return strings.TrimSpace(email), strings.TrimSpace(username), strings.TrimSpace(imapHost), strings.TrimSpace(smtpHost), strings.TrimSpace(jmapSessionURL), err
 }
 
 func contactSyncDiscoveryCandidates(values ...string) []string {
@@ -933,7 +934,10 @@ func (h *Handler) cardDAVConfig(ctx context.Context, userID, accountID string) (
 	if !cfg.Enabled || cfg.Provider != providers.ProviderCardDAV {
 		return cfg, "", fmt.Errorf("CardDAV is not configured for this account")
 	}
-	password, err := h.accountStore.DecryptContactSyncPassword(ctx, userID, accountID)
+	// Contacts set up with the account's own sign-in, such as those of an
+	// account imported from a profile, use the mailbox password, as in
+	// multi-user mode.
+	password, err := h.contactSyncPasswordOrAccount(ctx, userID, accountID, "")
 	if err != nil {
 		return cfg, "", err
 	}
@@ -971,7 +975,7 @@ func cardDAVAddressBookQuery(ctx context.Context, cfg models.ContactSyncConfig, 
 	}
 	req.Header.Set("Depth", "1")
 	req.Header.Set("Content-Type", `application/xml; charset="utf-8"`)
-	resp, err := (&http.Client{Transport: davHTTPTransport, Timeout: 30 * time.Second}).Do(req)
+	resp, err := (&http.Client{Transport: cardDAVHTTPTransport, Timeout: 30 * time.Second}).Do(req)
 	if err != nil {
 		return nil, "", err
 	}
@@ -1003,7 +1007,7 @@ func cardDAVAddressBookEmailQuery(ctx context.Context, cfg models.ContactSyncCon
 	}
 	req.Header.Set("Depth", "1")
 	req.Header.Set("Content-Type", `application/xml; charset="utf-8"`)
-	resp, err := (&http.Client{Transport: davHTTPTransport, Timeout: 30 * time.Second}).Do(req)
+	resp, err := (&http.Client{Transport: cardDAVHTTPTransport, Timeout: 30 * time.Second}).Do(req)
 	if err != nil {
 		return nil, err
 	}
@@ -1032,7 +1036,7 @@ func cardDAVSyncCollection(ctx context.Context, cfg models.ContactSyncConfig, pa
 	}
 	req.Header.Set("Depth", "1")
 	req.Header.Set("Content-Type", `application/xml; charset="utf-8"`)
-	resp, err := (&http.Client{Transport: davHTTPTransport, Timeout: 30 * time.Second}).Do(req)
+	resp, err := (&http.Client{Transport: cardDAVHTTPTransport, Timeout: 30 * time.Second}).Do(req)
 	if err != nil {
 		return cardDAVSyncResult{}, err
 	}
@@ -1091,7 +1095,7 @@ func cardDAVAddressBookMultiget(ctx context.Context, cfg models.ContactSyncConfi
 	}
 	req.Header.Set("Depth", "0")
 	req.Header.Set("Content-Type", `application/xml; charset="utf-8"`)
-	resp, err := (&http.Client{Transport: davHTTPTransport, Timeout: 30 * time.Second}).Do(req)
+	resp, err := (&http.Client{Transport: cardDAVHTTPTransport, Timeout: 30 * time.Second}).Do(req)
 	if err != nil {
 		return nil, err
 	}
@@ -1130,7 +1134,7 @@ func testCardDAVAddressBook(ctx context.Context, cfg models.ContactSyncConfig, p
 	}
 	req.Header.Set("Depth", "0")
 	req.Header.Set("Content-Type", `application/xml; charset="utf-8"`)
-	resp, err := (&http.Client{Transport: davHTTPTransport, Timeout: cardDAVDiscoveryHTTPTimeout}).Do(req)
+	resp, err := (&http.Client{Transport: cardDAVHTTPTransport, Timeout: cardDAVDiscoveryHTTPTimeout}).Do(req)
 	if err != nil {
 		return err
 	}
@@ -1352,6 +1356,9 @@ func cardDAVDiscoveryDomains(domain string) []string {
 	if domain == "" {
 		return nil
 	}
+	if _, err := netip.ParseAddr(domain); err == nil {
+		return nil
+	}
 	domains := []string{domain}
 	parts := strings.Split(domain, ".")
 	if len(parts) > 2 {
@@ -1367,6 +1374,9 @@ func cardDAVDiscoveryDomain(candidate string) string {
 	candidate = strings.TrimSpace(candidate)
 	if candidate == "" {
 		return ""
+	}
+	if ip, err := netip.ParseAddr(strings.Trim(candidate, "[]")); err == nil {
+		return ip.String()
 	}
 	if strings.Contains(candidate, "@") && !strings.Contains(candidate, "://") {
 		parts := strings.Split(candidate, "@")
@@ -1534,7 +1544,7 @@ func cardDAVPropfind(ctx context.Context, endpoint, username, password, depth, b
 	}
 	req.Header.Set("Depth", depth)
 	req.Header.Set("Content-Type", `application/xml; charset="utf-8"`)
-	resp, err := (&http.Client{Transport: davHTTPTransport, Timeout: cardDAVDiscoveryHTTPTimeout}).Do(req)
+	resp, err := (&http.Client{Transport: cardDAVHTTPTransport, Timeout: cardDAVDiscoveryHTTPTimeout}).Do(req)
 	if err != nil {
 		return davMultiStatus{}, err
 	}
@@ -1689,7 +1699,7 @@ func cardDAVPut(ctx context.Context, cfg models.ContactSyncConfig, password, rem
 	} else {
 		req.Header.Set("If-None-Match", "*")
 	}
-	resp, err := (&http.Client{Transport: davHTTPTransport, Timeout: 30 * time.Second}).Do(req)
+	resp, err := (&http.Client{Transport: cardDAVHTTPTransport, Timeout: 30 * time.Second}).Do(req)
 	if err != nil {
 		return "", err
 	}
@@ -1712,7 +1722,7 @@ func cardDAVDelete(ctx context.Context, cfg models.ContactSyncConfig, password, 
 	if strings.TrimSpace(etag) != "" {
 		req.Header.Set("If-Match", etag)
 	}
-	resp, err := (&http.Client{Transport: davHTTPTransport, Timeout: 30 * time.Second}).Do(req)
+	resp, err := (&http.Client{Transport: cardDAVHTTPTransport, Timeout: 30 * time.Second}).Do(req)
 	if err != nil {
 		return err
 	}

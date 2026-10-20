@@ -274,7 +274,7 @@ func updateCalDAVCalendarOccurrence(ctx context.Context, source storage.Calendar
 			return preflight(err)
 		}
 	}
-	client := calendarDeleteClient(davHTTPTransport)
+	client := calendarDeleteClient(calDAVHTTPTransport)
 	current, headers, err := calendarUpdateCalDAVGet(ctx, client, endpoint, username, password)
 	if err != nil {
 		return preflight(err)

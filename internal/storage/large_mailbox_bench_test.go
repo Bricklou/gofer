@@ -152,10 +152,10 @@ func seedLargeMailbox(b *testing.B, db *DB, messages int) {
 		 ('bench-archive', 'bench-account', 'Archive', 'Archive', 'archive', 4),
 		 ('bench-sent', 'bench-account', 'Sent', 'Sent', 'sent', 2)`,
 		`WITH RECURSIVE n(i) AS (SELECT 1 UNION ALL SELECT i + 1 FROM n WHERE i < ?)
-		 INSERT INTO messages(id, account_id, remote_message_id, internet_message_id, message_id_normalized,
+		 INSERT INTO messages(id, account_id, internet_message_id, message_id_normalized,
 		   thread_id, subject, normalized_subject, from_name, from_email, date_sent, date_received,
 		   snippet, preview_text, size_bytes, has_attachments)
-		 SELECT i, 'bench-account', 'remote-' || i, '<m' || i || '@example.test>', 'm' || i || '@example.test',
+		 SELECT i, 'bench-account', '<m' || i || '@example.test>', 'm' || i || '@example.test',
 		   'bench-thread-' || (i / 3), 'Subject ' || (i % 5000), 'subject ' || (i % 5000),
 		   'Sender ' || (i % 2000), 'sender' || (i % 2000) || '@example.test',
 		   datetime('2015-01-01', '+' || (i * 15) || ' minutes'), datetime('2015-01-01', '+' || (i * 15) || ' minutes'),

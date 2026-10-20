@@ -329,7 +329,7 @@ func TestIMAPMoveWaitsForDestinationSyncWithoutRevivingSource(t *testing.T) {
 func TestProviderMoveIgnoresStaleSourceUntilDestinationIsConfirmed(t *testing.T) {
 	db, messageID := seedMoveMutationTest(t, MessageMutationProviderGmail)
 	ctx := t.Context()
-	if _, err := db.Write().Exec(`UPDATE messages SET remote_message_id = 'gmail-message' WHERE id = ?`, messageID); err != nil {
+	if _, err := db.Write().Exec(`UPDATE message_folder_state SET remote_message_id='gmail-message' WHERE message_id=?`, messageID); err != nil {
 		t.Fatalf("set provider identity: %v", err)
 	}
 	if err := db.MoveMessageAndQueue(ctx, messageID, "inbox", "archive"); err != nil {
@@ -440,7 +440,7 @@ func TestPermanentDeleteRollsBackLocalStateWhenQueueFails(t *testing.T) {
 
 func TestProviderPermanentDeleteHidesEveryFolderAndWaitsForConfirmation(t *testing.T) {
 	db, messageID := seedDeleteMutationTest(t, MessageMutationProviderGmail)
-	if _, err := db.Write().Exec(`UPDATE messages SET remote_message_id = 'gmail-delete' WHERE id = ?`, messageID); err != nil {
+	if _, err := db.Write().Exec(`UPDATE message_folder_state SET remote_message_id='gmail-delete' WHERE message_id=?`, messageID); err != nil {
 		t.Fatalf("set provider identity: %v", err)
 	}
 	if err := db.PermanentlyDeleteMessageAndQueue(t.Context(), messageID, "trash"); err != nil {
@@ -478,7 +478,9 @@ func TestProviderPermanentDeleteHidesEveryFolderAndWaitsForConfirmation(t *testi
 	}
 }
 
-func TestIMAPPermanentDeleteCompletionClearsOtherMutations(t *testing.T) {
+// Completing a delete drops the other changes queued for that copy; the
+// message's copy in another folder keeps its own.
+func TestIMAPPermanentDeleteCompletionClearsOtherMutationsOfItsCopy(t *testing.T) {
 	db, messageID := seedDeleteMutationTest(t, "imap")
 	if err := db.SetMessageStarredAndQueue(t.Context(), messageID, true); err != nil {
 		t.Fatalf("SetMessageStarredAndQueue() error = %v", err)
@@ -496,14 +498,19 @@ func TestIMAPPermanentDeleteCompletionClearsOtherMutations(t *testing.T) {
 	}
 	var remaining int
 	var status string
-	_ = db.Read().QueryRow(`SELECT COUNT(*), COALESCE(MAX(status), '') FROM message_mutations WHERE message_id = ?`, messageID).Scan(&remaining, &status)
+	_ = db.Read().QueryRow(`SELECT COUNT(*), COALESCE(MAX(status), '') FROM message_mutations WHERE message_id = ? AND folder_id = 'trash'`, messageID).Scan(&remaining, &status)
 	if remaining != 1 || status != MessageMutationApplied {
-		t.Fatalf("mutations after IMAP delete = %d status=%q", remaining, status)
+		t.Fatalf("Trash mutations after IMAP delete = %d status=%q", remaining, status)
+	}
+	var inboxStar int
+	_ = db.Read().QueryRow(`SELECT COUNT(*) FROM message_mutations WHERE message_id = ? AND folder_id = 'inbox' AND kind = 'starred'`, messageID).Scan(&inboxStar)
+	if inboxStar != 1 {
+		t.Fatalf("Inbox star after deleting the Trash copy = %d, want kept", inboxStar)
 	}
 	if err := db.ConfirmMessageDeleteMutation(t.Context(), deleteID); err != nil {
 		t.Fatalf("ConfirmMessageDeleteMutation() error = %v", err)
 	}
-	_ = db.Read().QueryRow(`SELECT COUNT(*) FROM message_mutations WHERE message_id = ?`, messageID).Scan(&remaining)
+	_ = db.Read().QueryRow(`SELECT COUNT(*) FROM message_mutations WHERE message_id = ? AND kind = 'delete'`, messageID).Scan(&remaining)
 	if remaining != 0 {
 		t.Fatalf("confirmed IMAP delete mutations = %d", remaining)
 	}
