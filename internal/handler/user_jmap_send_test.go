@@ -25,7 +25,8 @@ import (
 
 // fakeJMAPSender is a JMAP server for alice@example.com that answers a send
 // as mode says: "accept", "forbiddenFrom" or "rateLimit" (refusals), or "drop",
-// which closes the connection without answering the send request.
+// which closes the connection without answering the send request. It can't
+// answer the lookup that follows, so a dropped send stays possibly sent.
 type fakeJMAPSender struct {
 	*httptest.Server
 	mode     string
@@ -153,7 +154,8 @@ func newFakeJMAPSender(t *testing.T, mode string) *fakeJMAPSender {
 // The routed delivery worker sends a JMAP account's queued mail and records
 // the outcome as the queue expects: sent (with its Sent copy to publish),
 // retried later, failed for good, or ambiguous when the connection dropped
-// mid-send, which must never be resent automatically.
+// mid-send and the server can't say whether it went out, which must never be
+// resent automatically.
 func TestUserJMAPDeliveryOutcomes(t *testing.T) {
 	t.Setenv("GOFER_JMAP_EXPERIMENT", "true")
 	for _, tc := range []struct{ mode, want string }{

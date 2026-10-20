@@ -22,7 +22,7 @@ func (s *userMailDeliveryScope) sendJMAP(ctx context.Context, send storage.Outgo
 	var emailID string
 	if err == nil {
 		work, cancel := context.WithTimeout(ctx, 2*time.Minute)
-		emailID, err = mail.SendJMAPMessage(work, s.cfg, s.password, send.EnvelopeFrom, send.EnvelopeRecipients, send.MIMEData)
+		emailID, err = mail.SendJMAPMessage(work, s.cfg, s.password, send.EnvelopeFrom, send.EnvelopeRecipients, send.MIMEData, jmapEarlierAttempt(send))
 		cancel()
 	}
 	if ctx.Err() != nil {

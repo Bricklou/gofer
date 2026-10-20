@@ -160,7 +160,7 @@ func sendCalendarEmailOverJMAP(ctx context.Context, service *config.AccountServi
 	if err := validate(); err != nil {
 		return models.SendFailed, err
 	}
-	_, err = mail.SendJMAPMessage(ctx, cfg, password, send.EnvelopeFrom, send.EnvelopeRecipients, send.MIMEData)
+	_, err = mail.SendJMAPMessage(ctx, cfg, password, send.EnvelopeFrom, send.EnvelopeRecipients, send.MIMEData, jmapEarlierAttempt(send))
 	var notSent *mail.JMAPNotSentError
 	switch {
 	case err == nil:

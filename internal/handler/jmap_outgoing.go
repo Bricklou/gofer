@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log"
 	"strings"
+	"time"
 
 	"github.com/cristianadrielbraun/gofer/internal/mail"
 	"github.com/cristianadrielbraun/gofer/internal/mail/message"
@@ -25,7 +26,7 @@ func (h *Handler) sendJMAPOutgoingRaw(ctx context.Context, cfg *models.AccountCo
 	if err != nil {
 		return "", markOutgoingSendRetryable(fmt.Errorf("failed to get credentials: %w", err))
 	}
-	emailID, err := mail.SendJMAPMessage(ctx, cfg, password, send.EnvelopeFrom, send.EnvelopeRecipients, send.MIMEData)
+	emailID, err := mail.SendJMAPMessage(ctx, cfg, password, send.EnvelopeFrom, send.EnvelopeRecipients, send.MIMEData, jmapEarlierAttempt(send))
 	var notSent *mail.JMAPNotSentError
 	switch {
 	case err == nil:
@@ -37,6 +38,18 @@ func (h *Handler) sendJMAPOutgoingRaw(ctx context.Context, cfg *models.AccountCo
 	default:
 		return "", fmt.Errorf("%w: %v", errOutgoingSendAmbiguous, err)
 	}
+}
+
+// jmapEarlierAttempt is when an earlier attempt at send could have started,
+// or zero on its first attempt. A send is tried no sooner than it is due.
+func jmapEarlierAttempt(send storage.OutgoingSend) time.Time {
+	if send.AttemptCount <= 1 {
+		return time.Time{}
+	}
+	if send.SendAfter.After(send.CreatedAt) {
+		return send.SendAfter
+	}
+	return send.CreatedAt
 }
 
 // cacheJMAPSentMessageID ties the local Sent copy to the email the server

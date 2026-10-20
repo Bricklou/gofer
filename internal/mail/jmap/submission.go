@@ -222,3 +222,50 @@ func (c *Client) SendEmail(ctx context.Context, session *Session, accountID stri
 	}
 	return &Sent{EmailID: emailID, SubmissionID: submission}, nil
 }
+
+// EmailCopy is what tells whether an email is the copy a send stored: where
+// it is, whether it is still a draft, its size, and the revision header that
+// Gofer's own saved drafts carry and sent messages don't.
+type EmailCopy struct {
+	ID            string          `json:"id"`
+	MailboxIDs    map[string]bool `json:"mailboxIds"`
+	Keywords      map[string]bool `json:"keywords"`
+	Size          int64           `json:"size"`
+	DraftRevision string          `json:"header:X-Gofer-Draft-Revision:asText"`
+}
+
+// GetEmailCopies reads ids as EmailCopy values.
+func (c *Client) GetEmailCopies(ctx context.Context, session *Session, accountID string, ids []string) ([]EmailCopy, error) {
+	responses, err := c.Call(ctx, session, []string{CapabilityMail},
+		Invocation{Name: "Email/get", Args: map[string]any{
+			"accountId":  accountID,
+			"ids":        ids,
+			"properties": []string{"id", "mailboxIds", "keywords", "size", "header:" + DraftRevisionHeader + ":asText"},
+		}, CallID: "0"})
+	if err != nil {
+		return nil, err
+	}
+	var result GetResponse[EmailCopy]
+	if err := responses.Get("0", &result); err != nil {
+		return nil, fmt.Errorf("Email/get: %w", err)
+	}
+	return result.List, nil
+}
+
+// HasSubmission reports whether the server has a submission of emailID, that
+// is, whether it was handed over for delivery.
+func (c *Client) HasSubmission(ctx context.Context, session *Session, accountID, emailID string) (bool, error) {
+	responses, err := c.Call(ctx, session, []string{CapabilityMail, CapabilitySubmission},
+		Invocation{Name: "EmailSubmission/query", Args: map[string]any{
+			"accountId": accountID,
+			"filter":    map[string]any{"emailIds": []string{emailID}},
+		}, CallID: "0"})
+	if err != nil {
+		return false, err
+	}
+	var result QueryResponse
+	if err := responses.Get("0", &result); err != nil {
+		return false, fmt.Errorf("EmailSubmission/query: %w", err)
+	}
+	return len(result.IDs) > 0, nil
+}
