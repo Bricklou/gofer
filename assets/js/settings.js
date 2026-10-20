@@ -1254,3 +1254,20 @@ document.addEventListener("htmx:afterSettle", function (e) {
     setTimeout(setupEditAccountDialog, 20)
   }
 })
+
+// htmx leaves the page as it was when a request fails, so the About page's
+// update check says so itself.
+function showAboutUpdateCheckFailure(e) {
+  var check = e.target && e.target.closest && e.target.closest("#about-update-check")
+  var status = check && check.querySelector("[data-about-update-status]")
+  if (!status) return
+  var message = document.createElement("p")
+  message.className = "text-destructive"
+  var xhr = e.detail && e.detail.xhr
+  message.textContent = xhr && xhr.status
+    ? "Could not check for updates (the server answered " + xhr.status + ")."
+    : "Could not reach Gofer to check for updates."
+  status.replaceChildren(message)
+}
+document.addEventListener("htmx:responseError", showAboutUpdateCheckFailure)
+document.addEventListener("htmx:sendError", showAboutUpdateCheckFailure)

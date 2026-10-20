@@ -4,7 +4,7 @@ tasks:
   templ:
     desc: Run templ with integrated server and hot reload
     cmds:
-      - templ generate --watch --ignore-pattern='(^|/)dist(/|$)|(^|/).*_templ\.go$' --proxy="http://localhost:8090" -proxyport 9090 --cmd="go run ." --open-browser=false
+      - templ generate --watch --ignore-pattern='(^|/)dist(/|$)|(^|/).*_templ\.go$' --proxy="http://localhost:8090" -proxyport 9090 --cmd="go run -buildvcs=true ." --open-browser=false
 
   tailwind:
     desc: Watch Tailwind CSS changes
