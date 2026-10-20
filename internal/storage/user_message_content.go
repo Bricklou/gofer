@@ -28,7 +28,7 @@ func messageContentSnapshot(ctx context.Context, query messageContentRowReader, 
 		return nil, sql.ErrNoRows
 	}
 	s := &MessageContentSnapshot{Owner: owner, ID: id}
-	err := query.QueryRowContext(ctx, `SELECT m.account_id,COALESCE(a.provider,''),COALESCE(a.auth_method,''),COALESCE(a.provider_account_id,''),COALESCE(m.remote_message_id,''),COALESCE(m.body_html_path,''),COALESCE(m.body_text_path,''),COALESCE(m.body_html_original_path,''),COALESCE(m.raw_path,''),LOWER(COALESCE(m.from_email,'')),COALESCE(m.subject,''),COALESCE(m.preview_text,'')
+	err := query.QueryRowContext(ctx, `SELECT m.account_id,COALESCE(a.provider,''),COALESCE(a.auth_method,''),COALESCE(a.provider_account_id,''),`+liveProviderCopyIDSQL("m")+`,COALESCE(m.body_html_path,''),COALESCE(m.body_text_path,''),COALESCE(m.body_html_original_path,''),COALESCE(m.raw_path,''),LOWER(COALESCE(m.from_email,'')),COALESCE(m.subject,''),COALESCE(m.preview_text,'')
 	FROM messages m JOIN accounts a ON a.id=m.account_id
 	WHERE m.id=? AND a.user_id=? AND COALESCE(a.is_deleting,0)=0
 	AND EXISTS(SELECT 1 FROM message_folder_state ms JOIN folders f ON f.id=ms.folder_id WHERE ms.message_id=m.id AND ms.is_deleted=0 AND f.account_id=m.account_id)`, id, owner).

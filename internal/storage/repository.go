@@ -7150,7 +7150,7 @@ type AttachmentFetchInfo struct {
 
 func (db *DB) GetAttachmentFetchInfo(ctx context.Context, attachmentID int64) (*AttachmentFetchInfo, error) {
 	row := db.Read().QueryRowContext(ctx, `
-		SELECT att.id, att.message_id, m.account_id, a.provider, m.remote_message_id,
+		SELECT att.id, att.message_id, m.account_id, a.provider, `+liveProviderCopyIDSQL("m")+`,
 		       att.provider_remote_id, att.filename, att.content_type, COALESCE(att.content_id, ''), att.size_bytes, att.storage_path
 		FROM attachments att
 		JOIN messages m ON att.message_id = m.id
@@ -7162,7 +7162,7 @@ func (db *DB) GetAttachmentFetchInfo(ctx context.Context, attachmentID int64) (*
 
 func (db *DB) GetAttachmentFetchInfoForUser(ctx context.Context, attachmentID int64, userID string) (*AttachmentFetchInfo, error) {
 	row := db.Read().QueryRowContext(ctx, `
-		SELECT att.id, att.message_id, m.account_id, a.provider, m.remote_message_id,
+		SELECT att.id, att.message_id, m.account_id, a.provider, `+liveProviderCopyIDSQL("m")+`,
 		       att.provider_remote_id, att.filename, att.content_type, COALESCE(att.content_id, ''), att.size_bytes, att.storage_path
 		FROM attachments att
 		JOIN messages m ON att.message_id = m.id
@@ -7178,7 +7178,7 @@ func (db *DB) GetAttachmentFetchInfoByContentID(ctx context.Context, messageID i
 		return nil, nil
 	}
 	row := db.Read().QueryRowContext(ctx, `
-		SELECT att.id, att.message_id, m.account_id, a.provider, m.remote_message_id,
+		SELECT att.id, att.message_id, m.account_id, a.provider, `+liveProviderCopyIDSQL("m")+`,
 		       att.provider_remote_id, att.filename, att.content_type, COALESCE(att.content_id, ''), att.size_bytes, att.storage_path
 		FROM attachments att
 		JOIN messages m ON att.message_id = m.id
@@ -7195,7 +7195,7 @@ func (db *DB) GetAttachmentFetchInfoByContentIDForUser(ctx context.Context, mess
 		return nil, nil
 	}
 	row := db.Read().QueryRowContext(ctx, `
-		SELECT att.id, att.message_id, m.account_id, a.provider, m.remote_message_id,
+		SELECT att.id, att.message_id, m.account_id, a.provider, `+liveProviderCopyIDSQL("m")+`,
 		       att.provider_remote_id, att.filename, att.content_type, COALESCE(att.content_id, ''), att.size_bytes, att.storage_path
 		FROM attachments att
 		JOIN messages m ON att.message_id = m.id

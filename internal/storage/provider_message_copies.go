@@ -157,3 +157,16 @@ func providerCopyFolderScopesTx(ctx context.Context, tx *sql.Tx, messageID int64
 	}
 	return folderIDs, nil
 }
+
+// liveProviderCopyIDSQL is the provider id to fetch a row's content through:
+// the row's own id while its copy is in a folder, or else another copy that
+// is. Every copy has the same content.
+func liveProviderCopyIDSQL(row string) string {
+	return `COALESCE(
+		(SELECT live.remote_message_id FROM message_folder_state live
+		 WHERE live.message_id = ` + row + `.id AND live.is_deleted = 0 AND live.remote_message_id = ` + row + `.remote_message_id LIMIT 1),
+		(SELECT live.remote_message_id FROM message_folder_state live
+		 WHERE live.message_id = ` + row + `.id AND live.is_deleted = 0 AND COALESCE(live.remote_message_id, '') != ''
+		 ORDER BY live.folder_id LIMIT 1),
+		` + row + `.remote_message_id, '')`
+}

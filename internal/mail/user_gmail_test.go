@@ -593,7 +593,7 @@ func TestUserGmailRejectsChangedOrInvalidBodies(t *testing.T) {
 				var query string
 				switch change {
 				case "message-id":
-					query = `UPDATE messages SET remote_message_id='replacement' WHERE id=` + strconv.FormatInt(id, 10)
+					query = `UPDATE messages SET remote_message_id='replacement' WHERE id=` + strconv.FormatInt(id, 10) + `; UPDATE message_folder_state SET remote_message_id='replacement' WHERE message_id=` + strconv.FormatInt(id, 10)
 				case "account-subject":
 					query = `UPDATE accounts SET provider_account_id='changed-subject'`
 				case "deleted":

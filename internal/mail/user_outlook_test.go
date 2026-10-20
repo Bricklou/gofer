@@ -581,7 +581,7 @@ func TestUserOutlookRejectsStaleOrFailedBodyPublication(t *testing.T) {
 				var err error
 				switch change {
 				case "message":
-					_, err = db.Write().Exec(`UPDATE messages SET remote_message_id='different' WHERE id=?`, id)
+					_, err = db.Write().Exec(`UPDATE messages SET remote_message_id='different' WHERE id=?; UPDATE message_folder_state SET remote_message_id='different' WHERE message_id=?`, id, id)
 				case "subject":
 					_, err = db.Write().Exec(`UPDATE accounts SET provider_account_id='different' WHERE id=?`, f.ids["alice"])
 				case "provider":

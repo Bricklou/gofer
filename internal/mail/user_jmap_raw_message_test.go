@@ -174,7 +174,7 @@ func TestUserJMAPRawMessageRejectsChangesDuringDownload(t *testing.T) {
 				args := []any{f.ids["alice"]}
 				switch mode {
 				case "message":
-					change, args = `UPDATE messages SET remote_message_id='replacement' WHERE id=?`, []any{id}
+					change, args = `UPDATE messages SET remote_message_id='replacement' WHERE id=?; UPDATE message_folder_state SET remote_message_id='replacement' WHERE message_id=?`, []any{id, id}
 				case "password":
 					change = `UPDATE accounts SET encrypted_password=X'01' WHERE id=?`
 				}

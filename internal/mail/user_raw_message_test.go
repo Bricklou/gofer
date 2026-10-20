@@ -107,7 +107,7 @@ func TestUserRawMessageRejectsChangedProviderIdentityAndGrant(t *testing.T) {
 			switch mode {
 			case "message":
 				f.local(t, "alice", func(db *storage.DB) error {
-					_, err := db.Write().Exec(`UPDATE messages SET remote_message_id='new' WHERE id=?`, id)
+					_, err := db.Write().Exec(`UPDATE messages SET remote_message_id='new' WHERE id=?; UPDATE message_folder_state SET remote_message_id='new' WHERE message_id=?`, id, id)
 					return err
 				})
 			case "reconnect":

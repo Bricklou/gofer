@@ -46,7 +46,7 @@ func (db *DB) rawMessageSnapshotTx(ctx context.Context, tx *sql.Tx, owner string
 	var port int
 	var password []byte
 	err := tx.QueryRowContext(ctx, `SELECT a.id,a.provider,a.provider_account_id,a.auth_method,a.email_address,
- COALESCE(m.raw_path,''),COALESCE(m.remote_message_id,''),COALESCE(m.internet_message_id,''),
+ COALESCE(m.raw_path,''),`+liveProviderCopyIDSQL("m")+`,COALESCE(m.internet_message_id,''),
  f.id,COALESCE(f.remote_id,''),COALESCE(ms.remote_uid,0),COALESCE(f.uid_validity,0),a.imap_host,a.imap_port,a.imap_tls_mode,a.username,a.encrypted_password,a.jmap_session_url
  FROM messages m JOIN accounts a ON a.id=m.account_id JOIN users u ON u.id=a.user_id
  JOIN message_folder_state ms ON ms.message_id=m.id JOIN folders f ON f.id=ms.folder_id AND f.account_id=a.id

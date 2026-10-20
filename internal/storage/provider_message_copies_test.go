@@ -302,3 +302,22 @@ func visibleCopies(t *testing.T, db *DB, internetID string) map[string]string {
 	}
 	return got
 }
+
+func TestProviderContentIsFetchedThroughALiveCopy(t *testing.T) {
+	ctx := context.Background()
+	db := newContactsTestDB(t)
+	msgID := seedSelfSentCopies(t, db)
+	snapshot, err := db.GetMessageContentSnapshotForUser(ctx, "default", msgID)
+	if err != nil || snapshot.RemoteMessageID != "email-sent" {
+		t.Fatalf("content snapshot = %+v, %v; want the row's copy", snapshot, err)
+	}
+	// The Sent copy leaves on a full import of Sent, without the row hearing
+	// of it; content then comes through the Inbox copy.
+	if _, err := db.MarkProviderMessagesMissingFromFolder(ctx, "acc", "acc_sent", map[string]bool{}); err != nil {
+		t.Fatalf("MarkProviderMessagesMissingFromFolder() error = %v", err)
+	}
+	snapshot, err = db.GetMessageContentSnapshotForUser(ctx, "default", msgID)
+	if err != nil || snapshot.RemoteMessageID != "email-inbox" {
+		t.Fatalf("content snapshot = %+v, %v; want the Inbox copy", snapshot, err)
+	}
+}

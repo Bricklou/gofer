@@ -131,6 +131,13 @@ func (s *UserIMAP) EnsureAttachment(ctx context.Context, owner string, id int64)
 			}
 			if snapshot.Info.ProviderAttachmentID != "" {
 				content, err = s.fetchUserAttachment(ctx, scope, providerID, snapshot.Info.ProviderAttachmentID)
+				// Attachment ids belong to one provider message. A message kept
+				// as two copies, such as mail sent to oneself, may have its
+				// attachments listed from the other copy; its MIME has them too.
+				if status, ok := providerAPIStatus(err); ok && (status == http.StatusNotFound || status == http.StatusBadRequest) {
+					content = nil
+					raw, err = s.fetchUserAttachmentMIME(ctx, scope, providerID)
+				}
 			} else {
 				raw, err = s.fetchUserAttachmentMIME(ctx, scope, providerID)
 			}
