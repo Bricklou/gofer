@@ -11,6 +11,7 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
+	"time"
 )
 
 const (
@@ -36,6 +37,10 @@ func BearerAuth(token string) Auth {
 type Client struct {
 	HTTP *http.Client
 	Auth Auth
+
+	// StallTimeout gives up a request that sends or receives nothing for
+	// this long; zero means DefaultStallTimeout.
+	StallTimeout time.Duration
 }
 
 // Session is the JMAP session object (RFC 8620 section 2).
@@ -103,7 +108,7 @@ func (c *Client) Session(ctx context.Context, sessionURL string) (*Session, erro
 	if c.Auth != nil {
 		c.Auth(req)
 	}
-	resp, err := c.httpClient().Do(req)
+	resp, err := c.do(req)
 	if err != nil {
 		return nil, err
 	}

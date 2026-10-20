@@ -35,7 +35,7 @@ func (c *Client) DownloadBlob(ctx context.Context, session *Session, accountID, 
 	if c.Auth != nil {
 		c.Auth(req)
 	}
-	resp, err := c.httpClient().Do(req)
+	resp, err := c.do(req)
 	if err != nil {
 		return nil, err
 	}

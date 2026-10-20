@@ -33,7 +33,7 @@ func (c *Client) UploadBlob(ctx context.Context, session *Session, accountID, co
 	if c.Auth != nil {
 		c.Auth(req)
 	}
-	resp, err := c.httpClient().Do(req)
+	resp, err := c.do(req)
 	if err != nil {
 		return "", err
 	}
