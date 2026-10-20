@@ -2,6 +2,7 @@ package mail
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"log"
 	"sort"
@@ -196,21 +197,47 @@ func (o *SyncOrchestrator) syncJMAPEmailChanges(ctx context.Context, accountID s
 const (
 	jmapEmailScope   = "email"
 	jmapMailboxScope = "mailbox"
+	// jmapImportScope holds the progress of an import that hasn't finished.
+	jmapImportScope = "email-import"
 	// jmapImportPage is how many emails one import request fetches, within the
 	// server's own limit.
 	jmapImportPage = 100
 )
 
+// jmapPagePoint is the last email a page ended with, and when it was
+// received.
+type jmapPagePoint struct {
+	ID         string    `json:"anchor"`
+	ReceivedAt time.Time `json:"receivedAt"`
+}
+
+// jmapImportProgress is an import that hasn't finished: the Email state read
+// before its first page and the last email it stored. It is saved after every
+// page, so the next sync continues the import instead of starting over.
+type jmapImportProgress struct {
+	State string `json:"state"`
+	jmapPagePoint
+}
+
 // importJMAPEmails stores every email of the account, newest first, removes
 // from each folder the messages the server no longer has in it, then saves the
 // Email and Mailbox states as the account's sync cursors. The Email
 // state is read before the first page, so mail that arrives during the import
-// is caught by the changes since it. An interrupted import saves no cursor
-// and simply runs again; storing an email twice only updates it.
+// is caught by the changes since it. An interrupted import continues from the
+// last page it stored, with the state it read first; storing an email twice
+// only updates it.
 func (o *SyncOrchestrator) importJMAPEmails(ctx context.Context, accountID string, client *jmap.Client, session *jmap.Session, mailAccount string, mailboxes *jmap.GetResponse[jmap.Mailbox]) error {
-	before, err := client.GetEmails(ctx, session, mailAccount, []string{}, nil)
+	repo := o.outlookRepository()
+	saved, err := repo.GetLabelSyncState(ctx, accountID, storage.LabelProviderJMAP, jmapImportScope)
 	if err != nil {
 		return err
+	}
+	var progress jmapImportProgress
+	if saved.Cursor != "" {
+		if err := json.Unmarshal([]byte(saved.Cursor), &progress); err != nil || progress.State == "" || progress.ID == "" {
+			log.Printf("jmap sync %s: ignoring unreadable import progress %q", accountID, saved.Cursor)
+			progress = jmapImportProgress{}
+		}
 	}
 	folders := make(map[string]string, len(mailboxes.List))
 	for _, mailbox := range mailboxes.List {
@@ -220,37 +247,49 @@ func (o *SyncOrchestrator) importJMAPEmails(ctx context.Context, accountID strin
 	if max := session.Core.MaxObjectsInGet; max > 0 && max < limit {
 		limit = max
 	}
-	repo := o.outlookRepository()
 	touched := map[string]bool{}
 	seen := map[string]map[string]bool{}
-	anchor := ""
-	for {
-		query := jmap.EmailQuery{
-			AccountID: mailAccount,
-			Sort:      []jmap.Comparator{{Property: "receivedAt", IsAscending: false}},
-			Limit:     limit,
+	see := func(folderID, emailID string) {
+		if seen[folderID] == nil {
+			seen[folderID] = map[string]bool{}
 		}
-		if anchor != "" {
-			query.Anchor, query.AnchorOffset = anchor, 1
-		}
-		page, emails, err := client.QueryAndGetEmails(ctx, session, query, jmap.EmailSummaryProperties)
-		if jmap.IsAnchorNotFound(err) {
-			// The email the page started from was deleted; start over.
-			anchor = ""
-			continue
-		}
+		seen[folderID][emailID] = true
+	}
+
+	if progress.State == "" {
+		before, err := client.GetEmails(ctx, session, mailAccount, []string{}, nil)
 		if err != nil {
 			return err
 		}
+		progress.State = before.State
+	} else {
+		// The cleanup below needs every email this import has seen, and the
+		// earlier attempts' list is gone. Those emails were all received at
+		// or after the saved one, so list them again, ids and mailboxes only.
+		log.Printf("jmap sync %s: continuing the import from emails received at %s", accountID, progress.ReceivedAt.Format(time.RFC3339))
+		after := progress.ReceivedAt
+		err := pageJMAPEmails(ctx, client, session, mailAccount, limit, &after, jmapPagePoint{}, []string{"id", "mailboxIds"}, func(emails []jmap.Email, _ jmapPagePoint) error {
+			for _, email := range emails {
+				for mailboxID, in := range email.MailboxIDs {
+					if folderID, ok := folders[mailboxID]; ok && in {
+						see(folderID, email.ID)
+					}
+				}
+			}
+			return nil
+		})
+		if err != nil {
+			return err
+		}
+	}
+
+	err = pageJMAPEmails(ctx, client, session, mailAccount, limit, nil, progress.jmapPagePoint, jmap.EmailSummaryProperties, func(emails []jmap.Email, last jmapPagePoint) error {
 		var rows []storage.ProviderSyncMessage
-		for _, email := range emails.List {
+		for _, email := range emails {
 			for _, row := range jmapEmailToProviderSyncs(accountID, email, folders) {
 				rows = append(rows, row)
 				touched[row.FolderID] = true
-				if seen[row.FolderID] == nil {
-					seen[row.FolderID] = map[string]bool{}
-				}
-				seen[row.FolderID][row.ProviderMessageID] = true
+				see(row.FolderID, row.ProviderMessageID)
 			}
 		}
 		if len(rows) > 0 {
@@ -258,16 +297,18 @@ func (o *SyncOrchestrator) importJMAPEmails(ctx context.Context, accountID strin
 				return err
 			}
 		}
-		// A server may cap the page below the limit asked for; a page shorter
-		// than its own limit is the last one.
-		pageLimit := limit
-		if page.Limit > 0 && page.Limit < pageLimit {
-			pageLimit = page.Limit
+		if last.ID == "" {
+			return nil
 		}
-		if len(page.IDs) == 0 || len(page.IDs) < pageLimit {
-			break
+		progress.jmapPagePoint = last
+		cursor, err := json.Marshal(progress)
+		if err != nil {
+			return err
 		}
-		anchor = page.IDs[len(page.IDs)-1]
+		return repo.SaveLabelSyncCursor(ctx, accountID, storage.LabelProviderJMAP, jmapImportScope, string(cursor))
+	})
+	if err != nil {
+		return err
 	}
 	// After a new import of a known account, as when the server could no
 	// longer give the changes since its cursor, messages deleted meanwhile are
@@ -281,7 +322,12 @@ func (o *SyncOrchestrator) importJMAPEmails(ctx context.Context, accountID strin
 			touched[folderID] = true
 		}
 	}
-	if err := repo.MarkLabelSyncSuccess(ctx, accountID, storage.LabelProviderJMAP, jmapEmailScope, before.State, true); err != nil {
+	// The progress goes first: left behind, it would be taken up by a later
+	// import that has nothing to do with this one.
+	if err := repo.SaveLabelSyncCursor(ctx, accountID, storage.LabelProviderJMAP, jmapImportScope, ""); err != nil {
+		return err
+	}
+	if err := repo.MarkLabelSyncSuccess(ctx, accountID, storage.LabelProviderJMAP, jmapEmailScope, progress.State, true); err != nil {
 		return err
 	}
 	if err := repo.MarkLabelSyncSuccess(ctx, accountID, storage.LabelProviderJMAP, jmapMailboxScope, mailboxes.State, true); err != nil {
@@ -291,6 +337,64 @@ func (o *SyncOrchestrator) importJMAPEmails(ctx context.Context, accountID strin
 		o.publishEvent(Event{Type: EventSyncComplete, AccountID: accountID, FolderID: folderID, Payload: map[string]any{"status": "complete", "provider": "jmap"}})
 	}
 	return nil
+}
+
+// pageJMAPEmails walks the account's emails newest first, those received at
+// or after `after` when it is set, starting just past from (or at the newest
+// when from is empty), and hands each page to store with the last email in
+// it. When the email a page would continue from has been deleted, it
+// continues from that email's date instead, which hands the emails of that
+// same second over again.
+func pageJMAPEmails(ctx context.Context, client *jmap.Client, session *jmap.Session, mailAccount string, limit int, after *time.Time, from jmapPagePoint, properties []string, store func(emails []jmap.Email, last jmapPagePoint) error) error {
+	var before *time.Time
+	for {
+		query := jmap.EmailQuery{
+			AccountID: mailAccount,
+			Sort:      []jmap.Comparator{{Property: "receivedAt", IsAscending: false}},
+			Limit:     limit,
+		}
+		if after != nil || before != nil {
+			query.Filter = &jmap.EmailFilter{After: after, Before: before}
+		}
+		if from.ID != "" {
+			query.Anchor, query.AnchorOffset = from.ID, 1
+		}
+		page, emails, err := client.QueryAndGetEmails(ctx, session, query, properties)
+		if jmap.IsAnchorNotFound(err) {
+			if from.ReceivedAt.IsZero() {
+				// Without a date to go on, start over.
+				from = jmapPagePoint{}
+				continue
+			}
+			// Before is exclusive and dates have whole seconds.
+			next := from.ReceivedAt.Truncate(time.Second).Add(time.Second)
+			before, from = &next, jmapPagePoint{}
+			continue
+		}
+		if err != nil {
+			return err
+		}
+		if len(page.IDs) > 0 {
+			from = jmapPagePoint{ID: page.IDs[len(page.IDs)-1]}
+			for _, email := range emails.List {
+				if email.ID == from.ID {
+					from.ReceivedAt = email.ReceivedAt
+				}
+			}
+		}
+		if err := store(emails.List, from); err != nil {
+			return err
+		}
+		// A server may cap the page below the limit asked for; a page shorter
+		// than its own limit is the last one.
+		pageLimit := limit
+		if page.Limit > 0 && page.Limit < pageLimit {
+			pageLimit = page.Limit
+		}
+		if len(page.IDs) == 0 || len(page.IDs) < pageLimit {
+			return nil
+		}
+	}
 }
 
 // jmapEmailToProviderSyncs gives one row per known mailbox the email is in,

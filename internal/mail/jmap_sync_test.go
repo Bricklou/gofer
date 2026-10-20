@@ -33,6 +33,10 @@ type fakeJMAPServer struct {
 	// when the anchor email was deleted between two pages.
 	loseAnchorOnce bool
 	queries        int
+	// failQuery makes that Email/query (counting from 1) fail with
+	// serverFail. queryLog records each query's anchor and date filter.
+	failQuery int
+	queryLog  []fakeJMAPQuery
 	// changeLog records each change made through addEmail, updateEmail and
 	// deleteEmail; its states are "c1", "c2"... Email/changes answers from it.
 	changeLog []fakeJMAPChange
@@ -71,6 +75,11 @@ func (f *fakeJMAPServer) email(id string) (jmap.Email, bool) {
 		return f.emails[i], true
 	}
 	return jmap.Email{}, false
+}
+
+type fakeJMAPQuery struct {
+	anchor        string
+	after, before *time.Time
 }
 
 type fakeJMAPChange struct {
@@ -240,13 +249,26 @@ func (f *fakeJMAPServer) answer(w http.ResponseWriter, r *http.Request) {
 			f.queries++
 			var anchor string
 			var anchorOffset, limit int
+			var filter jmap.EmailFilter
 			_ = json.Unmarshal(args["anchor"], &anchor)
 			_ = json.Unmarshal(args["anchorOffset"], &anchorOffset)
 			_ = json.Unmarshal(args["limit"], &limit)
+			_ = json.Unmarshal(args["filter"], &filter)
+			f.queryLog = append(f.queryLog, fakeJMAPQuery{anchor: anchor, after: filter.After, before: filter.Before})
+			if f.queries == f.failQuery {
+				responses = append(responses, []any{"error", map[string]any{"type": "serverFail"}, callID})
+				continue
+			}
 			if limit <= 0 || limit > f.maxObjectsInGet {
 				limit = f.maxObjectsInGet
 			}
-			sorted := append([]jmap.Email(nil), f.emails...)
+			sorted := []jmap.Email{}
+			for _, email := range f.emails {
+				// After is inclusive and before exclusive (RFC 8621 4.4.1).
+				if (filter.After == nil || !email.ReceivedAt.Before(*filter.After)) && (filter.Before == nil || email.ReceivedAt.Before(*filter.Before)) {
+					sorted = append(sorted, email)
+				}
+			}
 			sort.Slice(sorted, func(i, j int) bool { return sorted[i].ReceivedAt.After(sorted[j].ReceivedAt) })
 			start := 0
 			if anchor != "" {
@@ -574,6 +596,9 @@ func TestSyncImportsJMAPEmails(t *testing.T) {
 	if got := jmapCursor(t, f, jmapMailboxScope); got != "m1" {
 		t.Fatalf("mailbox cursor = %q", got)
 	}
+	if got := jmapCursor(t, f, jmapImportScope); got != "" {
+		t.Fatalf("finished import left progress %q", got)
+	}
 
 	// With a cursor saved, the next sync does not import again.
 	queries := server.queries
@@ -582,6 +607,121 @@ func TestSyncImportsJMAPEmails(t *testing.T) {
 	}
 	if server.queries != queries {
 		t.Fatal("imported again although a cursor was saved")
+	}
+}
+
+// jmapImportFixture is an account with five emails, e1 newest, that the
+// server hands out two at a time.
+func jmapImportFixture(t *testing.T) (*userGmailFixture, *fakeJMAPServer) {
+	t.Helper()
+	f := newUserGmailFixture(t)
+	server := newFakeJMAPServer(t)
+	server.maxObjectsInGet = 2
+	server.emailState = "es-before"
+	server.setMailboxes(jmap.Mailbox{ID: "mb-in", Name: "Inbox", Role: "inbox", MyRights: readable()})
+	for i := 1; i <= 5; i++ {
+		server.emails = append(server.emails, testJMAPEmail(fmt.Sprintf("e%d", i), fmt.Sprintf("Message %d", i), i, "mb-in"))
+	}
+	useFakeJMAPAccount(t, f, server)
+	return f, server
+}
+
+func storedJMAPIDs(t *testing.T, f *userGmailFixture) string {
+	t.Helper()
+	var ids []string
+	for id := range jmapMessages(t, f) {
+		ids = append(ids, id)
+	}
+	sort.Strings(ids)
+	return strings.Join(ids, ",")
+}
+
+// An import that fails partway keeps what it stored and where it got to; the
+// next sync continues from there with the state read before the first page.
+func TestSyncResumesInterruptedJMAPImport(t *testing.T) {
+	f, server := jmapImportFixture(t)
+	server.failQuery = 2
+	if err := f.worker.Sync(t.Context(), "alice", f.ids["alice"]); err == nil {
+		t.Fatal("Sync() succeeded although a page failed")
+	}
+	if got := storedJMAPIDs(t, f); got != "e1,e2" {
+		t.Fatalf("stored %s after the failed page", got)
+	}
+	if jmapCursor(t, f, jmapEmailScope) != "" || jmapCursor(t, f, jmapImportScope) == "" {
+		t.Fatal("an unfinished import must keep its progress and save no cursor")
+	}
+
+	server.emailState = "es-later"
+	server.queryLog = nil
+	if err := f.worker.Sync(t.Context(), "alice", f.ids["alice"]); err != nil {
+		t.Fatalf("resumed Sync() error = %v", err)
+	}
+	if got := storedJMAPIDs(t, f); got != "e1,e2,e3,e4,e5" {
+		t.Fatalf("stored %s", got)
+	}
+	for _, query := range server.queryLog {
+		if query.anchor == "" && query.after == nil {
+			t.Fatalf("the resumed import started over: %+v", server.queryLog)
+		}
+	}
+	if got := jmapCursor(t, f, jmapEmailScope); got != "es-before" {
+		t.Fatalf("email cursor = %q, want the state read before the first attempt", got)
+	}
+	if got := jmapCursor(t, f, jmapImportScope); got != "" {
+		t.Fatalf("finished import left progress %q", got)
+	}
+}
+
+// When the email the import stopped at is deleted before it continues, the
+// import continues from that email's date and skips nothing.
+func TestSyncResumesJMAPImportAfterItsEmailIsDeleted(t *testing.T) {
+	f, server := jmapImportFixture(t)
+	server.failQuery = 2
+	if err := f.worker.Sync(t.Context(), "alice", f.ids["alice"]); err == nil {
+		t.Fatal("Sync() succeeded although a page failed")
+	}
+	server.deleteEmail("e2", false)
+	server.queryLog = nil
+	if err := f.worker.Sync(t.Context(), "alice", f.ids["alice"]); err != nil {
+		t.Fatalf("resumed Sync() error = %v", err)
+	}
+	if got := storedJMAPIDs(t, f); got != "e1,e3,e4,e5" {
+		t.Fatalf("stored %s", got)
+	}
+	dated := false
+	for _, query := range server.queryLog {
+		dated = dated || query.before != nil
+	}
+	if !dated {
+		t.Fatalf("the import didn't continue from the deleted email's date: %+v", server.queryLog)
+	}
+}
+
+// A new import of a known account that is interrupted still removes, once it
+// finishes, the messages the server no longer has, and keeps the ones it
+// saw before the interruption.
+func TestResumedJMAPReimportRemovesOnlyLostMessages(t *testing.T) {
+	f, server := jmapImportFixture(t)
+	server.emailState = "c0"
+	server.emails = append(server.emails, testJMAPEmail("e6", "Message 6", 6, "mb-in"))
+	if err := f.worker.Sync(t.Context(), "alice", f.ids["alice"]); err != nil {
+		t.Fatal(err)
+	}
+	// The server deletes e6 and can no longer give the changes since c0.
+	server.deleteEmail("e6", false)
+	server.forgetBefore = 1000
+	server.failQuery = server.queries + 2
+	if err := f.worker.Sync(t.Context(), "alice", f.ids["alice"]); err == nil {
+		t.Fatal("Sync() succeeded although a page failed")
+	}
+	if got := storedJMAPIDs(t, f); got != "e1,e2,e3,e4,e5,e6" {
+		t.Fatalf("an unfinished import removed messages: %s", got)
+	}
+	if err := f.worker.Sync(t.Context(), "alice", f.ids["alice"]); err != nil {
+		t.Fatalf("resumed Sync() error = %v", err)
+	}
+	if got := storedJMAPIDs(t, f); got != "e1,e2,e3,e4,e5" {
+		t.Fatalf("stored %s, want everything but e6", got)
 	}
 }
 

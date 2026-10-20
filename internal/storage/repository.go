@@ -2993,6 +2993,20 @@ func (db *DB) MarkLabelSyncSuccess(ctx context.Context, accountID, providerType,
 	return err
 }
 
+// SaveLabelSyncCursor sets a scope's cursor as given, an empty one included,
+// without recording a successful sync. It keeps the progress of work that is
+// still under way.
+func (db *DB) SaveLabelSyncCursor(ctx context.Context, accountID, providerType, scope, cursor string) error {
+	_, err := db.Write().ExecContext(ctx, `
+		INSERT INTO label_sync_state (account_id, provider_type, scope, cursor, updated_at)
+		VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP)
+		ON CONFLICT(account_id, provider_type, scope) DO UPDATE SET
+			cursor = excluded.cursor,
+			updated_at = CURRENT_TIMESTAMP`,
+		strings.TrimSpace(accountID), strings.TrimSpace(providerType), strings.TrimSpace(scope), strings.TrimSpace(cursor))
+	return err
+}
+
 func (db *DB) MarkLabelSyncError(ctx context.Context, accountID, providerType, scope string, syncErr error) error {
 	message := ""
 	if syncErr != nil {

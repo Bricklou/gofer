@@ -25,6 +25,7 @@ type outlookSyncRepository interface {
 	UpdateProviderFolderSyncState(ctx context.Context, folderID, cursor string, totalCount, unreadCount int, full bool) error
 	MarkProviderMessagesMissingFromFolder(ctx context.Context, accountID, folderID string, seenProviderIDs map[string]bool) (int64, error)
 	UpsertLabels(ctx context.Context, labels []storage.LabelInput) error
+	SaveLabelSyncCursor(ctx context.Context, accountID, providerType, scope, cursor string) error
 }
 
 func (o *SyncOrchestrator) outlookRepository() outlookSyncRepository {
@@ -50,6 +51,12 @@ func (o *SyncOrchestrator) setOutlookFolderError(ctx context.Context, folderID s
 		return o.imapScope.call(ctx, save)
 	}
 	return save(o.db)
+}
+
+func (r *userIMAPScope) SaveLabelSyncCursor(ctx context.Context, accountID, providerType, scope, cursor string) error {
+	return r.call(ctx, func(db *storage.DB) error {
+		return db.SaveLabelSyncCursor(ctx, accountID, providerType, scope, cursor)
+	})
 }
 
 func (r *userIMAPScope) ListProviderMessageIDBackfillCandidates(ctx context.Context, accountID string, limit int) ([]storage.ProviderMessageIDBackfillCandidate, error) {
