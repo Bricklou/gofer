@@ -22,7 +22,19 @@ type JMAPImport struct {
 	session   *jmap.Session
 	account   string
 	mailboxes []jmap.Mailbox
+	// unanswered is the last import sent that got no answer; the server
+	// may have stored it.
+	unanswered *jmapUnansweredImport
 }
+
+type jmapUnansweredImport struct {
+	mailboxID, messageID string
+	receivedAt, sent     time.Time
+}
+
+// jmapClockSkew is how far the server's clock may be from Gofer's when
+// looking for a message the server dated itself.
+const jmapClockSkew = 10 * time.Minute
 
 func NewJMAPImport(cfg *models.AccountConfig, password string) *JMAPImport {
 	return &JMAPImport{config: cfg, password: password}
@@ -100,11 +112,16 @@ func (j *JMAPImport) EnsureMailbox(ctx context.Context, path string) (id string,
 
 // Import uploads raw and stores it in the mailbox with the keywords given,
 // received at receivedAt when it isn't zero. A message the server already
-// has counts as imported.
-func (j *JMAPImport) Import(ctx context.Context, mailboxID string, raw []byte, keywords []string, receivedAt time.Time) (err error) {
+// has counts as imported. messageID, without angle brackets, lets a retry
+// after an import that got no answer find the copy the server may have
+// stored, rather than storing it twice.
+func (j *JMAPImport) Import(ctx context.Context, mailboxID string, raw []byte, messageID string, keywords []string, receivedAt time.Time) (err error) {
 	defer func() { j.drop(err) }()
 	if err := j.open(ctx); err != nil {
 		return err
+	}
+	if j.storedBefore(ctx, mailboxID, messageID, receivedAt) {
+		return nil
 	}
 	blob, err := j.client.UploadBlob(ctx, j.session, j.account, jmap.ContentTypeMessage, raw)
 	if err != nil {
@@ -114,6 +131,48 @@ func (j *JMAPImport) Import(ctx context.Context, mailboxID string, raw []byte, k
 		}
 		return err
 	}
+	sent := time.Now()
 	_, err = j.client.ImportEmail(ctx, j.session, j.account, blob, mailboxID, keywords, receivedAt)
+	if messageID != "" && jmapImportUnanswered(err) {
+		j.unanswered = &jmapUnansweredImport{mailboxID: mailboxID, messageID: messageID, receivedAt: receivedAt, sent: sent}
+	}
 	return err
+}
+
+// storedBefore reports whether this message is the one whose last import got
+// no answer, and the server has it after all. When the server can't be asked,
+// the import goes ahead: a rare duplicate is better than a lost message.
+func (j *JMAPImport) storedBefore(ctx context.Context, mailboxID, messageID string, receivedAt time.Time) bool {
+	last := j.unanswered
+	j.unanswered = nil
+	if last == nil || messageID == "" || last.mailboxID != mailboxID || last.messageID != messageID || !last.receivedAt.Equal(receivedAt) {
+		return false
+	}
+	// The copy has the date it was given, or, on a server that dates
+	// messages itself, about the time it was sent.
+	windows := []jmap.Window{{From: last.sent.Add(-jmapClockSkew), To: time.Now().Add(jmapClockSkew)}}
+	if !receivedAt.IsZero() {
+		windows = append(windows, jmap.Window{From: receivedAt.Add(-time.Second), To: receivedAt.Add(time.Second)})
+	}
+	found, err := j.client.FindEmails(ctx, j.session, j.account, mailboxID, messageID, windows)
+	return err == nil && len(found) > 0
+}
+
+// jmapImportUnanswered reports whether an import failed without the server
+// saying what it did, so it may have stored the message.
+func jmapImportUnanswered(err error) bool {
+	if err == nil {
+		return false
+	}
+	var refused *jmap.ImportError
+	var method *jmap.MethodError
+	var status *jmap.HTTPError
+	switch {
+	case errors.As(err, &refused), errors.As(err, &method):
+		return false
+	case errors.As(err, &status):
+		// A gateway can time out after the server stored the message.
+		return status.StatusCode >= 500
+	}
+	return true
 }

@@ -778,7 +778,7 @@ func (w *jmapImportWriter) upload(ctx context.Context, mailboxID string, msg mai
 	if msg.Draft {
 		keywords = append(keywords, jmap.KeywordDraft)
 	}
-	return w.imports.Import(ctx, mailboxID, msg.Raw, keywords, msg.Date)
+	return w.imports.Import(ctx, mailboxID, msg.Raw, msg.MessageID, keywords, msg.Date)
 }
 
 type imapImportWriter struct {

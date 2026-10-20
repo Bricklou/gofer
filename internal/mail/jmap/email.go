@@ -52,12 +52,15 @@ var EmailSummaryProperties = []string{
 	"subject", "sentAt", "hasAttachment", "preview",
 }
 
-// EmailFilter is a FilterCondition for Email/query. Only the conditions sync
+// EmailFilter is a FilterCondition for Email/query. Only the conditions Gofer
 // uses are here.
 type EmailFilter struct {
 	InMailbox string     `json:"inMailbox,omitempty"`
 	After     *time.Time `json:"after,omitempty"`
 	Before    *time.Time `json:"before,omitempty"`
+	// Header is a header name and a value it must contain. Servers need
+	// not support it.
+	Header []string `json:"header,omitempty"`
 }
 
 type Comparator struct {

@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"reflect"
+	"strings"
 	"testing"
 	"time"
 )
@@ -100,5 +101,73 @@ func TestCreateMailbox(t *testing.T) {
 	var importErr *ImportError
 	if !errors.As(err, &importErr) || importErr.Type != "forbidden" {
 		t.Fatalf("refused = %v", err)
+	}
+}
+
+// FindEmails sends the header search and every window in one request, uses
+// the searches the server answers, and keeps only exact Message-IDs.
+func TestFindEmailsSearchesTogether(t *testing.T) {
+	var requests [][][]json.RawMessage
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		calls := decodeCalls(t, r)
+		requests = append(requests, calls)
+		var answers []string
+		for _, call := range calls {
+			var name, id string
+			_ = json.Unmarshal(call[0], &name)
+			_ = json.Unmarshal(call[2], &id)
+			var query EmailQuery
+			_ = json.Unmarshal(call[1], &query)
+			switch {
+			case name == "Email/query" && query.Filter.Header != nil:
+				answers = append(answers, `["error", {"type": "unsupportedFilter"}, "`+id+`"]`)
+			case name == "Email/query":
+				answers = append(answers, `["Email/query", {"accountId": "a1", "ids": ["e1", "e2"]}, "`+id+`"]`)
+			case id == "g0":
+				answers = append(answers, `["error", {"type": "invalidResultReference"}, "g0"]`)
+			default:
+				answers = append(answers, `["Email/get", {"accountId": "a1", "list": [
+				  {"id": "e1", "messageId": ["m1@example.test"]}, {"id": "e2", "messageId": ["xm1@example.test"]}]}, "`+id+`"]`)
+			}
+		}
+		_, _ = io.WriteString(w, `{"methodResponses": [`+strings.Join(answers, ",")+`], "sessionState": "s1"}`)
+	}))
+	defer server.Close()
+	client := &Client{HTTP: server.Client()}
+	at := time.Date(2023, 7, 1, 8, 0, 0, 0, time.UTC)
+	windows := []Window{{From: at.Add(-time.Second), To: at.Add(time.Second)}, {From: at.Add(time.Hour), To: at.Add(2 * time.Hour)}}
+	found, err := client.FindEmails(context.Background(), &Session{APIURL: server.URL}, "a1", "mb", "m1@example.test", windows)
+	if err != nil || !reflect.DeepEqual(found, []string{"e1"}) {
+		t.Fatalf("FindEmails = %v, %v", found, err)
+	}
+	if len(requests) != 1 || len(requests[0]) != 6 {
+		t.Fatalf("want one request of six calls, got %d requests", len(requests))
+	}
+	var first EmailQuery
+	_ = json.Unmarshal(requests[0][2][1], &first)
+	if first.Filter.InMailbox != "mb" || !first.Filter.After.Equal(at.Add(-time.Second)) || !first.Filter.Before.Equal(at.Add(2*time.Second)) {
+		t.Fatalf("window filter = %+v", first.Filter)
+	}
+
+	// A server taking fewer calls per request gets several requests.
+	requests = nil
+	session := &Session{APIURL: server.URL, Core: CoreCapability{MaxCallsInRequest: 4}}
+	if found, err := client.FindEmails(context.Background(), session, "a1", "mb", "m1@example.test", windows); err != nil || len(found) != 1 {
+		t.Fatalf("split FindEmails = %v, %v", found, err)
+	}
+	if len(requests) != 2 || len(requests[0]) != 4 || len(requests[1]) != 2 {
+		t.Fatalf("split into %d requests", len(requests))
+	}
+}
+
+func TestFindEmailsFailsWhenNoSearchIsAnswered(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.Error(w, "unavailable", http.StatusServiceUnavailable)
+	}))
+	defer server.Close()
+	_, err := (&Client{HTTP: server.Client()}).FindEmails(context.Background(), &Session{APIURL: server.URL}, "a1", "mb", "m1@example.test", []Window{{}})
+	var httpErr *HTTPError
+	if !errors.As(err, &httpErr) {
+		t.Fatalf("FindEmails = %v", err)
 	}
 }
