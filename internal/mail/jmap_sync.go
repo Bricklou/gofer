@@ -143,10 +143,17 @@ func (o *SyncOrchestrator) syncJMAPEmailChanges(ctx context.Context, accountID s
 	}
 	repo := o.outlookRepository()
 	touched := map[string]bool{}
+	// Emails the server created since the cursor are new mail, announced per
+	// folder as IMAP does once they are stored.
+	fresh := map[string]*newMailSummary{}
 	for {
 		changes, err := client.GetEmailChanges(ctx, session, mailAccount, since, jmapMaxChanges)
 		if err != nil {
 			return err
+		}
+		created := make(map[string]bool, len(changes.Created))
+		for _, id := range changes.Created {
+			created[id] = true
 		}
 		gone := append([]string(nil), changes.Destroyed...)
 		changed := append(append([]string(nil), changes.Created...), changes.Updated...)
@@ -168,6 +175,12 @@ func (o *SyncOrchestrator) syncJMAPEmailChanges(ctx context.Context, accountID s
 				for _, row := range emailRows {
 					rows = append(rows, row)
 					touched[row.FolderID] = true
+					if created[email.ID] {
+						if fresh[row.FolderID] == nil {
+							fresh[row.FolderID] = &newMailSummary{}
+						}
+						fresh[row.FolderID].Add([]storage.SyncMessage{jmapNewMail(email)})
+					}
 				}
 			}
 			if len(rows) > 0 {
@@ -196,7 +209,23 @@ func (o *SyncOrchestrator) syncJMAPEmailChanges(ctx context.Context, accountID s
 	for folderID := range touched {
 		o.publishEvent(Event{Type: EventSyncComplete, AccountID: accountID, FolderID: folderID, Payload: map[string]any{"status": "complete", "provider": "jmap"}})
 	}
+	names := make(map[string]string, len(mailboxes.List))
+	for _, mailbox := range mailboxes.List {
+		names[folders[mailbox.ID]] = mailbox.Name
+	}
+	for folderID, summary := range fresh {
+		o.publishNewMail(ctx, accountID, folderID, names[folderID], *summary)
+	}
 	return nil
+}
+
+// jmapNewMail is what a new-mail notification shows of an email.
+func jmapNewMail(email jmap.Email) storage.SyncMessage {
+	msg := storage.SyncMessage{Subject: email.Subject, DateSent: email.ReceivedAt, IsRead: email.Keywords[jmap.KeywordSeen]}
+	if len(email.From) > 0 {
+		msg.FromName, msg.FromEmail = email.From[0].Name, email.From[0].Email
+	}
+	return msg
 }
 
 const (

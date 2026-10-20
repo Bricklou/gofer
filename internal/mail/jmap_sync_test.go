@@ -726,6 +726,60 @@ func TestResumedJMAPReimportRemovesOnlyLostMessages(t *testing.T) {
 	}
 }
 
+// Mail the server reports as created since the cursor is announced as new
+// mail, per folder, like IMAP's; the first import and changes to known mail
+// are not.
+func TestSyncAnnouncesNewJMAPMail(t *testing.T) {
+	f := newUserGmailFixture(t)
+	server := newFakeJMAPServer(t)
+	server.emailState = "c0"
+	server.setMailboxes(
+		jmap.Mailbox{ID: "mb-in", Name: "Inbox", Role: "inbox", MyRights: readable()},
+		jmap.Mailbox{ID: "mb-sent", Name: "Sent", Role: "sent", MyRights: readable()},
+	)
+	server.emails = []jmap.Email{testJMAPEmail("e1", "Lunch on Friday?", 10, "mb-in")}
+	useFakeJMAPAccount(t, f, server)
+	events := f.worker.Events().Subscribe()
+	defer f.worker.Events().Unsubscribe(events)
+	newMail := func() map[string]Event {
+		t.Helper()
+		got := map[string]Event{}
+		for len(events) > 0 {
+			if event := <-events; event.Type == EventNewMail {
+				got[event.FolderID] = event
+			}
+		}
+		return got
+	}
+	if err := f.worker.Sync(t.Context(), "alice", f.ids["alice"]); err != nil {
+		t.Fatal(err)
+	}
+	if got := newMail(); len(got) != 0 {
+		t.Fatalf("the first import announced new mail: %v", got)
+	}
+
+	server.updateEmail("e1", func(e *jmap.Email) { e.Keywords = map[string]bool{"$seen": true} })
+	server.addEmail(testJMAPEmail("e2", "Garden plans", 2, "mb-in"))
+	latest := testJMAPEmail("e3", "Invoice 42", 1, "mb-in")
+	latest.From = []jmap.EmailAddress{{Name: "Billing", Email: "billing@example.test"}}
+	server.addEmail(latest)
+	mine := testJMAPEmail("e4", "Re: Lunch", 0, "mb-sent")
+	mine.Keywords = map[string]bool{"$seen": true}
+	server.addEmail(mine)
+	if err := f.worker.Sync(t.Context(), "alice", f.ids["alice"]); err != nil {
+		t.Fatal(err)
+	}
+	got := newMail()
+	inbox := got[jmapLocalFolderID(f.ids["alice"], "mb-in")]
+	if inbox.FolderRole != "inbox" || inbox.Payload["count"] != 2 || inbox.Payload["unread_count"] != 2 ||
+		inbox.Payload["subject"] != "Invoice 42" || inbox.Payload["from_name"] != "Billing" || inbox.Payload["from_email"] != "billing@example.test" {
+		t.Fatalf("inbox new mail = %+v", inbox)
+	}
+	if sent := got[jmapLocalFolderID(f.ids["alice"], "mb-sent")]; sent.FolderRole != "sent" || sent.Payload["unread_count"] != 0 {
+		t.Fatalf("sent new mail = %+v", sent)
+	}
+}
+
 // Later syncs apply the changes since the saved cursor, chunk by chunk,
 // without querying the whole account again: read and flag changes, moves,
 // deletions and new mail.
