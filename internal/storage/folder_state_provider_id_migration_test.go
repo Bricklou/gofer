@@ -9,6 +9,7 @@ func TestMigrateV117ToV118GivesProviderFolderStatesTheirRowID(t *testing.T) {
 	ctx := context.Background()
 	db := newContactsTestDB(t)
 	if _, err := db.Write().ExecContext(ctx, `
+		ALTER TABLE messages ADD COLUMN remote_message_id TEXT;
 		INSERT INTO accounts (id, user_id, email_address, provider) VALUES
 			('jmap', 'default', 'jmap@example.com', 'jmap'),
 			('imap', 'default', 'imap@example.com', 'imap');
@@ -53,5 +54,35 @@ func TestMigrateV117ToV118GivesProviderFolderStatesTheirRowID(t *testing.T) {
 	}
 	if err := migrateV117ToV118(db.Write()); err != nil {
 		t.Fatalf("migrateV117ToV118() rerun error = %v", err)
+	}
+}
+
+func TestMigrateV118ToV119DropsTheRowProviderID(t *testing.T) {
+	ctx := context.Background()
+	db := newContactsTestDB(t)
+	if _, err := db.Write().ExecContext(ctx, `
+		ALTER TABLE messages ADD COLUMN remote_message_id TEXT;
+		CREATE UNIQUE INDEX idx_messages_remote_id ON messages(account_id, remote_message_id);
+		INSERT INTO accounts (id, user_id, email_address, provider) VALUES ('jmap', 'default', 'jmap@example.com', 'jmap');
+		INSERT INTO folders (id, account_id, remote_id, name) VALUES ('jmap_inbox', 'jmap', 'INBOX', 'Inbox');
+		INSERT INTO messages (id, account_id, remote_message_id, internet_message_id) VALUES (1, 'jmap', 'email-1', '<one@example.com>');
+		INSERT INTO message_folder_state (message_id, folder_id, remote_message_id) VALUES (1, 'jmap_inbox', 'email-1');
+		DELETE FROM schema_version;
+		INSERT INTO schema_version (version) VALUES (118);`); err != nil {
+		t.Fatalf("set up schema 118: %v", err)
+	}
+	if err := migrateV118ToV119(db.Write()); err != nil {
+		t.Fatalf("migrateV118ToV119() error = %v", err)
+	}
+	var columns int
+	if err := db.Read().QueryRowContext(ctx, `SELECT COUNT(*) FROM pragma_table_info('messages') WHERE name = 'remote_message_id'`).Scan(&columns); err != nil || columns != 0 {
+		t.Fatalf("messages.remote_message_id still there: %d, %v", columns, err)
+	}
+	var providerID string
+	if err := db.Read().QueryRowContext(ctx, `SELECT remote_message_id FROM message_folder_state WHERE message_id = 1`).Scan(&providerID); err != nil || providerID != "email-1" {
+		t.Fatalf("folder state provider id = %q, %v", providerID, err)
+	}
+	if err := migrateV118ToV119(db.Write()); err != nil {
+		t.Fatalf("migrateV118ToV119() rerun error = %v", err)
 	}
 }

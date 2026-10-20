@@ -94,7 +94,6 @@ WHERE provider_remote_id = '' AND COALESCE(remote_id, '') != '';
 CREATE TABLE IF NOT EXISTS messages (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     account_id TEXT NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,
-    remote_message_id TEXT,
     internet_message_id TEXT,
     message_id_normalized TEXT NOT NULL DEFAULT '',
     thread_id TEXT,
@@ -386,9 +385,6 @@ ON unresolved_references(account_id, referenced_message_id);
 
 CREATE INDEX IF NOT EXISTS idx_unresolved_references_child
 ON unresolved_references(child_message_id);
-
-CREATE UNIQUE INDEX IF NOT EXISTS idx_messages_remote_id
-ON messages(account_id, remote_message_id);
 
 CREATE UNIQUE INDEX IF NOT EXISTS idx_messages_account_internet_msg_id
 ON messages(account_id, internet_message_id);
@@ -1657,4 +1653,4 @@ CREATE TABLE IF NOT EXISTS calendar_invitation_messages (
 );
 
 -- Schema version marker for fresh installs
-INSERT OR REPLACE INTO schema_version (version) VALUES (118);
+INSERT OR REPLACE INTO schema_version (version) VALUES (119);

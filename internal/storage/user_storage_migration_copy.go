@@ -103,7 +103,7 @@ func copyUserStorageMigrationRows(ctx context.Context, sourcePath string, destin
 		// from their row, as migrateV117ToV118 does.
 		for _, table := range report.Tables {
 			if table.Name == "message_folder_state" && !migrationHasColumn(table, "remote_message_id") {
-				if _, err := tx.ExecContext(ctx, folderStateProviderIDBackfillSQL); err != nil {
+				if _, err := tx.ExecContext(ctx, copiedFolderStateProviderIDBackfillSQL); err != nil {
 					return err
 				}
 			}

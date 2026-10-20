@@ -131,7 +131,7 @@ func InspectUserStorageMigration(ctx context.Context, sourcePath string) (UserSt
 }
 
 func migrationSharedVersionSupported(version int) bool {
-	return version >= 105 && version <= 118
+	return version >= 105 && version <= 119
 }
 
 // These recognized shared schemas differ only in the explicitly handled push
@@ -381,6 +381,11 @@ func migrationSourceColumns(ctx context.Context, tx *sql.Tx, table *UserStorageM
 	}
 	if err := rows.Err(); err != nil {
 		return err
+	}
+	// Before 119 message rows kept a provider id, which each folder state
+	// keeps now; it isn't copied.
+	if table.Name == "messages" && version < 119 {
+		delete(actual, "remote_message_id")
 	}
 	if table.Name == "calendar_response_requests" && actual["claim_id"] {
 		var kind, defaultValue string

@@ -298,6 +298,7 @@ func TestUserStorageMigrationCopyRecognizesHistoricalColumnsWithoutUpgradingSour
 func TestUserStorageMigrationCopyGivesOldFolderStatesTheirProviderID(t *testing.T) {
 	source := sharedMigrationFixture(t)
 	migrationFixtureSQL(t, source, `UPDATE accounts SET provider='jmap' WHERE id='alice-mail';
+ ALTER TABLE messages ADD COLUMN remote_message_id TEXT;
  UPDATE messages SET remote_message_id='email-1' WHERE account_id='alice-mail';
  DROP INDEX idx_message_folder_state_remote_message;
  ALTER TABLE message_folder_state DROP COLUMN remote_message_id;
