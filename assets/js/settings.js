@@ -612,7 +612,7 @@ function sanitizeSignatureHTML(raw) {
       if (href && href.charAt(0) !== "#") node.setAttribute("target", "_blank")
     } else if (tag === "IMG") {
       var src = node.getAttribute("src") || node.getAttribute("data-remote-src") || ""
-      if (!/^(cid:|https?:|\/api\/attachments\/|\/api\/inline-content\/|\/compose\/attachments\/)/i.test(src)) {
+      if (!/^(cid:|https?:|\/api\/attachments\/|\/api\/inline-content\/|\/compose\/attachments\/|data:image\/(png|jpe?g|gif|webp|bmp|svg\+xml)[;,])/i.test(src)) {
         node.remove()
         continue
       }
