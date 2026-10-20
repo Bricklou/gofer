@@ -4,6 +4,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"slices"
 	"sync"
 	"testing"
 	"time"
@@ -131,6 +132,56 @@ func TestJMAPPushWatcherNotifiesAndReconnects(t *testing.T) {
 	connected, lost, reconnected := record.statuses[0], record.statuses[1], record.statuses[2]
 	if !connected.Healthy || lost.Healthy || lost.ReasonCode != "connection_lost" || lost.RetryAt.IsZero() || !reconnected.Healthy {
 		t.Fatalf("statuses = %+v, want connected, lost, connected", record.statuses)
+	}
+}
+
+// A server that accepts the push connection and closes it at once is
+// retried with a growing wait, not every second; a connection that stays
+// open long enough starts the wait over.
+func TestJMAPPushWatcherBacksOffFromConnectionsThatCloseAtOnce(t *testing.T) {
+	initial, stable := jmapPushInitialBackoff, jmapPushStableAfter
+	jmapPushInitialBackoff, jmapPushStableAfter = 20*time.Millisecond, 300*time.Millisecond
+	t.Cleanup(func() { jmapPushInitialBackoff, jmapPushStableAfter = initial, stable })
+	var mu sync.Mutex
+	var waits []time.Duration
+	server := pushTestServer(t, true, func(n int, w io.Writer, flush func(), done <-chan struct{}) {
+		if n == 5 {
+			// This one stays open long enough to count as working.
+			select {
+			case <-time.After(2 * jmapPushStableAfter):
+			case <-done:
+			}
+		}
+	})
+	enough := make(chan struct{})
+	watcher := NewJMAPPushWatcher(pushTestConfig(server), "secret", nil, func(status imap.IdleWatcherStatus) {
+		if status.Healthy {
+			return
+		}
+		mu.Lock()
+		defer mu.Unlock()
+		waits = append(waits, time.Until(status.RetryAt).Round(10*time.Millisecond))
+		if len(waits) == 6 {
+			close(enough)
+		}
+	})
+	finished := make(chan struct{})
+	go func() { watcher.Run(t.Context()); close(finished) }()
+	select {
+	case <-enough:
+	case <-time.After(10 * time.Second):
+		t.Fatal("the watcher stopped reconnecting")
+	}
+	watcher.Close()
+	<-finished
+	mu.Lock()
+	defer mu.Unlock()
+	// 20, 40, 80 and 160 ms after the connections that closed at once; the
+	// fifth stayed open, so the wait after it starts over.
+	ms := time.Millisecond
+	want := []time.Duration{20 * ms, 40 * ms, 80 * ms, 160 * ms, 20 * ms, 40 * ms}
+	if !slices.Equal(waits, want) {
+		t.Fatalf("waits = %v, want %v", waits, want)
 	}
 }
 

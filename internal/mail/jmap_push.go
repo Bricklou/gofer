@@ -19,8 +19,17 @@ const (
 	// jmapPushUnavailableRetry is how long to wait when the server offers no
 	// push or refuses the login; periodic sync covers the account meanwhile.
 	jmapPushUnavailableRetry = 30 * time.Minute
-	jmapPushInitialBackoff   = time.Second
 	jmapPushMaxBackoff       = 5 * time.Minute
+)
+
+// jmapPushInitialBackoff is the first wait before reconnecting, and
+// jmapPushStableAfter how long a connection must stay open before the wait
+// starts over from it, so a server that accepts the connection and closes
+// it at once isn't reconnected, and synced, every second. Tests shorten
+// them.
+var (
+	jmapPushInitialBackoff = time.Second
+	jmapPushStableAfter    = time.Minute
 )
 
 // JMAPPushWatcher keeps a JMAP account's push connection open and calls
@@ -76,9 +85,9 @@ func (w *JMAPPushWatcher) Run(ctx context.Context) {
 	backoff := jmapPushInitialBackoff
 	reconnecting := false
 	for ctx.Err() == nil {
-		connected := false
+		var opened time.Time
 		err := w.watch(ctx, func() {
-			connected = true
+			opened = time.Now()
 			w.onStatus(imap.IdleWatcherStatus{Healthy: true})
 			if reconnecting {
 				// Changes made while disconnected were never pushed.
@@ -89,7 +98,7 @@ func (w *JMAPPushWatcher) Run(ctx context.Context) {
 		if ctx.Err() != nil {
 			return
 		}
-		if connected {
+		if !opened.IsZero() && time.Since(opened) >= jmapPushStableAfter {
 			backoff = jmapPushInitialBackoff
 		}
 		status := imap.IdleWatcherStatus{ReasonCode: "connection_error", Reason: "the push connection failed"}
