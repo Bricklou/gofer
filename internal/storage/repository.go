@@ -1620,7 +1620,7 @@ func (db *DB) UpsertSyncMessages(ctx context.Context, msgs []SyncMessage) error 
 			if err := refreshIMAPDeleteUIDValidityTx(ctx, tx, msgID, m.FolderID); err != nil {
 				return fmt.Errorf("refresh pending IMAP delete identity: %w", err)
 			}
-			if err := resolveMessageMutationTargetsTx(ctx, tx, msgID, m.FolderID, &isRead, &isStarred); err != nil {
+			if err := resolveMessageMutationTargetsTx(ctx, tx, msgID, m.FolderID, "", &isRead, &isStarred); err != nil {
 				return fmt.Errorf("protect pending message mutation: %w", err)
 			}
 			if visible, err = protectProviderMoveFolderTx(ctx, tx, msgID, m.FolderID); err != nil {
@@ -1890,7 +1890,7 @@ func (db *DB) UpsertProviderSyncMessages(ctx context.Context, msgs []ProviderSyn
 		}
 
 		isRead, isStarred := m.IsRead, m.IsStarred
-		if err := resolveMessageMutationTargetsTx(ctx, tx, msgID, m.FolderID, &isRead, &isStarred); err != nil {
+		if err := resolveMessageMutationTargetsTx(ctx, tx, msgID, m.FolderID, m.ProviderMessageID, &isRead, &isStarred); err != nil {
 			return nil, fmt.Errorf("protect pending provider mutation: %w", err)
 		}
 		visible, err := protectProviderMoveFolderTx(ctx, tx, msgID, m.FolderID)
@@ -2233,12 +2233,14 @@ func (db *DB) ReconcileProviderFolderSeen(ctx context.Context, accountID, folder
 	}
 	if _, err := tx.ExecContext(ctx, `
 		DELETE FROM message_mutations
-		WHERE kind = 'delete' AND status = 'applied' AND message_id IN (
-			SELECT m.id FROM messages m
-			WHERE m.account_id = ? AND COALESCE(m.remote_message_id, '') != ''
+		WHERE kind = 'delete' AND status = 'applied' AND account_id = ? AND EXISTS (
+			SELECT 1 FROM message_folder_state mfs
+			WHERE mfs.message_id = message_mutations.message_id
+			  AND (mfs.folder_id = message_mutations.folder_id OR message_mutations.folder_id = '')
+			  AND `+providerCopyIDSQL("mfs")+` != ''
 			  AND NOT EXISTS (
 				SELECT 1 FROM temp_provider_folder_seen seen
-				WHERE seen.provider_id = m.remote_message_id
+				WHERE seen.provider_id = `+providerCopyIDSQL("mfs")+`
 			  )
 		)`, accountID); err != nil {
 		return fmt.Errorf("confirm unseen provider deletes: %w", err)
@@ -3991,12 +3993,14 @@ func (db *DB) MarkProviderMessagesMissingFromFolder(ctx context.Context, account
 	}
 	if _, err := tx.ExecContext(ctx, `
 		DELETE FROM message_mutations
-		WHERE kind = 'delete' AND status = 'applied' AND message_id IN (
-			SELECT m.id FROM messages m
-			WHERE m.account_id = ? AND COALESCE(m.remote_message_id, '') != ''
+		WHERE kind = 'delete' AND status = 'applied' AND account_id = ? AND EXISTS (
+			SELECT 1 FROM message_folder_state mfs
+			WHERE mfs.message_id = message_mutations.message_id
+			  AND (mfs.folder_id = message_mutations.folder_id OR message_mutations.folder_id = '')
+			  AND `+providerCopyIDSQL("mfs")+` != ''
 			  AND NOT EXISTS (
 				SELECT 1 FROM tmp_provider_folder_seen seen
-				WHERE seen.provider_message_id = m.remote_message_id
+				WHERE seen.provider_message_id = `+providerCopyIDSQL("mfs")+`
 			  )
 		)`, accountID); err != nil {
 		return 0, fmt.Errorf("confirm missing provider deletes: %w", err)
@@ -7346,7 +7350,7 @@ func (db *DB) getMessageMutationInfo(ctx context.Context, messageID int64, folde
 	var isRead, isStarred int
 
 	query := `SELECT m.account_id, a.provider, mfs.folder_id, f.remote_id, mfs.remote_uid, f.role,
-	                 m.remote_message_id, m.internet_message_id, m.thread_id, m.provider_thread_id,
+	                 COALESCE(NULLIF(mfs.remote_message_id, ''), m.remote_message_id), m.internet_message_id, m.thread_id, m.provider_thread_id,
 	                 mfs.is_read, mfs.is_starred
 			  FROM messages m
 			  JOIN accounts a ON m.account_id = a.id
@@ -7468,7 +7472,7 @@ func (db *DB) getThreadMutationInfos(ctx context.Context, accountID, threadID, f
 	}
 
 	query := `SELECT m.id, m.account_id, a.provider, mfs.folder_id, f.remote_id, mfs.remote_uid, f.role,
-	                 m.remote_message_id, m.internet_message_id, m.provider_thread_id,
+	                 COALESCE(NULLIF(mfs.remote_message_id, ''), m.remote_message_id), m.internet_message_id, m.provider_thread_id,
 	                 mfs.is_read, mfs.is_starred
 			 FROM messages m
 			 JOIN accounts a ON m.account_id = a.id
@@ -8683,7 +8687,7 @@ func (db *DB) applyIMAPFlagUpdates(ctx context.Context, folderID string, expecte
 
 		newRead := 0
 		incomingRead, incomingStarred := u.IsRead, u.IsStarred
-		if err := resolveMessageMutationTargetsTx(ctx, tx, messageID, folderID, &incomingRead, &incomingStarred); err != nil {
+		if err := resolveMessageMutationTargetsTx(ctx, tx, messageID, folderID, "", &incomingRead, &incomingStarred); err != nil {
 			return 0, fmt.Errorf("protect pending IMAP flag mutation for UID %d: %w", u.UID, err)
 		}
 		if incomingRead {

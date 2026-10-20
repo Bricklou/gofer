@@ -169,3 +169,136 @@ func TestProviderFolderReconcileOnlyTouchesTheSameCopy(t *testing.T) {
 		t.Fatalf("row provider id = %q, %v; want the Sent copy", rowID, err)
 	}
 }
+
+// seedSelfSentCopies stores the Sent and Inbox copies of mail sent to oneself
+// on a JMAP account, and returns their row.
+func seedSelfSentCopies(t *testing.T, db *DB) int64 {
+	t.Helper()
+	ctx := context.Background()
+	if _, err := db.Write().ExecContext(ctx, `INSERT INTO accounts (id, user_id, email_address, provider) VALUES ('acc', 'default', 'user@example.com', 'jmap')`); err != nil {
+		t.Fatalf("insert account: %v", err)
+	}
+	if err := db.UpsertFolders(ctx, []UpsertFolderInput{
+		{ID: "acc_inbox", AccountID: "acc", RemoteID: "INBOX", ProviderRemoteID: "mb-inbox", Name: "Inbox", Role: "inbox", Selectable: true},
+		{ID: "acc_sent", AccountID: "acc", RemoteID: "Sent", ProviderRemoteID: "mb-sent", Name: "Sent", Role: "sent", Selectable: true},
+		{ID: "acc_archive", AccountID: "acc", RemoteID: "Archive", ProviderRemoteID: "mb-archive", Name: "Archive", Role: "archive", Selectable: true},
+	}); err != nil {
+		t.Fatalf("UpsertFolders() error = %v", err)
+	}
+	now := time.Date(2026, 6, 22, 10, 0, 0, 0, time.UTC)
+	ids, err := db.UpsertProviderSyncMessages(ctx, []ProviderSyncMessage{
+		{AccountID: "acc", FolderID: "acc_sent", ProviderMessageID: "email-sent", InternetMessageID: "<self@example.com>", Subject: "Plans", DateSent: now, IsRead: true},
+		{AccountID: "acc", FolderID: "acc_inbox", ProviderMessageID: "email-inbox", InternetMessageID: "<self@example.com>", Subject: "Plans", DateSent: now},
+	})
+	if err != nil {
+		t.Fatalf("UpsertProviderSyncMessages() error = %v", err)
+	}
+	return ids["email-sent"]
+}
+
+func queuedMutationTargets(t *testing.T, db *DB, messageID int64, kind string) map[string]string {
+	t.Helper()
+	rows, err := db.Read().QueryContext(context.Background(), `SELECT folder_id FROM message_mutations WHERE message_id = ? AND kind = ?`, messageID, kind)
+	if err != nil {
+		t.Fatalf("query mutations: %v", err)
+	}
+	var folders []string
+	for rows.Next() {
+		var folderID string
+		if err := rows.Scan(&folderID); err != nil {
+			t.Fatalf("scan mutation: %v", err)
+		}
+		folders = append(folders, folderID)
+	}
+	rows.Close()
+	targets := map[string]string{}
+	for _, folderID := range folders {
+		info, err := db.GetMessageMutationInfoIncludingDeletedInFolder(context.Background(), messageID, folderID)
+		if err != nil || info == nil {
+			t.Fatalf("GetMessageMutationInfoIncludingDeletedInFolder(%q) = %v, %v", folderID, info, err)
+		}
+		targets[folderID] = info.RemoteMessageID
+	}
+	return targets
+}
+
+func TestProviderMutationsGoToTheCopyTheyAreMadeOn(t *testing.T) {
+	ctx := context.Background()
+	db := newContactsTestDB(t)
+	msgID := seedSelfSentCopies(t, db)
+
+	for folderID, want := range map[string]string{"acc_sent": "email-sent", "acc_inbox": "email-inbox"} {
+		info, err := db.GetMessageMutationInfoForFolder(ctx, msgID, folderID)
+		if err != nil || info == nil || info.RemoteMessageID != want {
+			t.Fatalf("mutation info in %s = %+v, %v; want %s", folderID, info, err, want)
+		}
+	}
+
+	// Reading the message marks both copies read on the server.
+	if err := db.SetMessageReadAndQueue(ctx, msgID, true); err != nil {
+		t.Fatalf("SetMessageReadAndQueue() error = %v", err)
+	}
+	if got, want := queuedMutationTargets(t, db, msgID, MessageMutationRead), map[string]string{"acc_sent": "email-sent", "acc_inbox": "email-inbox"}; !maps.Equal(got, want) {
+		t.Fatalf("read changes = %v, want %v", got, want)
+	}
+
+	// Moving the Inbox copy leaves the Sent one, and the moved copy keeps its id.
+	if err := db.MoveMessageAndQueue(ctx, msgID, "acc_inbox", "acc_archive"); err != nil {
+		t.Fatalf("MoveMessageAndQueue() error = %v", err)
+	}
+	if got, want := visibleCopies(t, db, "<self@example.com>"), map[string]string{"acc_sent": "email-sent", "acc_archive": "email-inbox"}; !maps.Equal(got, want) {
+		t.Fatalf("after moving the Inbox copy = %v, want %v", got, want)
+	}
+
+	// Deleting the archived copy leaves the Sent one.
+	if err := db.PermanentlyDeleteMessageAndQueue(ctx, msgID, "acc_archive"); err != nil {
+		t.Fatalf("PermanentlyDeleteMessageAndQueue() error = %v", err)
+	}
+	if got, want := visibleCopies(t, db, "<self@example.com>"), map[string]string{"acc_sent": "email-sent"}; !maps.Equal(got, want) {
+		t.Fatalf("after deleting the archived copy = %v, want %v", got, want)
+	}
+	if got, want := queuedMutationTargets(t, db, msgID, MessageMutationDelete), map[string]string{"acc_archive": "email-inbox"}; !maps.Equal(got, want) {
+		t.Fatalf("delete = %v, want %v", got, want)
+	}
+}
+
+func TestProviderMoveGivesTheMovedCopyItsNewID(t *testing.T) {
+	ctx := context.Background()
+	db := newContactsTestDB(t)
+	msgID := seedSelfSentCopies(t, db)
+	if err := db.MoveMessageAndQueue(ctx, msgID, "acc_inbox", "acc_archive"); err != nil {
+		t.Fatalf("MoveMessageAndQueue() error = %v", err)
+	}
+	var mutationID string
+	if err := db.Read().QueryRowContext(ctx, `SELECT id FROM message_mutations WHERE message_id = ? AND kind = ?`, msgID, MessageMutationMove).Scan(&mutationID); err != nil {
+		t.Fatalf("query move: %v", err)
+	}
+	// Outlook gives a moved message a new id.
+	if err := db.AdvanceMessageMoveMutation(ctx, mutationID, "acc_archive", "email-archived", 0); err != nil {
+		t.Fatalf("AdvanceMessageMoveMutation() error = %v", err)
+	}
+	if got, want := visibleCopies(t, db, "<self@example.com>"), map[string]string{"acc_sent": "email-sent", "acc_archive": "email-archived"}; !maps.Equal(got, want) {
+		t.Fatalf("after the move = %v, want %v", got, want)
+	}
+}
+
+func visibleCopies(t *testing.T, db *DB, internetID string) map[string]string {
+	t.Helper()
+	rows, err := db.Read().QueryContext(context.Background(), `
+		SELECT mfs.folder_id, COALESCE(mfs.remote_message_id, '') FROM message_folder_state mfs
+		JOIN messages m ON m.id = mfs.message_id
+		WHERE m.internet_message_id = ? AND mfs.is_deleted = 0`, internetID)
+	if err != nil {
+		t.Fatalf("query folder states: %v", err)
+	}
+	defer rows.Close()
+	got := map[string]string{}
+	for rows.Next() {
+		var folderID, providerID string
+		if err := rows.Scan(&folderID, &providerID); err != nil {
+			t.Fatalf("scan folder state: %v", err)
+		}
+		got[folderID] = providerID
+	}
+	return got
+}

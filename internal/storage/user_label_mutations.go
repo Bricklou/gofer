@@ -186,7 +186,7 @@ func (db *DB) CompleteUserLabelMutation(ctx context.Context, e LabelMutationQueu
 	if count != 1 {
 		return ErrMessageMutationSuperseded
 	}
-	if err := tx.QueryRowContext(ctx, `SELECT count(*) FROM messages m JOIN accounts a ON a.id=m.account_id WHERE m.id=? AND m.account_id=? AND a.provider=? AND COALESCE(a.provider_account_id,'')=? AND COALESCE(a.is_deleting,0)=0 AND COALESCE(m.remote_message_id,'')=? AND COALESCE(m.internet_message_id,'')=?`, e.MessageID, e.AccountID, info.AccountProvider, subject, info.RemoteMessageID, info.InternetMessageID).Scan(&count); err != nil {
+	if err := tx.QueryRowContext(ctx, `SELECT count(*) FROM messages m JOIN accounts a ON a.id=m.account_id WHERE m.id=? AND m.account_id=? AND a.provider=? AND COALESCE(a.provider_account_id,'')=? AND COALESCE(a.is_deleting,0)=0 AND `+providerCopyOfRowSQL("m")+` AND COALESCE(m.internet_message_id,'')=?`, e.MessageID, e.AccountID, info.AccountProvider, subject, info.RemoteMessageID, info.RemoteMessageID, info.InternetMessageID).Scan(&count); err != nil {
 		return err
 	}
 	if count != 1 {
@@ -211,7 +211,7 @@ func (db *DB) CompleteUserLabelMutation(ctx context.Context, e LabelMutationQueu
 			return errors.New("label IMAP folder or UID identity changed")
 		}
 	} else if info.RemoteMessageID == "" && resolvedID != "" {
-		if _, err := tx.ExecContext(ctx, `UPDATE messages SET remote_message_id=?,updated_at=CURRENT_TIMESTAMP WHERE id=?`, resolvedID, e.MessageID); err != nil {
+		if err := bindProviderCopyIDTx(ctx, tx, e.MessageID, info.FolderID, resolvedID); err != nil {
 			return err
 		}
 	}

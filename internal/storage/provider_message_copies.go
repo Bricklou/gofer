@@ -81,3 +81,79 @@ func refreshProviderRowIDTx(ctx context.Context, tx *sql.Tx, messageID int64) er
 	}
 	return nil
 }
+
+// providerCopyOfRowSQL matches a row that holds a copy with the provider id
+// bound twice after it.
+func providerCopyOfRowSQL(row string) string {
+	return `(COALESCE(` + row + `.remote_message_id, '') = ? OR EXISTS (
+		SELECT 1 FROM message_folder_state copy_state WHERE copy_state.message_id = ` + row + `.id AND copy_state.remote_message_id = ?))`
+}
+
+// bindProviderCopyIDTx records a provider id found for the copy in a folder,
+// and for the row when it has none.
+func bindProviderCopyIDTx(ctx context.Context, tx *sql.Tx, messageID int64, folderID, providerMessageID string) error {
+	if providerMessageID == "" {
+		return nil
+	}
+	if folderID != "" {
+		if _, err := tx.ExecContext(ctx, `UPDATE message_folder_state SET remote_message_id = ? WHERE message_id = ? AND folder_id = ? AND COALESCE(remote_message_id, '') = ''`,
+			providerMessageID, messageID, folderID); err != nil {
+			return err
+		}
+	}
+	_, err := tx.ExecContext(ctx, `UPDATE messages SET remote_message_id = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND COALESCE(remote_message_id, '') = ''`,
+		providerMessageID, messageID)
+	return err
+}
+
+// replaceProviderCopyIDTx gives a copy the new id a provider assigned it, as
+// Outlook does when it moves a message. The row's id follows when it named
+// that copy.
+func replaceProviderCopyIDTx(ctx context.Context, tx *sql.Tx, messageID int64, previousFolderID, destinationFolderID, providerMessageID string) error {
+	var previousID string
+	err := tx.QueryRowContext(ctx, `SELECT `+providerCopyIDSQL("mfs")+` FROM message_folder_state mfs WHERE mfs.message_id = ? AND mfs.folder_id = ?`,
+		messageID, previousFolderID).Scan(&previousID)
+	if err != nil && err != sql.ErrNoRows {
+		return err
+	}
+	if _, err := tx.ExecContext(ctx, `
+		UPDATE message_folder_state SET remote_message_id = ?
+		WHERE message_id = ? AND (folder_id = ? OR (? != '' AND remote_message_id = ?))`,
+		providerMessageID, messageID, destinationFolderID, previousID, previousID); err != nil {
+		return err
+	}
+	_, err = tx.ExecContext(ctx, `
+		UPDATE messages SET remote_message_id = ?, updated_at = CURRENT_TIMESTAMP
+		WHERE id = ? AND (COALESCE(remote_message_id, '') = '' OR remote_message_id = ?)`,
+		providerMessageID, messageID, previousID)
+	return err
+}
+
+// providerCopyFolderScopesTx returns one folder for each copy of a message
+// with its own provider id, when it has more than one. A change made to the
+// message is then queued for every copy.
+func providerCopyFolderScopesTx(ctx context.Context, tx *sql.Tx, messageID int64) ([]string, error) {
+	rows, err := tx.QueryContext(ctx, `
+		SELECT MIN(mfs.folder_id) FROM message_folder_state mfs
+		WHERE mfs.message_id = ? AND mfs.is_deleted = 0 AND COALESCE(mfs.remote_message_id, '') != ''
+		GROUP BY mfs.remote_message_id ORDER BY 1`, messageID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var folderIDs []string
+	for rows.Next() {
+		var folderID string
+		if err := rows.Scan(&folderID); err != nil {
+			return nil, err
+		}
+		folderIDs = append(folderIDs, folderID)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	if len(folderIDs) < 2 {
+		return nil, nil
+	}
+	return folderIDs, nil
+}

@@ -1293,3 +1293,54 @@ func TestSyncKeepsBothJMAPCopiesOfMailSentToOneself(t *testing.T) {
 		t.Fatalf("copies after deleting the Inbox copy = %v, want only Sent", got)
 	}
 }
+
+// Reading mail sent to oneself marks both its emails read, and deleting the
+// Inbox copy destroys only that email.
+func TestSyncReplaysJMAPChangesOnEachCopy(t *testing.T) {
+	f := newUserGmailFixture(t)
+	server := newFakeJMAPServer(t)
+	server.emailState = "c0"
+	server.setMailboxes(
+		jmap.Mailbox{ID: "mb-in", Name: "Inbox", Role: "inbox", MyRights: readable()},
+		jmap.Mailbox{ID: "mb-sent", Name: "Sent", Role: "sent", MyRights: readable()},
+	)
+	sent := testJMAPEmail("sent-1", "Reminder to self", 2, "mb-sent")
+	received := testJMAPEmail("in-1", "Reminder to self", 1, "mb-in")
+	sent.MessageID = []string{"reminder@example.test"}
+	received.MessageID = []string{"reminder@example.test"}
+	server.emails = []jmap.Email{sent, received}
+	useFakeJMAPAccount(t, f, server)
+	if err := f.worker.Sync(t.Context(), "alice", f.ids["alice"]); err != nil {
+		t.Fatalf("first Sync() error = %v", err)
+	}
+	account := f.ids["alice"]
+	var msgID int64
+	f.local(t, "alice", func(db *storage.DB) error {
+		return db.Read().QueryRow(`SELECT id FROM messages WHERE account_id=? AND internet_message_id='<reminder@example.test>'`, account).Scan(&msgID)
+	})
+	f.local(t, "alice", func(db *storage.DB) error { return db.SetMessageReadAndQueue(t.Context(), msgID, true) })
+	if err := f.worker.Sync(t.Context(), "alice", account); err != nil {
+		t.Fatalf("Sync() replaying read error = %v", err)
+	}
+	for _, id := range []string{"sent-1", "in-1"} {
+		if email, _ := server.email(id); !email.Keywords["$seen"] {
+			t.Fatalf("%s on the server = %v, want $seen", id, email.Keywords)
+		}
+	}
+
+	f.local(t, "alice", func(db *storage.DB) error {
+		return db.PermanentlyDeleteMessageAndQueue(t.Context(), msgID, jmapLocalFolderID(account, "mb-in"))
+	})
+	if err := f.worker.Sync(t.Context(), "alice", account); err != nil {
+		t.Fatalf("Sync() replaying delete error = %v", err)
+	}
+	if _, ok := server.email("in-1"); ok {
+		t.Fatal("in-1 still on the server after deleting the Inbox copy")
+	}
+	if _, ok := server.email("sent-1"); !ok {
+		t.Fatal("deleting the Inbox copy destroyed the Sent one")
+	}
+	if got := jmapCopies(t, f, "<reminder@example.test>"); !maps.Equal(got, map[string]string{"mb-sent": "sent-1"}) {
+		t.Fatalf("copies after the delete = %v, want only Sent", got)
+	}
+}
