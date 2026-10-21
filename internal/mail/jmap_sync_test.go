@@ -58,6 +58,13 @@ type fakeJMAPServer struct {
 	// the StateChange JSON sent here. streams counts open connections.
 	pushes  chan string
 	streams int
+	// mailboxLog records each change of the mailboxes; Mailbox/changes
+	// answers from it, with states "m1", "m2"... fullMailboxGets counts
+	// Mailbox/get calls for every mailbox. noMailboxChanges makes every
+	// Mailbox/changes fail with cannotCalculateChanges.
+	mailboxLog       []fakeMailboxChange
+	fullMailboxGets  int
+	noMailboxChanges bool
 }
 
 // emailIndex finds an email; the caller holds f.mu.
@@ -223,7 +230,47 @@ func (f *fakeJMAPServer) answer(w http.ResponseWriter, r *http.Request) {
 		_ = json.Unmarshal(call[2], &callID)
 		switch name {
 		case "Mailbox/get":
-			responses = append(responses, []any{name, map[string]any{"accountId": "a1", "state": "m1", "list": f.mailboxes, "notFound": []string{}}, callID})
+			list, notFound := f.mailboxes, []string{}
+			var ids []string
+			if json.Unmarshal(args["ids"], &ids) != nil || ids == nil {
+				f.fullMailboxGets++
+			} else {
+				list = []jmap.Mailbox{}
+				for _, id := range ids {
+					found := false
+					for _, mailbox := range f.mailboxes {
+						if mailbox.ID == id {
+							list, found = append(list, mailbox), true
+						}
+					}
+					if !found {
+						notFound = append(notFound, id)
+					}
+				}
+			}
+			responses = append(responses, []any{name, map[string]any{"accountId": "a1", "state": fmt.Sprintf("m%d", len(f.mailboxLog)), "list": list, "notFound": notFound}, callID})
+		case "Mailbox/changes":
+			var since string
+			_ = json.Unmarshal(args["sinceState"], &since)
+			var from int
+			if _, err := fmt.Sscanf(since, "m%d", &from); err != nil || from > len(f.mailboxLog) || f.noMailboxChanges {
+				responses = append(responses, []any{"error", map[string]any{"type": "cannotCalculateChanges"}, callID})
+				continue
+			}
+			created, updated, destroyed := []string{}, []string{}, []string{}
+			countsOnly := true
+			for _, change := range f.mailboxLog[from:] {
+				created = append(created, change.created...)
+				updated = append(updated, change.updated...)
+				destroyed = append(destroyed, change.destroyed...)
+				countsOnly = countsOnly && change.countsOnly
+			}
+			var properties []string
+			if countsOnly {
+				properties = jmap.MailboxCountProperties
+			}
+			responses = append(responses, []any{name, map[string]any{"accountId": "a1", "oldState": since, "newState": fmt.Sprintf("m%d", len(f.mailboxLog)),
+				"hasMoreChanges": false, "created": created, "updated": updated, "destroyed": destroyed, "updatedProperties": properties}, callID})
 		case "Email/get":
 			var ids []string
 			if ref, ok := args["#ids"]; ok {
@@ -373,10 +420,47 @@ func (f *fakeJMAPServer) answer(w http.ResponseWriter, r *http.Request) {
 	_ = json.NewEncoder(w).Encode(map[string]any{"methodResponses": responses, "sessionState": "s1"})
 }
 
+// setMailboxes replaces the mailboxes, logging which were created,
+// destroyed or changed.
 func (f *fakeJMAPServer) setMailboxes(mailboxes ...jmap.Mailbox) {
 	f.mu.Lock()
+	defer f.mu.Unlock()
+	old := map[string]bool{}
+	for _, mailbox := range f.mailboxes {
+		old[mailbox.ID] = true
+	}
+	var change fakeMailboxChange
+	for _, mailbox := range mailboxes {
+		if old[mailbox.ID] {
+			change.updated = append(change.updated, mailbox.ID)
+			delete(old, mailbox.ID)
+		} else {
+			change.created = append(change.created, mailbox.ID)
+		}
+	}
+	for id := range old {
+		change.destroyed = append(change.destroyed, id)
+	}
 	f.mailboxes = mailboxes
-	f.mu.Unlock()
+	f.mailboxLog = append(f.mailboxLog, change)
+}
+
+// setMailboxCounts changes a mailbox's counters, a change Mailbox/changes
+// reports as counters only.
+func (f *fakeJMAPServer) setMailboxCounts(id string, total, unread int) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	for i := range f.mailboxes {
+		if f.mailboxes[i].ID == id {
+			f.mailboxes[i].TotalEmails, f.mailboxes[i].UnreadEmails = total, unread
+		}
+	}
+	f.mailboxLog = append(f.mailboxLog, fakeMailboxChange{updated: []string{id}, countsOnly: true})
+}
+
+type fakeMailboxChange struct {
+	created, updated, destroyed []string
+	countsOnly                  bool
 }
 
 func readable() jmap.MailboxRights { return jmap.MailboxRights{MayReadItems: true} }
@@ -938,6 +1022,79 @@ func TestSyncReplaysJMAPLabelChanges(t *testing.T) {
 	})
 	if pending != 0 {
 		t.Fatalf("%d label changes still queued", pending)
+	}
+}
+
+// After the first sync, mailboxes are read again only when more than their
+// counters changed: new counters are saved on their own, and a new, renamed
+// or deleted mailbox, or a state the server no longer knows, reads them all.
+func TestSyncFollowsJMAPMailboxChanges(t *testing.T) {
+	f := newUserGmailFixture(t)
+	server := newFakeJMAPServer(t)
+	server.emailState = "c0"
+	inbox := jmap.Mailbox{ID: "mb-in", Name: "Inbox", Role: "inbox", MyRights: readable(), TotalEmails: 1, UnreadEmails: 1}
+	server.setMailboxes(inbox, jmap.Mailbox{ID: "mb-proj", Name: "Projects", MyRights: readable()})
+	server.emails = []jmap.Email{testJMAPEmail("e1", "Garden plans", 1, "mb-in")}
+	useFakeJMAPAccount(t, f, server)
+	account := f.ids["alice"]
+	type folderState struct {
+		name          string
+		total, unread int
+		listed        bool
+	}
+	folder := func(mailboxID string) folderState {
+		t.Helper()
+		var got folderState
+		f.local(t, "alice", func(db *storage.DB) error {
+			return db.Read().QueryRow(`SELECT name, total_count, unread_count, COALESCE(discovery_state, 'active') = 'active' FROM folders WHERE id = ?`,
+				jmapLocalFolderID(account, mailboxID)).Scan(&got.name, &got.total, &got.unread, &got.listed)
+		})
+		return got
+	}
+	sync := func(step string, fullGets int) {
+		t.Helper()
+		if err := f.worker.Sync(t.Context(), "alice", account); err != nil {
+			t.Fatalf("%s: Sync() error = %v", step, err)
+		}
+		server.mu.Lock()
+		got := server.fullMailboxGets
+		server.mu.Unlock()
+		if got != fullGets {
+			t.Fatalf("%s: mailboxes read in full %d times, want %d", step, got, fullGets)
+		}
+	}
+	sync("first sync", 1)
+	sync("nothing changed", 1)
+
+	server.setMailboxCounts("mb-in", 4, 2)
+	sync("counters changed", 1)
+	if got := folder("mb-in"); got.total != 4 || got.unread != 2 {
+		t.Fatalf("Inbox after its counters changed = %+v, want 4 and 2 unread", got)
+	}
+
+	server.setMailboxes(inbox, jmap.Mailbox{ID: "mb-proj", Name: "Clients", MyRights: readable()})
+	sync("mailbox renamed", 2)
+	if got := folder("mb-proj"); got.name != "Clients" {
+		t.Fatalf("renamed mailbox = %+v, want Clients", got)
+	}
+	server.setMailboxes(inbox, jmap.Mailbox{ID: "mb-proj", Name: "Clients", MyRights: readable()}, jmap.Mailbox{ID: "mb-new", Name: "Receipts", MyRights: readable()})
+	sync("mailbox created", 3)
+	if got := folder("mb-new"); got.name != "Receipts" || !got.listed {
+		t.Fatalf("new mailbox = %+v, want Receipts listed", got)
+	}
+	server.setMailboxes(inbox, jmap.Mailbox{ID: "mb-new", Name: "Receipts", MyRights: readable()})
+	sync("mailbox deleted", 4)
+	if got := folder("mb-proj"); got.listed {
+		t.Fatalf("deleted mailbox = %+v, want no longer listed", got)
+	}
+
+	server.mu.Lock()
+	server.noMailboxChanges = true
+	server.mu.Unlock()
+	server.setMailboxCounts("mb-in", 5, 0)
+	sync("changes unavailable", 5)
+	if got := folder("mb-in"); got.total != 5 || got.unread != 0 {
+		t.Fatalf("Inbox read in full = %+v, want 5 and none unread", got)
 	}
 }
 

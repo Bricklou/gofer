@@ -44,10 +44,24 @@ type MailboxRights struct {
 // GetMailboxes runs Mailbox/get. A nil ids fetches every mailbox; an empty,
 // non-nil ids fetches none and only returns the current state.
 func (c *Client) GetMailboxes(ctx context.Context, session *Session, accountID string, ids []string) (*GetResponse[Mailbox], error) {
+	return c.getMailboxes(ctx, session, accountID, ids, nil)
+}
+
+// MailboxCountProperties are the counters of a mailbox, which change as its
+// emails do.
+var MailboxCountProperties = []string{"totalEmails", "unreadEmails", "totalThreads", "unreadThreads"}
+
+// GetMailboxCounts runs Mailbox/get for the counters of some mailboxes.
+func (c *Client) GetMailboxCounts(ctx context.Context, session *Session, accountID string, ids []string) (*GetResponse[Mailbox], error) {
+	return c.getMailboxes(ctx, session, accountID, ids, append([]string{"id"}, MailboxCountProperties...))
+}
+
+func (c *Client) getMailboxes(ctx context.Context, session *Session, accountID string, ids, properties []string) (*GetResponse[Mailbox], error) {
 	args := struct {
-		AccountID string   `json:"accountId"`
-		IDs       []string `json:"ids"`
-	}{accountID, ids}
+		AccountID  string   `json:"accountId"`
+		IDs        []string `json:"ids"`
+		Properties []string `json:"properties,omitempty"`
+	}{accountID, ids, properties}
 	responses, err := c.Call(ctx, session, []string{CapabilityMail},
 		Invocation{Name: "Mailbox/get", Args: args, CallID: "0"})
 	if err != nil {

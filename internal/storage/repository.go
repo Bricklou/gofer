@@ -302,6 +302,46 @@ func (db *DB) UpsertFolders(ctx context.Context, folders []UpsertFolderInput) er
 	return tx.Commit()
 }
 
+// ListedProviderFolder is a folder the provider lists, with the provider's
+// id for it.
+type ListedProviderFolder struct {
+	ID               string
+	ProviderRemoteID string
+	Name             string
+}
+
+// ListListedProviderFolders returns the folders an account's provider listed
+// last time its folders were read.
+func (db *DB) ListListedProviderFolders(ctx context.Context, accountID string) ([]ListedProviderFolder, error) {
+	rows, err := db.Read().QueryContext(ctx, `
+		SELECT id, provider_remote_id, name FROM folders
+		WHERE account_id = ? AND COALESCE(provider_remote_id, '') != ''
+		  AND COALESCE(discovery_state, 'active') = 'active'
+		ORDER BY id`, strings.TrimSpace(accountID))
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var folders []ListedProviderFolder
+	for rows.Next() {
+		var f ListedProviderFolder
+		if err := rows.Scan(&f.ID, &f.ProviderRemoteID, &f.Name); err != nil {
+			return nil, err
+		}
+		folders = append(folders, f)
+	}
+	return folders, rows.Err()
+}
+
+// SetFolderCounts saves the message counts a provider gives for a folder.
+func (db *DB) SetFolderCounts(ctx context.Context, folderID string, totalCount, unreadCount int) error {
+	_, err := db.Write().ExecContext(ctx, `
+		UPDATE folders SET total_count = ?, unread_count = ?, updated_at = CURRENT_TIMESTAMP
+		WHERE id = ? AND (total_count != ? OR unread_count != ?)`,
+		clampNonNegative(totalCount), clampNonNegative(unreadCount), folderID, clampNonNegative(totalCount), clampNonNegative(unreadCount))
+	return err
+}
+
 func (db *DB) MarkUnlistedProviderFoldersNonSelectable(ctx context.Context, accountID string, providerRemoteIDs []string) error {
 	accountID = strings.TrimSpace(accountID)
 	if accountID == "" {

@@ -33,6 +33,12 @@ func IsCannotCalculateChanges(err error) bool {
 	return errors.As(err, &methodErr) && methodErr.Type == "cannotCalculateChanges"
 }
 
+// IsUnknownMethod reports whether the server doesn't offer a method.
+func IsUnknownMethod(err error) bool {
+	var methodErr *MethodError
+	return errors.As(err, &methodErr) && methodErr.Type == "unknownMethod"
+}
+
 type changesArgs struct {
 	AccountID  string `json:"accountId"`
 	SinceState string `json:"sinceState"`

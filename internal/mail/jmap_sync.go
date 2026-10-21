@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"slices"
 	"sort"
 	"strings"
 	"time"
@@ -38,11 +39,8 @@ func (o *SyncOrchestrator) syncJMAPAccount(ctx context.Context, accountID string
 	if mailAccount == "" {
 		return fmt.Errorf("the JMAP server offers no mail account for this login")
 	}
-	mailboxes, err := client.GetMailboxes(ctx, session, mailAccount, nil)
+	mailboxes, err := o.syncJMAPMailboxes(ctx, accountID, client, session, mailAccount)
 	if err != nil {
-		return err
-	}
-	if err := o.syncJMAPFolders(ctx, accountID, mailboxes.List); err != nil {
 		return err
 	}
 	repo := o.outlookRepository()
@@ -62,7 +60,7 @@ func (o *SyncOrchestrator) syncJMAPAccount(ctx context.Context, accountID string
 	if err != nil {
 		return err
 	}
-	return repo.MarkLabelSyncSuccess(ctx, accountID, storage.LabelProviderJMAP, jmapMailboxScope, mailboxes.State, false)
+	return repo.MarkLabelSyncSuccess(ctx, accountID, storage.LabelProviderJMAP, jmapMailboxScope, mailboxes.state, false)
 }
 
 // replayJMAPLabelMutationQueue retries the account's queued label changes,
@@ -132,11 +130,8 @@ const jmapMaxChanges = 500
 // and updated emails are fetched as summaries, without bodies, and stored
 // like imported ones, which also moves them between folders; an email no
 // longer in any known mailbox, or gone, is removed from its folders.
-func (o *SyncOrchestrator) syncJMAPEmailChanges(ctx context.Context, accountID string, client *jmap.Client, session *jmap.Session, mailAccount string, mailboxes *jmap.GetResponse[jmap.Mailbox], since string) error {
-	folders := make(map[string]string, len(mailboxes.List))
-	for _, mailbox := range mailboxes.List {
-		folders[mailbox.ID] = jmapLocalFolderID(accountID, mailbox.ID)
-	}
+func (o *SyncOrchestrator) syncJMAPEmailChanges(ctx context.Context, accountID string, client *jmap.Client, session *jmap.Session, mailAccount string, mailboxes jmapMailboxes, since string) error {
+	folders := mailboxes.folders
 	batch := jmapImportPage
 	if max := session.Core.MaxObjectsInGet; max > 0 && max < batch {
 		batch = max
@@ -209,12 +204,8 @@ func (o *SyncOrchestrator) syncJMAPEmailChanges(ctx context.Context, accountID s
 	for folderID := range touched {
 		o.publishEvent(Event{Type: EventSyncComplete, AccountID: accountID, FolderID: folderID, Payload: map[string]any{"status": "complete", "provider": "jmap"}})
 	}
-	names := make(map[string]string, len(mailboxes.List))
-	for _, mailbox := range mailboxes.List {
-		names[folders[mailbox.ID]] = mailbox.Name
-	}
 	for folderID, summary := range fresh {
-		o.publishNewMail(ctx, accountID, folderID, names[folderID], *summary)
+		o.publishNewMail(ctx, accountID, folderID, mailboxes.names[folderID], *summary)
 	}
 	return nil
 }
@@ -260,7 +251,7 @@ type jmapImportProgress struct {
 // is caught by the changes since it. An interrupted import continues from the
 // last page it stored, with the state it read first; storing an email twice
 // only updates it.
-func (o *SyncOrchestrator) importJMAPEmails(ctx context.Context, accountID string, client *jmap.Client, session *jmap.Session, mailAccount string, mailboxes *jmap.GetResponse[jmap.Mailbox]) error {
+func (o *SyncOrchestrator) importJMAPEmails(ctx context.Context, accountID string, client *jmap.Client, session *jmap.Session, mailAccount string, mailboxes jmapMailboxes) error {
 	repo := o.outlookRepository()
 	saved, err := repo.GetLabelSyncState(ctx, accountID, storage.LabelProviderJMAP, jmapImportScope)
 	if err != nil {
@@ -273,10 +264,7 @@ func (o *SyncOrchestrator) importJMAPEmails(ctx context.Context, accountID strin
 			progress = jmapImportProgress{}
 		}
 	}
-	folders := make(map[string]string, len(mailboxes.List))
-	for _, mailbox := range mailboxes.List {
-		folders[mailbox.ID] = jmapLocalFolderID(accountID, mailbox.ID)
-	}
+	folders := mailboxes.folders
 	limit := jmapImportPage
 	if max := session.Core.MaxObjectsInGet; max > 0 && max < limit {
 		limit = max
@@ -364,7 +352,7 @@ func (o *SyncOrchestrator) importJMAPEmails(ctx context.Context, accountID strin
 	if err := repo.MarkLabelSyncSuccess(ctx, accountID, storage.LabelProviderJMAP, jmapEmailScope, progress.State, true); err != nil {
 		return err
 	}
-	if err := repo.MarkLabelSyncSuccess(ctx, accountID, storage.LabelProviderJMAP, jmapMailboxScope, mailboxes.State, true); err != nil {
+	if err := repo.MarkLabelSyncSuccess(ctx, accountID, storage.LabelProviderJMAP, jmapMailboxScope, mailboxes.state, true); err != nil {
 		return err
 	}
 	for folderID := range touched {
@@ -530,6 +518,145 @@ func jmapRecipients(addresses []jmap.EmailAddress) []storage.Recipient {
 		}
 	}
 	return out
+}
+
+// jmapMailboxes is what an email sync needs of an account's mailboxes: the
+// folder of each mailbox, folder names, and the Mailbox state they were read
+// at.
+type jmapMailboxes struct {
+	folders map[string]string
+	names   map[string]string
+	state   string
+}
+
+// syncJMAPMailboxes brings the account's folders up to date with its
+// mailboxes. When only mailbox counters changed since the saved Mailbox
+// state, as when mail arrives, it updates those counters and nothing else.
+// Any other change, or a state the server no longer knows, reads every
+// mailbox again.
+func (o *SyncOrchestrator) syncJMAPMailboxes(ctx context.Context, accountID string, client *jmap.Client, session *jmap.Session, mailAccount string) (jmapMailboxes, error) {
+	saved, err := o.outlookRepository().GetLabelSyncState(ctx, accountID, storage.LabelProviderJMAP, jmapMailboxScope)
+	if err != nil {
+		return jmapMailboxes{}, err
+	}
+	if saved.Cursor != "" {
+		mailboxes, ok, err := o.syncJMAPMailboxCounts(ctx, accountID, client, session, mailAccount, saved.Cursor)
+		switch {
+		case jmap.IsCannotCalculateChanges(err) || jmap.IsUnknownMethod(err):
+			log.Printf("jmap sync %s: mailbox changes since %q are unavailable (%v), reading every mailbox", accountID, saved.Cursor, err)
+		case err != nil:
+			return jmapMailboxes{}, err
+		case ok:
+			return mailboxes, nil
+		}
+	}
+	list, err := client.GetMailboxes(ctx, session, mailAccount, nil)
+	if err != nil {
+		return jmapMailboxes{}, err
+	}
+	if err := o.syncJMAPFolders(ctx, accountID, list.List); err != nil {
+		return jmapMailboxes{}, err
+	}
+	mailboxes := jmapMailboxes{folders: map[string]string{}, names: map[string]string{}, state: list.State}
+	for _, mailbox := range list.List {
+		folderID := jmapLocalFolderID(accountID, mailbox.ID)
+		mailboxes.folders[mailbox.ID] = folderID
+		mailboxes.names[folderID] = mailbox.Name
+	}
+	return mailboxes, nil
+}
+
+// syncJMAPMailboxCounts follows the mailbox changes since a saved state. It
+// reports false, having changed nothing, when more than counters changed.
+func (o *SyncOrchestrator) syncJMAPMailboxCounts(ctx context.Context, accountID string, client *jmap.Client, session *jmap.Session, mailAccount, since string) (jmapMailboxes, bool, error) {
+	updated := map[string]bool{}
+	for {
+		changes, err := client.GetMailboxChanges(ctx, session, mailAccount, since, 0)
+		if err != nil {
+			return jmapMailboxes{}, false, err
+		}
+		if len(changes.Created) > 0 || len(changes.Destroyed) > 0 || (len(changes.Updated) > 0 && !jmapCountsOnly(changes.UpdatedProperties)) {
+			return jmapMailboxes{}, false, nil
+		}
+		for _, id := range changes.Updated {
+			updated[id] = true
+		}
+		more := changes.HasMoreChanges && changes.NewState != since
+		since = changes.NewState
+		if !more {
+			break
+		}
+	}
+	mailboxes := jmapMailboxes{folders: map[string]string{}, names: map[string]string{}, state: since}
+	err := o.withSyncStore(ctx, func(db *storage.DB) error {
+		listed, err := db.ListListedProviderFolders(ctx, accountID)
+		if err != nil {
+			return err
+		}
+		for _, folder := range listed {
+			mailboxes.folders[folder.ProviderRemoteID] = folder.ID
+			mailboxes.names[folder.ID] = folder.Name
+		}
+		return nil
+	})
+	if err != nil {
+		return jmapMailboxes{}, false, err
+	}
+	ids := make([]string, 0, len(updated))
+	for id := range updated {
+		if mailboxes.folders[id] == "" {
+			// A mailbox Gofer doesn't list yet.
+			return jmapMailboxes{}, false, nil
+		}
+		ids = append(ids, id)
+	}
+	if len(ids) == 0 {
+		return mailboxes, true, nil
+	}
+	sort.Strings(ids)
+	counts, err := client.GetMailboxCounts(ctx, session, mailAccount, ids)
+	if err != nil {
+		return jmapMailboxes{}, false, err
+	}
+	if len(counts.NotFound) > 0 {
+		return jmapMailboxes{}, false, nil
+	}
+	err = o.withSyncStore(ctx, func(db *storage.DB) error {
+		for _, mailbox := range counts.List {
+			if folderID := mailboxes.folders[mailbox.ID]; folderID != "" {
+				if err := db.SetFolderCounts(ctx, folderID, mailbox.TotalEmails, mailbox.UnreadEmails); err != nil {
+					return err
+				}
+			}
+		}
+		return nil
+	})
+	if err != nil {
+		return jmapMailboxes{}, false, err
+	}
+	return mailboxes, true, nil
+}
+
+// jmapCountsOnly reports whether the updated properties of a Mailbox/changes
+// are counters only. Without them, anything may have changed.
+func jmapCountsOnly(properties []string) bool {
+	if properties == nil {
+		return false
+	}
+	for _, property := range properties {
+		if !slices.Contains(jmap.MailboxCountProperties, property) {
+			return false
+		}
+	}
+	return true
+}
+
+// withSyncStore runs fn on the database the account is synced into.
+func (o *SyncOrchestrator) withSyncStore(ctx context.Context, fn func(*storage.DB) error) error {
+	if o.imapScope != nil {
+		return o.imapScope.call(ctx, fn)
+	}
+	return fn(o.db)
 }
 
 // syncJMAPFolders stores the account's mailboxes as folders. A mailbox keeps
