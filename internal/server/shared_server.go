@@ -59,6 +59,10 @@ func RunShared() {
 		log.Printf("WARNING: unauthenticated remote access is explicitly enabled; anyone who can reach %s can control Gofer", httpConfig.BaseURL)
 	}
 
+	if httpConfig.WarnOutlookWebhooksBehindAllowlist() {
+		log.Printf("WARNING: GOFER_ALLOWED_CIDRS applies to %s, so Outlook notifications only arrive if it lists Microsoft's servers; set GOFER_OUTLOOK_WEBHOOKS_SKIP_ALLOWED_CIDRS=true to let them through", httpguard.OutlookWebhookPath)
+	}
+
 	diagnostics, err := loadDiagnosticsConfig()
 	if err != nil {
 		log.Fatalf("invalid diagnostics configuration: %v", err)
@@ -178,6 +182,9 @@ func RunShared() {
 	h.StartMailImports(ctx)
 	h.StartMailTransfers(ctx)
 	h.RegisterRoutes(mux)
+	if httpConfig.OutlookWebhooks {
+		mux.Handle("POST "+httpguard.OutlookWebhookPath, mail.OutlookWebhookHandler(nil))
+	}
 	log.Printf("boot: HTTP routes registered")
 	h.StartAccountDeletionCleanup(ctx)
 

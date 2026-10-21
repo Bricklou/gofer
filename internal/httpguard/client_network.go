@@ -46,11 +46,17 @@ func containsAddress(prefixes []netip.Prefix, address netip.Addr) bool {
 // ClientNetworkMiddleware applies an explicit allowlist in every auth mode.
 // Without one, open mode defaults to loopback; authenticated modes accept any
 // network. Host/origin validation and authentication remain independent.
+// Outlook notifications come from Microsoft's servers and pass only when
+// GOFER_OUTLOOK_WEBHOOKS_SKIP_ALLOWED_CIDRS says so.
 func (c *Config) ClientNetworkMiddleware(authEnabled bool, next http.Handler) http.Handler {
 	if authEnabled && len(c.allowedCIDRs) == 0 {
 		return next
 	}
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if authEnabled && c.OutlookWebhooksSkipAllowedCIDRs && c.isOutlookWebhook(r.URL.Path) {
+			next.ServeHTTP(w, r)
+			return
+		}
 		address, ok := c.clientAddress(r)
 		allowed := ok && containsAddress(c.allowedCIDRs, address)
 		if len(c.allowedCIDRs) == 0 {

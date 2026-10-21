@@ -71,6 +71,9 @@ func newManagedApplication(parent context.Context, path string, maxOpen int) (re
 	if app.httpConfig.WarnInsecureLAN(authConfig.Enabled) {
 		log.Printf("WARNING: GOFER_ALLOW_INSECURE_LAN is enabled; sign-in cookies for %s travel unencrypted on the local network", app.httpConfig.BaseURL)
 	}
+	if app.httpConfig.WarnOutlookWebhooksBehindAllowlist() {
+		log.Printf("WARNING: GOFER_ALLOWED_CIDRS applies to %s, so Outlook notifications only arrive if it lists Microsoft's servers; set GOFER_OUTLOOK_WEBHOOKS_SKIP_ALLOWED_CIDRS=true to let them through", httpguard.OutlookWebhookPath)
+	}
 	app.storage, err = openManagedStorage(ctx, path, maxOpen)
 	if err != nil {
 		return nil, err
@@ -145,6 +148,9 @@ func newManagedApplication(parent context.Context, path string, maxOpen int) (re
 	}
 	app.mailbox.RegisterAuthenticationRoutes(mux)
 	app.mailbox.RegisterAdministrationRoutes(mux)
+	if app.httpConfig.OutlookWebhooks {
+		mux.Handle("POST "+httpguard.OutlookWebhookPath, mail.OutlookWebhookHandler(nil))
+	}
 	if err := app.mailbox.StartUserThreading(ctx); err != nil {
 		return nil, err
 	}
