@@ -2,6 +2,7 @@ package mail
 
 import (
 	"bytes"
+	"cmp"
 	"context"
 	"encoding/json"
 	"errors"
@@ -511,7 +512,8 @@ func (o *SyncOrchestrator) applyGmailMessageState(ctx context.Context, msg stora
 		}
 	}
 	labels := gmailLabelInputs(msg.AccountID, state.LabelIDs, labelsByID)
-	if err := o.db.ReplaceMessageLabelsForProvider(ctx, msg.ID, msg.AccountID, storage.LabelProviderGmail, labels); err != nil {
+	copyID := cmp.Or(strings.TrimSpace(state.ID), strings.TrimSpace(msg.ProviderMessageID), strings.TrimSpace(providerMessageID))
+	if err := o.db.ReplaceMessageLabelsForProvider(ctx, msg.ID, msg.AccountID, storage.LabelProviderGmail, copyID, labels); err != nil {
 		return gmailLabelSyncResult{}, err
 	}
 	if err := o.db.SyncGmailInboxMembership(ctx, msg.ID, msg.AccountID, state.LabelIDs); err != nil {
@@ -951,7 +953,7 @@ func (o *SyncOrchestrator) syncOutlookMessageCategories(ctx context.Context, tok
 			log.Printf("cache outlook message id failed: %v", err)
 		}
 	}
-	return o.db.ReplaceMessageLabelsForProvider(ctx, msg.ID, msg.AccountID, storage.LabelProviderOutlook, outlookCategoryLabelInputs(msg.AccountID, state.Categories, categoriesByName))
+	return o.db.ReplaceMessageLabelsForProvider(ctx, msg.ID, msg.AccountID, storage.LabelProviderOutlook, cmp.Or(strings.TrimSpace(state.ID), providerMessageID), outlookCategoryLabelInputs(msg.AccountID, state.Categories, categoriesByName))
 }
 
 func (o *SyncOrchestrator) syncOutlookMessageCategoriesBatch(ctx context.Context, token string, messages []storage.ProviderLabelSyncMessage, categoriesByName map[string]outlookCategory) (outlookCategoryBatchResult, error) {
@@ -1042,7 +1044,7 @@ func (o *SyncOrchestrator) syncOutlookMessageCategoriesBatchChunk(ctx context.Co
 			}
 		}
 		labels := outlookCategoryLabelInputs(msg.AccountID, state.Categories, categoriesByName)
-		if err := o.db.ReplaceMessageLabelsForProvider(ctx, msg.ID, msg.AccountID, storage.LabelProviderOutlook, labels); err != nil {
+		if err := o.db.ReplaceMessageLabelsForProvider(ctx, msg.ID, msg.AccountID, storage.LabelProviderOutlook, cmp.Or(strings.TrimSpace(state.ID), strings.TrimSpace(msg.ProviderMessageID)), labels); err != nil {
 			return result, err
 		}
 		result.Synced++
@@ -1210,8 +1212,7 @@ func (o *SyncOrchestrator) applyQueuedGmailLabelMutation(ctx context.Context, to
 		if err != nil {
 			return err
 		}
-		endpoint := gmailAPIBaseURL + "/users/me/messages/" + url.PathEscape(providerMessageID) + "/modify"
-		if err := providerJSON(ctx, http.MethodPost, endpoint, token, nil, map[string][]string{"addLabelIds": []string{label.ID}}, nil); err != nil {
+		if err := modifyGmailCopies(ctx, token, info.LabelCopyIDs(providerMessageID), map[string][]string{"addLabelIds": {label.ID}}); err != nil {
 			return err
 		}
 		if _, err := o.gmailRepository().AddMessageLabel(ctx, entry.MessageID, entry.AccountID, storage.LabelInput{
@@ -1230,8 +1231,7 @@ func (o *SyncOrchestrator) applyQueuedGmailLabelMutation(ctx context.Context, to
 			return err
 		}
 		if ok {
-			endpoint := gmailAPIBaseURL + "/users/me/messages/" + url.PathEscape(providerMessageID) + "/modify"
-			if err := providerJSON(ctx, http.MethodPost, endpoint, token, nil, map[string][]string{"removeLabelIds": []string{label.ID}}, nil); err != nil {
+			if err := modifyGmailCopies(ctx, token, info.LabelCopyIDs(providerMessageID), map[string][]string{"removeLabelIds": {label.ID}}); err != nil {
 				return err
 			}
 			if err := o.gmailRepository().RemoveMessageLabelForProvider(ctx, entry.MessageID, entry.AccountID, storage.LabelProviderGmail, label.ID, label.Name); err != nil {
@@ -1244,6 +1244,18 @@ func (o *SyncOrchestrator) applyQueuedGmailLabelMutation(ctx context.Context, to
 	default:
 		return fmt.Errorf("unsupported label mutation operation %q", entry.Operation)
 	}
+}
+
+// modifyGmailCopies changes the labels of every copy of a message. A further
+// copy Gmail no longer has is skipped.
+func modifyGmailCopies(ctx context.Context, token string, ids []string, payload map[string][]string) error {
+	for i, id := range ids {
+		err := providerJSON(ctx, http.MethodPost, gmailAPIBaseURL+"/users/me/messages/"+url.PathEscape(id)+"/modify", token, nil, payload, nil)
+		if err = otherCopyGone(i, err); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func (o *SyncOrchestrator) queuedGmailMessageID(ctx context.Context, token string, messageID int64, info *storage.MessageMutationInfo) (string, error) {
@@ -1335,52 +1347,56 @@ func (o *SyncOrchestrator) applyQueuedOutlookLabelMutation(ctx context.Context, 
 		return err
 	}
 
+	add := entry.Operation == storage.LabelMutationAdd
+	if !add && entry.Operation != storage.LabelMutationRemove {
+		return fmt.Errorf("unsupported label mutation operation %q", entry.Operation)
+	}
+	if add {
+		if err := o.outlookRequest(ctx, token, func(access string) error { return ensureOutlookProviderCategory(ctx, access, entry.LabelName) }); err != nil {
+			return err
+		}
+	}
+	for i, id := range info.LabelCopyIDs(providerMessageID) {
+		if err := otherCopyGone(i, o.setQueuedOutlookCategory(ctx, token, id, entry.LabelName, add)); err != nil {
+			return err
+		}
+	}
+	if add {
+		if _, err := o.outlookRepository().AddMessageLabel(ctx, entry.MessageID, entry.AccountID, outlookCategoryLabelInput(entry.AccountID, entry.LabelName)); err != nil {
+			return err
+		}
+	} else if err := o.outlookRepository().RemoveMessageLabelForProvider(ctx, entry.MessageID, entry.AccountID, storage.LabelProviderOutlook, entry.LabelName, entry.LabelName); err != nil {
+		return err
+	}
+	return o.outlookRepository().RemoveMessageLabelForProvider(ctx, entry.MessageID, entry.AccountID, storage.LabelProviderLocal, "", entry.LabelName)
+}
+
+// setQueuedOutlookCategory adds a category to one copy of a message, or
+// removes it.
+func (o *SyncOrchestrator) setQueuedOutlookCategory(ctx context.Context, token, id, name string, add bool) error {
 	var state outlookMessageState
-	err = o.outlookRequest(ctx, token, func(access string) error {
+	err := o.outlookRequest(ctx, token, func(access string) error {
 		var err error
-		state, err = getOutlookMessageState(ctx, access, providerMessageID)
+		state, err = getOutlookMessageState(ctx, access, id)
 		return err
 	})
 	if err != nil {
 		return err
 	}
 	categories := append([]string(nil), state.Categories...)
-	switch entry.Operation {
-	case storage.LabelMutationAdd:
-		if err := o.outlookRequest(ctx, token, func(access string) error { return ensureOutlookProviderCategory(ctx, access, entry.LabelName) }); err != nil {
-			return err
-		}
-		categories = appendUniqueFold(categories, entry.LabelName)
+	if add {
+		categories = appendUniqueFold(categories, name)
 		sort.SliceStable(categories, func(i, j int) bool {
 			return strings.ToLower(categories[i]) < strings.ToLower(categories[j])
 		})
-	case storage.LabelMutationRemove:
+	} else {
 		var removed bool
-		categories, removed = removeFold(categories, entry.LabelName)
-		if !removed {
-			if err := o.outlookRepository().RemoveMessageLabelForProvider(ctx, entry.MessageID, entry.AccountID, storage.LabelProviderOutlook, "", entry.LabelName); err != nil {
-				return err
-			}
-			return o.outlookRepository().RemoveMessageLabelForProvider(ctx, entry.MessageID, entry.AccountID, storage.LabelProviderLocal, "", entry.LabelName)
+		if categories, removed = removeFold(categories, name); !removed {
+			return nil
 		}
-	default:
-		return fmt.Errorf("unsupported label mutation operation %q", entry.Operation)
 	}
-
-	endpoint := outlookGraphBaseURL + "/me/messages/" + url.PathEscape(providerMessageID)
-	if err := o.outlookJSON(ctx, http.MethodPatch, endpoint, token, outlookImmutableIDHeaders(), map[string][]string{"categories": categories}, nil); err != nil {
-		return err
-	}
-	if entry.Operation == storage.LabelMutationAdd {
-		if _, err := o.outlookRepository().AddMessageLabel(ctx, entry.MessageID, entry.AccountID, outlookCategoryLabelInput(entry.AccountID, entry.LabelName)); err != nil {
-			return err
-		}
-		return o.outlookRepository().RemoveMessageLabelForProvider(ctx, entry.MessageID, entry.AccountID, storage.LabelProviderLocal, "", entry.LabelName)
-	}
-	if err := o.outlookRepository().RemoveMessageLabelForProvider(ctx, entry.MessageID, entry.AccountID, storage.LabelProviderOutlook, entry.LabelName, entry.LabelName); err != nil {
-		return err
-	}
-	return o.outlookRepository().RemoveMessageLabelForProvider(ctx, entry.MessageID, entry.AccountID, storage.LabelProviderLocal, "", entry.LabelName)
+	endpoint := outlookGraphBaseURL + "/me/messages/" + url.PathEscape(id)
+	return o.outlookJSON(ctx, http.MethodPatch, endpoint, token, outlookImmutableIDHeaders(), map[string][]string{"categories": categories}, nil)
 }
 
 func (o *SyncOrchestrator) queuedOutlookMessageID(ctx context.Context, token string, messageID int64, info *storage.MessageMutationInfo) (string, error) {

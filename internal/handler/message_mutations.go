@@ -209,6 +209,9 @@ func (h *Handler) applyGmailMessageMutation(ctx context.Context, mutation storag
 	if err != nil {
 		return fmt.Errorf("get Gmail token: %w", err)
 	}
+	if err := h.applyProviderFolderCopies(ctx, mutation, info, token); err != nil {
+		return err
+	}
 	providerMessageID := strings.TrimSpace(info.RemoteMessageID)
 	if providerMessageID == "" {
 		providerMessageID, err = h.resolveGmailMessageID(ctx, token, mutation.MessageID, info)
@@ -219,7 +222,6 @@ func (h *Handler) applyGmailMessageMutation(ctx context.Context, mutation storag
 	if providerMessageID == "" {
 		return fmt.Errorf("Gmail message identity is unavailable")
 	}
-	var addLabels, removeLabels []string
 	switch mutation.Kind {
 	case storage.MessageMutationDelete:
 		err := h.deleteGmailAPIMessage(ctx, token, providerMessageID)
@@ -229,22 +231,37 @@ func (h *Handler) applyGmailMessageMutation(ctx context.Context, mutation storag
 		return err
 	case storage.MessageMutationMove:
 		return h.applyGmailMessageMove(ctx, mutation, info, token, providerMessageID)
-	case storage.MessageMutationRead:
-		if mutation.TargetValue {
-			removeLabels = []string{"UNREAD"}
-		} else {
-			addLabels = []string{"UNREAD"}
-		}
-	case storage.MessageMutationStarred:
-		if mutation.TargetValue {
-			addLabels = []string{"STARRED"}
-		} else {
-			removeLabels = []string{"STARRED"}
-		}
+	case storage.MessageMutationRead, storage.MessageMutationStarred:
+		addLabels, removeLabels := gmailFlagLabels(mutation)
+		return h.modifyGmailMessageLabels(ctx, token, providerMessageID, addLabels, removeLabels)
 	default:
 		return fmt.Errorf("unsupported Gmail mutation %q", mutation.Kind)
 	}
-	return h.modifyGmailMessageLabels(ctx, token, providerMessageID, addLabels, removeLabels)
+}
+
+// gmailFlagLabels returns the labels a read or starred change adds and removes.
+func gmailFlagLabels(mutation storage.MessageMutation) (add, remove []string) {
+	label := "UNREAD"
+	on := !mutation.TargetValue
+	if mutation.Kind == storage.MessageMutationStarred {
+		label, on = "STARRED", mutation.TargetValue
+	}
+	if on {
+		return []string{label}, nil
+	}
+	return nil, []string{label}
+}
+
+// outlookFlagPayload is the Graph update for a read or starred change.
+func outlookFlagPayload(mutation storage.MessageMutation) any {
+	if mutation.Kind == storage.MessageMutationRead {
+		return map[string]bool{"isRead": mutation.TargetValue}
+	}
+	status := "notFlagged"
+	if mutation.TargetValue {
+		status = "flagged"
+	}
+	return map[string]any{"flag": map[string]string{"flagStatus": status}}
 }
 
 func (h *Handler) applyOutlookMessageMutation(ctx context.Context, mutation storage.MessageMutation, info storage.MessageMutationInfo) error {
@@ -254,6 +271,9 @@ func (h *Handler) applyOutlookMessageMutation(ctx context.Context, mutation stor
 	token, err := h.mailCredentials().GetMicrosoftGraphMailTokenForAccount(ctx, info.AccountID)
 	if err != nil {
 		return fmt.Errorf("get Outlook token: %w", err)
+	}
+	if err := h.applyProviderFolderCopies(ctx, mutation, info, token); err != nil {
+		return err
 	}
 	providerMessageID := strings.TrimSpace(info.RemoteMessageID)
 	if providerMessageID == "" {
@@ -299,14 +319,8 @@ func (h *Handler) applyOutlookMessageMutation(ctx context.Context, mutation stor
 			movedID = providerMessageID
 		}
 		return h.db.AdvanceMessageMoveMutation(ctx, mutation.ID, mutation.DestinationFolderID, movedID, 0)
-	case storage.MessageMutationRead:
-		return h.doOutlookJSON(ctx, http.MethodPatch, endpoint, token, map[string]bool{"isRead": mutation.TargetValue}, nil)
-	case storage.MessageMutationStarred:
-		status := "notFlagged"
-		if mutation.TargetValue {
-			status = "flagged"
-		}
-		return h.doOutlookJSON(ctx, http.MethodPatch, endpoint, token, map[string]any{"flag": map[string]string{"flagStatus": status}}, nil)
+	case storage.MessageMutationRead, storage.MessageMutationStarred:
+		return h.doOutlookJSON(ctx, http.MethodPatch, endpoint, token, outlookFlagPayload(mutation), nil)
 	default:
 		return fmt.Errorf("unsupported Outlook mutation %q", mutation.Kind)
 	}
@@ -398,6 +412,14 @@ func (h *Handler) applyIMAPMessageMutation(ctx context.Context, mutation storage
 }
 
 func (h *Handler) applyGmailMessageMove(ctx context.Context, mutation storage.MessageMutation, info storage.MessageMutationInfo, token, providerMessageID string) error {
+	if err := h.moveGmailMessage(ctx, mutation, info, token, providerMessageID); err != nil {
+		return err
+	}
+	return h.db.AdvanceMessageMoveMutation(ctx, mutation.ID, mutation.DestinationFolderID, providerMessageID, 0)
+}
+
+// moveGmailMessage changes one Gmail message's labels for a queued move.
+func (h *Handler) moveGmailMessage(ctx context.Context, mutation storage.MessageMutation, info storage.MessageMutationInfo, token, providerMessageID string) error {
 	destinationProviderID, destinationRole, err := h.db.GetFolderProviderRemoteInfo(ctx, mutation.DestinationFolderID)
 	if err != nil {
 		return fmt.Errorf("load Gmail destination: %w", err)
@@ -438,10 +460,57 @@ func (h *Handler) applyGmailMessageMove(ctx context.Context, mutation storage.Me
 		removeLabels = append(removeLabels, "INBOX")
 		err = h.modifyGmailMessageLabels(ctx, token, providerMessageID, []string{destinationProviderID}, removeLabels)
 	}
-	if err != nil {
-		return err
+	return err
+}
+
+// applyProviderFolderCopies makes a change reach the further copies of the
+// message in its folder. It runs before the folder state's own copy, so a
+// retry repeats it; a copy the provider no longer has is done.
+func (h *Handler) applyProviderFolderCopies(ctx context.Context, mutation storage.MessageMutation, info storage.MessageMutationInfo, token string) error {
+	outlookDestination := ""
+	if len(info.FolderCopyIDs) > 0 && mutation.Kind == storage.MessageMutationMove && mutation.ProviderType == storage.MessageMutationProviderOutlook {
+		var err error
+		if outlookDestination, err = h.db.GetFolderProviderRemoteID(ctx, mutation.DestinationFolderID); err != nil {
+			return fmt.Errorf("load Outlook destination: %w", err)
+		}
+		if outlookDestination = strings.TrimSpace(outlookDestination); outlookDestination == "" {
+			return fmt.Errorf("Outlook destination has no provider identity")
+		}
 	}
-	return h.db.AdvanceMessageMoveMutation(ctx, mutation.ID, mutation.DestinationFolderID, providerMessageID, 0)
+	for _, id := range info.FolderCopyIDs {
+		var err error
+		if mutation.ProviderType == storage.MessageMutationProviderGmail {
+			switch mutation.Kind {
+			case storage.MessageMutationDelete:
+				err = h.deleteGmailAPIMessage(ctx, token, id)
+			case storage.MessageMutationMove:
+				err = h.moveGmailMessage(ctx, mutation, info, token, id)
+			default:
+				add, remove := gmailFlagLabels(mutation)
+				err = h.modifyGmailMessageLabels(ctx, token, id, add, remove)
+			}
+			if googleAPIStatus(err, http.StatusNotFound) {
+				err = nil
+			}
+		} else {
+			endpoint := outlookGraphBaseURL + "/me/messages/" + url.PathEscape(id)
+			switch mutation.Kind {
+			case storage.MessageMutationDelete:
+				err = h.doOutlookJSON(ctx, http.MethodDelete, endpoint, token, nil, nil)
+			case storage.MessageMutationMove:
+				err = h.doOutlookJSON(ctx, http.MethodPost, endpoint+"/move", token, map[string]string{"destinationId": outlookDestination}, nil)
+			default:
+				err = h.doOutlookJSON(ctx, http.MethodPatch, endpoint, token, outlookFlagPayload(mutation), nil)
+			}
+			if outlookAPIStatus(err, http.StatusNotFound) {
+				err = nil
+			}
+		}
+		if err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func (h *Handler) applyIMAPMessageMove(ctx context.Context, client messageMutationIMAPClient, mutation storage.MessageMutation, info storage.MessageMutationInfo) error {

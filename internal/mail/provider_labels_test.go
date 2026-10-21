@@ -737,6 +737,54 @@ func TestReplayGmailLabelMutationQueueAppliesQueuedAdd(t *testing.T) {
 	}
 }
 
+// A queued label change reaches every copy of the message, and a further
+// copy Gmail no longer has does not hold it up.
+func TestReplayGmailLabelMutationQueueReachesEveryCopy(t *testing.T) {
+	ctx := context.Background()
+	db := newLabelSyncTestDB(t)
+	msgID := seedLabelSyncMessage(t, db, providers.ProviderGmail, "<gmail-copies-label@example.com>", "gmail-msg-first")
+	if _, err := db.Write().ExecContext(ctx, `INSERT INTO message_folder_copies (message_id, folder_id, remote_message_id) VALUES (?, 'acc_inbox', 'gmail-msg-gone'), (?, 'acc_inbox', 'gmail-msg-second')`, msgID, msgID); err != nil {
+		t.Fatalf("insert further copies: %v", err)
+	}
+	if err := db.EnqueueLabelMutation(ctx, "acc", msgID, "acc_inbox", storage.LabelProviderGmail, storage.LabelMutationAdd, "Projects", errors.New("temporary provider failure")); err != nil {
+		t.Fatalf("EnqueueLabelMutation() error = %v", err)
+	}
+
+	modified := map[string]bool{}
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case r.Method == http.MethodGet && r.URL.Path == "/users/me/labels":
+			_ = json.NewEncoder(w).Encode(map[string]any{"labels": []map[string]string{
+				{"id": "Label_Projects", "name": "Projects", "type": "user"},
+			}})
+		case r.Method == http.MethodPost && r.URL.Path == "/users/me/messages/gmail-msg-gone/modify":
+			http.Error(w, `{"error":{"code":404}}`, http.StatusNotFound)
+		case r.Method == http.MethodPost && strings.HasSuffix(r.URL.Path, "/modify"):
+			modified[strings.TrimSuffix(strings.TrimPrefix(r.URL.Path, "/users/me/messages/"), "/modify")] = true
+			_, _ = w.Write([]byte(`{}`))
+		default:
+			t.Fatalf("unexpected Gmail request %s %s", r.Method, r.URL.String())
+		}
+	}))
+	defer server.Close()
+	previousBaseURL := gmailAPIBaseURL
+	gmailAPIBaseURL = server.URL
+	t.Cleanup(func() { gmailAPIBaseURL = previousBaseURL })
+
+	NewSyncOrchestrator(db, nil, nil, labelSyncTestTokens{}).replayGmailLabelMutationQueue(ctx, "acc", "gmail-token")
+
+	if !modified["gmail-msg-first"] || !modified["gmail-msg-second"] {
+		t.Fatalf("modified copies = %v, want both copies Gmail still has", modified)
+	}
+	if entries, err := db.ListDueLabelMutations(ctx, "acc", storage.LabelProviderGmail, 10); err != nil || len(entries) != 0 {
+		t.Fatalf("queued entries after replay = %#v, %v; want none", entries, err)
+	}
+	var recorded int
+	if err := db.Read().QueryRowContext(ctx, `SELECT COUNT(*) FROM message_label_copies WHERE message_id = ?`, msgID).Scan(&recorded); err != nil || recorded != 3 {
+		t.Fatalf("copies recorded with the label = %d, %v; want 3", recorded, err)
+	}
+}
+
 func TestReplayOutlookLabelMutationQueueAppliesQueuedAdd(t *testing.T) {
 	ctx := context.Background()
 	db := newLabelSyncTestDB(t)

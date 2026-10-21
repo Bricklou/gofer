@@ -941,6 +941,72 @@ func TestSyncReplaysJMAPLabelChanges(t *testing.T) {
 	}
 }
 
+// A label change made in Gofer reaches every email of the message, so a
+// later change on the server to one of them leaves the label the other has.
+func TestSyncReplaysJMAPLabelChangesToEveryCopy(t *testing.T) {
+	f := newUserGmailFixture(t)
+	server := newFakeJMAPServer(t)
+	server.emailState = "c0"
+	server.setMailboxes(
+		jmap.Mailbox{ID: "mb-in", Name: "Inbox", Role: "inbox", MyRights: readable()},
+		jmap.Mailbox{ID: "mb-sent", Name: "Sent", Role: "sent", MyRights: readable()},
+	)
+	sent := testJMAPEmail("sent-1", "Reminder to self", 2, "mb-sent")
+	received := testJMAPEmail("in-1", "Reminder to self", 1, "mb-in")
+	sent.MessageID = []string{"reminder@example.test"}
+	received.MessageID = []string{"reminder@example.test"}
+	sent.Keywords = map[string]bool{"Client": true}
+	received.Keywords = map[string]bool{"Client": true, "Family": true}
+	server.emails = []jmap.Email{sent, received}
+	useFakeJMAPAccount(t, f, server)
+	account := f.ids["alice"]
+	if err := f.worker.Sync(t.Context(), "alice", account); err != nil {
+		t.Fatalf("first Sync() error = %v", err)
+	}
+	if got := jmapLabels(t, f, "in-1"); got != "Client,Family" {
+		t.Fatalf("labels after import = %q, want Client and Family", got)
+	}
+	for _, change := range []struct{ name, operation string }{{"Work", storage.LabelMutationAdd}, {"client", storage.LabelMutationRemove}} {
+		f.local(t, "alice", func(db *storage.DB) error {
+			var id int64
+			if err := db.Read().QueryRow(`SELECT id FROM messages WHERE account_id=? AND internet_message_id='<reminder@example.test>'`, account).Scan(&id); err != nil {
+				return err
+			}
+			info, err := db.GetMessageMutationInfoForUser(t.Context(), id, "alice")
+			if err != nil {
+				return err
+			}
+			return db.QueueUserLabels(t.Context(), "alice", []storage.ThreadMessageMutationInfo{{MessageID: id, MessageMutationInfo: *info}}, change.name, change.operation)
+		})
+	}
+	if err := f.worker.Sync(t.Context(), "alice", account); err != nil {
+		t.Fatalf("Sync() replaying labels error = %v", err)
+	}
+	for id, want := range map[string]map[string]bool{"sent-1": {"$label2": true}, "in-1": {"$label2": true, "Family": true}} {
+		if email, _ := server.email(id); !maps.Equal(email.Keywords, want) {
+			t.Fatalf("%s keywords on the server = %v, want %v", id, email.Keywords, want)
+		}
+	}
+	if got := jmapLabels(t, f, "in-1"); got != "Family,Work" {
+		t.Fatalf("labels after the changes = %q, want Family and Work", got)
+	}
+
+	server.updateEmail("in-1", func(e *jmap.Email) { e.Keywords = map[string]bool{"Family": true} })
+	if err := f.worker.Sync(t.Context(), "alice", account); err != nil {
+		t.Fatalf("Sync() error = %v", err)
+	}
+	if got := jmapLabels(t, f, "in-1"); got != "Family,Work" {
+		t.Fatalf("labels after Work left the Inbox email = %q, want Work kept by the Sent one", got)
+	}
+	server.updateEmail("sent-1", func(e *jmap.Email) { e.Keywords = map[string]bool{} })
+	if err := f.worker.Sync(t.Context(), "alice", account); err != nil {
+		t.Fatalf("Sync() error = %v", err)
+	}
+	if got := jmapLabels(t, f, "in-1"); got != "Family" {
+		t.Fatalf("labels after Work left both emails = %q, want Family", got)
+	}
+}
+
 // Marking a JMAP message as spam moves it into Junk and sends the training
 // keywords, which clear the opposite one in whatever casing the server has it
 // and never show as labels; not spam does the reverse.
@@ -1385,5 +1451,93 @@ func TestSyncReplaysJMAPDeletesOfBothCopies(t *testing.T) {
 	}
 	if got := jmapCopies(t, f, "<reminder@example.test>"); len(got) != 0 {
 		t.Fatalf("copies after both deletes = %v", got)
+	}
+}
+
+// Both copies of mail sent to oneself can end up in one mailbox, such as
+// Trash. Gofer shows the message there once, and changing it there reaches
+// both emails.
+func TestSyncReplaysJMAPChangesToBothCopiesInOneMailbox(t *testing.T) {
+	inTrash := map[string][]string{"sent-1": {"mb-trash"}, "in-1": {"mb-trash"}}
+	for _, tc := range []struct {
+		name    string
+		change  func(db *storage.DB, msgID int64, account string) error
+		want    map[string][]string // email id -> mailboxes; absent is destroyed
+		shown   []string            // mailboxes showing the message afterwards
+		keyword string              // set on both emails afterwards
+	}{
+		{"read", func(db *storage.DB, msgID int64, account string) error {
+			return db.SetMessageReadAndQueue(t.Context(), msgID, true)
+		}, inTrash, []string{"mb-trash"}, "$seen"},
+		{"starred", func(db *storage.DB, msgID int64, account string) error {
+			return db.SetMessageStarredAndQueue(t.Context(), msgID, true)
+		}, inTrash, []string{"mb-trash"}, "$flagged"},
+		{"delete", func(db *storage.DB, msgID int64, account string) error {
+			return db.PermanentlyDeleteMessageAndQueue(t.Context(), msgID, jmapLocalFolderID(account, "mb-trash"))
+		}, map[string][]string{}, nil, ""},
+		{"move", func(db *storage.DB, msgID int64, account string) error {
+			return db.MoveMessageAndQueue(t.Context(), msgID, jmapLocalFolderID(account, "mb-trash"), jmapLocalFolderID(account, "mb-in"))
+		}, map[string][]string{"sent-1": {"mb-in"}, "in-1": {"mb-in"}}, []string{"mb-in"}, ""},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			f := newUserGmailFixture(t)
+			server := newFakeJMAPServer(t)
+			server.emailState = "c0"
+			server.setMailboxes(
+				jmap.Mailbox{ID: "mb-in", Name: "Inbox", Role: "inbox", MyRights: readable()},
+				jmap.Mailbox{ID: "mb-sent", Name: "Sent", Role: "sent", MyRights: readable()},
+				jmap.Mailbox{ID: "mb-trash", Name: "Trash", Role: "trash", MyRights: readable()},
+			)
+			sent := testJMAPEmail("sent-1", "Reminder to self", 2, "mb-trash")
+			received := testJMAPEmail("in-1", "Reminder to self", 1, "mb-trash")
+			sent.MessageID = []string{"reminder@example.test"}
+			received.MessageID = []string{"reminder@example.test"}
+			server.emails = []jmap.Email{sent, received}
+			useFakeJMAPAccount(t, f, server)
+			account := f.ids["alice"]
+			if err := f.worker.Sync(t.Context(), "alice", account); err != nil {
+				t.Fatalf("first Sync() error = %v", err)
+			}
+			if got := jmapCopies(t, f, "<reminder@example.test>"); len(got) != 1 || got["mb-trash"] == "" {
+				t.Fatalf("copies after import = %v, want one in Trash", got)
+			}
+			var msgID int64
+			f.local(t, "alice", func(db *storage.DB) error {
+				return db.Read().QueryRow(`SELECT id FROM messages WHERE account_id=? AND internet_message_id='<reminder@example.test>'`, account).Scan(&msgID)
+			})
+			f.local(t, "alice", func(db *storage.DB) error { return tc.change(db, msgID, account) })
+			if err := f.worker.Sync(t.Context(), "alice", account); err != nil {
+				t.Fatalf("Sync() replaying %s error = %v", tc.name, err)
+			}
+			for _, id := range []string{"sent-1", "in-1"} {
+				email, ok := server.email(id)
+				mailboxes, want := tc.want[id]
+				if ok != want {
+					t.Fatalf("%s on the server = %v, want present %v", id, ok, want)
+				}
+				for _, mailbox := range mailboxes {
+					if !email.MailboxIDs[mailbox] || len(email.MailboxIDs) != len(mailboxes) {
+						t.Fatalf("%s mailboxes = %v, want %v", id, email.MailboxIDs, mailboxes)
+					}
+				}
+				if tc.keyword != "" && !email.Keywords[tc.keyword] {
+					t.Fatalf("%s keywords = %v, want %s", id, email.Keywords, tc.keyword)
+				}
+			}
+			got := jmapCopies(t, f, "<reminder@example.test>")
+			if len(got) != len(tc.shown) {
+				t.Fatalf("copies after the %s = %v, want one in each of %v", tc.name, got, tc.shown)
+			}
+			for _, mailbox := range tc.shown {
+				var others int
+				f.local(t, "alice", func(db *storage.DB) error {
+					return db.Read().QueryRow(`SELECT COUNT(*) FROM message_folder_copies WHERE message_id = ? AND folder_id = ? AND remote_message_id != ?`,
+						msgID, jmapLocalFolderID(account, mailbox), got[mailbox]).Scan(&others)
+				})
+				if got[mailbox] == "" || others != 1 {
+					t.Fatalf("%s after the %s shows %q with %d further copies, want one of each", mailbox, tc.name, got[mailbox], others)
+				}
+			}
+		})
 	}
 }

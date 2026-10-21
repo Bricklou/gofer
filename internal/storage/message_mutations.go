@@ -143,9 +143,11 @@ func (db *DB) permanentlyDeleteMessagesAndQueue(ctx context.Context, messageIDs 
 			}
 			refreshFolders[folderID] = struct{}{}
 		} else {
-			// Deleting a copy leaves the message's other copies.
-			copyIDs := `SELECT ` + providerCopyIDSQL("source") + ` FROM message_folder_state source WHERE source.message_id = ? AND source.folder_id = ?`
-			rows, err := tx.QueryContext(ctx, `SELECT folder_id FROM message_folder_state WHERE message_id = ? AND is_deleted = 0 AND `+providerCopyIDSQL("message_folder_state")+` = (`+copyIDs+`)`, messageID, messageID, folderID)
+			// Deleting a copy leaves the message's other copies. Copies
+			// recorded in the same folder go with it.
+			copyIDs := `SELECT ` + providerCopyIDSQL("source") + ` FROM message_folder_state source WHERE source.message_id = ? AND source.folder_id = ?
+				UNION SELECT remote_message_id FROM message_folder_copies WHERE message_id = ? AND folder_id = ?`
+			rows, err := tx.QueryContext(ctx, `SELECT folder_id FROM message_folder_state WHERE message_id = ? AND is_deleted = 0 AND `+providerCopyIDSQL("message_folder_state")+` IN (`+copyIDs+`)`, messageID, messageID, folderID, messageID, folderID)
 			if err != nil {
 				return err
 			}
@@ -160,7 +162,7 @@ func (db *DB) permanentlyDeleteMessagesAndQueue(ctx context.Context, messageIDs 
 			if err := rows.Close(); err != nil {
 				return err
 			}
-			if _, err := tx.ExecContext(ctx, `UPDATE message_folder_state SET is_deleted = 1, synced_at = CURRENT_TIMESTAMP WHERE message_id = ? AND `+providerCopyIDSQL("message_folder_state")+` = (`+copyIDs+`)`, messageID, messageID, folderID); err != nil {
+			if _, err := tx.ExecContext(ctx, `UPDATE message_folder_state SET is_deleted = 1, synced_at = CURRENT_TIMESTAMP WHERE message_id = ? AND `+providerCopyIDSQL("message_folder_state")+` IN (`+copyIDs+`)`, messageID, messageID, folderID, messageID, folderID); err != nil {
 				return err
 			}
 		}
@@ -329,6 +331,18 @@ func moveMessagesAndQueueTx(ctx context.Context, tx *sql.Tx, messageIDs []int64,
 				remote_message_id = COALESCE(excluded.remote_message_id, message_folder_state.remote_message_id)`,
 			messageID, destinationFolderID, isRead, isStarred, messageID, sourceFolderID, boolInt(preserveRemoteUID)); err != nil {
 			return nil, fmt.Errorf("show destination folder for message %d: %w", messageID, err)
+		}
+		// The move takes the source's further copies along.
+		if _, err := tx.ExecContext(ctx, `DELETE FROM message_folder_copies WHERE message_id = ? AND folder_id = ?`, messageID, destinationFolderID); err != nil {
+			return nil, err
+		}
+		if _, err := tx.ExecContext(ctx, `
+			INSERT OR IGNORE INTO message_folder_copies (message_id, folder_id, remote_message_id)
+			SELECT message_id, ?, remote_message_id FROM message_folder_copies
+			WHERE message_id = ? AND folder_id = ? AND remote_message_id != COALESCE((
+				SELECT remote_message_id FROM message_folder_state WHERE message_id = ? AND folder_id = ?), '')`,
+			destinationFolderID, messageID, sourceFolderID, messageID, destinationFolderID); err != nil {
+			return nil, fmt.Errorf("carry folder copies for message %d: %w", messageID, err)
 		}
 	}
 	return refreshFolders, nil
@@ -680,6 +694,9 @@ func (db *DB) CompleteMessageDeleteMutation(ctx context.Context, id string) erro
 		return err
 	}
 	if err := deleteCopyMutationsTx(ctx, tx, messageID, id, folderID); err != nil {
+		return err
+	}
+	if err := dropFolderCopiesTx(ctx, tx, messageID, folderID); err != nil {
 		return err
 	}
 	if _, err := tx.ExecContext(ctx, `

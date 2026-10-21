@@ -24,7 +24,7 @@ func (h *Handler) applyJMAPMessageMutation(ctx context.Context, mutation storage
 	if err != nil {
 		return err
 	}
-	request := mail.JMAPMutation{Kind: mutation.Kind, TargetValue: mutation.TargetValue, EmailID: info.RemoteMessageID}
+	request := mail.JMAPMutation{Kind: mutation.Kind, TargetValue: mutation.TargetValue, EmailID: info.RemoteMessageID, FolderCopyIDs: info.FolderCopyIDs}
 	if mutation.Kind == storage.MessageMutationMove {
 		if request.FromMailboxID, err = h.db.GetFolderProviderRemoteID(ctx, mutation.FolderID); err != nil {
 			return fmt.Errorf("load JMAP source mailbox: %w", err)
@@ -70,7 +70,7 @@ func (h *Handler) setJMAPMessageKeyword(ctx context.Context, messageID int64, in
 	if err != nil {
 		return storage.LabelInput{}, err
 	}
-	if _, err := mail.SetJMAPKeyword(ctx, cfg, password, info.RemoteMessageID, keyword, add); err != nil {
+	if _, err := mail.SetJMAPKeyword(ctx, cfg, password, info.LabelCopyIDs(info.RemoteMessageID), keyword, add); err != nil {
 		return storage.LabelInput{}, err
 	}
 	return storage.LabelInput{

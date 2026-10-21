@@ -1908,8 +1908,14 @@ func (db *DB) UpsertProviderSyncMessages(ctx context.Context, msgs []ProviderSyn
 		if err != nil {
 			return nil, fmt.Errorf("protect pending provider move: %w", err)
 		}
-		if _, err := stateStmt.ExecContext(ctx, msgID, m.FolderID, isRead, isStarred, m.IsFlagged, m.IsDraft, boolInt(!visible), time.Now().UTC(), m.ProviderMessageID); err != nil {
-			return nil, fmt.Errorf("upsert provider folder state: %w", err)
+		recorded, err := recordFolderCopyTx(ctx, tx, msgID, m.FolderID, m.ProviderMessageID)
+		if err != nil {
+			return nil, fmt.Errorf("record provider folder copy: %w", err)
+		}
+		if !recorded {
+			if _, err := stateStmt.ExecContext(ctx, msgID, m.FolderID, isRead, isStarred, m.IsFlagged, m.IsDraft, boolInt(!visible), time.Now().UTC(), m.ProviderMessageID); err != nil {
+				return nil, fmt.Errorf("upsert provider folder state: %w", err)
+			}
 		}
 		copyKey := providerCopy{messageID: msgID, providerID: m.ProviderMessageID}
 		if observedProviderFolders[copyKey] == nil {
@@ -1924,16 +1930,8 @@ func (db *DB) UpsertProviderSyncMessages(ctx context.Context, msgs []ProviderSyn
 		messageAccounts[msgID] = m.AccountID
 		affectedFolderMessages[m.FolderID] = append(affectedFolderMessages[m.FolderID], msgID)
 
-		// Labels are kept per row, so a row holding other copies keeps the
-		// labels they have too.
-		otherCopy := false
 		if m.LabelsKnown && strings.TrimSpace(m.LabelProvider) != "" {
-			if otherCopy, err = hasOtherLiveProviderCopyTx(ctx, tx, msgID, m.ProviderMessageID); err != nil {
-				return nil, fmt.Errorf("check provider message copies: %w", err)
-			}
-		}
-		if m.LabelsKnown && strings.TrimSpace(m.LabelProvider) != "" && !otherCopy {
-			if err := db.replaceMessageLabelsForProviderTx(ctx, tx, msgID, m.AccountID, m.LabelProvider, m.Labels); err != nil {
+			if err := db.replaceCopyLabelsTx(ctx, tx, msgID, m.AccountID, m.LabelProvider, m.ProviderMessageID, m.Labels); err != nil {
 				return nil, fmt.Errorf("replace provider message labels: %w", err)
 			}
 		} else if len(m.Labels) > 0 {
@@ -2047,13 +2045,13 @@ func (db *DB) UpsertProviderSyncMessages(ctx context.Context, msgs []ProviderSyn
 
 // reconcileProviderFolderStatesTx hides the states of one copy of a message
 // in the provider folders that copy is no longer in. Other copies' states are
-// left alone.
+// left alone, or handed to another copy recorded in the same folder.
 func reconcileProviderFolderStatesTx(ctx context.Context, tx *sql.Tx, messageID int64, accountID, providerMessageID string, desired map[string]bool) error {
 	accountID = strings.TrimSpace(accountID)
 	if messageID == 0 || accountID == "" || len(desired) == 0 {
 		return nil
 	}
-	args := []any{messageID, providerMessageID, accountID}
+	var keptArgs []any
 	placeholders := make([]string, 0, len(desired))
 	for folderID := range desired {
 		folderID = strings.TrimSpace(folderID)
@@ -2061,28 +2059,35 @@ func reconcileProviderFolderStatesTx(ctx context.Context, tx *sql.Tx, messageID 
 			continue
 		}
 		placeholders = append(placeholders, "?")
-		args = append(args, folderID)
+		keptArgs = append(keptArgs, folderID)
 	}
 	if len(placeholders) == 0 {
 		return nil
 	}
-	query := `
-		UPDATE message_folder_state
-		SET is_deleted = 1
-		WHERE message_id = ?
-		  AND is_deleted = 0
+	kept := strings.Join(placeholders, ",")
+	args := append([]any{messageID, providerMessageID, accountID}, keptArgs...)
+	if _, err := tx.ExecContext(ctx, `
+		DELETE FROM message_folder_copies
+		WHERE message_id = ? AND remote_message_id = ? AND folder_id NOT IN (`+kept+`)`,
+		append([]any{messageID, providerMessageID}, keptArgs...)...); err != nil {
+		return fmt.Errorf("reconcile provider folder copies: %w", err)
+	}
+	leaving := `message_id = ?
 		  AND ` + providerCopyIDSQL("message_folder_state") + ` = ?
 		  AND folder_id IN (
 		    SELECT id FROM folders
 		    WHERE account_id = ?
 		      AND COALESCE(provider_remote_id, '') != ''
 		  )
-		  AND folder_id NOT IN (` + strings.Join(placeholders, ",") + `)`
-	_, err := tx.ExecContext(ctx, query, args...)
+		  AND folder_id NOT IN (` + kept + `)`
+	if err := promoteFolderCopiesTx(ctx, tx, leaving, args...); err != nil {
+		return err
+	}
+	_, err := tx.ExecContext(ctx, `UPDATE message_folder_state SET is_deleted = 1 WHERE is_deleted = 0 AND `+leaving, args...)
 	if err != nil {
 		return fmt.Errorf("reconcile provider folder states: %w", err)
 	}
-	return nil
+	return dropDeadMessageCopyLabelsTx(ctx, tx, messageID)
 }
 
 func (db *DB) UpsertExistingProviderFolderStates(ctx context.Context, accountID, folderID string, providerMessageIDs []string) (map[string]int64, error) {
@@ -2121,6 +2126,8 @@ func (db *DB) UpsertExistingProviderFolderStates(ctx context.Context, accountID,
 			ids[i] = id
 		}
 		args := append([]any{accountID}, ids...)
+		args = append(args, accountID)
+		args = append(args, ids...)
 		// Flags come from the same copy's other folders when it has any.
 		const copyState = `SELECT %s FROM message_folder_state mfs WHERE mfs.message_id = c.message_id
 			ORDER BY COALESCE(mfs.remote_message_id, '') = c.copy_id DESC, mfs.is_deleted ASC, mfs.synced_at DESC LIMIT 1`
@@ -2134,6 +2141,10 @@ func (db *DB) UpsertExistingProviderFolderStates(ctx context.Context, accountID,
 				SELECT DISTINCT mfs.message_id, mfs.remote_message_id AS copy_id
 				FROM message_folder_state mfs JOIN folders f ON f.id = mfs.folder_id
 				WHERE f.account_id = ? AND mfs.remote_message_id IN (`+strings.Join(placeholders, ",")+`)
+				UNION
+				SELECT c.message_id, c.remote_message_id
+				FROM message_folder_copies c JOIN folders f ON f.id = c.folder_id
+				WHERE f.account_id = ? AND c.remote_message_id IN (`+strings.Join(placeholders, ",")+`)
 			) c`, args...)
 		if err != nil {
 			return nil, fmt.Errorf("query existing provider messages: %w", err)
@@ -2155,9 +2166,16 @@ func (db *DB) UpsertExistingProviderFolderStates(ctx context.Context, accountID,
 				rows.Close()
 				return nil, fmt.Errorf("protect existing provider move: %w", err)
 			}
-			if _, err := stateStmt.ExecContext(ctx, msgID, folderID, isRead, isStarred, isFlagged, isDraft, boolInt(!visible), syncedAt, providerID); err != nil {
+			recorded, err := recordFolderCopyTx(ctx, tx, msgID, folderID, providerID)
+			if err != nil {
 				rows.Close()
-				return nil, fmt.Errorf("upsert existing provider state: %w", err)
+				return nil, fmt.Errorf("record existing provider folder copy: %w", err)
+			}
+			if !recorded {
+				if _, err := stateStmt.ExecContext(ctx, msgID, folderID, isRead, isStarred, isFlagged, isDraft, boolInt(!visible), syncedAt, providerID); err != nil {
+					rows.Close()
+					return nil, fmt.Errorf("upsert existing provider state: %w", err)
+				}
 			}
 			found[providerID] = msgID
 		}
@@ -2208,16 +2226,18 @@ func (db *DB) ReconcileProviderFolderSeen(ctx context.Context, accountID, folder
 		}
 	}
 
-	_, err = tx.ExecContext(ctx, `
-		UPDATE message_folder_state
-		SET is_deleted = 1,
-		    synced_at = ?
+	if _, err := tx.ExecContext(ctx, `
+		DELETE FROM message_folder_copies
 		WHERE folder_id = ?
-		  AND is_deleted = 0
-		  AND `+providerCopyIDSQL("message_folder_state")+` != ''
+		  AND NOT EXISTS (SELECT 1 FROM temp_provider_folder_seen seen WHERE seen.provider_id = message_folder_copies.remote_message_id)
+		  AND message_id IN (SELECT m.id FROM messages m WHERE m.account_id = ?)`, folderID, accountID); err != nil {
+		return fmt.Errorf("drop unseen provider folder copies: %w", err)
+	}
+	unseen := `folder_id = ?
+		  AND ` + providerCopyIDSQL("message_folder_state") + ` != ''
 		  AND NOT EXISTS (
 		    SELECT 1 FROM temp_provider_folder_seen seen
-		    WHERE seen.provider_id = `+providerCopyIDSQL("message_folder_state")+`
+		    WHERE seen.provider_id = ` + providerCopyIDSQL("message_folder_state") + `
 		  )
 		  AND message_id IN (
 		    SELECT m.id
@@ -2227,9 +2247,20 @@ func (db *DB) ReconcileProviderFolderSeen(ctx context.Context, accountID, folder
 		        SELECT 1 FROM message_mutations mm
 		        WHERE mm.message_id = m.id AND mm.kind = 'move' AND mm.destination_folder_id = ?
 		      )
-		  `+db.userProviderDraftProtectionSQL("m")+`)`, time.Now().UTC(), folderID, accountID, folderID)
+		  ` + db.userProviderDraftProtectionSQL("m") + `)`
+	if err := promoteFolderCopiesTx(ctx, tx, unseen, folderID, accountID, folderID); err != nil {
+		return err
+	}
+	_, err = tx.ExecContext(ctx, `
+		UPDATE message_folder_state
+		SET is_deleted = 1,
+		    synced_at = ?
+		WHERE is_deleted = 0 AND `+unseen, time.Now().UTC(), folderID, accountID, folderID)
 	if err != nil {
 		return fmt.Errorf("mark unseen provider folder messages deleted: %w", err)
+	}
+	if err := dropDeadCopyLabelsTx(ctx, tx, accountID); err != nil {
+		return err
 	}
 	if _, err := tx.ExecContext(ctx, `
 		DELETE FROM message_mutations
@@ -2641,40 +2672,63 @@ func (db *DB) UpsertLabels(ctx context.Context, labels []LabelInput) error {
 }
 
 func (db *DB) addMessageLabelsTx(ctx context.Context, tx *sql.Tx, messageID int64, accountID string, labels []LabelInput) error {
-	type insertedLabel struct {
-		label models.Label
-		rank  int
+	kept, dropped, err := db.resolveMessageLabelsTx(ctx, tx, accountID, labels)
+	if err != nil {
+		return err
 	}
-	seen := map[string]insertedLabel{}
-	for _, input := range labels {
-		input.AccountID = firstNonEmpty(input.AccountID, accountID)
-		label, err := db.ensureLabelTx(ctx, tx, input)
-		if err != nil {
+	for _, labelID := range dropped {
+		if _, err := tx.ExecContext(ctx,
+			`DELETE FROM message_labels WHERE message_id = ? AND label_id = ?`,
+			messageID, labelID); err != nil {
 			return err
 		}
-		key := strings.ToLower(label.ProviderType + ":" + label.Name)
-		rank, err := db.labelAliasRankTx(ctx, tx, label.AccountID, label.ProviderType, label.ProviderID)
-		if err != nil {
-			return err
-		}
-		if previous, ok := seen[key]; ok {
-			if rank <= previous.rank {
-				continue
-			}
-			if _, err := tx.ExecContext(ctx,
-				`DELETE FROM message_labels WHERE message_id = ? AND label_id = ?`,
-				messageID, previous.label.ID); err != nil {
-				return err
-			}
-		}
+	}
+	for _, label := range kept {
 		if _, err := tx.ExecContext(ctx,
 			`INSERT OR IGNORE INTO message_labels (message_id, label_id) VALUES (?, ?)`,
 			messageID, label.ID); err != nil {
 			return err
 		}
-		seen[key] = insertedLabel{label: label, rank: rank}
 	}
 	return nil
+}
+
+// resolveMessageLabelsTx returns the labels to put on a message, keeping the
+// best-ranked of those sharing a name, and the ones given up for them.
+func (db *DB) resolveMessageLabelsTx(ctx context.Context, tx *sql.Tx, accountID string, labels []LabelInput) ([]models.Label, []string, error) {
+	type insertedLabel struct {
+		label models.Label
+		rank  int
+	}
+	seen := map[string]insertedLabel{}
+	var order []string
+	var dropped []string
+	for _, input := range labels {
+		input.AccountID = firstNonEmpty(input.AccountID, accountID)
+		label, err := db.ensureLabelTx(ctx, tx, input)
+		if err != nil {
+			return nil, nil, err
+		}
+		key := strings.ToLower(label.ProviderType + ":" + label.Name)
+		rank, err := db.labelAliasRankTx(ctx, tx, label.AccountID, label.ProviderType, label.ProviderID)
+		if err != nil {
+			return nil, nil, err
+		}
+		if previous, ok := seen[key]; ok {
+			if rank <= previous.rank {
+				continue
+			}
+			dropped = append(dropped, previous.label.ID)
+		} else {
+			order = append(order, key)
+		}
+		seen[key] = insertedLabel{label: label, rank: rank}
+	}
+	kept := make([]models.Label, 0, len(order))
+	for _, key := range order {
+		kept = append(kept, seen[key].label)
+	}
+	return kept, dropped, nil
 }
 
 func (db *DB) labelAliasRankTx(ctx context.Context, tx *sql.Tx, accountID, providerType, providerID string) (int, error) {
@@ -2721,6 +2775,10 @@ func (db *DB) replaceMessageLabelsForProviderTx(ctx context.Context, tx *sql.Tx,
 	if err := db.addMessageLabelsTx(ctx, tx, messageID, accountID, withLabelProvider(labels, accountID, providerType)); err != nil {
 		return err
 	}
+	return protectPendingLabelRemovalsTx(ctx, tx, messageID, accountID, providerType)
+}
+
+func protectPendingLabelRemovalsTx(ctx context.Context, tx *sql.Tx, messageID int64, accountID, providerType string) error {
 	// Routed removals remain optimistic during retries. Receiving older metadata
 	// must not resurrect a label while its removal is still durable in the queue.
 	_, err := tx.ExecContext(ctx, `DELETE FROM message_labels WHERE message_id=? AND label_id IN (
@@ -2743,13 +2801,15 @@ func withLabelProvider(labels []LabelInput, accountID, providerType string) []La
 	return labels
 }
 
-func (db *DB) ReplaceMessageLabelsForProvider(ctx context.Context, messageID int64, accountID, providerType string, labels []LabelInput) error {
+// ReplaceMessageLabelsForProvider replaces the labels of one provider type
+// found on the copy of a message with the provider id providerMessageID.
+func (db *DB) ReplaceMessageLabelsForProvider(ctx context.Context, messageID int64, accountID, providerType, providerMessageID string, labels []LabelInput) error {
 	tx, err := db.Write().BeginTx(ctx, nil)
 	if err != nil {
 		return err
 	}
 	defer tx.Rollback()
-	if err := db.replaceMessageLabelsForProviderTx(ctx, tx, messageID, accountID, providerType, labels); err != nil {
+	if err := db.replaceCopyLabelsTx(ctx, tx, messageID, accountID, providerType, providerMessageID, labels); err != nil {
 		return err
 	}
 	return tx.Commit()
@@ -2771,6 +2831,10 @@ func (db *DB) AddMessageLabel(ctx context.Context, messageID int64, accountID st
 		messageID, out.ID); err != nil {
 		return models.Label{}, err
 	}
+	// Gofer puts a provider label on every copy of the message.
+	if err := recordLabelOnEveryCopyTx(ctx, tx, messageID, out); err != nil {
+		return models.Label{}, err
+	}
 	if err := tx.Commit(); err != nil {
 		return models.Label{}, err
 	}
@@ -2778,13 +2842,29 @@ func (db *DB) AddMessageLabel(ctx context.Context, messageID int64, accountID st
 }
 
 func (db *DB) RemoveMessageLabel(ctx context.Context, messageID int64, accountID, labelName string) error {
-	_, err := db.Write().ExecContext(ctx, `
+	return db.removeMessageLabels(ctx, messageID, `
 		DELETE FROM message_labels
 		WHERE message_id = ?
 		  AND label_id IN (
 			SELECT id FROM labels WHERE account_id = ? AND lower(name) = lower(?)
 		  )`, messageID, accountID, strings.TrimSpace(labelName))
-	return err
+}
+
+// removeMessageLabels runs a delete of a message's labels, which Gofer takes
+// off every copy of the message.
+func (db *DB) removeMessageLabels(ctx context.Context, messageID int64, query string, args ...any) error {
+	tx, err := db.Write().BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	if _, err := tx.ExecContext(ctx, query, args...); err != nil {
+		return err
+	}
+	if err := dropRemovedLabelCopiesTx(ctx, tx, messageID); err != nil {
+		return err
+	}
+	return tx.Commit()
 }
 
 func (db *DB) RemoveMessageLabelForProvider(ctx context.Context, messageID int64, accountID, providerType, providerID, labelName string) error {
@@ -2809,8 +2889,7 @@ func (db *DB) RemoveMessageLabelForProvider(ctx context.Context, messageID int64
 		  AND label_id IN (
 			SELECT id FROM labels WHERE account_id = ? AND ` + predicate + `
 		  )`
-	_, err := db.Write().ExecContext(ctx, query, args...)
-	return err
+	return db.removeMessageLabels(ctx, messageID, query, args...)
 }
 
 func (db *DB) GetProviderMessageLabels(ctx context.Context, messageID int64, accountID, providerType string) ([]models.Label, error) {
@@ -3906,22 +3985,42 @@ func (db *DB) MarkProviderMessageRemovedFromFolder(ctx context.Context, accountI
 	if accountID == "" || folderID == "" || providerMessageID == "" {
 		return nil
 	}
-	_, err := db.Write().ExecContext(ctx, `
-		UPDATE message_folder_state
-		SET is_deleted = 1, synced_at = CURRENT_TIMESTAMP
-		WHERE folder_id = ?
-		  AND `+providerCopyIDSQL("message_folder_state")+` = ?
+	tx, err := db.Write().BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	if _, err := tx.ExecContext(ctx, `
+		DELETE FROM message_folder_copies
+		WHERE folder_id = ? AND remote_message_id = ?
+		  AND message_id IN (SELECT m.id FROM messages m WHERE m.account_id = ?)`, folderID, providerMessageID, accountID); err != nil {
+		return err
+	}
+	removed := `folder_id = ?
+		  AND ` + providerCopyIDSQL("message_folder_state") + ` = ?
 		  AND message_id IN (
 			SELECT m.id FROM messages m
 			WHERE m.account_id = ?
-			`+db.userProviderDraftProtectionSQL("m")+`
+			` + db.userProviderDraftProtectionSQL("m") + `
 		  )
 		  AND NOT EXISTS (
 			SELECT 1 FROM message_mutations mm
 			WHERE mm.message_id = message_folder_state.message_id
 			  AND mm.kind = 'move' AND mm.destination_folder_id = ?
-		  )`, folderID, providerMessageID, accountID, folderID)
-	if err != nil {
+		  )`
+	if err := promoteFolderCopiesTx(ctx, tx, removed, folderID, providerMessageID, accountID, folderID); err != nil {
+		return err
+	}
+	if _, err := tx.ExecContext(ctx, `
+		UPDATE message_folder_state
+		SET is_deleted = 1, synced_at = CURRENT_TIMESTAMP
+		WHERE `+removed, folderID, providerMessageID, accountID, folderID); err != nil {
+		return err
+	}
+	if err := dropDeadCopyLabelsTx(ctx, tx, accountID); err != nil {
+		return err
+	}
+	if err := tx.Commit(); err != nil {
 		return err
 	}
 	return db.ConfirmProviderMessageDeleted(ctx, accountID, providerMessageID)
@@ -3964,16 +4063,19 @@ func (db *DB) MarkProviderMessagesMissingFromFolder(ctx context.Context, account
 		}
 	}
 
-	result, err := tx.ExecContext(ctx, `
-		UPDATE message_folder_state
-		SET is_deleted = 1, synced_at = CURRENT_TIMESTAMP
+	if _, err := tx.ExecContext(ctx, `
+		DELETE FROM message_folder_copies
 		WHERE folder_id = ?
-		  AND is_deleted = 0
-		  AND `+providerCopyIDSQL("message_folder_state")+` != ''
+		  AND NOT EXISTS (SELECT 1 FROM tmp_provider_folder_seen seen WHERE seen.provider_message_id = message_folder_copies.remote_message_id)
+		  AND message_id IN (SELECT m.id FROM messages m WHERE m.account_id = ?)`, folderID, accountID); err != nil {
+		return 0, fmt.Errorf("drop missing provider folder copies: %w", err)
+	}
+	missing := `folder_id = ?
+		  AND ` + providerCopyIDSQL("message_folder_state") + ` != ''
 		  AND NOT EXISTS (
 			SELECT 1
 			FROM tmp_provider_folder_seen seen
-			WHERE seen.provider_message_id = `+providerCopyIDSQL("message_folder_state")+`
+			WHERE seen.provider_message_id = ` + providerCopyIDSQL("message_folder_state") + `
 		  )
 		  AND message_id IN (
 			SELECT m.id
@@ -3983,13 +4085,23 @@ func (db *DB) MarkProviderMessagesMissingFromFolder(ctx context.Context, account
 				SELECT 1 FROM message_mutations mm
 				WHERE mm.message_id = m.id AND mm.kind = 'move' AND mm.destination_folder_id = ?
 			  )
-		  `+db.userProviderDraftProtectionSQL("m")+`)`, folderID, accountID, folderID)
+		  ` + db.userProviderDraftProtectionSQL("m") + `)`
+	if err := promoteFolderCopiesTx(ctx, tx, missing, folderID, accountID, folderID); err != nil {
+		return 0, err
+	}
+	result, err := tx.ExecContext(ctx, `
+		UPDATE message_folder_state
+		SET is_deleted = 1, synced_at = CURRENT_TIMESTAMP
+		WHERE is_deleted = 0 AND `+missing, folderID, accountID, folderID)
 	if err != nil {
 		return 0, fmt.Errorf("mark missing provider messages: %w", err)
 	}
 	removed, err := result.RowsAffected()
 	if err != nil {
 		return 0, fmt.Errorf("missing provider messages affected rows: %w", err)
+	}
+	if err := dropDeadCopyLabelsTx(ctx, tx, accountID); err != nil {
+		return 0, err
 	}
 	if _, err := tx.ExecContext(ctx, `
 		DELETE FROM message_mutations
@@ -7281,13 +7393,19 @@ func (db *DB) GetMessageBodyPaths(ctx context.Context, messageID int64) (textPat
 }
 
 type MessageMutationInfo struct {
-	AccountID         string
-	AccountProvider   string
-	FolderID          string
-	FolderRemoteID    string
-	RemoteUID         uint32
-	FolderRole        string
-	RemoteMessageID   string
+	AccountID       string
+	AccountProvider string
+	FolderID        string
+	FolderRemoteID  string
+	RemoteUID       uint32
+	FolderRole      string
+	RemoteMessageID string
+	// FolderCopyIDs are further provider copies of the message in the same
+	// folder, which a change made there reaches too.
+	FolderCopyIDs []string
+	// OtherCopyIDs are the message's other provider copies in a folder,
+	// which a label change reaches too.
+	OtherCopyIDs      []string
 	InternetMessageID string
 	ThreadID          string
 	ProviderThreadID  string
@@ -7440,6 +7558,12 @@ func (db *DB) getMessageMutationInfo(ctx context.Context, messageID int64, folde
 	}
 	info.IsRead = isRead == 1
 	info.IsStarred = isStarred == 1
+	if info.FolderCopyIDs, err = folderCopyIDs(ctx, db.Read(), messageID, info.FolderID); err != nil {
+		return nil, err
+	}
+	if info.OtherCopyIDs, err = otherLiveCopyIDs(ctx, db.Read(), messageID, info.RemoteMessageID); err != nil {
+		return nil, err
+	}
 	return &info, nil
 }
 
@@ -7590,9 +7714,20 @@ func (db *DB) ReplaceProviderMessageID(ctx context.Context, messageID int64, pre
 	if previousID == "" {
 		return db.SetMessageProviderMessageID(ctx, messageID, providerMessageID)
 	}
-	_, err := db.Write().ExecContext(ctx, `UPDATE message_folder_state SET remote_message_id = ? WHERE message_id = ? AND remote_message_id = ?`,
-		providerMessageID, messageID, previousID)
-	return err
+	tx, err := db.Write().BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	if _, err := tx.ExecContext(ctx, `UPDATE message_folder_state SET remote_message_id = ? WHERE message_id = ? AND remote_message_id = ?`,
+		providerMessageID, messageID, previousID); err != nil {
+		return err
+	}
+	if _, err := tx.ExecContext(ctx, `UPDATE OR IGNORE message_label_copies SET remote_message_id = ? WHERE message_id = ? AND remote_message_id = ?`,
+		providerMessageID, messageID, previousID); err != nil {
+		return err
+	}
+	return tx.Commit()
 }
 
 func (db *DB) ThreadHasUnread(ctx context.Context, accountID, threadID string) (bool, error) {
