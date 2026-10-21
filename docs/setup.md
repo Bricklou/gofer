@@ -4,7 +4,7 @@ Everything about configuring, upgrading, and deploying Gofer. For a quick start,
 
 ## auth modes and storage
 
-Choose `GOFER_AUTH_MODE=managed` for multiple users with separate administrator accounts, or `personal` for one protected profile with multiple mailboxes. Both modes guide you through first-run setup using a token printed in the terminal. The default `open` mode has no login and is intended for local use. See [`.env.example`](../.env.example) for configuration options.
+Gofer runs in `personal` mode by default: one protected profile with multiple mailboxes. Choose `GOFER_AUTH_MODE=managed` for multiple users with separate administrator accounts. Both modes guide you through first-run setup using a token printed in the terminal. `GOFER_AUTH_MODE=open` has no login and is intended for local use. See [`.env.example`](../.env.example) for configuration options.
 
 Managed mode keeps each user's mail, contacts, Calendar and preferences in a separate SQLite database. Authentication and installation settings stay in the central database. New installations initialize this layout automatically.
 

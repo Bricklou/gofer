@@ -1134,7 +1134,7 @@ func TestManagedOfficePairedCalibration(t *testing.T) {
 	baseline := filepath.Join(baselineRoot, "shared.db")
 	tokens := make(map[string]string)
 	f := newManagedMailFixture(t, func(db *storage.DB, _ *config.AccountStore, _ map[string]string) {
-		manager := auth.NewManager(auth.LoadConfig("http://127.0.0.1:8090"), db, auth.Dependencies{BucketHashKey: []byte("0123456789abcdef0123456789abcdef")})
+		manager := auth.NewManager(&auth.Config{BaseURL: "http://127.0.0.1:8090"}, db, auth.Dependencies{BucketHashKey: []byte("0123456789abcdef0123456789abcdef")})
 		for _, owner := range []string{"alice", "bob"} {
 			session, err := manager.CreateAuthenticatedSession(t.Context(), owner, "office calibration", auth.AuthenticationMethodTOTP, auth.AssuranceLevelMultiFactor)
 			if err != nil {

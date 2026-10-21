@@ -237,6 +237,11 @@ func LoadConfig(baseURL string) *Config {
 		BaseURL:    baseURL,
 	}
 
+	// Without either setting, Gofer protects its one profile with a login.
+	// The legacy GOFER_AUTH_ENABLED still picks open or managed when set.
+	if _, legacy := os.LookupEnv("GOFER_AUTH_ENABLED"); cfg.Mode == "" && !legacy {
+		cfg.Mode = ModePersonal
+	}
 	if cfg.Mode != "" {
 		cfg.Enabled = cfg.Mode != ModeOpen
 	}

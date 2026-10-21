@@ -1,6 +1,7 @@
 package auth
 
 import (
+	"os"
 	"slices"
 	"testing"
 )
@@ -44,5 +45,32 @@ func TestLoadConfigKeepsLocalAuthenticationEnabledWithoutGoogleLogin(t *testing.
 	}
 	if cfg.GoogleLoginClient != nil {
 		t.Fatalf("Google login client = %#v, want nil", cfg.GoogleLoginClient)
+	}
+}
+
+func TestLoadConfigDefaultsToPersonalMode(t *testing.T) {
+	for _, test := range []struct {
+		name, mode, legacy string
+		unsetLegacy        bool
+		want               Mode
+	}{
+		{name: "nothing set", unsetLegacy: true, want: ModePersonal},
+		{name: "empty mode", mode: "", unsetLegacy: true, want: ModePersonal},
+		{name: "explicit open", mode: "open", unsetLegacy: true, want: ModeOpen},
+		{name: "legacy disabled", legacy: "false", want: ModeOpen},
+		{name: "legacy enabled", legacy: "true", want: ModeManaged},
+		{name: "mode wins over legacy", mode: "personal", legacy: "false", want: ModePersonal},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			t.Setenv("GOFER_AUTH_MODE", test.mode)
+			t.Setenv("GOFER_AUTH_ENABLED", test.legacy)
+			if test.unsetLegacy {
+				os.Unsetenv("GOFER_AUTH_ENABLED")
+			}
+			cfg := LoadConfig("")
+			if got := cfg.AuthenticationMode(); got != test.want || cfg.Enabled != (test.want != ModeOpen) {
+				t.Fatalf("mode = %q enabled = %t, want %q", got, cfg.Enabled, test.want)
+			}
+		})
 	}
 }

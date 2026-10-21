@@ -150,7 +150,7 @@ func newOfficeDataset(t *testing.T, spec officeWorkloadSpec) (*officeDataset, st
 		if err := db.AddPrivateTargetException(t.Context(), "https", davURL.Hostname(), davPort, "office workload"); err != nil {
 			t.Fatal(err)
 		}
-		manager := auth.NewManager(auth.LoadConfig("http://127.0.0.1:8090"), db, auth.Dependencies{BucketHashKey: key})
+		manager := auth.NewManager(&auth.Config{BaseURL: "http://127.0.0.1:8090"}, db, auth.Dependencies{BucketHashKey: key})
 		for _, owner := range dataset.All {
 			session, err := manager.CreateAuthenticatedSession(t.Context(), owner, "office workload", auth.AuthenticationMethodTOTP, auth.AssuranceLevelMultiFactor)
 			if err != nil {
