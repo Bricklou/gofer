@@ -30,6 +30,12 @@ func findProviderCopyMessage(ctx context.Context, q rowQueryer, accountID, provi
 		JOIN folders f ON f.id = mfs.folder_id
 		WHERE f.account_id = ? AND mfs.remote_message_id = ?
 		ORDER BY mfs.is_deleted ASC LIMIT 1`, accountID, providerMessageID).Scan(&msgID)
+	if err == sql.ErrNoRows {
+		err = q.QueryRowContext(ctx, `
+			SELECT c.message_id FROM message_folder_copies c
+			JOIN folders f ON f.id = c.folder_id
+			WHERE f.account_id = ? AND c.remote_message_id = ? LIMIT 1`, accountID, providerMessageID).Scan(&msgID)
+	}
 	if err != nil && err != sql.ErrNoRows {
 		return 0, fmt.Errorf("query provider copy id: %w", err)
 	}
@@ -45,8 +51,59 @@ func hasOtherLiveProviderCopyTx(ctx context.Context, tx *sql.Tx, messageID int64
 			SELECT 1 FROM message_folder_state
 			WHERE message_id = ? AND is_deleted = 0
 			  AND COALESCE(remote_message_id, '') NOT IN ('', ?)
-		)`, messageID, providerMessageID).Scan(&exists)
+		) OR EXISTS(
+			SELECT 1 FROM message_folder_copies c
+			JOIN message_folder_state mfs ON mfs.message_id = c.message_id AND mfs.folder_id = c.folder_id
+			WHERE c.message_id = ? AND mfs.is_deleted = 0 AND c.remote_message_id != ?
+		)`, messageID, providerMessageID, messageID, providerMessageID).Scan(&exists)
 	return exists, err
+}
+
+// Two copies of a message can sit in one folder, such as both copies of mail
+// sent to oneself in Trash. The folder's state belongs to one of them, and
+// message_folder_copies records the others there. When the state's copy
+// leaves the folder, a recorded copy takes the state over.
+
+// recordFolderCopyTx records a copy synced into a folder whose state belongs
+// to another copy still there, and reports whether it did; the state is then
+// left to its copy. Otherwise the caller gives the state to this copy.
+func recordFolderCopyTx(ctx context.Context, tx *sql.Tx, messageID int64, folderID, providerMessageID string) (bool, error) {
+	var stateID string
+	err := tx.QueryRowContext(ctx, `SELECT `+providerCopyIDSQL("mfs")+` FROM message_folder_state mfs WHERE mfs.message_id = ? AND mfs.folder_id = ? AND mfs.is_deleted = 0`,
+		messageID, folderID).Scan(&stateID)
+	if err != nil && err != sql.ErrNoRows {
+		return false, err
+	}
+	if stateID != "" && stateID != providerMessageID {
+		_, err := tx.ExecContext(ctx, `INSERT OR IGNORE INTO message_folder_copies (message_id, folder_id, remote_message_id) VALUES (?, ?, ?)`,
+			messageID, folderID, providerMessageID)
+		return err == nil, err
+	}
+	_, err = tx.ExecContext(ctx, `DELETE FROM message_folder_copies WHERE message_id = ? AND folder_id = ? AND remote_message_id = ?`,
+		messageID, folderID, providerMessageID)
+	return false, err
+}
+
+// promoteFolderCopiesTx gives the live folder states matched by where, whose
+// copy is leaving their folder, to another copy recorded there, so they stay.
+// where is a condition on message_folder_state. Recorded copies leaving the
+// same folders must be dropped first.
+func promoteFolderCopiesTx(ctx context.Context, tx *sql.Tx, where string, args ...any) error {
+	const recorded = `FROM message_folder_copies c
+		WHERE c.message_id = message_folder_state.message_id AND c.folder_id = message_folder_state.folder_id`
+	if _, err := tx.ExecContext(ctx, `
+		UPDATE message_folder_state SET remote_message_id = (SELECT MIN(c.remote_message_id) `+recorded+`)
+		WHERE is_deleted = 0 AND EXISTS (SELECT 1 `+recorded+`) AND (`+where+`)`, args...); err != nil {
+		return fmt.Errorf("promote folder copies: %w", err)
+	}
+	if _, err := tx.ExecContext(ctx, `
+		DELETE FROM message_folder_copies WHERE remote_message_id = (
+			SELECT s.remote_message_id FROM message_folder_state s
+			WHERE s.message_id = message_folder_copies.message_id AND s.folder_id = message_folder_copies.folder_id
+		)`); err != nil {
+		return fmt.Errorf("drop promoted folder copies: %w", err)
+	}
+	return nil
 }
 
 // providerCopyOfRowSQL matches a row that holds a copy with the provider id

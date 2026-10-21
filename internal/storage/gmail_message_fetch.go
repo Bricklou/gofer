@@ -204,12 +204,21 @@ func (db *DB) MarkProviderMessageDeleted(ctx context.Context, accountID, provide
 	}
 
 	if _, err := tx.ExecContext(ctx, `
-		UPDATE message_folder_state
-		SET is_deleted = 1, synced_at = CURRENT_TIMESTAMP
-		WHERE `+providerCopyIDSQL("message_folder_state")+` = ?
+		DELETE FROM message_folder_copies
+		WHERE remote_message_id = ? AND message_id IN (SELECT m.id FROM messages m WHERE m.account_id = ?)`, providerMessageID, accountID); err != nil {
+		return nil, err
+	}
+	deleted := providerCopyIDSQL("message_folder_state") + ` = ?
 		  AND message_id IN (
 			SELECT m.id FROM messages m WHERE m.account_id = ?
-		`+db.userProviderDraftProtectionSQL("m")+`)`, providerMessageID, accountID); err != nil {
+		` + db.userProviderDraftProtectionSQL("m") + `)`
+	if err := promoteFolderCopiesTx(ctx, tx, deleted, providerMessageID, accountID); err != nil {
+		return nil, err
+	}
+	if _, err := tx.ExecContext(ctx, `
+		UPDATE message_folder_state
+		SET is_deleted = 1, synced_at = CURRENT_TIMESTAMP
+		WHERE `+deleted, providerMessageID, accountID); err != nil {
 		return nil, err
 	}
 	// A delete is confirmed once no copy of the message is left.
