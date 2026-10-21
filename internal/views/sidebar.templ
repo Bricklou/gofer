@@ -117,7 +117,7 @@ templ ContactsSidebarAccountSection(account models.Account, filters models.Conta
 }
 
 templ ContactsSidebarItem(target string, label string, filters models.ContactFilters) {
-	{{ active := filters.SaveTarget == target }}
+	{{ active := contactSidebarActiveTarget(filters) == target }}
 	<a
 		href={ templ.URL(contactSidebarURL(filters, target)) }
 		hx-get={ templ.URL(contactSidebarURL(filters, target)) }
@@ -140,8 +140,8 @@ templ ContactsSidebarItem(target string, label string, filters models.ContactFil
 }
 
 templ ContactsSidebarBookItem(book models.ContactAddressBook, filters models.ContactFilters) {
-	{{ target := "book:" + book.ID }}
-	{{ active := filters.SaveTarget == target }}
+	{{ target := "source:book:" + book.ID }}
+	{{ active := contactSidebarActiveTarget(filters) == target }}
 	<a
 		href={ templ.URL(contactSidebarURL(filters, target)) }
 		hx-get={ templ.URL(contactSidebarURL(filters, target)) }
@@ -164,8 +164,8 @@ templ ContactsSidebarBookItem(book models.ContactAddressBook, filters models.Con
 }
 
 templ ContactsSidebarAccountItem(account models.Account, filters models.ContactFilters) {
-	{{ target := "account:" + account.ID }}
-	{{ active := filters.SaveTarget == target }}
+	{{ target := "source:synced:" + account.ID }}
+	{{ active := contactSidebarActiveTarget(filters) == target }}
 	<a
 		href={ templ.URL(contactSidebarURL(filters, target)) }
 		hx-get={ templ.URL(contactSidebarURL(filters, target)) }
@@ -187,13 +187,17 @@ templ ContactsSidebarAccountItem(account models.Account, filters models.ContactF
 	</a>
 }
 
-func contactSidebarURL(filters models.ContactFilters, saveTarget string) string {
+// Sidebar targets name one contact filter: "source:<origin>" filters by
+// origin (accounts and address books), anything else by sync location.
+func contactSidebarURL(filters models.ContactFilters, target string) string {
 	values := url.Values{}
 	if strings.TrimSpace(filters.Query) != "" {
 		values.Set("q", strings.TrimSpace(filters.Query))
 	}
-	if saveTarget != "" {
-		values.Set("save_target", saveTarget)
+	if source, ok := strings.CutPrefix(target, "source:"); ok {
+		values.Set("source", source)
+	} else if target != "" {
+		values.Set("save_target", target)
 	}
 	if filters.View == "table" {
 		values.Set("view", "table")
@@ -202,6 +206,21 @@ func contactSidebarURL(filters models.ContactFilters, saveTarget string) string 
 		return "/contacts?" + encoded
 	}
 	return "/contacts"
+}
+
+// contactSidebarActiveTarget is the sidebar target the filters match, or
+// "-" when they mix an origin with a sync location and no item matches.
+func contactSidebarActiveTarget(filters models.ContactFilters) string {
+	switch {
+	case filters.Source == "":
+		return filters.SaveTarget
+	case filters.SaveTarget != "":
+		return "-"
+	case strings.HasPrefix(filters.Source, "synced:"), strings.HasPrefix(filters.Source, "book:"):
+		return "source:" + filters.Source
+	default:
+		return "-"
+	}
 }
 
 func contactSidebarAccountName(account models.Account) string {

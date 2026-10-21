@@ -513,7 +513,7 @@ func profileContactsIncluded(filters models.ContactFilters) bool {
 	switch {
 	case filters.Source == "observed":
 		return true
-	case filters.Source == "synced" || strings.HasPrefix(filters.Source, "synced:"):
+	case filters.Source == "synced" || strings.HasPrefix(filters.Source, "synced:") || strings.HasPrefix(filters.Source, "book:"):
 		return true
 	default:
 		return true
@@ -553,6 +553,17 @@ func contactProfileFilterSQL(userID string, filters models.ContactFilters) (stri
 		if strings.HasPrefix(filters.Source, "synced:") {
 			where += ` AND p.origin = ?`
 			args = append(args, filters.Source)
+		} else if bookID, ok := strings.CutPrefix(filters.Source, "book:"); ok && bookID != "" {
+			// Origin only records the account, so a book's own imports are the
+			// contacts from that account with a synced card in the book. Cards
+			// pushed into the book from elsewhere fail the origin check.
+			where += ` AND EXISTS (
+				SELECT 1 FROM contact_cards cc
+				JOIN account_contact_address_books b ON b.id = cc.address_book_id AND b.user_id = cc.user_id
+				WHERE cc.user_id = p.user_id AND cc.profile_id = p.id AND cc.kind = 'provider' AND cc.is_deleted = 0
+				  AND cc.address_book_id = ? AND p.origin = 'synced:' || b.account_id
+			)`
+			args = append(args, bookID)
 		}
 	}
 	if filters.Activity == "none" {

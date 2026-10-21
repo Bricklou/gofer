@@ -1047,7 +1047,7 @@ func (h *Handler) parseContactFilters(r *http.Request) models.ContactFilters {
 		SortBy:     strings.TrimSpace(q.Get("sort_by")),
 		SortOrder:  strings.TrimSpace(q.Get("sort_order")),
 	}
-	if filters.Source != "manual" && filters.Source != "observed" && filters.Source != "synced" && !strings.HasPrefix(filters.Source, "synced:") {
+	if filters.Source != "manual" && filters.Source != "observed" && filters.Source != "synced" && !strings.HasPrefix(filters.Source, "synced:") && !strings.HasPrefix(filters.Source, "book:") {
 		filters.Source = ""
 	}
 	if filters.Activity != "seen" && filters.Activity != "none" {

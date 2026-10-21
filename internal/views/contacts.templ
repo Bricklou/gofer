@@ -607,6 +607,16 @@ func contactSourceLabel(source string, isManual bool, accounts []models.Account)
 		}
 		return "Imported from account"
 	}
+	if bookID, ok := strings.CutPrefix(source, "book:"); ok {
+		for _, account := range accounts {
+			for _, book := range account.ContactAddressBooks {
+				if book.ID == bookID {
+					return "Imported from " + accountContactOriginLabel(account) + " / " + contactAddressBookDisplayName(book)
+				}
+			}
+		}
+		return "Imported from address book"
+	}
 	switch source {
 	case "observed":
 		return "Observed"
@@ -824,7 +834,30 @@ func contactAddressBookDisplayName(book models.ContactAddressBook) string {
 	return "Address book"
 }
 
+// contactOriginFilterLabel names an origin in the filter menu and pill. They
+// already say "Origin", so accounts and books go without "Imported from".
 func contactOriginFilterLabel(source string, accounts []models.Account) string {
+	if source == "synced" {
+		return "Any account"
+	}
+	if accountID, ok := strings.CutPrefix(source, "synced:"); ok {
+		for _, account := range accounts {
+			if account.ID == accountID {
+				return accountContactOriginLabel(account)
+			}
+		}
+		return "Unknown account"
+	}
+	if bookID, ok := strings.CutPrefix(source, "book:"); ok {
+		for _, account := range accounts {
+			for _, book := range account.ContactAddressBooks {
+				if book.ID == bookID {
+					return accountContactOriginLabel(account) + " / " + contactAddressBookDisplayName(book)
+				}
+			}
+		}
+		return "Unknown address book"
+	}
 	return contactSourceLabel(source, source == "manual", accounts)
 }
 
@@ -1210,7 +1243,7 @@ templ ContactsListPane(contacts []models.Contact, selected *models.Contact, filt
 						}
 					</button>
 				}
-				@dropdown.Content(dropdown.ContentProps{Placement: dropdown.PlacementBottomStart, Class: "mobile-sheet w-72 normal-case tracking-normal p-3"}) {
+				@dropdown.Content(dropdown.ContentProps{Placement: dropdown.PlacementBottomStart, Class: "mobile-sheet w-[26rem] max-w-[calc(100vw-2rem)] normal-case tracking-normal p-3"}) {
 					<form action="/contacts" method="get" class="space-y-3" data-contact-filter-form>
 						<input type="hidden" name="q" value={ filters.Query }/>
 						<input type="hidden" name="view" value={ contactViewMode(filters.View) }/>
@@ -1237,12 +1270,17 @@ templ ContactsListPane(contacts []models.Contact, selected *models.Contact, filt
 										Observed
 									}
 									@selectbox.Item(selectbox.ItemProps{Value: "synced", Selected: filters.Source == "synced"}) {
-										Imported from any account
+										{ contactOriginFilterLabel("synced", accounts) }
 									}
 									for _, account := range accounts {
 										if !account.IsDeleting && accountContactSyncCapable(account) {
 											@selectbox.Item(selectbox.ItemProps{Value: "synced:" + account.ID, Selected: filters.Source == "synced:"+account.ID}) {
-												Imported from { accountContactSaveLabel(account) }
+												{ contactOriginFilterLabel("synced:"+account.ID, accounts) }
+											}
+											for _, book := range account.ContactAddressBooks {
+												@selectbox.Item(selectbox.ItemProps{Value: "book:" + book.ID, Selected: filters.Source == "book:"+book.ID}) {
+													{ contactOriginFilterLabel("book:"+book.ID, accounts) }
+												}
 											}
 										}
 									}
@@ -1303,7 +1341,7 @@ templ ContactsListPane(contacts []models.Contact, selected *models.Contact, filt
 			if contactFiltersActive(filters) {
 				<div class="flex min-w-0 flex-1 items-center gap-1 overflow-hidden px-1 text-[11px] text-muted-foreground">
 					if filters.Source != "" {
-						<span class="shrink-0 rounded-full border border-border bg-background px-2 py-0.5">{ contactOriginFilterLabel(filters.Source, accounts) }</span>
+						<span class="truncate rounded-full border border-border bg-background px-2 py-0.5">Origin: { contactOriginFilterLabel(filters.Source, accounts) }</span>
 					}
 					if filters.SaveTarget != "" {
 						<span class="truncate rounded-full border border-border bg-background px-2 py-0.5">{ contactSaveTargetLabel(filters.SaveTarget, accounts) }</span>

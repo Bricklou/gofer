@@ -204,7 +204,13 @@ document.addEventListener("DOMContentLoaded", function () {
 
     function contactSidebarTargetFromURL(url) {
       try {
-        return new URL(url || window.location.href, window.location.origin).searchParams.get("save_target") || ""
+        // Mirrors contactSidebarActiveTarget in sidebar.templ.
+        var params = new URL(url || window.location.href, window.location.origin).searchParams
+        var saveTarget = params.get("save_target") || ""
+        var source = params.get("source") || ""
+        if (!source) return saveTarget
+        if (saveTarget) return "-"
+        return /^(synced:|book:)/.test(source) ? "source:" + source : "-"
       } catch (_) {
         return ""
       }
@@ -261,6 +267,19 @@ document.addEventListener("DOMContentLoaded", function () {
     }
 
     init(document)
+
+    // Escape deselects the open contact, like the mail list.
+    document.addEventListener("keydown", function (e) {
+      if (e.key !== "Escape" || e.defaultPrevented || e.metaKey || e.ctrlKey || e.altKey) return
+      var list = currentList()
+      if (!list || !list.selectedContactId) return
+      var target = e.target
+      if (target && target.closest && target.closest("input, textarea, select, [contenteditable='true']")) return
+      // Leave open dialogs, menus and an unsaved contact editor to handle Escape.
+      if (document.querySelector("dialog[open], [data-tui-popover-open='true'], #contacts-detail [data-contact-editor-form]")) return
+      e.preventDefault()
+      closeMobileContactView()
+    })
 
     document.addEventListener("click", function (e) {
       var viewBtn = e.target.closest && e.target.closest("[data-contact-list-view-button]")
