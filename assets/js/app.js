@@ -9467,6 +9467,17 @@ function initializeCalendarVisibility() {
     if (status) status.style.opacity = state && state.saving ? "1" : "0"
     var sync = row && row.querySelector("[data-calendar-source-sync]")
     if (sync) sync.style.visibility = state && state.saving ? "hidden" : ""
+    var only = row && row.querySelector("[data-calendar-visibility-only]")
+    if (only) {
+      var showsAll = calendarSourceIsOnlyVisible(input.dataset.calendarVisibility)
+      only.setAttribute("aria-label", showsAll ? "Show all calendars" : "Show only " + (label ? label.textContent : "this calendar"))
+      only.querySelectorAll("[data-calendar-only-icon]").forEach(function (icon) {
+        icon.hidden = (icon.dataset.calendarOnlyIcon === "all") !== showsAll
+      })
+      // Found by source ID: the tooltip popover may live outside the row.
+      var tip = document.querySelector('[data-calendar-only-tooltip="' + CSS.escape(input.dataset.calendarVisibility) + '"]')
+      if (tip) tip.textContent = showsAll ? "Show all calendars" : "Show only this calendar"
+    }
   })
   document.querySelectorAll("#calendar-main [data-calendar-week-all-day], #calendar-main [data-calendar-week-event], #calendar-main [data-calendar-day-dot]").forEach(function (node) {
     if (node.dataset.calendarPillExit) return
@@ -9504,21 +9515,51 @@ function saveCalendarVisibility(sourceID, state, force) {
   })
 }
 
-document.addEventListener("change", function (event) {
-  var input = event.target
-  if (!input.matches || !input.matches("[data-calendar-visibility]") || input.disabled) return
+// Records a calendar's new visibility for this session and queues its save.
+function setCalendarSourceVisible(input, visible) {
   var sourceID = input.dataset.calendarVisibility
   var state = _calendarVisibility.get(sourceID)
   if (!state) {
     state = { visible: input.dataset.calendarSourceHidden !== "true", confirmed: input.dataset.calendarSourceHidden !== "true", saving: false, revision: 0 }
     _calendarVisibility.set(sourceID, state)
   }
-  state.visible = input.checked
+  if (state.visible === visible) return
+  state.visible = visible
   state.revision++
+  saveCalendarVisibility(sourceID, state)
+}
+
+document.addEventListener("change", function (event) {
+  var input = event.target
+  if (!input.matches || !input.matches("[data-calendar-visibility]") || input.disabled) return
+  setCalendarSourceVisible(input, input.checked)
   finishCalendarNavigationTransition()
   initializeCalendarDaySelection()
-  saveCalendarVisibility(sourceID, state)
 })
+
+// "Only" shows one calendar and hides the rest; on the calendar that already is
+// the only one shown, it shows them all again.
+document.addEventListener("click", function (event) {
+  var button = event.target.closest && event.target.closest("[data-calendar-visibility-only]")
+  if (!button || button.disabled) return
+  // The button sits in the row's label; keep the click from toggling the checkbox.
+  event.preventDefault()
+  var sourceID = button.dataset.calendarVisibilityOnly
+  var inputs = Array.from(document.querySelectorAll("[data-calendar-visibility]")).filter(function (input) { return !input.disabled })
+  var showAll = calendarSourceIsOnlyVisible(sourceID)
+  inputs.forEach(function (input) {
+    setCalendarSourceVisible(input, showAll || input.dataset.calendarVisibility === sourceID)
+  })
+  finishCalendarNavigationTransition()
+  initializeCalendarDaySelection()
+})
+
+function calendarSourceIsOnlyVisible(sourceID) {
+  var inputs = Array.from(document.querySelectorAll("[data-calendar-visibility]"))
+  return inputs.length > 1 && inputs.every(function (input) {
+    return _calendarSourceIsVisible(input) === (input.dataset.calendarVisibility === sourceID)
+  })
+}
 
 function initializeCalendarDaySelection() {
   rememberCalendarPillGeometry(document.getElementById("calendar-main"))

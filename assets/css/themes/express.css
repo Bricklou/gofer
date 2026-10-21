@@ -1498,6 +1498,17 @@ html:root[data-theme="express"] :is(.account-wizard-card-footer, .account-wizard
 
 /* The mail list's view switch is drawn for Gofer as a pair: Tango has no
    list of cards, and its spreadsheet carries a chart. */
+/* The calendar sidebar's "show only this calendar" and "show all" buttons. */
+[data-theme="express"] svg[data-lucide="focus"] {
+  --xp-icon: url("/assets/icons/express/focus.svg");
+  --xp-icon-paths: hidden;
+}
+
+[data-theme="express"] svg[data-lucide="eye"] {
+  --xp-icon: url("/assets/icons/express/eye.svg");
+  --xp-icon-paths: hidden;
+}
+
 [data-theme="express"] svg[data-lucide="layout-list"] {
   --xp-icon: url("/assets/icons/express/cards.svg");
   --xp-icon-paths: hidden;

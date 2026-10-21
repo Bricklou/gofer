@@ -2,6 +2,7 @@ package views
 
 import (
 	"github.com/cristianadrielbraun/gofer/internal/assetver"
+	"github.com/cristianadrielbraun/gofer/components/button"
 	"github.com/cristianadrielbraun/gofer/components/checkbox"
 	"github.com/cristianadrielbraun/gofer/components/datepicker"
 	"github.com/cristianadrielbraun/gofer/components/dialog"
@@ -10,6 +11,7 @@ import (
 	"github.com/cristianadrielbraun/gofer/components/popover"
 	"github.com/cristianadrielbraun/gofer/components/timepicker"
 	"github.com/cristianadrielbraun/gofer/components/toast"
+	"github.com/cristianadrielbraun/gofer/components/tooltip"
 	"github.com/cristianadrielbraun/gofer/internal/models"
 	"strconv"
 	"time"
@@ -121,6 +123,32 @@ templ CalendarSidebarContent(accounts []models.Account, loading bool) {
 								</span>
 								<span class="size-2 shrink-0 rounded-full" style={ calendarEventColorStyle(CalendarEvent{SourceColor: source.Color}) }></span>
 								<span class={ "min-w-0 flex-1 truncate", templ.KV("opacity-50", source.IsHidden) } data-calendar-source-name title={ calendarSourceDisplayName(source) }>{ calendarSourceDisplayName(source) }</span>
+								// Shows only this calendar, or all of them again when it already is
+								// the only one shown. Appears on hover or keyboard focus.
+								@tooltip.Tooltip() {
+									@tooltip.Trigger() {
+										@button.Button(button.Props{
+											Variant:  button.VariantGhost,
+											Size:     button.SizeIcon,
+											Class:    "calendar-only-button size-6 shrink-0 rounded text-sidebar-foreground opacity-0 transition-opacity hover:bg-sidebar-accent hover:text-sidebar-accent-foreground focus-visible:opacity-100 group-hover:opacity-100",
+											Disabled: loading,
+											Attributes: templ.Attributes{
+												"data-calendar-visibility-only": source.ID,
+												"aria-label":                    "Show only " + calendarSourceDisplayName(source),
+											},
+										}) {
+											<span class="inline-flex" data-calendar-only-icon="only">
+												@icon.Focus(icon.Props{Class: "size-3.5"})
+											</span>
+											<span class="inline-flex" data-calendar-only-icon="all" hidden>
+												@icon.Eye(icon.Props{Class: "size-3.5"})
+											</span>
+										}
+									}
+									@tooltip.Content(tooltip.ContentProps{Position: tooltip.PositionRight, ShowArrow: true}) {
+										<span data-calendar-only-tooltip={ source.ID }>Show only this calendar</span>
+									}
+								}
 								<span class="relative inline-flex size-3 shrink-0">
 									@CalendarSourceSyncIndicator(source, loading)
 									<span data-calendar-visibility-status class="absolute inset-0 opacity-0" aria-hidden="true">@icon.LoaderCircle(icon.Props{Class: "size-3 animate-spin"})
