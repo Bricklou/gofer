@@ -152,3 +152,33 @@ func TestProviderCopyLeavingAFolderWithTwoCopies(t *testing.T) {
 		wantFolderCopies(t, "neither seen", folderCopiesOf(t, db, msgID, "acc_archive"), false, "email-sent")
 	})
 }
+
+// A read or starred change reaches a further copy through its folder, even
+// when the state's copy is in other folders too.
+func TestProviderChangeIsQueuedThroughAFolderWithFurtherCopies(t *testing.T) {
+	ctx := context.Background()
+	db := newContactsTestDB(t)
+	seedSelfSentCopies(t, db)
+	now := time.Date(2026, 6, 22, 10, 0, 0, 0, time.UTC)
+	// One email in Inbox and Archive, the other copy in Archive only.
+	ids, err := db.UpsertProviderSyncMessages(ctx, []ProviderSyncMessage{
+		{AccountID: "acc", FolderID: "acc_inbox", ProviderMessageID: "email-inbox", InternetMessageID: "<self@example.com>", Subject: "Plans", DateSent: now},
+		{AccountID: "acc", FolderID: "acc_archive", ProviderMessageID: "email-inbox", InternetMessageID: "<self@example.com>", Subject: "Plans", DateSent: now},
+		{AccountID: "acc", FolderID: "acc_archive", ProviderMessageID: "email-sent", InternetMessageID: "<self@example.com>", Subject: "Plans", DateSent: now},
+	})
+	if err != nil {
+		t.Fatalf("UpsertProviderSyncMessages() error = %v", err)
+	}
+	msgID := ids["email-inbox"]
+	wantFolderCopies(t, "Archive", folderCopiesOf(t, db, msgID, "acc_archive"), true, "email-inbox", "email-sent")
+	if err := db.SetMessageReadAndQueue(ctx, msgID, true); err != nil {
+		t.Fatalf("SetMessageReadAndQueue() error = %v", err)
+	}
+	info, err := db.GetMessageMutationInfoInFolder(ctx, msgID, "acc_archive")
+	if err != nil || info == nil {
+		t.Fatalf("GetMessageMutationInfoInFolder() = %v, %v", info, err)
+	}
+	if targets := queuedMutationTargets(t, db, msgID, MessageMutationRead); targets["acc_archive"] != "email-inbox" || !slices.Equal(info.FolderCopyIDs, []string{"email-sent"}) {
+		t.Fatalf("read queued for %v with further copies %v, want Archive with email-sent", targets, info.FolderCopyIDs)
+	}
+}

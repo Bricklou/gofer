@@ -162,10 +162,7 @@ func (s *UserIMAP) applyJMAPMutation(ctx context.Context, scope *userIMAPScope, 
 	if mutation.AccountID != scope.id || info.AccountID != scope.id || mutation.ProviderType != storage.MessageMutationProviderJMAP || info.AccountProvider != "jmap" {
 		return errors.New("queued mutation account or provider changed")
 	}
-	request := JMAPMutation{Kind: mutation.Kind, TargetValue: mutation.TargetValue, EmailID: info.RemoteMessageID}
-	if mutation.Kind == storage.MessageMutationMove || mutation.Kind == storage.MessageMutationDelete {
-		request.FolderCopyIDs = info.FolderCopyIDs
-	}
+	request := JMAPMutation{Kind: mutation.Kind, TargetValue: mutation.TargetValue, EmailID: info.RemoteMessageID, FolderCopyIDs: info.FolderCopyIDs}
 	if mutation.Kind == storage.MessageMutationMove {
 		if err := scope.call(ctx, func(db *storage.DB) error {
 			var err error

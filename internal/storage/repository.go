@@ -7352,7 +7352,7 @@ type MessageMutationInfo struct {
 	FolderRole        string
 	RemoteMessageID   string
 	// FolderCopyIDs are further provider copies of the message in the same
-	// folder, which a delete or move there reaches too.
+	// folder, which a change made there reaches too.
 	FolderCopyIDs     []string
 	InternetMessageID string
 	ThreadID          string

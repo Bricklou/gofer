@@ -721,7 +721,7 @@ func TestUserProviderActionsSlowPayloadDoesNotLeaseStore(t *testing.T) {
 }
 
 // A message can have two provider copies in one folder, such as both copies
-// of mail sent to oneself. Moving or deleting it there reaches both.
+// of mail sent to oneself. Marking, moving or deleting it there reaches both.
 func TestUserProviderActionsReachEveryCopyInTheFolder(t *testing.T) {
 	for _, provider := range []string{"gmail", "outlook"} {
 		t.Run(provider, func(t *testing.T) {
@@ -732,6 +732,12 @@ func TestUserProviderActionsReachEveryCopyInTheFolder(t *testing.T) {
 				return err
 			}); err != nil {
 				t.Fatal(err)
+			}
+			for _, path := range []string{"/api/messages/1/read?state=read", "/api/messages/1/star"} {
+				if rec := f.request("alice", "POST", path, ""); rec.Code != 200 {
+					t.Fatalf("flag: %d %s", rec.Code, rec.Body.String())
+				}
+				waitUserIMAP(t, func() bool { return f.pendingMutations(t, "alice") == 0 })
 			}
 			if rec := f.request("alice", "POST", "/api/messages/1/move", url.Values{"folder_id": {id + "-junk"}}.Encode()); rec.Code != 200 {
 				t.Fatalf("move: %d %s", rec.Code, rec.Body.String())
@@ -744,9 +750,10 @@ func TestUserProviderActionsReachEveryCopyInTheFolder(t *testing.T) {
 				}
 				waitUserIMAP(t, func() bool { return f.pendingMutations(t, "alice") == 0 })
 			}
-			want := map[string]int{"alice|POST|/me/messages/m2/move": 2, "alice|DELETE|/me/messages/m2": 1}
+			want := map[string]int{"alice|PATCH|/me/messages/m2": 2, "alice|POST|/me/messages/m2/move": 2, "alice|DELETE|/me/messages/m2": 1}
 			if provider == "gmail" {
-				want = map[string]int{"alice|POST|/users/me/messages/m2/modify": 1, "alice|POST|/users/me/messages/m2/trash": 1, "alice|DELETE|/users/me/messages/m2": 1}
+				// Read, starred and the move to Junk are label changes.
+				want = map[string]int{"alice|POST|/users/me/messages/m2/modify": 3, "alice|POST|/users/me/messages/m2/trash": 1, "alice|DELETE|/users/me/messages/m2": 1}
 			}
 			api.mu.Lock()
 			calls := fmt.Sprint(api.calls)
@@ -756,7 +763,7 @@ func TestUserProviderActionsReachEveryCopyInTheFolder(t *testing.T) {
 			}
 			api.mu.Unlock()
 			if !reached {
-				t.Fatalf("provider calls = %s, want the second copy moved and deleted: %v", calls, want)
+				t.Fatalf("provider calls = %s, want the second copy marked, moved and deleted: %v", calls, want)
 			}
 		})
 	}

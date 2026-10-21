@@ -148,28 +148,45 @@ func replaceProviderCopyIDTx(ctx context.Context, tx *sql.Tx, messageID int64, p
 
 // providerCopyFolderScopesTx returns one folder for each copy of a message
 // with its own provider id, when it has more than one. A change made to the
-// message is then queued for every copy.
+// message is then queued for every copy. A folder holding further copies is
+// among them, since a change made there reaches those too.
 func providerCopyFolderScopesTx(ctx context.Context, tx *sql.Tx, messageID int64) ([]string, error) {
 	rows, err := tx.QueryContext(ctx, `
-		SELECT MIN(mfs.folder_id) FROM message_folder_state mfs
+		SELECT MIN(mfs.folder_id), 0 FROM message_folder_state mfs
 		WHERE mfs.message_id = ? AND mfs.is_deleted = 0 AND COALESCE(mfs.remote_message_id, '') != ''
-		GROUP BY mfs.remote_message_id ORDER BY 1`, messageID)
+		GROUP BY mfs.remote_message_id
+		UNION
+		SELECT DISTINCT c.folder_id, 1 FROM message_folder_copies c
+		JOIN message_folder_state mfs ON mfs.message_id = c.message_id AND mfs.folder_id = c.folder_id
+		WHERE c.message_id = ? AND mfs.is_deleted = 0
+		ORDER BY 1`, messageID, messageID)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
 	var folderIDs []string
+	seen := map[string]bool{}
+	copies := 0
 	for rows.Next() {
 		var folderID string
-		if err := rows.Scan(&folderID); err != nil {
+		var further bool
+		if err := rows.Scan(&folderID, &further); err != nil {
 			return nil, err
 		}
-		folderIDs = append(folderIDs, folderID)
+		// A folder with further copies holds at least two.
+		copies++
+		if further {
+			copies++
+		}
+		if !seen[folderID] {
+			seen[folderID] = true
+			folderIDs = append(folderIDs, folderID)
+		}
 	}
 	if err := rows.Err(); err != nil {
 		return nil, err
 	}
-	if len(folderIDs) < 2 {
+	if copies < 2 {
 		return nil, nil
 	}
 	return folderIDs, nil

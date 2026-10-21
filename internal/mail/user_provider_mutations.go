@@ -46,29 +46,7 @@ func (s *UserIMAP) applyProviderMutation(ctx context.Context, scope *userIMAPSco
 	gone := false
 	switch m.Kind {
 	case storage.MessageMutationRead, storage.MessageMutationStarred:
-		if provider == "gmail" {
-			label := "UNREAD"
-			add := !m.TargetValue
-			if m.Kind == storage.MessageMutationStarred {
-				label = "STARRED"
-				add = m.TargetValue
-			}
-			key := "removeLabelIds"
-			if add {
-				key = "addLabelIds"
-			}
-			err = request(http.MethodPost, gmailAPIBaseURL+"/users/me/messages/"+url.PathEscape(id)+"/modify", map[string][]string{key: {label}}, nil)
-		} else {
-			var payload any = map[string]bool{"isRead": m.TargetValue}
-			if m.Kind == storage.MessageMutationStarred {
-				status := "notFlagged"
-				if m.TargetValue {
-					status = "flagged"
-				}
-				payload = map[string]any{"flag": map[string]string{"flagStatus": status}}
-			}
-			err = request(http.MethodPatch, outlookGraphBaseURL+"/me/messages/"+url.PathEscape(id), payload, nil)
-		}
+		err = applyUserProviderFlag(provider, m, id, request)
 	case storage.MessageMutationDelete:
 		endpoint := gmailAPIBaseURL + "/users/me/messages/" + url.PathEscape(id)
 		if provider == "outlook" {
@@ -154,11 +132,37 @@ func (s *UserIMAP) applyProviderMutation(ctx context.Context, scope *userIMAPSco
 	return err
 }
 
-// applyUserProviderFolderCopies makes a delete or move reach the further
-// copies of the message in its folder. It runs before the folder state's own
-// copy, so a retry repeats it; a copy the provider no longer has is done.
+// applyUserProviderFlag sets or clears read or starred on one provider message.
+func applyUserProviderFlag(provider string, m storage.MessageMutation, id string, request userMutationRequest) error {
+	if provider == "gmail" {
+		label := "UNREAD"
+		add := !m.TargetValue
+		if m.Kind == storage.MessageMutationStarred {
+			label = "STARRED"
+			add = m.TargetValue
+		}
+		key := "removeLabelIds"
+		if add {
+			key = "addLabelIds"
+		}
+		return request(http.MethodPost, gmailAPIBaseURL+"/users/me/messages/"+url.PathEscape(id)+"/modify", map[string][]string{key: {label}}, nil)
+	}
+	var payload any = map[string]bool{"isRead": m.TargetValue}
+	if m.Kind == storage.MessageMutationStarred {
+		status := "notFlagged"
+		if m.TargetValue {
+			status = "flagged"
+		}
+		payload = map[string]any{"flag": map[string]string{"flagStatus": status}}
+	}
+	return request(http.MethodPatch, outlookGraphBaseURL+"/me/messages/"+url.PathEscape(id), payload, nil)
+}
+
+// applyUserProviderFolderCopies makes a change reach the further copies of
+// the message in its folder. It runs before the folder state's own copy, so
+// a retry repeats it; a copy the provider no longer has is done.
 func applyUserProviderFolderCopies(ctx context.Context, scope *userIMAPScope, m storage.MessageMutation, info storage.MessageMutationInfo, request userMutationRequest) error {
-	if len(info.FolderCopyIDs) == 0 || (m.Kind != storage.MessageMutationDelete && m.Kind != storage.MessageMutationMove) {
+	if len(info.FolderCopyIDs) == 0 {
 		return nil
 	}
 	provider := scope.config.Provider
@@ -186,8 +190,12 @@ func applyUserProviderFolderCopies(ctx context.Context, scope *userIMAPScope, m 
 		}
 		var err error
 		switch {
+		case m.Kind == storage.MessageMutationRead || m.Kind == storage.MessageMutationStarred:
+			err = applyUserProviderFlag(provider, m, id, request)
 		case m.Kind == storage.MessageMutationDelete:
 			err = request(http.MethodDelete, endpoint, nil, nil)
+		case m.Kind != storage.MessageMutationMove:
+			return fmt.Errorf("unsupported provider mutation %q", m.Kind)
 		case provider == "gmail":
 			err = applyUserGmailMove(id, destinationID, role, sourceID, info.FolderRole, request)
 		default:

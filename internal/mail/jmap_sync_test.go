@@ -1389,21 +1389,29 @@ func TestSyncReplaysJMAPDeletesOfBothCopies(t *testing.T) {
 }
 
 // Both copies of mail sent to oneself can end up in one mailbox, such as
-// Trash. Gofer shows the message there once, and deleting or moving it there
-// reaches both emails.
+// Trash. Gofer shows the message there once, and changing it there reaches
+// both emails.
 func TestSyncReplaysJMAPChangesToBothCopiesInOneMailbox(t *testing.T) {
+	inTrash := map[string][]string{"sent-1": {"mb-trash"}, "in-1": {"mb-trash"}}
 	for _, tc := range []struct {
-		name   string
-		change func(db *storage.DB, msgID int64, account string) error
-		want   map[string][]string // email id -> mailboxes; absent is destroyed
-		shown  []string            // mailboxes showing the message afterwards
+		name    string
+		change  func(db *storage.DB, msgID int64, account string) error
+		want    map[string][]string // email id -> mailboxes; absent is destroyed
+		shown   []string            // mailboxes showing the message afterwards
+		keyword string              // set on both emails afterwards
 	}{
+		{"read", func(db *storage.DB, msgID int64, account string) error {
+			return db.SetMessageReadAndQueue(t.Context(), msgID, true)
+		}, inTrash, []string{"mb-trash"}, "$seen"},
+		{"starred", func(db *storage.DB, msgID int64, account string) error {
+			return db.SetMessageStarredAndQueue(t.Context(), msgID, true)
+		}, inTrash, []string{"mb-trash"}, "$flagged"},
 		{"delete", func(db *storage.DB, msgID int64, account string) error {
 			return db.PermanentlyDeleteMessageAndQueue(t.Context(), msgID, jmapLocalFolderID(account, "mb-trash"))
-		}, map[string][]string{}, nil},
+		}, map[string][]string{}, nil, ""},
 		{"move", func(db *storage.DB, msgID int64, account string) error {
 			return db.MoveMessageAndQueue(t.Context(), msgID, jmapLocalFolderID(account, "mb-trash"), jmapLocalFolderID(account, "mb-in"))
-		}, map[string][]string{"sent-1": {"mb-in"}, "in-1": {"mb-in"}}, []string{"mb-in"}},
+		}, map[string][]string{"sent-1": {"mb-in"}, "in-1": {"mb-in"}}, []string{"mb-in"}, ""},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			f := newUserGmailFixture(t)
@@ -1445,6 +1453,9 @@ func TestSyncReplaysJMAPChangesToBothCopiesInOneMailbox(t *testing.T) {
 					if !email.MailboxIDs[mailbox] || len(email.MailboxIDs) != len(mailboxes) {
 						t.Fatalf("%s mailboxes = %v, want %v", id, email.MailboxIDs, mailboxes)
 					}
+				}
+				if tc.keyword != "" && !email.Keywords[tc.keyword] {
+					t.Fatalf("%s keywords = %v, want %s", id, email.Keywords, tc.keyword)
 				}
 			}
 			got := jmapCopies(t, f, "<reminder@example.test>")
