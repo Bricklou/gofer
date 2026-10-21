@@ -680,6 +680,10 @@ func (o *SyncOrchestrator) syncOutlookGraphFolder(ctx context.Context, accountID
 	if resumingFull {
 		startedCurrent = folder.SyncProgressCurrent
 	}
+	// Messages a later sync stores in the folder for the first time are new
+	// mail, announced as IMAP does once they are stored. A full baseline
+	// announces nothing.
+	var fresh newMailSummary
 	o.publishEvent(Event{Type: EventSyncStarted, AccountID: accountID, FolderID: folder.ID, FolderRole: folder.Role, Current: startedCurrent, Total: eventTotal, Payload: o.folderSyncProgressPayload(ctx, accountID, folderName, "graph", map[string]any{
 		"account_folders_total": folderTotal,
 		"account_folders_done":  folderIndex - 1,
@@ -699,6 +703,7 @@ func (o *SyncOrchestrator) syncOutlookGraphFolder(ctx context.Context, accountID
 			}
 		}
 		o.publishEvent(Event{Type: EventSyncComplete, AccountID: accountID, FolderID: folder.ID, FolderRole: folder.Role, Payload: o.folderSyncProgressPayload(o.outlookPersistContext(ctx), accountID, folderName, "graph", payload)})
+		o.publishNewMail(o.outlookPersistContext(ctx), accountID, folder.ID, folder.RemoteID, fresh)
 	}()
 
 	fetched := startedCurrent
@@ -761,9 +766,26 @@ func (o *SyncOrchestrator) syncOutlookGraphFolder(ctx context.Context, accountID
 			bodySources = append(bodySources, msg)
 		}
 		if len(upserts) > 0 {
+			var known map[string]bool
+			if !full {
+				providerIDs := make([]string, 0, len(upserts))
+				for _, upsert := range upserts {
+					providerIDs = append(providerIDs, upsert.ProviderMessageID)
+				}
+				if known, err = o.outlookRepository().KnownProviderFolderCopies(persistCtx, accountID, folder.ID, providerIDs); err != nil {
+					return err
+				}
+			}
 			idsByProvider, err := o.outlookRepository().UpsertProviderSyncMessages(persistCtx, upserts)
 			if err != nil {
 				return err
+			}
+			if !full {
+				for _, upsert := range upserts {
+					if !known[upsert.ProviderMessageID] {
+						fresh.Add([]storage.SyncMessage{providerNewMail(upsert)})
+					}
+				}
 			}
 			folderStateDirty = true
 			if full {

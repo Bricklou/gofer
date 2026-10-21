@@ -1243,6 +1243,89 @@ func TestSyncOutlookGraphFolderIncrementalHydratesAttachmentMetadataAndStoresBod
 	}
 }
 
+// Messages a later sync stores in a folder for the first time are announced
+// as new mail, like IMAP's; the first import and changes to mail already in
+// the folder are not.
+func TestSyncOutlookGraphFolderAnnouncesNewMail(t *testing.T) {
+	ctx := context.Background()
+	db := newLabelSyncTestDB(t)
+	seedOutlookGraphFolder(t, ctx, db)
+	message := func(id, subject, fromName, fromEmail, received string, read bool) map[string]any {
+		return map[string]any{
+			"id":                id,
+			"internetMessageId": "<" + id + "@example.com>",
+			"subject":           subject,
+			"isRead":            read,
+			"body":              map[string]string{"contentType": "text", "content": subject},
+			"from":              map[string]any{"emailAddress": map[string]string{"name": fromName, "address": fromEmail}},
+			"toRecipients":      []map[string]any{{"emailAddress": map[string]string{"address": "user@example.com"}}},
+			"receivedDateTime":  received,
+			"sentDateTime":      received,
+		}
+	}
+	var page []map[string]any
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case r.Method == http.MethodGet && (r.URL.Path == "/me/mailFolders/folder-inbox/messages/delta" || r.URL.Path == "/delta/current"):
+			_ = json.NewEncoder(w).Encode(map[string]any{"value": page, "@odata.deltaLink": "http://" + r.Host + "/delta/current"})
+		default:
+			t.Fatalf("unexpected Graph request %s %s", r.Method, r.URL.String())
+		}
+	}))
+	defer server.Close()
+	previousBaseURL := outlookGraphBaseURL
+	outlookGraphBaseURL = server.URL
+	t.Cleanup(func() { outlookGraphBaseURL = previousBaseURL })
+
+	orchestrator := NewSyncOrchestrator(db, nil, store.NewBlobStore(filepath.Join(t.TempDir(), "blobs")), labelSyncTestTokens{})
+	events := orchestrator.Events().Subscribe()
+	defer orchestrator.Events().Unsubscribe(events)
+	newMail := func() []Event {
+		t.Helper()
+		var got []Event
+		for len(events) > 0 {
+			if event := <-events; event.Type == EventNewMail {
+				got = append(got, event)
+			}
+		}
+		return got
+	}
+
+	page = []map[string]any{message("graph-known", "Lunch on Friday?", "Robin", "robin@example.test", "2026-06-22T09:00:00Z", false)}
+	if err := orchestrator.syncOutlookGraphFolder(ctx, "acc", "graph-token", outlookGraphInboxTarget(""), nil, 1, 1); err != nil {
+		t.Fatalf("first syncOutlookGraphFolder() error = %v", err)
+	}
+	if got := newMail(); len(got) != 0 {
+		t.Fatalf("the first import announced new mail: %+v", got)
+	}
+
+	page = []map[string]any{
+		message("graph-known", "Lunch on Friday?", "Robin", "robin@example.test", "2026-06-22T09:00:00Z", true),
+		message("graph-older", "Garden plans", "Neighbour", "neighbour@example.test", "2026-06-22T10:00:00Z", false),
+		message("graph-new", "Invoice 42", "Billing", "billing@example.test", "2026-06-22T11:00:00Z", false),
+	}
+	if err := orchestrator.syncOutlookGraphFolder(ctx, "acc", "graph-token", outlookGraphInboxTargetFromDB(t, ctx, db), nil, 1, 1); err != nil {
+		t.Fatalf("incremental syncOutlookGraphFolder() error = %v", err)
+	}
+	got := newMail()
+	if len(got) != 1 {
+		t.Fatalf("new mail events = %+v, want one for the Inbox", got)
+	}
+	inbox := got[0]
+	if inbox.FolderID != "acc_inbox" || inbox.FolderRole != "inbox" || inbox.Payload["count"] != 2 || inbox.Payload["unread_count"] != 2 ||
+		inbox.Payload["subject"] != "Invoice 42" || inbox.Payload["from_name"] != "Billing" || inbox.Payload["from_email"] != "billing@example.test" {
+		t.Fatalf("inbox new mail = %+v", inbox)
+	}
+
+	page = []map[string]any{message("graph-new", "Invoice 42", "Billing", "billing@example.test", "2026-06-22T11:00:00Z", true)}
+	if err := orchestrator.syncOutlookGraphFolder(ctx, "acc", "graph-token", outlookGraphInboxTargetFromDB(t, ctx, db), nil, 1, 1); err != nil {
+		t.Fatalf("repeated syncOutlookGraphFolder() error = %v", err)
+	}
+	if got := newMail(); len(got) != 0 {
+		t.Fatalf("a change to known mail announced new mail: %+v", got)
+	}
+}
+
 func TestSyncOutlookGraphFolderAttachmentFailureDoesNotCheckpoint(t *testing.T) {
 	ctx := context.Background()
 	db := newLabelSyncTestDB(t)

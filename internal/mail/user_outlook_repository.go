@@ -18,6 +18,7 @@ type outlookSyncRepository interface {
 	gmailSyncRepository
 	ListProviderMessageIDBackfillCandidates(ctx context.Context, accountID string, limit int) ([]storage.ProviderMessageIDBackfillCandidate, error)
 	HasProviderFolderMessagesMissingSender(ctx context.Context, accountID, folderID string) (bool, error)
+	KnownProviderFolderCopies(ctx context.Context, accountID, folderID string, providerMessageIDs []string) (map[string]bool, error)
 	StartProviderFolderBaseline(ctx context.Context, folderID string) error
 	MarkProviderMessageRemovedFromFolder(ctx context.Context, accountID, folderID, providerMessageID string) error
 	RefreshFolderThreadsForMessages(ctx context.Context, folderID string, messageIDs []int64) error
@@ -74,6 +75,16 @@ func (r *userIMAPScope) HasProviderFolderMessagesMissingSender(ctx context.Conte
 	err := r.call(ctx, func(db *storage.DB) error {
 		var err error
 		result, err = db.HasProviderFolderMessagesMissingSender(ctx, accountID, folderID)
+		return err
+	})
+	return result, err
+}
+
+func (r *userIMAPScope) KnownProviderFolderCopies(ctx context.Context, accountID, folderID string, providerMessageIDs []string) (map[string]bool, error) {
+	var result map[string]bool
+	err := r.call(ctx, func(db *storage.DB) error {
+		var err error
+		result, err = db.KnownProviderFolderCopies(ctx, accountID, folderID, providerMessageIDs)
 		return err
 	})
 	return result, err

@@ -46,6 +46,45 @@ func findProviderCopyMessage(ctx context.Context, q rowQueryer, accountID, provi
 	return msgID, nil
 }
 
+// KnownProviderFolderCopies reports which of these provider ids already have a
+// copy in the folder.
+func (db *DB) KnownProviderFolderCopies(ctx context.Context, accountID, folderID string, providerMessageIDs []string) (map[string]bool, error) {
+	known := map[string]bool{}
+	if len(providerMessageIDs) == 0 {
+		return known, nil
+	}
+	marks := strings.TrimSuffix(strings.Repeat("?,", len(providerMessageIDs)), ",")
+	args := make([]any, 0, 2*len(providerMessageIDs)+4)
+	args = append(args, folderID, accountID)
+	for _, id := range providerMessageIDs {
+		args = append(args, id)
+	}
+	args = append(args, folderID, accountID)
+	for _, id := range providerMessageIDs {
+		args = append(args, id)
+	}
+	rows, err := db.Read().QueryContext(ctx, `
+		SELECT mfs.remote_message_id FROM message_folder_state mfs
+		JOIN messages m ON m.id = mfs.message_id
+		WHERE mfs.folder_id = ? AND mfs.is_deleted = 0 AND m.account_id = ? AND mfs.remote_message_id IN (`+marks+`)
+		UNION
+		SELECT c.remote_message_id FROM message_folder_copies c
+		JOIN messages m ON m.id = c.message_id
+		WHERE c.folder_id = ? AND m.account_id = ? AND c.remote_message_id IN (`+marks+`)`, args...)
+	if err != nil {
+		return nil, fmt.Errorf("query known provider copies: %w", err)
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		known[id] = true
+	}
+	return known, rows.Err()
+}
+
 // Two copies of a message can sit in one folder, such as both copies of mail
 // sent to oneself in Trash. The folder's state belongs to one of them, and
 // message_folder_copies records the others there. When the state's copy
