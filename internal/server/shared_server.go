@@ -142,6 +142,7 @@ func RunShared() {
 	}
 
 	syncer := mail.NewSyncOrchestrator(db, accountStore, blobStore, mailCredentials)
+	syncer.EnableOutlookWebhooks(httpConfig.OutlookWebhookURL(), secretKey)
 	log.Printf("boot: sync orchestrator initialized")
 	vapidPublicKey, vapidPrivateKey := loadOrGenerateVAPIDKeys(filepath.Join(dataDir, "vapid_private.key"), filepath.Join(dataDir, "vapid_public.key"))
 	vapidSubject := os.Getenv("GOFER_VAPID_SUBJECT")
@@ -183,7 +184,7 @@ func RunShared() {
 	h.StartMailTransfers(ctx)
 	h.RegisterRoutes(mux)
 	if httpConfig.OutlookWebhooks {
-		mux.Handle("POST "+httpguard.OutlookWebhookPath, mail.OutlookWebhookHandler(nil))
+		mux.Handle("POST "+httpguard.OutlookWebhookPath, mail.OutlookWebhookHandler(syncer))
 	}
 	log.Printf("boot: HTTP routes registered")
 	h.StartAccountDeletionCleanup(ctx)

@@ -156,6 +156,12 @@ type SyncOrchestrator struct {
 	lifecycleCtx        context.Context
 	syncAccountOverride func(context.Context, string, bool) error
 	incrementalOverride func(context.Context, string, string, string)
+	// Outlook subscriptions, kept while GOFER_OUTLOOK_WEBHOOKS is on.
+	outlookSubsMu       sync.Mutex
+	outlookWebhook      *outlookWebhookConfig
+	outlookSubs         map[string]*outlookSubscriptionState
+	outlookSubsWake     chan struct{}
+	outlookGraphRequest graphJSONRequest
 	gmailPollMu         sync.Mutex
 	activeUsers         map[string]int
 	gmailPollRuntime    map[string]gmailPollRuntimeState
@@ -740,7 +746,7 @@ func (o *SyncOrchestrator) startIDLEWatchers(ctx context.Context, accountID stri
 			}
 			folderID, remoteName := folder.ID, folder.RemoteID
 			watchers = append(watchers, NewJMAPPushWatcher(cfg, password,
-				func() { o.requestJMAPPushSync(watcherCtx, accountID) },
+				func() { o.requestPushSync(watcherCtx, accountID) },
 				func(status imap.IdleWatcherStatus) { o.updateIDLEFolderStatus(accountID, folderID, remoteName, status) }))
 			folderIDs[folderID] = true
 			continue
@@ -791,10 +797,10 @@ func (o *SyncOrchestrator) startIDLEWatchers(ctx context.Context, accountID stri
 	}()
 }
 
-// requestJMAPPushSync syncs a JMAP account after its server pushed a change.
-// Pushes that arrive while that sync runs ask for one more sync after it,
-// however many there are.
-func (o *SyncOrchestrator) requestJMAPPushSync(ctx context.Context, accountID string) {
+// requestPushSync syncs an account after its server announced a change, by a
+// JMAP push or an Outlook notification. Announcements that arrive while that
+// sync runs ask for one more sync after it, however many there are.
+func (o *SyncOrchestrator) requestPushSync(ctx context.Context, accountID string) {
 	o.mu.Lock()
 	if o.jmapPushSyncs == nil {
 		o.jmapPushSyncs = make(map[string]bool)
@@ -808,7 +814,7 @@ func (o *SyncOrchestrator) requestJMAPPushSync(ctx context.Context, accountID st
 	o.mu.Unlock()
 	go func() {
 		for {
-			o.syncJMAPAfterPush(ctx, accountID)
+			o.syncAfterPush(ctx, accountID)
 			o.mu.Lock()
 			again := o.jmapPushSyncs[accountID] && ctx.Err() == nil
 			if !again {
@@ -822,10 +828,10 @@ func (o *SyncOrchestrator) requestJMAPPushSync(ctx context.Context, accountID st
 	}()
 }
 
-// syncJMAPAfterPush runs one account sync for a push. A sync already running
+// syncAfterPush runs one account sync for a push. A sync already running
 // may have read the server before the pushed change, so it waits for that one
 // to end and then syncs anyway.
-func (o *SyncOrchestrator) syncJMAPAfterPush(ctx context.Context, accountID string) {
+func (o *SyncOrchestrator) syncAfterPush(ctx context.Context, accountID string) {
 	for ctx.Err() == nil {
 		o.mu.Lock()
 		run := o.running[accountID]
@@ -842,7 +848,11 @@ func (o *SyncOrchestrator) syncJMAPAfterPush(ctx context.Context, accountID stri
 		if !ok {
 			continue
 		}
-		if err := o.syncAccount(syncCtx, accountID, false); err != nil {
+		syncAccount := o.syncAccount
+		if o.syncAccountOverride != nil {
+			syncAccount = o.syncAccountOverride
+		}
+		if err := syncAccount(syncCtx, accountID, false); err != nil {
 			log.Printf("sync account %s after a push: %v", accountID, err)
 			o.markAccountSyncError(syncCtx, accountID, err)
 		} else {
@@ -1018,6 +1028,10 @@ func (o *SyncOrchestrator) Start(ctx context.Context) {
 	if o.tokenProvider != nil && gmailAPIPollEnabled() {
 		go o.runGmailAPIPoller(ctx)
 		log.Printf("sync: Gmail API active poll worker started")
+	}
+	if o.tokenProvider != nil && o.outlookWebhookConfig() != nil {
+		go o.runOutlookSubscriptions(ctx)
+		log.Printf("sync: Outlook webhook subscriptions started")
 	}
 	go o.runScheduledSync(ctx)
 	log.Printf("sync: scheduled sync worker started")
