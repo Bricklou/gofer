@@ -339,3 +339,18 @@ func TestUserGmailActivePollingShutdownCancelsBoundedProfileWorkers(t *testing.T
 		return err
 	})
 }
+
+// The active poll skips accounts that are not Gmail, JMAP ones included,
+// instead of failing on them.
+func TestUserGmailActivePollSkipsJMAPAccounts(t *testing.T) {
+	f := newUserGmailFixture(t)
+	useFakeJMAPAccount(t, f, newFakeJMAPServer(t))
+	job, release := activeGmailJob(t, f, "alice")
+	defer release()
+	if err := f.worker.pollActiveGmailAccount(job); err != nil {
+		t.Fatal(err)
+	}
+	if got := f.api.count("alice", "/users/me/profile", ""); got != 0 {
+		t.Fatalf("JMAP account's Gmail profile checks: %d", got)
+	}
+}

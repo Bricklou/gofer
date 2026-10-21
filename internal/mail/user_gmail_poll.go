@@ -239,7 +239,8 @@ func (s *UserIMAP) pollActiveGmailAccount(job userActivePollJob) error {
 	changed := false
 	if !busy {
 		err = s.operation(job.session.ctx, job.owner, job.account, 0, gmailAPIPollRequestTimeout, func(ctx context.Context) error {
-			scope, err := s.snapshot(ctx, job.owner, job.account)
+			// Accounts that are not Gmail, JMAP included, are skipped below.
+			scope, err := s.snapshotAccount(ctx, job.owner, job.account, true)
 			if err != nil {
 				return err
 			}
