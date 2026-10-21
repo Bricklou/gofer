@@ -120,3 +120,25 @@ func TestFolderMissingACopyDropsTheLabelsOnlyItCarried(t *testing.T) {
 	}
 	wantMessageLabels(t, db, "Inbox copy missing", msgID, "Work")
 }
+
+func TestLabelChangedInGoferIsRecordedOnEveryCopy(t *testing.T) {
+	ctx := context.Background()
+	db := newContactsTestDB(t)
+	msgID := seedSelfSentCopies(t, db)
+	syncCopyLabels(t, db, "acc_sent", "email-sent", "Work")
+	syncCopyLabels(t, db, "acc_inbox", "email-inbox", "Work")
+
+	if _, err := db.AddMessageLabel(ctx, msgID, "acc", LabelInput{Name: "Family", ProviderID: "Family", ProviderType: LabelProviderKeyword}); err != nil {
+		t.Fatalf("AddMessageLabel() error = %v", err)
+	}
+	// A sync of one copy that has not caught up yet keeps it, as the other
+	// copy carries it too.
+	syncCopyLabels(t, db, "acc_sent", "email-sent", "Work")
+	wantMessageLabels(t, db, "Sent copy synced without Family", msgID, "Family", "Work")
+
+	if err := db.RemoveMessageLabelForProvider(ctx, msgID, "acc", LabelProviderKeyword, "", "Work"); err != nil {
+		t.Fatalf("RemoveMessageLabelForProvider() error = %v", err)
+	}
+	syncCopyLabels(t, db, "acc_sent", "email-sent")
+	wantMessageLabels(t, db, "Work removed in Gofer", msgID, "Family")
+}

@@ -212,7 +212,11 @@ func (a *providerActionAPI) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 		_ = json.NewEncoder(w).Encode(response)
 	case r.Method == "GET":
-		_ = json.NewEncoder(w).Encode(map[string]any{"id": "m1", "parentFolderId": a.parent[owner], "categories": a.categoriesLocked(owner)})
+		id := "m1"
+		if copyID, ok := strings.CutPrefix(r.URL.Path, "/me/messages/"); ok {
+			id = copyID
+		}
+		_ = json.NewEncoder(w).Encode(map[string]any{"id": id, "parentFolderId": a.parent[owner], "categories": a.categoriesLocked(owner)})
 	case strings.HasSuffix(r.URL.Path, "/move"):
 		var destination string
 		_ = json.Unmarshal(payload["destinationId"], &destination)

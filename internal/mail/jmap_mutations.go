@@ -112,48 +112,62 @@ func JMAPSpamKeyword(name string) (string, bool) {
 	return "", false
 }
 
-// SetJMAPKeyword adds a keyword label to a JMAP email, or removes it. Servers
-// may match keywords exactly, so a removal reads the email's keywords first
-// and clears the keyword in every casing the email carries. It reports gone
-// when the server no longer has the email, which needs no retry.
-func SetJMAPKeyword(ctx context.Context, cfg *models.AccountConfig, password, emailID, keyword string, add bool) (gone bool, err error) {
-	if emailID == "" {
+// SetJMAPKeyword adds a keyword label to JMAP emails, the copies of one
+// message, or removes it. Servers may match keywords exactly, so a removal
+// reads the emails' keywords first and clears the keyword in every casing
+// each email carries. It reports gone when the server has none of the emails
+// any more, which needs no retry.
+func SetJMAPKeyword(ctx context.Context, cfg *models.AccountConfig, password string, emailIDs []string, keyword string, add bool) (gone bool, err error) {
+	if len(emailIDs) == 0 || emailIDs[0] == "" {
 		return false, errors.New("JMAP email identity is unavailable")
 	}
 	client, session, account, err := openJMAPMail(ctx, cfg, password)
 	if err != nil {
 		return false, err
 	}
-	patch := jmap.KeywordPatch(keyword, true)
-	if !add {
-		current, err := client.GetEmails(ctx, session, account, []string{emailID}, []string{"keywords"})
+	update := map[string]jmap.PatchObject{}
+	if add {
+		for _, id := range emailIDs {
+			update[id] = jmap.KeywordPatch(keyword, true)
+		}
+	} else {
+		current, err := client.GetEmails(ctx, session, account, emailIDs, []string{"keywords"})
 		if err != nil {
 			return false, err
 		}
 		if len(current.List) == 0 {
 			return true, nil
 		}
-		patch = jmap.PatchObject{}
-		for name, on := range current.List[0].Keywords {
-			if on && strings.EqualFold(name, keyword) {
-				maps.Copy(patch, jmap.KeywordPatch(name, false))
+		for _, email := range current.List {
+			patch := jmap.PatchObject{}
+			for name, on := range email.Keywords {
+				if on && strings.EqualFold(name, keyword) {
+					maps.Copy(patch, jmap.KeywordPatch(name, false))
+				}
+			}
+			if len(patch) > 0 {
+				update[email.ID] = patch
 			}
 		}
-		if len(patch) == 0 {
+		if len(update) == 0 {
 			return false, nil
 		}
 	}
-	result, err := client.SetEmails(ctx, session, jmap.EmailSet{AccountID: account, Update: map[string]jmap.PatchObject{emailID: patch}})
+	result, err := client.SetEmails(ctx, session, jmap.EmailSet{AccountID: account, Update: update})
 	if err != nil {
 		return false, err
 	}
-	if failure, failed := result.NotUpdated[emailID]; failed {
-		if failure.Type == "notFound" {
-			return true, nil
+	gone = true
+	for id := range update {
+		failure, failed := result.NotUpdated[id]
+		switch {
+		case !failed:
+			gone = false
+		case failure.Type != "notFound":
+			return false, &failure
 		}
-		return false, &failure
 	}
-	return false, nil
+	return gone, nil
 }
 
 // applyJMAPMutation replays one queued change of a JMAP account in a routed

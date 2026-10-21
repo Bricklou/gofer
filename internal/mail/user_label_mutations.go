@@ -143,7 +143,7 @@ func (s *UserIMAP) applyUserLabelMutation(ctx context.Context, scope *userIMAPSc
 			}
 			// A label on an email the server no longer has is done: the next
 			// sync removes the email.
-			if _, err := SetJMAPKeyword(ctx, scope.config, scope.password, info.RemoteMessageID, keyword, entry.Operation == storage.LabelMutationAdd); err != nil {
+			if _, err := SetJMAPKeyword(ctx, scope.config, scope.password, info.LabelCopyIDs(info.RemoteMessageID), keyword, entry.Operation == storage.LabelMutationAdd); err != nil {
 				return err
 			}
 			return scope.call(ctx, func(db *storage.DB) error {
@@ -201,30 +201,23 @@ func (s *UserIMAP) applyUserLabelMutation(ctx context.Context, scope *userIMAPSc
 				if entry.Operation == storage.LabelMutationAdd {
 					key = "addLabelIds"
 				}
-				if err := request(http.MethodPost, gmailAPIBaseURL+"/users/me/messages/"+url.PathEscape(resolvedID)+"/modify", map[string][]string{key: {remote.ID}}, nil); err != nil {
-					return err
+				for i, id := range info.LabelCopyIDs(resolvedID) {
+					err := request(http.MethodPost, gmailAPIBaseURL+"/users/me/messages/"+url.PathEscape(id)+"/modify", map[string][]string{key: {remote.ID}}, nil)
+					if err = otherCopyGone(i, err); err != nil {
+						return err
+					}
 				}
 			}
 		} else {
-			var state outlookMessageState
-			if err := request(http.MethodGet, outlookGraphBaseURL+"/me/messages/"+url.PathEscape(resolvedID)+"?$select=id,categories", nil, &state); err != nil {
-				return err
-			}
-			if state.ID == "" || state.ID != resolvedID {
-				return errors.New("Graph returned a different label message")
-			}
-			categories := append([]string(nil), state.Categories...)
 			if entry.Operation == storage.LabelMutationAdd {
 				if err := userOutlookCategory(entry.LabelName, request); err != nil {
 					return err
 				}
-				categories = appendUniqueFold(categories, entry.LabelName)
-				sort.SliceStable(categories, func(i, j int) bool { return strings.ToLower(categories[i]) < strings.ToLower(categories[j]) })
-			} else {
-				categories, _ = removeFold(categories, entry.LabelName)
 			}
-			if err := request(http.MethodPatch, outlookGraphBaseURL+"/me/messages/"+url.PathEscape(resolvedID), map[string][]string{"categories": categories}, nil); err != nil {
-				return err
+			for i, id := range info.LabelCopyIDs(resolvedID) {
+				if err := otherCopyGone(i, userOutlookMessageCategory(id, entry.LabelName, entry.Operation == storage.LabelMutationAdd, request)); err != nil {
+					return err
+				}
 			}
 			label.ProviderID = entry.LabelName
 		}
@@ -270,4 +263,32 @@ func userOutlookCategory(name string, request userMutationRequest) error {
 		}
 	}
 	return request(http.MethodPost, outlookGraphBaseURL+"/me/outlook/masterCategories", map[string]string{"displayName": strings.TrimSpace(name), "color": "preset0"}, nil)
+}
+
+// userOutlookMessageCategory adds a category to a message, or removes it.
+func userOutlookMessageCategory(id, name string, add bool, request userMutationRequest) error {
+	var state outlookMessageState
+	if err := request(http.MethodGet, outlookGraphBaseURL+"/me/messages/"+url.PathEscape(id)+"?$select=id,categories", nil, &state); err != nil {
+		return err
+	}
+	if state.ID == "" || state.ID != id {
+		return errors.New("Graph returned a different label message")
+	}
+	categories := append([]string(nil), state.Categories...)
+	if add {
+		categories = appendUniqueFold(categories, name)
+		sort.SliceStable(categories, func(i, j int) bool { return strings.ToLower(categories[i]) < strings.ToLower(categories[j]) })
+	} else {
+		categories, _ = removeFold(categories, name)
+	}
+	return request(http.MethodPatch, outlookGraphBaseURL+"/me/messages/"+url.PathEscape(id), map[string][]string{"categories": categories}, nil)
+}
+
+// otherCopyGone lets a label change skip a further copy of the message, the
+// i-th it reaches, that the provider no longer has.
+func otherCopyGone(i int, err error) error {
+	if status, ok := providerAPIStatus(err); ok && status == 404 && i > 0 {
+		return nil
+	}
+	return err
 }

@@ -70,7 +70,7 @@ func (h *Handler) setJMAPMessageKeyword(ctx context.Context, messageID int64, in
 	if err != nil {
 		return storage.LabelInput{}, err
 	}
-	if _, err := mail.SetJMAPKeyword(ctx, cfg, password, info.RemoteMessageID, keyword, add); err != nil {
+	if _, err := mail.SetJMAPKeyword(ctx, cfg, password, info.LabelCopyIDs(info.RemoteMessageID), keyword, add); err != nil {
 		return storage.LabelInput{}, err
 	}
 	return storage.LabelInput{

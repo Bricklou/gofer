@@ -5,6 +5,8 @@ import (
 	"database/sql"
 	"fmt"
 	"strings"
+
+	"github.com/cristianadrielbraun/gofer/internal/models"
 )
 
 // A row holding more than one provider copy shows the labels of all of them,
@@ -14,7 +16,7 @@ import (
 
 // liveProviderCopyIDsTx returns the provider ids of a row's copies still in a
 // folder.
-func liveProviderCopyIDsTx(ctx context.Context, tx *sql.Tx, messageID int64) ([]string, error) {
+func liveProviderCopyIDsTx(ctx context.Context, tx rowsQueryer, messageID int64) ([]string, error) {
 	rows, err := tx.QueryContext(ctx, `
 		SELECT remote_message_id FROM message_folder_state
 		WHERE message_id = ? AND is_deleted = 0 AND COALESCE(remote_message_id, '') != ''
@@ -64,31 +66,18 @@ func (db *DB) replaceCopyLabelsTx(ctx context.Context, tx *sql.Tx, messageID int
 		return db.replaceMessageLabelsForProviderTx(ctx, tx, messageID, accountID, providerType, labels)
 	}
 
-	const ofProvider = `SELECT id FROM labels WHERE account_id = ? AND provider_type = ?`
 	// The first time a row is synced with more than one copy, Gofer cannot
 	// tell which copies carry the labels it has, so it credits them to the
 	// others. Their own syncs correct it.
-	var recorded bool
-	if err := tx.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM message_label_copies WHERE message_id = ? AND label_id IN (`+ofProvider+`))`,
-		messageID, accountID, providerType).Scan(&recorded); err != nil {
-		return fmt.Errorf("check label copies: %w", err)
-	}
-	if !recorded {
-		for _, id := range others {
-			if _, err := tx.ExecContext(ctx, `
-				INSERT OR IGNORE INTO message_label_copies (message_id, label_id, remote_message_id)
-				SELECT message_id, label_id, ? FROM message_labels
-				WHERE message_id = ? AND label_id IN (`+ofProvider+`)`, id, messageID, accountID, providerType); err != nil {
-				return fmt.Errorf("seed label copies: %w", err)
-			}
-		}
+	if err := seedLabelCopiesTx(ctx, tx, messageID, accountID, providerType, others); err != nil {
+		return err
 	}
 
 	kept, _, err := db.resolveMessageLabelsTx(ctx, tx, accountID, withLabelProvider(labels, accountID, providerType))
 	if err != nil {
 		return err
 	}
-	if _, err := tx.ExecContext(ctx, `DELETE FROM message_label_copies WHERE message_id = ? AND remote_message_id = ? AND label_id IN (`+ofProvider+`)`,
+	if _, err := tx.ExecContext(ctx, `DELETE FROM message_label_copies WHERE message_id = ? AND remote_message_id = ? AND label_id IN (`+providerLabelIDsSQL+`)`,
 		messageID, copyID, accountID, providerType); err != nil {
 		return fmt.Errorf("replace label copies: %w", err)
 	}
@@ -107,7 +96,7 @@ func (db *DB) replaceCopyLabelsTx(ctx context.Context, tx *sql.Tx, messageID int
 	// The row has the labels any of its copies carries.
 	if _, err := tx.ExecContext(ctx, `
 		DELETE FROM message_labels
-		WHERE message_id = ? AND label_id IN (`+ofProvider+`)
+		WHERE message_id = ? AND label_id IN (`+providerLabelIDsSQL+`)
 		  AND label_id NOT IN (SELECT label_id FROM message_label_copies WHERE message_id = ?)`,
 		messageID, accountID, providerType, messageID); err != nil {
 		return fmt.Errorf("drop labels no copy carries: %w", err)
@@ -115,10 +104,83 @@ func (db *DB) replaceCopyLabelsTx(ctx context.Context, tx *sql.Tx, messageID int
 	if _, err := tx.ExecContext(ctx, `
 		INSERT OR IGNORE INTO message_labels (message_id, label_id)
 		SELECT DISTINCT message_id, label_id FROM message_label_copies
-		WHERE message_id = ? AND label_id IN (`+ofProvider+`)`, messageID, accountID, providerType); err != nil {
+		WHERE message_id = ? AND label_id IN (`+providerLabelIDsSQL+`)`, messageID, accountID, providerType); err != nil {
 		return fmt.Errorf("add labels a copy carries: %w", err)
 	}
 	return protectPendingLabelRemovalsTx(ctx, tx, messageID, accountID, providerType)
+}
+
+const providerLabelIDsSQL = `SELECT id FROM labels WHERE account_id = ? AND provider_type = ?`
+
+// seedLabelCopiesTx credits a row's labels of one provider type to copies,
+// unless which copies carry them is already recorded.
+func seedLabelCopiesTx(ctx context.Context, tx *sql.Tx, messageID int64, accountID, providerType string, copies []string) error {
+	var recorded bool
+	if err := tx.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM message_label_copies WHERE message_id = ? AND label_id IN (`+providerLabelIDsSQL+`))`,
+		messageID, accountID, providerType).Scan(&recorded); err != nil {
+		return fmt.Errorf("check label copies: %w", err)
+	}
+	if recorded {
+		return nil
+	}
+	for _, id := range copies {
+		if _, err := tx.ExecContext(ctx, `
+			INSERT OR IGNORE INTO message_label_copies (message_id, label_id, remote_message_id)
+			SELECT message_id, label_id, ? FROM message_labels
+			WHERE message_id = ? AND label_id IN (`+providerLabelIDsSQL+`)`, id, messageID, accountID, providerType); err != nil {
+			return fmt.Errorf("seed label copies: %w", err)
+		}
+	}
+	return nil
+}
+
+// recordLabelOnEveryCopyTx records a label Gofer put on every copy of a row.
+func recordLabelOnEveryCopyTx(ctx context.Context, tx *sql.Tx, messageID int64, label models.Label) error {
+	if label.ProviderType == "" || label.ProviderType == LabelProviderLocal {
+		return nil
+	}
+	live, err := liveProviderCopyIDsTx(ctx, tx, messageID)
+	if err != nil || len(live) < 2 {
+		return err
+	}
+	if err := seedLabelCopiesTx(ctx, tx, messageID, label.AccountID, label.ProviderType, live); err != nil {
+		return err
+	}
+	for _, id := range live {
+		if _, err := tx.ExecContext(ctx, `INSERT OR IGNORE INTO message_label_copies (message_id, label_id, remote_message_id) VALUES (?, ?, ?)`,
+			messageID, label.ID, id); err != nil {
+			return fmt.Errorf("record label copy: %w", err)
+		}
+	}
+	return nil
+}
+
+// dropRemovedLabelCopiesTx forgets the copies carrying the labels of a row
+// that are no longer on it, once Gofer took them off every copy.
+func dropRemovedLabelCopiesTx(ctx context.Context, tx *sql.Tx, messageID int64) error {
+	_, err := tx.ExecContext(ctx, `
+		DELETE FROM message_label_copies WHERE message_id = ?
+		  AND label_id NOT IN (SELECT label_id FROM message_labels WHERE message_id = ?)`, messageID, messageID)
+	if err != nil {
+		return fmt.Errorf("drop removed label copies: %w", err)
+	}
+	return nil
+}
+
+// otherLiveCopyIDs returns the provider ids of a row's copies in a folder
+// other than providerMessageID. A label change reaches them too.
+func otherLiveCopyIDs(ctx context.Context, q rowsQueryer, messageID int64, providerMessageID string) ([]string, error) {
+	live, err := liveProviderCopyIDsTx(ctx, q, messageID)
+	if err != nil {
+		return nil, err
+	}
+	var others []string
+	for _, id := range live {
+		if id != providerMessageID {
+			others = append(others, id)
+		}
+	}
+	return others, nil
 }
 
 // dropDeadCopyLabelsTx forgets the labels of an account's copies that are no
@@ -185,4 +247,16 @@ func dropDeadMessageCopyLabelsTx(ctx context.Context, tx *sql.Tx, messageID int6
 		}
 	}
 	return nil
+}
+
+// LabelCopyIDs returns the provider ids a label change on a message reaches:
+// id, the copy it was resolved through, then the message's other copies.
+func (info MessageMutationInfo) LabelCopyIDs(id string) []string {
+	ids := []string{id}
+	for _, other := range info.OtherCopyIDs {
+		if other != id {
+			ids = append(ids, other)
+		}
+	}
+	return ids
 }

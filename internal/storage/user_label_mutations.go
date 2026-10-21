@@ -222,13 +222,31 @@ func (db *DB) CompleteUserLabelMutation(ctx context.Context, e LabelMutationQueu
 		}
 		return tx.Commit()
 	}
+	// The change reached every copy of the message.
 	if e.Operation == LabelMutationAdd {
 		label.AccountID = e.AccountID
-		if err := db.addMessageLabelsTx(ctx, tx, e.MessageID, e.AccountID, []LabelInput{label}); err != nil {
+		kept, dropped, err := db.resolveMessageLabelsTx(ctx, tx, e.AccountID, []LabelInput{label})
+		if err != nil {
 			return err
+		}
+		for _, labelID := range dropped {
+			if _, err := tx.ExecContext(ctx, `DELETE FROM message_labels WHERE message_id=? AND label_id=?`, e.MessageID, labelID); err != nil {
+				return err
+			}
+		}
+		for _, added := range kept {
+			if _, err := tx.ExecContext(ctx, `INSERT OR IGNORE INTO message_labels(message_id,label_id) VALUES(?,?)`, e.MessageID, added.ID); err != nil {
+				return err
+			}
+			if err := recordLabelOnEveryCopyTx(ctx, tx, e.MessageID, added); err != nil {
+				return err
+			}
 		}
 	} else {
 		if _, err := tx.ExecContext(ctx, `DELETE FROM message_labels WHERE message_id=? AND label_id IN (SELECT id FROM labels WHERE account_id=? AND provider_type=? AND (lower(name)=lower(?) OR (?!='' AND provider_id=?)))`, e.MessageID, e.AccountID, e.ProviderType, e.LabelName, label.ProviderID, label.ProviderID); err != nil {
+			return err
+		}
+		if err := dropRemovedLabelCopiesTx(ctx, tx, e.MessageID); err != nil {
 			return err
 		}
 	}

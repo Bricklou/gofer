@@ -356,8 +356,7 @@ func (h *Handler) applyGmailMessageLabel(ctx context.Context, messageID int64, i
 		}
 	}
 
-	endpoint := gmailAPIBaseURL + "/users/me/messages/" + url.PathEscape(providerMessageID) + "/modify"
-	if err := doGoogleJSON(ctx, http.MethodPost, endpoint, token, map[string][]string{"addLabelIds": []string{label.ID}}, nil); err != nil {
+	if err := h.modifyGmailCopyLabels(ctx, token, info.LabelCopyIDs(providerMessageID), map[string][]string{"addLabelIds": {label.ID}}); err != nil {
 		return storage.LabelInput{}, err
 	}
 	return storage.LabelInput{
@@ -441,8 +440,7 @@ func (h *Handler) removeGmailMessageLabel(ctx context.Context, messageID int64, 
 		}
 	}
 
-	endpoint := gmailAPIBaseURL + "/users/me/messages/" + url.PathEscape(providerMessageID) + "/modify"
-	if err := doGoogleJSON(ctx, http.MethodPost, endpoint, token, map[string][]string{"removeLabelIds": []string{label.ID}}, nil); err != nil {
+	if err := h.modifyGmailCopyLabels(ctx, token, info.LabelCopyIDs(providerMessageID), map[string][]string{"removeLabelIds": {label.ID}}); err != nil {
 		return storage.LabelInput{}, err
 	}
 	return storage.LabelInput{
@@ -487,17 +485,7 @@ func (h *Handler) applyOutlookMessageLabel(ctx context.Context, messageID int64,
 		return storage.LabelInput{}, err
 	}
 
-	categories, err := h.getOutlookMessageCategories(ctx, token, providerMessageID)
-	if err != nil {
-		return storage.LabelInput{}, err
-	}
-	categories = appendUniqueFold(categories, labelName)
-	sort.SliceStable(categories, func(i, j int) bool {
-		return strings.ToLower(categories[i]) < strings.ToLower(categories[j])
-	})
-
-	endpoint := outlookGraphBaseURL + "/me/messages/" + url.PathEscape(providerMessageID)
-	if err := h.doOutlookJSON(ctx, http.MethodPatch, endpoint, token, map[string][]string{"categories": categories}, nil); err != nil {
+	if err := h.setOutlookCopyCategories(ctx, token, info.LabelCopyIDs(providerMessageID), labelName, true); err != nil {
 		return storage.LabelInput{}, err
 	}
 	return storage.LabelInput{
@@ -549,16 +537,8 @@ func (h *Handler) removeOutlookMessageLabel(ctx context.Context, messageID int64
 		}
 	}
 
-	categories, err := h.getOutlookMessageCategories(ctx, token, providerMessageID)
-	if err != nil {
+	if err := h.setOutlookCopyCategories(ctx, token, info.LabelCopyIDs(providerMessageID), labelName, false); err != nil {
 		return storage.LabelInput{}, err
-	}
-	next, removed := removeFold(categories, labelName)
-	if removed {
-		endpoint := outlookGraphBaseURL + "/me/messages/" + url.PathEscape(providerMessageID)
-		if err := h.doOutlookJSON(ctx, http.MethodPatch, endpoint, token, map[string][]string{"categories": next}, nil); err != nil {
-			return storage.LabelInput{}, err
-		}
 	}
 	return storage.LabelInput{
 		AccountID:    info.AccountID,
@@ -566,6 +546,56 @@ func (h *Handler) removeOutlookMessageLabel(ctx context.Context, messageID int64
 		ProviderID:   labelName,
 		ProviderType: storage.LabelProviderOutlook,
 	}, nil
+}
+
+// modifyGmailCopyLabels changes the labels of every copy of a message. A
+// further copy Gmail no longer has is skipped.
+func (h *Handler) modifyGmailCopyLabels(ctx context.Context, token string, ids []string, payload map[string][]string) error {
+	for i, id := range ids {
+		err := doGoogleJSON(ctx, http.MethodPost, gmailAPIBaseURL+"/users/me/messages/"+url.PathEscape(id)+"/modify", token, payload, nil)
+		if i > 0 && googleAPIStatus(err, http.StatusNotFound) {
+			err = nil
+		}
+		if err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// setOutlookCopyCategories adds a category to every copy of a message, or
+// removes it. A further copy Outlook no longer has is skipped.
+func (h *Handler) setOutlookCopyCategories(ctx context.Context, token string, ids []string, labelName string, add bool) error {
+	for i, id := range ids {
+		err := h.setOutlookMessageCategory(ctx, token, id, labelName, add)
+		if i > 0 && outlookAPIStatus(err, http.StatusNotFound) {
+			err = nil
+		}
+		if err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (h *Handler) setOutlookMessageCategory(ctx context.Context, token, providerMessageID, labelName string, add bool) error {
+	categories, err := h.getOutlookMessageCategories(ctx, token, providerMessageID)
+	if err != nil {
+		return err
+	}
+	if add {
+		categories = appendUniqueFold(categories, labelName)
+		sort.SliceStable(categories, func(i, j int) bool {
+			return strings.ToLower(categories[i]) < strings.ToLower(categories[j])
+		})
+	} else {
+		var removed bool
+		if categories, removed = removeFold(categories, labelName); !removed {
+			return nil
+		}
+	}
+	endpoint := outlookGraphBaseURL + "/me/messages/" + url.PathEscape(providerMessageID)
+	return h.doOutlookJSON(ctx, http.MethodPatch, endpoint, token, map[string][]string{"categories": categories}, nil)
 }
 
 func appendUniqueFold(values []string, value string) []string {

@@ -405,3 +405,57 @@ func TestUserLabelsMalformedCreateRetainsIntentAndRetriesExistingLabel(t *testin
 		t.Fatal("retry duplicated remote label creation")
 	}
 }
+
+// A label change reaches every copy of a message, here a further copy in its
+// folder, and Gofer records that both carry the label.
+func TestUserLabelsReachEveryCopyOfAMessage(t *testing.T) {
+	for _, provider := range []string{"gmail", "outlook"} {
+		t.Run(provider, func(t *testing.T) {
+			f, api := newProviderActionFixture(t, provider)
+			id := f.accounts["alice"].ID
+			if err := f.routing.WithUser(t.Context(), "alice", func(db *storage.DB) error {
+				_, err := db.Write().Exec(`INSERT INTO message_folder_copies(message_id,folder_id,remote_message_id) VALUES(1,?,'m2')`, id+"-inbox")
+				return err
+			}); err != nil {
+				t.Fatal(err)
+			}
+			labelCopies := func() int {
+				var count int
+				if err := f.routing.WithUser(t.Context(), "alice", func(db *storage.DB) error {
+					return db.Read().QueryRow(`SELECT count(*) FROM message_label_copies WHERE message_id=1`).Scan(&count)
+				}); err != nil {
+					t.Fatal(err)
+				}
+				return count
+			}
+			if rec := f.request("alice", "POST", "/api/messages/1/label", url.Values{"label": {"Projects"}}.Encode()); rec.Code != 200 {
+				t.Fatalf("label: %d %s", rec.Code, rec.Body.String())
+			}
+			waitUserIMAP(t, func() bool { return f.pendingLabels(t, "alice") == 0 })
+			if f.labelCount(t, "alice", "Projects", provider) != 1 || labelCopies() != 2 {
+				t.Fatalf("label on both copies: shown %d, copies recorded %d", f.labelCount(t, "alice", "Projects", provider), labelCopies())
+			}
+			if rec := f.request("alice", "POST", "/api/messages/1/unlabel", url.Values{"label": {"Projects"}}.Encode()); rec.Code != 200 {
+				t.Fatalf("unlabel: %d %s", rec.Code, rec.Body.String())
+			}
+			waitUserIMAP(t, func() bool { return f.pendingLabels(t, "alice") == 0 })
+			if f.labelCount(t, "alice", "Projects", "") != 0 || labelCopies() != 0 {
+				t.Fatalf("label removed: shown %d, copies recorded %d", f.labelCount(t, "alice", "Projects", ""), labelCopies())
+			}
+			want := map[string]int{"alice|GET|/me/messages/m2": 2, "alice|PATCH|/me/messages/m2": 2}
+			if provider == "gmail" {
+				want = map[string]int{"alice|POST|/users/me/messages/m2/modify": 2}
+			}
+			api.mu.Lock()
+			calls := fmt.Sprint(api.calls)
+			reached := true
+			for call, count := range want {
+				reached = reached && api.calls[call] == count
+			}
+			api.mu.Unlock()
+			if !reached {
+				t.Fatalf("provider calls = %s, want the second copy labelled and unlabelled: %v", calls, want)
+			}
+		})
+	}
+}

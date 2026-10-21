@@ -2831,6 +2831,10 @@ func (db *DB) AddMessageLabel(ctx context.Context, messageID int64, accountID st
 		messageID, out.ID); err != nil {
 		return models.Label{}, err
 	}
+	// Gofer puts a provider label on every copy of the message.
+	if err := recordLabelOnEveryCopyTx(ctx, tx, messageID, out); err != nil {
+		return models.Label{}, err
+	}
 	if err := tx.Commit(); err != nil {
 		return models.Label{}, err
 	}
@@ -2838,13 +2842,29 @@ func (db *DB) AddMessageLabel(ctx context.Context, messageID int64, accountID st
 }
 
 func (db *DB) RemoveMessageLabel(ctx context.Context, messageID int64, accountID, labelName string) error {
-	_, err := db.Write().ExecContext(ctx, `
+	return db.removeMessageLabels(ctx, messageID, `
 		DELETE FROM message_labels
 		WHERE message_id = ?
 		  AND label_id IN (
 			SELECT id FROM labels WHERE account_id = ? AND lower(name) = lower(?)
 		  )`, messageID, accountID, strings.TrimSpace(labelName))
-	return err
+}
+
+// removeMessageLabels runs a delete of a message's labels, which Gofer takes
+// off every copy of the message.
+func (db *DB) removeMessageLabels(ctx context.Context, messageID int64, query string, args ...any) error {
+	tx, err := db.Write().BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	if _, err := tx.ExecContext(ctx, query, args...); err != nil {
+		return err
+	}
+	if err := dropRemovedLabelCopiesTx(ctx, tx, messageID); err != nil {
+		return err
+	}
+	return tx.Commit()
 }
 
 func (db *DB) RemoveMessageLabelForProvider(ctx context.Context, messageID int64, accountID, providerType, providerID, labelName string) error {
@@ -2869,8 +2889,7 @@ func (db *DB) RemoveMessageLabelForProvider(ctx context.Context, messageID int64
 		  AND label_id IN (
 			SELECT id FROM labels WHERE account_id = ? AND ` + predicate + `
 		  )`
-	_, err := db.Write().ExecContext(ctx, query, args...)
-	return err
+	return db.removeMessageLabels(ctx, messageID, query, args...)
 }
 
 func (db *DB) GetProviderMessageLabels(ctx context.Context, messageID int64, accountID, providerType string) ([]models.Label, error) {
@@ -7383,7 +7402,10 @@ type MessageMutationInfo struct {
 	RemoteMessageID string
 	// FolderCopyIDs are further provider copies of the message in the same
 	// folder, which a change made there reaches too.
-	FolderCopyIDs     []string
+	FolderCopyIDs []string
+	// OtherCopyIDs are the message's other provider copies in a folder,
+	// which a label change reaches too.
+	OtherCopyIDs      []string
 	InternetMessageID string
 	ThreadID          string
 	ProviderThreadID  string
@@ -7537,6 +7559,9 @@ func (db *DB) getMessageMutationInfo(ctx context.Context, messageID int64, folde
 	info.IsRead = isRead == 1
 	info.IsStarred = isStarred == 1
 	if info.FolderCopyIDs, err = folderCopyIDs(ctx, db.Read(), messageID, info.FolderID); err != nil {
+		return nil, err
+	}
+	if info.OtherCopyIDs, err = otherLiveCopyIDs(ctx, db.Read(), messageID, info.RemoteMessageID); err != nil {
 		return nil, err
 	}
 	return &info, nil
