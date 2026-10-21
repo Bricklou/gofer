@@ -973,13 +973,6 @@ input[role="switch"] + .gofer-switch-track::after {
   transform: scale(.72) rotate(16deg);
 }
 
-.settings-select .select-trigger,
-.settings-select .select-item,
-[data-avatar-admin] .select-trigger,
-[data-avatar-admin] .select-item {
-  transition: color 150ms ease, background-color 150ms ease, border-color 150ms ease, box-shadow 150ms ease;
-}
-
 .compose-from-trigger,
 .email-translation-language-trigger,
 .compose-from-menu .compose-from-item,
@@ -1369,6 +1362,19 @@ html[data-theme="classic"] .mail-list-search-input-wrap {
     opacity: 0;
     transform: translateX(0.5rem);
   }
+}
+
+/* Inside menus and popovers, hovered and selected items use a stronger accent:
+   Classic's and Minimal's accent is almost the menu background (about 1.1:1).
+   Express keeps its own blue accent, which already shows. */
+:root:not([data-theme="express"]) [data-tui-popover-content] {
+  --accent: color-mix(in oklab, var(--popover-foreground) 14%, var(--popover));
+}
+
+/* A small gap between menu items, so a hovered item's highlight never touches
+   the selected item's. */
+[data-tui-popover-content] :is(.select-item, [data-tui-dropdown-item], [data-tui-dropdown-submenu-trigger]):not(:first-child) {
+  margin-top: 0.25rem;
 }
 
 /* The sort menu's order switch slides its highlight like the view capsule. */
