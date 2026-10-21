@@ -31,6 +31,17 @@ Gofer doesn't connect to servers on private network addresses unless they are ap
 
 Runtime data is stored in `data/` by default. Protect the data directory, configuration, and secrets, and back them up together before upgrades. Shared databases apply schema migrations at startup, and managed mode converts them to per-user storage as described in [pre-0.5.0-migration.md](./pre-0.5.0-migration.md). Going back to an older version may require restoring its matching backup, and the retained shared database does not include changes made after conversion. I recommend testing your providers and access setup before relying on Gofer for anything critical.
 
+## outlook change notifications
+
+Outlook accounts are checked for new mail on a schedule, and more often while Gofer is open. If your installation is reachable from the internet over HTTPS, Microsoft can instead tell Gofer about Inbox changes as they happen. Set `GOFER_OUTLOOK_WEBHOOKS=true` and Gofer subscribes each Outlook account that receives mail, renews the subscriptions in the background, and syncs an account when Microsoft reports a change. This needs:
+
+- Personal or managed authentication.
+- A `GOFER_BASE_URL` on a public host name or address, served over HTTPS with a certificate Microsoft trusts. Self-signed certificates and private addresses don't work.
+- `/webhooks/outlook` reachable from the internet without signing in. If your reverse proxy adds its own login or an IP allowlist, exempt this path. Gofer only accepts notifications signed for one of its own subscriptions.
+- `GOFER_OUTLOOK_WEBHOOKS_SKIP_ALLOWED_CIDRS=true` if you set `GOFER_ALLOWED_CIDRS`, so Microsoft's servers can reach that path. Gofer logs a warning at startup when it's missing.
+
+To check the path from outside your network, run `curl -X POST 'https://your-host/webhooks/outlook?validationToken=hello'`; it should print `hello`. Gofer logs `outlook webhook account=…: subscribed until …` when a subscription is made. If Microsoft can't reach Gofer, subscribing fails, Gofer tries again later, and the scheduled checks keep working meanwhile.
+
 ## docker
 
 Images for amd64 and arm64 are published to `ghcr.io/cristianadrielbraun/gofer` with each release. The quickest start is the example [`compose.yaml`](../compose.yaml): set `GOFER_BASE_URL` to the address you'll open in your browser, then run
