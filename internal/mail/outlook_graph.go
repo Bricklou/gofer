@@ -879,6 +879,34 @@ func (o *SyncOrchestrator) syncOutlookGraphFolder(ctx context.Context, accountID
 	return nil
 }
 
+// outlookInboxChanged is the quick check run while the owner has Gofer open:
+// it asks Graph for at most one Inbox change since the saved delta link and
+// leaves the link as it is, so the next sync applies every change. Until the
+// Inbox has a delta link the regular sync is still importing it, and the
+// check reports nothing.
+func (o *SyncOrchestrator) outlookInboxChanged(ctx context.Context, accountID, token string) (bool, error) {
+	folders, err := o.outlookRepository().GetFoldersForAccount(ctx, accountID)
+	if err != nil {
+		return false, err
+	}
+	for _, folder := range folders {
+		if folder.Role != "inbox" || outlookGraphFolderNeedsFullReconcile(folder) {
+			continue
+		}
+		var response outlookGraphMessagesDeltaResponse
+		err := o.outlookJSON(ctx, http.MethodGet, strings.TrimSpace(folder.SyncCursor), token, outlookGraphHeaders(1), nil, &response)
+		if status, ok := providerAPIStatus(err); ok && status == http.StatusGone {
+			// The link expired, and the sync starts the Inbox over.
+			return true, nil
+		}
+		if err != nil {
+			return false, err
+		}
+		return len(response.Value) > 0 || strings.TrimSpace(response.NextLink) != "", nil
+	}
+	return false, nil
+}
+
 func outlookGraphFolderNeedsFullReconcile(folder storage.FolderSyncInfo) bool {
 	if strings.TrimSpace(folder.SyncCursor) == "" {
 		return true

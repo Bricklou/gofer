@@ -3,6 +3,7 @@ package mail
 import (
 	"context"
 	"database/sql"
+	"fmt"
 	"log"
 	"os"
 	"strconv"
@@ -11,6 +12,7 @@ import (
 	"time"
 
 	"github.com/cristianadrielbraun/gofer/internal/providerquota"
+	"github.com/cristianadrielbraun/gofer/internal/providers"
 	"github.com/cristianadrielbraun/gofer/internal/storage"
 )
 
@@ -140,58 +142,67 @@ func (o *SyncOrchestrator) pollGmailAPIForUsers(ctx context.Context, userIDs []s
 		return
 	}
 	seen := map[string]bool{}
-	var accountIDs []string
+	var accounts []activePollAccount
 	for _, userID := range userIDs {
-		if ctx.Err() != nil {
-			return
-		}
-		ids, err := o.db.GetGmailEmailSyncAccountIDs(ctx, userID)
-		if err != nil {
-			log.Printf("gmail api poll user=%s: list accounts: %v", userID, err)
-			continue
-		}
-		for _, accountID := range ids {
-			accountID = strings.TrimSpace(accountID)
-			if accountID == "" || seen[accountID] {
+		for _, provider := range []string{providers.ProviderGmail, providers.ProviderOutlook} {
+			if ctx.Err() != nil {
+				return
+			}
+			ids, err := o.db.GetProviderEmailSyncAccountIDs(ctx, userID, provider)
+			if err != nil {
+				log.Printf("%s poll user=%s: list accounts: %v", provider, userID, err)
 				continue
 			}
-			seen[accountID] = true
-			accountIDs = append(accountIDs, accountID)
+			for _, accountID := range ids {
+				accountID = strings.TrimSpace(accountID)
+				if accountID == "" || seen[accountID] {
+					continue
+				}
+				seen[accountID] = true
+				accounts = append(accounts, activePollAccount{id: accountID, provider: provider})
+			}
 		}
 	}
-	if len(accountIDs) == 0 {
+	if len(accounts) == 0 {
 		return
 	}
 
-	parallelism := accountSyncParallelism(len(accountIDs), gmailAPIPollMaxParallelAccounts)
-	jobs := make(chan string)
+	parallelism := accountSyncParallelism(len(accounts), gmailAPIPollMaxParallelAccounts)
+	jobs := make(chan activePollAccount)
 	var wg sync.WaitGroup
 	for worker := 0; worker < parallelism; worker++ {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			for accountID := range jobs {
+			for account := range jobs {
 				if ctx.Err() != nil {
 					return
 				}
-				o.pollGmailAPIAccountIfDue(ctx, accountID, force)
+				o.pollAccountIfDue(ctx, account, force)
 			}
 		}()
 	}
-	for _, accountID := range accountIDs {
+	for _, account := range accounts {
 		select {
 		case <-ctx.Done():
 			close(jobs)
 			wg.Wait()
 			return
-		case jobs <- accountID:
+		case jobs <- account:
 		}
 	}
 	close(jobs)
 	wg.Wait()
 }
 
-func (o *SyncOrchestrator) pollGmailAPIAccountIfDue(ctx context.Context, accountID string, force bool) {
+// activePollAccount is a Gmail or Outlook account checked for changes while
+// its owner has Gofer open.
+type activePollAccount struct {
+	id, provider string
+}
+
+func (o *SyncOrchestrator) pollAccountIfDue(ctx context.Context, account activePollAccount, force bool) {
+	accountID := account.id
 	if !o.gmailAPIPollReserve(accountID, force) {
 		return
 	}
@@ -201,19 +212,38 @@ func (o *SyncOrchestrator) pollGmailAPIAccountIfDue(ctx context.Context, account
 
 	pollCtx, cancel := context.WithTimeout(ctx, gmailAPIPollRequestTimeout)
 	defer cancel()
-	changed, _, err := o.checkGmailAPIProfile(pollCtx, accountID)
+	var changed bool
+	var err error
+	if account.provider == providers.ProviderOutlook {
+		changed, err = o.checkOutlookInbox(pollCtx, accountID)
+	} else {
+		changed, _, err = o.checkGmailAPIProfile(pollCtx, accountID)
+	}
 	o.gmailAPIPollComplete(accountID, err)
 	if err != nil {
 		if ctx.Err() == nil {
-			log.Printf("gmail api poll account=%s: %v", accountID, err)
+			log.Printf("%s poll account=%s: %v", account.provider, accountID, err)
 		}
 		return
 	}
 	if changed {
 		if o.SyncAccount(context.Background(), accountID) {
-			log.Printf("gmail api poll account=%s: history changed, starting sync", accountID)
+			log.Printf("%s poll account=%s: changed, starting sync", account.provider, accountID)
 		}
 	}
+}
+
+func (o *SyncOrchestrator) checkOutlookInbox(ctx context.Context, accountID string) (bool, error) {
+	ctx = providerquota.Background(ctx)
+	graphTokens, ok := o.tokenProvider.(graphMailTokenProvider)
+	if !ok {
+		return false, fmt.Errorf("outlook graph mail token provider is unavailable")
+	}
+	token, err := graphTokens.GetMicrosoftGraphMailTokenForAccount(ctx, accountID)
+	if err != nil {
+		return false, err
+	}
+	return o.outlookInboxChanged(ctx, accountID, token)
 }
 
 func (o *SyncOrchestrator) gmailAPIPollReserve(accountID string, force bool) bool {

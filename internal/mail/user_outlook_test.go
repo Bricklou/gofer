@@ -27,6 +27,7 @@ const userOutlookScopes = "https://graph.microsoft.com/Mail.ReadWrite https://gr
 type routedOutlookState struct {
 	tokenThrottled                                                                      bool
 	throttled                                                                           bool
+	quiet                                                                               bool // no changes since a delta link
 	phase                                                                               int
 	expired, paged, failSecond, rejectOld, incomplete, wrongLink, sparse, missingDetail bool
 	mimeStatus                                                                          int
@@ -147,7 +148,7 @@ func (a *routedOutlookAPI) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		value := []map[string]any{}
-		if folder == "inbox-id" {
+		if folder == "inbox-id" && !(state.quiet && token != "") {
 			id := fmt.Sprintf("m%d", state.phase+1)
 			if q.Get("$skiptoken") != "" {
 				id = "m2"
@@ -841,5 +842,63 @@ func TestUserOutlookTokenThrottlingDefersAccountWithoutGraphRequests(t *testing.
 	}
 	if err := f.worker.Sync(t.Context(), "bob", f.ids["bob"]); err != nil {
 		t.Fatal(err)
+	}
+}
+
+// While its owner has Gofer open, an Outlook account's Inbox is checked for
+// changes, and a change queues the account's sync.
+func TestUserOutlookActivePollQueuesSyncOnInboxChange(t *testing.T) {
+	f := newUserOutlookFixture(t)
+	if err := f.worker.Sync(t.Context(), "alice", f.ids["alice"]); err != nil {
+		t.Fatal(err)
+	}
+	release, err := f.worker.BeginActiveUserSession(t.Context(), "alice")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer release()
+	f.worker.mu.Lock()
+	job := userActivePollJob{owner: "alice", account: f.ids["alice"], session: f.worker.activePollUsers["alice"]}
+	f.worker.mu.Unlock()
+	const delta = "/me/mailFolders/inbox-id/messages/delta"
+
+	f.api.change("alice", func(state *routedOutlookState) { state.quiet = true })
+	before := f.api.count("alice", delta)
+	if err := f.worker.pollActiveGmailAccount(job); err != nil {
+		t.Fatal(err)
+	}
+	if got := f.api.count("alice", delta); got != before+1 {
+		t.Fatalf("Inbox checks: %d, want %d", got, before+1)
+	}
+	f.worker.mu.Lock()
+	queued := f.worker.queued[f.ids["alice"]] != nil
+	f.worker.mu.Unlock()
+	if queued {
+		t.Fatal("an unchanged Inbox queued a sync")
+	}
+
+	f.api.change("alice", func(state *routedOutlookState) { state.quiet, state.phase = false, 1 })
+	if err := f.routing.ResetActivePolling(t.Context(), "alice", f.ids["alice"]); err != nil {
+		t.Fatal(err)
+	}
+	if err := f.worker.pollActiveGmailAccount(job); err != nil {
+		t.Fatal(err)
+	}
+	deadline := time.Now().Add(15 * time.Second)
+	var found int64
+	for time.Now().Before(deadline) {
+		f.local(t, "alice", func(db *storage.DB) error {
+			return db.Read().QueryRow(`SELECT COUNT(*) FROM message_folder_state s JOIN folders f ON f.id=s.folder_id WHERE f.account_id=? AND s.remote_message_id='m2'`, f.ids["alice"]).Scan(&found)
+		})
+		if found > 0 {
+			break
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	if found == 0 {
+		t.Fatal("a changed Inbox did not sync the new message")
+	}
+	if f.api.count("bob", delta) != 0 {
+		t.Fatal("an owner without Gofer open was checked")
 	}
 }

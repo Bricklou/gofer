@@ -3379,14 +3379,20 @@ func markGmailPollCheck(ctx context.Context, writer gmailPollWriter, state Gmail
 }
 
 func (db *DB) GetGmailEmailSyncAccountIDs(ctx context.Context, userID string) ([]string, error) {
+	return db.GetProviderEmailSyncAccountIDs(ctx, userID, "gmail")
+}
+
+// GetProviderEmailSyncAccountIDs lists the user's accounts of one provider
+// that receive mail.
+func (db *DB) GetProviderEmailSyncAccountIDs(ctx context.Context, userID, provider string) ([]string, error) {
 	rows, err := db.Read().QueryContext(ctx, `
 		SELECT id
 		FROM accounts
 		WHERE user_id = ?
-		  AND provider = 'gmail'
+		  AND provider = ?
 		  AND COALESCE(is_deleting, 0) = 0
 		  AND COALESCE(email_sync_enabled, 1) = 1
-		ORDER BY id`, strings.TrimSpace(userID))
+		ORDER BY id`, strings.TrimSpace(userID), provider)
 	if err != nil {
 		return nil, err
 	}

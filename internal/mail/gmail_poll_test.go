@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
@@ -150,9 +151,63 @@ func TestPollGmailAPIAccountSkipsProfileCheckWhileSyncRunning(t *testing.T) {
 	orchestrator.running["acc"] = &accountSyncRun{done: make(chan struct{})}
 	orchestrator.mu.Unlock()
 
-	orchestrator.pollGmailAPIAccountIfDue(ctx, "acc", true)
+	orchestrator.pollAccountIfDue(ctx, activePollAccount{id: "acc", provider: providers.ProviderGmail}, true)
 	if profileRequests != 0 {
 		t.Fatalf("profile requests = %d, want no polling while sync is already running", profileRequests)
+	}
+}
+
+// The shared poller checks an Outlook account's Inbox for one change since
+// its delta link, starts the sync when there is one, and leaves an Inbox
+// still being imported to the regular sync.
+func TestPollOutlookAccountChecksInboxDeltaLink(t *testing.T) {
+	ctx := context.Background()
+	db := newLabelSyncTestDB(t)
+	seedOutlookGraphFolder(t, ctx, db)
+	status := http.StatusOK
+	var page []map[string]any
+	var requests []string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		requests = append(requests, r.URL.Path)
+		if r.URL.Path != "/delta/inbox" {
+			t.Fatalf("unexpected Graph request %s %s", r.Method, r.URL.String())
+		}
+		if prefer := r.Header.Get("Prefer"); !strings.Contains(prefer, "odata.maxpagesize=1") {
+			t.Fatalf("Prefer = %q, want one change per page", prefer)
+		}
+		if status != http.StatusOK {
+			http.Error(w, "expired", status)
+			return
+		}
+		_ = json.NewEncoder(w).Encode(map[string]any{"value": page, "@odata.deltaLink": "http://" + r.Host + "/delta/later"})
+	}))
+	defer server.Close()
+	previousBaseURL := outlookGraphBaseURL
+	outlookGraphBaseURL = server.URL
+	t.Cleanup(func() { outlookGraphBaseURL = previousBaseURL })
+	orchestrator := NewSyncOrchestrator(db, nil, nil, labelSyncTestTokens{})
+
+	changed, err := orchestrator.checkOutlookInbox(ctx, "acc")
+	if err != nil || changed || len(requests) != 0 {
+		t.Fatalf("Inbox still being imported: changed=%v err=%v requests=%v", changed, err, requests)
+	}
+
+	if _, err := db.Write().ExecContext(ctx, `UPDATE folders SET sync_cursor = ?, last_full_sync_at = CURRENT_TIMESTAMP WHERE id = 'acc_inbox'`, server.URL+"/delta/inbox"); err != nil {
+		t.Fatalf("set Inbox delta link: %v", err)
+	}
+	if changed, err := orchestrator.checkOutlookInbox(ctx, "acc"); err != nil || changed {
+		t.Fatalf("unchanged Inbox: changed=%v err=%v", changed, err)
+	}
+	page = []map[string]any{{"id": "graph-new"}}
+	if changed, err := orchestrator.checkOutlookInbox(ctx, "acc"); err != nil || !changed {
+		t.Fatalf("changed Inbox: changed=%v err=%v", changed, err)
+	}
+	status = http.StatusGone
+	if changed, err := orchestrator.checkOutlookInbox(ctx, "acc"); err != nil || !changed {
+		t.Fatalf("expired delta link: changed=%v err=%v", changed, err)
+	}
+	if got := queryOutlookGraphFolderCursor(t, ctx, db); got != server.URL+"/delta/inbox" {
+		t.Fatalf("sync_cursor = %q, the check must leave the delta link to the sync", got)
 	}
 }
 

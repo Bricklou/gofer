@@ -244,11 +244,18 @@ func (s *UserIMAP) pollActiveGmailAccount(job userActivePollJob) error {
 			if err != nil {
 				return err
 			}
-			if scope.config.Provider != providers.ProviderGmail || scope.config.AuthMethod != "oauth2" || scope.tokens == nil || !scope.account.EmailSyncEnabled {
+			if scope.config.AuthMethod != "oauth2" || scope.tokens == nil || !scope.account.EmailSyncEnabled {
 				interval = gmailAPIPollMaxBackoff
 				return nil
 			}
-			changed, err = s.checkUserGmailProfile(ctx, scope)
+			switch scope.config.Provider {
+			case providers.ProviderGmail:
+				changed, err = s.checkUserGmailProfile(ctx, scope)
+			case providers.ProviderOutlook:
+				changed, err = s.checkUserOutlookInbox(ctx, scope)
+			default:
+				interval = gmailAPIPollMaxBackoff
+			}
 			return err
 		})
 	}
@@ -274,6 +281,22 @@ func (s *UserIMAP) pollActiveGmailAccount(job userActivePollJob) error {
 		return s.QueueAccount(job.session.ctx, job.account)
 	}
 	return err
+}
+
+func (s *UserIMAP) checkUserOutlookInbox(ctx context.Context, scope *userIMAPScope) (bool, error) {
+	ctx = providerquota.Background(ctx)
+	o := NewSyncOrchestrator(nil, nil, nil, scope.tokens)
+	o.imapScope = scope
+	graphTokens, ok := scope.tokens.(graphMailTokenProvider)
+	if !ok {
+		return false, fmt.Errorf("outlook graph mail token provider is unavailable")
+	}
+	token, err := graphTokens.GetMicrosoftGraphMailTokenForAccount(ctx, scope.id)
+	if err != nil {
+		return false, o.recordOutlookRetry(ctx, err)
+	}
+	o.userGraphToken = token
+	return o.outlookInboxChanged(ctx, scope.id, token)
 }
 
 func (s *UserIMAP) checkUserGmailProfile(ctx context.Context, scope *userIMAPScope) (bool, error) {
