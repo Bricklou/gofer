@@ -122,6 +122,7 @@ func newManagedApplication(parent context.Context, path string, maxOpen int) (re
 	if err != nil {
 		return nil, err
 	}
+	app.imap.EnableOutlookWebhooks(app.httpConfig.OutlookWebhookURL(), s.key)
 	// Keep the databases of people with Gofer open when room is needed.
 	s.stores.SetRetainHint(app.imap.OwnerOnline)
 	dataDir := filepath.Dir(s.layout.CentralPath)
@@ -149,7 +150,7 @@ func newManagedApplication(parent context.Context, path string, maxOpen int) (re
 	app.mailbox.RegisterAuthenticationRoutes(mux)
 	app.mailbox.RegisterAdministrationRoutes(mux)
 	if app.httpConfig.OutlookWebhooks {
-		mux.Handle("POST "+httpguard.OutlookWebhookPath, mail.OutlookWebhookHandler(nil))
+		mux.Handle("POST "+httpguard.OutlookWebhookPath, mail.OutlookWebhookHandler(app.imap))
 	}
 	if err := app.mailbox.StartUserThreading(ctx); err != nil {
 		return nil, err

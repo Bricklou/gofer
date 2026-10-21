@@ -159,7 +159,7 @@ func (o *SyncOrchestrator) pollGmailAPIForUsers(ctx context.Context, userIDs []s
 					continue
 				}
 				// Graph announces the Inbox changes of subscribed accounts.
-				if provider == providers.ProviderOutlook && o.outlookSubscribed(accountID, time.Now()) {
+				if provider == providers.ProviderOutlook && o.outlookSubs.subscribed(accountID, time.Now()) {
 					continue
 				}
 				seen[accountID] = true

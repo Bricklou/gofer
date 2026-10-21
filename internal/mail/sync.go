@@ -156,11 +156,8 @@ type SyncOrchestrator struct {
 	lifecycleCtx        context.Context
 	syncAccountOverride func(context.Context, string, bool) error
 	incrementalOverride func(context.Context, string, string, string)
-	// Outlook subscriptions, kept while GOFER_OUTLOOK_WEBHOOKS is on.
-	outlookSubsMu       sync.Mutex
-	outlookWebhook      *outlookWebhookConfig
-	outlookSubs         map[string]*outlookSubscriptionState
-	outlookSubsWake     chan struct{}
+	// outlookSubs is set while GOFER_OUTLOOK_WEBHOOKS is on.
+	outlookSubs         *outlookSubscriptions
 	outlookGraphRequest graphJSONRequest
 	gmailPollMu         sync.Mutex
 	activeUsers         map[string]int
@@ -1029,7 +1026,7 @@ func (o *SyncOrchestrator) Start(ctx context.Context) {
 		go o.runGmailAPIPoller(ctx)
 		log.Printf("sync: Gmail API active poll worker started")
 	}
-	if o.tokenProvider != nil && o.outlookWebhookConfig() != nil {
+	if o.tokenProvider != nil && o.outlookSubs != nil {
 		go o.runOutlookSubscriptions(ctx)
 		log.Printf("sync: Outlook webhook subscriptions started")
 	}

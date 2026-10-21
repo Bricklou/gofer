@@ -29,12 +29,6 @@ const (
 	outlookClientStateMaxLength   = 128
 )
 
-// outlookWebhookConfig is set when GOFER_OUTLOOK_WEBHOOKS is on.
-type outlookWebhookConfig struct {
-	url string
-	key []byte
-}
-
 // outlookClientState is the secret Graph repeats in every notification of
 // an account's subscription. It names the account and signs that name with
 // Gofer's key, so a notification proves which account it is for without

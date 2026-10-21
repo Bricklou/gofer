@@ -144,7 +144,7 @@ func TestOutlookSubscriptionsFollowTheAccounts(t *testing.T) {
 	if account, ok := outlookClientStateAccount(testOutlookWebhookKey, created.ClientState); !ok || account != "out-1" {
 		t.Fatalf("client state %q names %q %t", created.ClientState, account, ok)
 	}
-	if !o.outlookSubscribed("out-1", now) || o.outlookSubscribed("gm-1", now) {
+	if !o.outlookSubs.subscribed("out-1", now) || o.outlookSubs.subscribed("gm-1", now) {
 		t.Fatal("subscribed accounts are wrong")
 	}
 
@@ -166,7 +166,7 @@ func TestOutlookSubscriptionsFollowTheAccounts(t *testing.T) {
 	}
 	o.sweepOutlookSubscriptions(ctx, later.Add(time.Minute))
 	equalCalls(t, "sweep after receiving stopped", graph.takeCalls(), "DELETE /subscriptions/sub-2")
-	if o.outlookSubscribed("out-1", later.Add(time.Minute)) {
+	if o.outlookSubs.subscribed("out-1", later.Add(time.Minute)) {
 		t.Fatal("account still subscribed after receiving stopped")
 	}
 }
@@ -189,7 +189,7 @@ func TestOutlookSubscriptionFailuresWaitBeforeTryingAgain(t *testing.T) {
 	graph.createErr = nil
 	o.sweepOutlookSubscriptions(ctx, now.Add(3*outlookSubscriptionRetry))
 	equalCalls(t, "recovery", graph.takeCalls(), "POST /subscriptions")
-	if !o.outlookSubscribed("out-1", now.Add(3*outlookSubscriptionRetry)) {
+	if !o.outlookSubs.subscribed("out-1", now.Add(3*outlookSubscriptionRetry)) {
 		t.Fatal("account not subscribed after recovering")
 	}
 }
@@ -229,6 +229,15 @@ func TestOutlookNotificationsActOnlyOnSignedAccounts(t *testing.T) {
 
 	// Graph asks for a renewal long before the end.
 	o.ReceiveOutlookNotifications([]OutlookNotification{{SubscriptionID: "sub-1", ClientState: state, LifecycleEvent: "reauthorizationRequired"}})
+	waitSync := func(step string) {
+		t.Helper()
+		select {
+		case <-synced:
+		case <-time.After(5 * time.Second):
+			t.Fatalf("no sync after %s", step)
+		}
+	}
+	waitSync("reauthorizationRequired")
 	o.sweepOutlookSubscriptions(ctx, now.Add(time.Minute))
 	equalCalls(t, "sweep after reauthorizationRequired", graph.takeCalls(), "PATCH /subscriptions/sub-1")
 	o.sweepOutlookSubscriptions(ctx, now.Add(2*time.Minute))
@@ -236,12 +245,12 @@ func TestOutlookNotificationsActOnlyOnSignedAccounts(t *testing.T) {
 
 	// A notification about an older subscription leaves the current one.
 	o.ReceiveOutlookNotifications([]OutlookNotification{{SubscriptionID: "old", ClientState: state, LifecycleEvent: "subscriptionRemoved"}})
-	<-synced
+	waitSync("an old subscription ended")
 	o.sweepOutlookSubscriptions(ctx, now.Add(3*time.Minute))
 	equalCalls(t, "sweep after an old subscription ended", graph.takeCalls())
 
 	o.ReceiveOutlookNotifications([]OutlookNotification{{SubscriptionID: "sub-1", ClientState: state, LifecycleEvent: "subscriptionRemoved"}})
-	<-synced
+	waitSync("the subscription ended")
 	o.sweepOutlookSubscriptions(ctx, now.Add(4*time.Minute))
 	equalCalls(t, "sweep after the subscription ended", graph.takeCalls(), "POST /subscriptions")
 }

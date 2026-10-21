@@ -252,6 +252,11 @@ func (s *UserIMAP) pollActiveGmailAccount(job userActivePollJob) error {
 			case providers.ProviderGmail:
 				changed, err = s.checkUserGmailProfile(ctx, scope)
 			case providers.ProviderOutlook:
+				if s.outlookSubs.subscribed(scope.id, time.Now()) {
+					// Graph announces the Inbox changes.
+					interval = gmailAPIPollMaxBackoff
+					return nil
+				}
 				changed, err = s.checkUserOutlookInbox(ctx, scope)
 			default:
 				interval = gmailAPIPollMaxBackoff
