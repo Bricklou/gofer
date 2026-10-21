@@ -233,6 +233,16 @@ CREATE TABLE IF NOT EXISTS message_labels (
     PRIMARY KEY (message_id, label_id)
 );
 
+-- The provider copies carrying each label of a message with more than one
+-- copy, such as both copies of mail sent to oneself. The message shows the
+-- labels of all its copies; each copy's sync replaces only its own.
+CREATE TABLE IF NOT EXISTS message_label_copies (
+    message_id INTEGER NOT NULL REFERENCES messages(id) ON DELETE CASCADE,
+    label_id TEXT NOT NULL REFERENCES labels(id) ON DELETE CASCADE,
+    remote_message_id TEXT NOT NULL CHECK (remote_message_id != ''),
+    PRIMARY KEY (message_id, label_id, remote_message_id)
+);
+
 CREATE TABLE IF NOT EXISTS label_sync_state (
     account_id TEXT NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,
     provider_type TEXT NOT NULL,
@@ -1666,4 +1676,4 @@ CREATE TABLE IF NOT EXISTS calendar_invitation_messages (
 );
 
 -- Schema version marker for fresh installs
-INSERT OR REPLACE INTO schema_version (version) VALUES (120);
+INSERT OR REPLACE INTO schema_version (version) VALUES (121);

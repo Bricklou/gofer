@@ -38,3 +38,33 @@ func TestMigrateV119ToV120AddsFolderCopies(t *testing.T) {
 		t.Fatalf("copies left after their folder state = %d, %v", copies, err)
 	}
 }
+
+func TestMigrateV120ToV121AddsLabelCopies(t *testing.T) {
+	ctx := context.Background()
+	db := newContactsTestDB(t)
+	if _, err := db.Write().ExecContext(ctx, `
+		DROP TABLE message_label_copies;
+		DELETE FROM schema_version;
+		INSERT INTO schema_version (version) VALUES (120);
+		INSERT INTO accounts (id, user_id, email_address, provider) VALUES ('jmap', 'default', 'jmap@example.com', 'jmap');
+		INSERT INTO labels (id, account_id, name, provider_type) VALUES ('work', 'jmap', 'Work', 'imap_keyword');
+		INSERT INTO messages (id, account_id, internet_message_id) VALUES (1, 'jmap', '<one@example.com>');`); err != nil {
+		t.Fatalf("set up schema 120: %v", err)
+	}
+	if err := migrateV120ToV121(db.Write()); err != nil {
+		t.Fatalf("migrateV120ToV121() error = %v", err)
+	}
+	if err := migrateV120ToV121(db.Write()); err != nil {
+		t.Fatalf("migrateV120ToV121() rerun error = %v", err)
+	}
+	if _, err := db.Write().ExecContext(ctx, `INSERT INTO message_label_copies (message_id, label_id, remote_message_id) VALUES (1, 'work', 'email-1')`); err != nil {
+		t.Fatalf("record label copy: %v", err)
+	}
+	if _, err := db.Write().ExecContext(ctx, `DELETE FROM labels WHERE id = 'work'`); err != nil {
+		t.Fatalf("delete label: %v", err)
+	}
+	var copies int
+	if err := db.Read().QueryRowContext(ctx, `SELECT COUNT(*) FROM message_label_copies`).Scan(&copies); err != nil || copies != 0 {
+		t.Fatalf("label copies left after their label = %d, %v", copies, err)
+	}
+}

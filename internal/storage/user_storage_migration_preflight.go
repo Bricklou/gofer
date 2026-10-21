@@ -131,7 +131,7 @@ func InspectUserStorageMigration(ctx context.Context, sourcePath string) (UserSt
 }
 
 func migrationSharedVersionSupported(version int) bool {
-	return version >= 105 && version <= 120
+	return version >= 105 && version <= 121
 }
 
 // These recognized shared schemas differ only in the explicitly handled push
@@ -483,6 +483,9 @@ func requireSharedMigrationTables(ctx context.Context, present map[string]bool, 
 			}
 			if name == "message_folder_copies" && version < 120 {
 				continue // Added empty by migrateV119ToV120.
+			}
+			if name == "message_label_copies" && version < 121 {
+				continue // Added empty by migrateV120ToV121.
 			}
 			return migrationSourceError(name, "required shared table is missing")
 		}
