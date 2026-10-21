@@ -1129,9 +1129,13 @@ input[role="switch"] + .gofer-switch-track::after {
   container-type: inline-size;
 }
 
-.mail-list-title-row,
-.mail-list-toolbar {
+.mail-list-title-row {
   flex-wrap: wrap;
+}
+
+/* The toolbar never wraps: selection actions fold into the ⋮ menu instead. */
+.mail-list-toolbar {
+  flex-wrap: nowrap;
 }
 
 .mail-list-search-section {
@@ -1332,6 +1336,74 @@ html[data-theme="classic"] .mail-list-search-input-wrap {
   min-width: 0.5rem;
 }
 
+/* The message actions only show while messages are selected, and fade in
+   and out. Hidden, they stay rendered but sit absolutely over the toolbar's
+   right edge, so they take no room and can fade out where they were. */
+.mail-list-toolbar {
+  position: relative;
+}
+
+[data-mail-selection-actions] {
+  position: absolute;
+  right: 1rem;
+  display: inline-flex;
+  flex-shrink: 0;
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+  transform: translateX(0.5rem);
+  transition: opacity 180ms ease, transform 180ms ease, visibility 180ms;
+}
+
+#mail-list[data-mail-has-selection] [data-mail-selection-actions],
+#mail-list[data-mail-selecting] [data-mail-selection-actions] {
+  position: static;
+  opacity: 1;
+  visibility: visible;
+  pointer-events: auto;
+  transform: none;
+
+  @starting-style {
+    opacity: 0;
+    transform: translateX(0.5rem);
+  }
+}
+
+/* The sort menu's order switch slides its highlight like the view capsule. */
+.mail-sort-order {
+  position: relative;
+}
+
+.mail-sort-order-indicator {
+  position: absolute;
+  top: 2px;
+  bottom: 2px;
+  left: 2px;
+  width: calc(50% - 3px);
+  transition: transform 200ms ease-out;
+}
+
+.mail-sort-order:has(input[value="asc"]:checked) .mail-sort-order-indicator {
+  transform: translateX(calc(100% + 2px));
+}
+
+/* app.js sets --collapse-width to each part's real width, so the slide runs
+   evenly both ways instead of racing through a generous fixed maximum. */
+.mail-toolbar-collapsible {
+  display: inline-flex;
+  max-width: var(--collapse-width, 12rem);
+  overflow: hidden;
+  white-space: nowrap;
+  opacity: 1;
+  transition: max-width 220ms ease, margin 220ms ease, opacity 220ms ease;
+}
+
+.mail-toolbar-collapsible[data-mail-collapsed] {
+  max-width: 0;
+  margin-left: calc(-1 * var(--collapse-gap, 0.25rem));
+  opacity: 0;
+}
+
 @container (max-width: 360px) {
   .mail-list-header {
     padding-inline: 0.75rem;
@@ -1374,11 +1446,6 @@ html[data-theme="classic"] .mail-list-search-input-wrap {
     gap: 0.25rem 0.375rem;
     padding-inline: 0.75rem;
   }
-
-  .mail-list-toolbar-spacer {
-    flex: 1 0 100%;
-    height: 0;
-  }
 }
 
 @container (max-width: 320px) {
@@ -1386,7 +1453,7 @@ html[data-theme="classic"] .mail-list-search-input-wrap {
     display: none;
   }
 
-  .mail-list-toolbar [data-mail-list-view-toggle] {
+  .mail-list-toolbar [data-mail-list-view-capsule] {
     max-width: 100%;
     overflow-x: auto;
   }
@@ -3852,7 +3919,7 @@ body.mail-list-column-resizing {
     background: var(--color-card);
   }
 
-  #mail-list[data-mail-selecting] .mail-list-toolbar > [data-mail-list-view-toggle],
+  #mail-list[data-mail-selecting] .mail-list-toolbar > [data-mail-list-view-capsule],
   #mail-list[data-mail-selecting] .mail-list-toolbar > :has([data-mail-sort-trigger]),
   #mail-list[data-mail-selecting] .mail-list-toolbar > .mail-list-toolbar-divider,
   #mail-list[data-mail-selecting] .mail-list-toolbar [data-mail-table-column-trigger-wrapper],

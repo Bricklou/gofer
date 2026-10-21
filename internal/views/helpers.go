@@ -916,7 +916,7 @@ func mailListViewMode(mode string) string {
 
 func mailListViewIndicatorStyle(mode string) string {
 	if mailListViewMode(mode) == "table" {
-		return "transform: translateX(100%);"
+		return "transform: translateX(calc(100% + 2px));"
 	}
 	return "transform: translateX(0);"
 }

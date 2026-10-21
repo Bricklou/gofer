@@ -279,7 +279,7 @@ document.addEventListener("DOMContentLoaded", function () {
             buttons[i].setAttribute("aria-pressed", active ? "true" : "false")
           }
           var indicator = group.querySelector("[data-contact-list-view-indicator]")
-          if (indicator) indicator.style.transform = mode === "table" ? "translateX(100%)" : "translateX(0)"
+          if (indicator) indicator.style.transform = mode === "table" ? "translateX(calc(100% + 2px))" : "translateX(0)"
         }
         var list = currentList()
         if (list) list.switchViewMode(mode).catch(function () {})
@@ -1455,7 +1455,7 @@ document.addEventListener("DOMContentLoaded", function () {
       var selectionAction = e.target.closest && e.target.closest("[data-mail-selection-action]")
       if (selectionAction) {
         e.preventDefault()
-        if (!selectionAction.disabled) performMailSelectionAction(selectionAction.getAttribute("data-mail-selection-action"))
+        if (!selectionAction.disabled) performMailSelectionAction(mailSelectionActionName(selectionAction))
         return
       }
 
@@ -1484,6 +1484,10 @@ document.addEventListener("DOMContentLoaded", function () {
     document.body.addEventListener("htmx:beforeRequest", function (evt) {
       var path = evt.detail.pathInfo && evt.detail.pathInfo.requestPath
       if (path && path.match(/^\/folder\//)) clearMailSelection()
+    })
+
+    document.addEventListener("gofer:mail-folder-clicked", function () {
+      clearMailSelection()
     })
 
     // Closing the reader drops the selection that opening the email seeded.
@@ -2105,6 +2109,139 @@ document.addEventListener("DOMContentLoaded", function () {
 
       var actions = document.querySelectorAll("[data-mail-selection-action]")
       for (var a = 0; a < actions.length; a++) actions[a].disabled = count === 0 || mailSelectionBusy
+
+      var list = document.getElementById("mail-list")
+      if (list) list.toggleAttribute("data-mail-has-selection", count > 0)
+      syncMailSelectionToggles(count)
+      syncMailActionOverflow()
+    }
+
+    // The read and star buttons undo the state when every selected message already has it.
+    function syncMailSelectionToggles(count) {
+      var allRead = false
+      var allStarred = false
+      if (count > 0) {
+        var selected = loadedMailRows().filter(function (row) { return selectedMailIds.has(row.id) })
+        allRead = selected.length > 0 && selected.every(function (row) { return row.read })
+        allStarred = selected.length > 0 && selected.every(function (row) { return row.starred })
+      }
+      syncMailSelectionToggle("read", allRead, "unread", "Mark as unread", "Mark as read", "Mark selected messages as unread", "Mark selected messages as read")
+      syncMailSelectionToggle("star", allStarred, "unstar", "Unstar", "Star", "Unstar selected messages", "Star selected messages")
+    }
+
+    function syncMailSelectionToggle(action, undo, undoName, undoTip, doTip, undoLabel, doLabel) {
+      var button = document.querySelector('.mail-list-toolbar [data-mail-selection-action="' + action + '"]')
+      if (!button) return
+      button.toggleAttribute("data-mail-selection-undo", undo)
+      button.setAttribute("aria-label", undo ? undoLabel : doLabel)
+      var doIcon = button.querySelector("[data-mail-" + action + "-icon]")
+      var undoIcon = button.querySelector("[data-mail-" + undoName + "-icon]")
+      if (doIcon) doIcon.classList.toggle("hidden", undo)
+      if (undoIcon) undoIcon.classList.toggle("hidden", !undo)
+      var tip = document.querySelector("[data-mail-" + action + "-tooltip]")
+      if (tip) tip.textContent = undo ? undoTip : doTip
+      var menuLabel = document.querySelector("[data-mail-" + action + "-menu-label]")
+      if (menuLabel) menuLabel.textContent = undo ? undoTip : doTip
+    }
+
+    // Compresses the toolbar step by step until it fits: the sort label goes
+    // first, then spam, labels and star move into the ⋮ menu, and last the
+    // Cards/Table words leave only their icons.
+    var MAIL_OVERFLOW_RANKS = 3
+    var MAIL_COMPRESS_STEPS = MAIL_OVERFLOW_RANKS + 2
+    var mailOverflowObserver = null
+    var mailOverflowObserved = null
+
+    function syncMailActionOverflow() {
+      var toolbar = document.querySelector(".mail-list-toolbar")
+      if (toolbar && toolbar !== mailOverflowObserved && typeof ResizeObserver === "function") {
+        if (!mailOverflowObserver) mailOverflowObserver = new ResizeObserver(function () { syncMailActionOverflow() })
+        mailOverflowObserver.disconnect()
+        mailOverflowObserver.observe(toolbar)
+        mailOverflowObserved = toolbar
+      }
+      if (!toolbar || toolbar.offsetParent === null) return
+      // The actions stay rendered while hidden, so ask the list whether they show.
+      var mailList = document.getElementById("mail-list")
+      var actions = mailList && (mailList.hasAttribute("data-mail-has-selection") || mailList.hasAttribute("data-mail-selecting")) ? toolbar.querySelector("[data-mail-selection-actions]") : null
+      // Work out the step from widths alone: toggling states to measure them
+      // would cut short the animation of a step that is still sliding.
+      var parts = mailToolbarCollapsibles(toolbar, actions)
+      var spacer = toolbar.querySelector(".mail-list-toolbar-spacer")
+      var spacerExtra = spacer && spacer.offsetParent ? spacer.offsetWidth - (parseFloat(getComputedStyle(spacer).minWidth) || 0) : 0
+      // The width everything but the collapsible parts needs.
+      var fixed = Math.max(toolbar.scrollWidth, toolbar.clientWidth) - spacerExtra
+      for (var i = 0; i < parts.length; i++) fixed -= parts[i].current
+      var step = 0
+      for (; step < MAIL_COMPRESS_STEPS; step++) {
+        var needed = fixed
+        var states = mailToolbarCollapsedStates(toolbar, actions, step)
+        for (var j = 0; j < parts.length; j++) {
+          if (!states.get(parts[j].el)) needed += parts[j].full
+        }
+        if (needed <= toolbar.clientWidth) break
+      }
+      if (step !== toolbar._mailCompressStep) setMailToolbarCompressed(toolbar, actions, step)
+      toolbar._mailCompressStep = step
+    }
+
+    // Each collapsible part with the width it takes now (mid-animation, maybe)
+    // and the width it takes when shown, both counting the flex gap beside it.
+    function mailToolbarCollapsibles(toolbar, actions) {
+      var parts = []
+      var states = mailToolbarCollapsedStates(toolbar, actions, 0)
+      states.forEach(function (_, el) {
+        var gap = parseFloat(getComputedStyle(el.parentElement).columnGap) || 0
+        var margin = parseFloat(getComputedStyle(el).marginLeft) || 0
+        var width = el.scrollWidth
+        if (el.style.getPropertyValue("--collapse-width") !== width + "px") el.style.setProperty("--collapse-width", width + "px")
+        parts.push({ el: el, current: el.offsetWidth + gap + margin, full: width + gap })
+      })
+      return parts
+    }
+
+    // Changes the sort label's text while its width slides to the new size.
+    function animateMailSortLabel(text) {
+      var label = document.querySelector("[data-mail-sort-label]")
+      if (!label || label.textContent === text) return
+      label.textContent = text
+      label.style.setProperty("--collapse-width", label.scrollWidth + "px")
+      syncMailActionOverflow()
+    }
+
+    // The sort form's submit handler lives in setupMailFilters.
+    window.animateMailSortLabel = animateMailSortLabel
+
+    // Which collapsible parts are collapsed at a step, as a Map of element to bool.
+    function mailToolbarCollapsedStates(toolbar, actions, step) {
+      var states = new Map()
+      var sortLabel = toolbar.querySelector("[data-mail-sort-label]")
+      if (sortLabel) states.set(sortLabel, step >= 1)
+      if (actions) {
+        var folded = Math.min(Math.max(step - 1, 0), MAIL_OVERFLOW_RANKS)
+        var buttons = actions.querySelectorAll(":scope > [data-mail-overflow-rank]")
+        for (var i = 0; i < buttons.length; i++) {
+          states.set(buttons[i], parseInt(buttons[i].getAttribute("data-mail-overflow-rank"), 10) <= folded)
+        }
+        var menu = actions.querySelector("[data-mail-overflow-menu]")
+        if (menu) states.set(menu, folded === 0)
+      }
+      var viewLabels = toolbar.querySelectorAll("[data-mail-view-label]")
+      var hideViewLabels = actions ? step >= MAIL_COMPRESS_STEPS : step >= 2
+      for (var v = 0; v < viewLabels.length; v++) states.set(viewLabels[v], hideViewLabels)
+      return states
+    }
+
+    function setMailToolbarCompressed(toolbar, actions, step) {
+      mailToolbarCollapsedStates(toolbar, actions, step).forEach(function (collapsed, el) {
+        el.toggleAttribute("data-mail-collapsed", collapsed)
+      })
+      var folded = actions ? Math.min(Math.max(step - 1, 0), MAIL_OVERFLOW_RANKS) : 0
+      var items = document.querySelectorAll("[data-mail-overflow-menu-item]")
+      for (var j = 0; j < items.length; j++) {
+        var itemRank = parseInt(items[j].getAttribute("data-mail-overflow-rank"), 10)
+        items[j].style.display = itemRank <= folded ? "" : "none"
+      }
     }
 
     function updateCachedRenderedRow(row) {
@@ -2149,6 +2286,16 @@ document.addEventListener("DOMContentLoaded", function () {
 
     function currentMailListFolderID() {
       return mailActionCurrentFolderID()
+    }
+
+    function mailSelectionActionName(button) {
+      var action = button.getAttribute("data-mail-selection-action")
+      // A menu copy of a toolbar button follows the button's state.
+      var toolbarButton = document.querySelector('.mail-list-toolbar button[data-mail-selection-action="' + action + '"]')
+      if (!(toolbarButton || button).hasAttribute("data-mail-selection-undo")) return action
+      if (action === "read") return "unread"
+      if (action === "star") return "unstar"
+      return action
     }
 
     function markSelectedReadInBackground(ids) {
@@ -2219,22 +2366,35 @@ document.addEventListener("DOMContentLoaded", function () {
         markSelectedReadInBackground(ids)
         return
       }
+      if (action === "unread") {
+        var unreadTargets = selectedMailTargets(ids)
+        clearMailSelection()
+        sendBulkMessageAction("/api/messages/read", unreadTargets, { state: "unread" }).then(function () {
+          for (var u = 0; u < ids.length; u++) invalidateMailListItem(ids[u])
+          if (virtualMailList && typeof virtualMailList.refreshCurrentFolder === "function") {
+            virtualMailList.refreshCurrentFolder({ noAnimation: true }).catch(function () {})
+          }
+          refreshSidebarUnread()
+        })
+        return
+      }
 
       if (action === "archive" && mailFolderIsArchive(currentMailListFolderID())) action = "unarchive"
-      if (action === "archive" || action === "unarchive" || action === "delete" || action === "star" || action === "spam" || action === "not-spam") {
+      if (action === "archive" || action === "unarchive" || action === "delete" || action === "star" || action === "unstar" || action === "spam" || action === "not-spam") {
         var targets = selectedMailTargets(ids)
         var current = virtualMailList && virtualMailList.selectedEmailId
-        var removesFromFolder = action !== "star"
+        var starring = action === "star" || action === "unstar"
+        var removesFromFolder = !starring
         if (removesFromFolder && current && ids.indexOf(current) !== -1) setMailViewEmpty()
         if (removesFromFolder) applyOptimisticRemove(ids)
         clearMailSelection()
         var path = action === "unarchive" ? "/api/messages/unarchive" : action === "archive" ? "/api/messages/archive" : (action === "delete" ? "/api/messages/delete" : (action === "spam" ? "/api/messages/spam" : (action === "not-spam" ? "/api/messages/not-spam" : "/api/messages/star")))
-        var extra = action === "star" ? { state: "starred" } : null
+        var extra = starring ? { state: action === "star" ? "starred" : "unstarred" } : null
         if (action === "delete") extra = { folder_id: currentMailListFolderID() }
         if (action === "spam" || action === "not-spam" || action === "unarchive") extra = { folder_id: currentMailListFolderID() }
         sendBulkMessageAction(path, targets, extra).then(function () {
           if (virtualMailList && typeof virtualMailList.refreshCurrentFolder === "function") {
-            virtualMailList.refreshCurrentFolder({ noAnimation: action === "star" }).catch(function () {})
+            virtualMailList.refreshCurrentFolder({ noAnimation: starring }).catch(function () {})
           }
           refreshSidebarUnread()
         })
@@ -3008,7 +3168,7 @@ document.addEventListener("DOMContentLoaded", function () {
       var sortForm = document.querySelector("[data-mail-sort-form]")
       if (sortForm) {
         filters.sortBy = (sortForm.querySelector('[name="sort_by"]') || {}).value || "date"
-        filters.sortOrder = (sortForm.querySelector('[name="sort_order"]') || {}).value || "desc"
+        filters.sortOrder = (sortForm.querySelector('[name="sort_order"]:checked') || {}).value || "desc"
       }
       var search = document.querySelector("[data-mail-search-input]")
       var pendingQuery = search ? (search.value || "").trim() : ""
@@ -3879,11 +4039,14 @@ document.addEventListener("DOMContentLoaded", function () {
       e.preventDefault()
       if (window.GoferSettings) {
         var mailSortBy = form.querySelector('[name="sort_by"]')
-        var mailSortOrder = form.querySelector('[name="sort_order"]')
+        var mailSortOrder = form.querySelector('[name="sort_order"]:checked')
         GoferSettings.set("mail_list_sort_by", mailSortBy ? mailSortBy.value || "date" : "date")
         GoferSettings.set("mail_list_sort_order", mailSortOrder ? mailSortOrder.value || "desc" : "desc")
       }
+      // Applying a sort reloads only the list, so the toolbar's label is updated here.
+      var sortByInput = form.querySelector('[name="sort_by"]')
       applyCurrentFilters({ delayResults: false })
+      if (window.animateMailSortLabel) window.animateMailSortLabel(mailSortLabelText(sortByInput ? sortByInput.value : ""))
     })
 
     document.addEventListener("change", function (e) {
@@ -5782,6 +5945,8 @@ document.addEventListener("DOMContentLoaded", function () {
       e.preventDefault()
       e.stopPropagation()
       e.stopImmediatePropagation()
+      // Any folder click, the open folder included, drops the selection.
+      document.dispatchEvent(new CustomEvent("gofer:mail-folder-clicked"))
 
       var target = sidebarFolderLinkTarget(link)
       var folderID = target.folderID
@@ -6296,14 +6461,29 @@ document.addEventListener("DOMContentLoaded", function () {
     return '<button type="button" disabled aria-label="' + label + '" class="' + (className || "relative inline-flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground opacity-75") + '">' + pendingIcon("size-3.5") + '</button>'
   }
 
-  function pendingViewToggleHTML(viewMode) {
+  // The mail list's Cards/Table switch sits in a capsule with the layout
+  // button; contacts has the switch alone, as it was before the capsule.
+  function pendingViewToggleHTML(viewMode, withLayoutButton) {
     var cardsClass = viewMode === "cards" ? "text-foreground" : "text-muted-foreground"
     var tableClass = viewMode === "table" ? "text-foreground" : "text-muted-foreground"
-    var indicator = viewMode === "table" ? "transform:translateX(100%)" : "transform:translateX(0)"
-    return '<div class="relative inline-flex h-7 shrink-0 rounded-lg border border-border bg-background p-0.5 gap-0.5" aria-hidden="true">' +
-      '<div class="absolute top-0.5 bottom-0.5 left-0.5 w-[calc(50%-2px)] rounded-md border border-border bg-card shadow-sm transition-transform duration-200 ease-out" style="' + indicator + '"></div>' +
+    var buttons =
       '<button type="button" disabled class="relative z-10 inline-flex h-6 items-center gap-1 px-2 rounded-md text-xs font-medium ' + cardsClass + '">' + pendingIcon("size-3.5") + 'Cards</button>' +
-      '<button type="button" disabled class="relative z-10 inline-flex h-6 items-center gap-1 px-2 rounded-md text-xs font-medium ' + tableClass + '">' + pendingIcon("size-3.5") + 'Table</button>' +
+      '<button type="button" disabled class="relative z-10 inline-flex h-6 items-center gap-1 px-2 rounded-md text-xs font-medium ' + tableClass + '">' + pendingIcon("size-3.5") + 'Table</button>'
+    if (!withLayoutButton) {
+      var plainIndicator = viewMode === "table" ? "transform:translateX(100%)" : "transform:translateX(0)"
+      return '<div class="relative inline-flex h-7 shrink-0 rounded-lg border border-border bg-background p-0.5 gap-0.5" aria-hidden="true">' +
+        '<div class="absolute top-0.5 bottom-0.5 left-0.5 w-[calc(50%-2px)] rounded-md border border-border bg-card shadow-sm transition-transform duration-200 ease-out" style="' + plainIndicator + '"></div>' +
+        buttons +
+      '</div>'
+    }
+    var indicator = viewMode === "table" ? "transform:translateX(calc(100% + 2px))" : "transform:translateX(0)"
+    return '<div class="inline-flex h-7 shrink-0 items-center rounded-lg border border-border bg-background p-0.5 gap-0.5" data-mail-list-view-capsule aria-hidden="true">' +
+      '<div class="relative inline-flex h-6 gap-0.5">' +
+      '<div class="absolute inset-y-0 left-0 w-[calc(50%-1px)] rounded-md border border-border bg-card shadow-sm transition-transform duration-200 ease-out" style="' + indicator + '"></div>' +
+      buttons +
+      '</div>' +
+      '<div class="mx-0.5 h-4 w-px bg-border" data-mail-list-view-divider></div>' +
+      '<button type="button" disabled class="h-6 w-6 rounded-md text-muted-foreground opacity-50">' + pendingIcon("mx-auto size-3.5") + '</button>' +
     '</div>'
   }
 
@@ -6329,15 +6509,23 @@ document.addEventListener("DOMContentLoaded", function () {
     '</div>'
   }
 
+  function mailSortLabelText(sortBy) {
+    return sortBy === "sender" ? "Sender" : (sortBy === "subject" ? "Subject" : "Date")
+  }
+
   function mailPendingToolbarHTML(viewMode) {
     var sortBy = window.GoferSettings ? GoferSettings.get("mail_list_sort_by") : "date"
-    var sortLabel = sortBy === "sender" ? "Sender" : (sortBy === "subject" ? "Subject" : "Date")
+    var sortLabel = mailSortLabelText(sortBy)
+    // Mirrors MailListToolbar with nothing selected: select-all, the view
+    // capsule and sort on the left; the message actions only show on a selection.
     return '<div class="mail-list-toolbar flex items-center gap-1 px-4 py-1.5">' +
-      pendingViewToggleHTML(viewMode) +
+      '<div class="inline-flex h-7 shrink-0 items-center gap-0.5 pl-1.5 text-muted-foreground opacity-60">' +
+        '<span class="inline-block size-4 rounded-[4px] border border-current opacity-60"></span>' +
+        '<span class="inline-flex h-7 w-5 items-center justify-center">' + pendingIcon("size-2.5") + '</span>' +
+      '</div>' +
+      pendingViewToggleHTML(viewMode, true) +
+      '<button type="button" disabled class="inline-flex h-7 shrink-0 items-center gap-1.5 rounded-md px-2 text-xs font-medium text-muted-foreground opacity-60">' + pendingIcon("size-3.5") + '<span>' + sortLabel + '</span></button>' +
       '<div class="mail-list-toolbar-spacer flex-1"></div>' +
-      '<button type="button" disabled class="inline-flex h-7 items-center gap-1.5 rounded-md px-2 text-xs font-medium text-muted-foreground opacity-60">' + pendingIcon("size-3.5") + '<span class="hidden sm:inline">' + sortLabel + '</span></button>' +
-      '<button type="button" disabled class="h-7 w-7 rounded-md text-muted-foreground opacity-50">' + pendingIcon("mx-auto size-3.5") + '</button>' +
-      '<button type="button" disabled class="h-7 w-7 rounded-md text-muted-foreground opacity-50">' + pendingIcon("mx-auto size-3.5") + '</button>' +
     '</div>'
   }
 

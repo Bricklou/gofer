@@ -13,6 +13,7 @@ import (
 	"github.com/cristianadrielbraun/gofer/components/icon"
 	"github.com/cristianadrielbraun/gofer/components/input"
 	"github.com/cristianadrielbraun/gofer/components/popover"
+	"github.com/cristianadrielbraun/gofer/components/radio"
 	"github.com/cristianadrielbraun/gofer/components/selectbox"
 	"github.com/cristianadrielbraun/gofer/components/tooltip"
 	"github.com/cristianadrielbraun/gofer/internal/models"
@@ -91,6 +92,19 @@ templ MailFilterTriState(name string, leftValue string, leftLabel string, rightV
 	</div>
 }
 
+// mailSortOrderOption is one half of the sort menu's two-way order switch.
+templ mailSortOrderOption(value string, label string, checked bool) {
+	<label class="relative z-10 flex cursor-pointer items-center justify-center gap-1 rounded-md text-xs font-medium text-muted-foreground transition-colors duration-200 hover:text-foreground has-[:checked]:text-foreground has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-ring">
+		@radio.Radio(radio.Props{Name: "sort_order", Value: value, Checked: checked, Class: "pointer-events-none absolute inset-0 size-full opacity-0"})
+		if value == "asc" {
+			@icon.ArrowUpNarrowWide(icon.Props{Class: "size-3.5"})
+		} else {
+			@icon.ArrowDownWideNarrow(icon.Props{Class: "size-3.5"})
+		}
+		{ label }
+	</label>
+}
+
 func mailSortLabel(filters models.EmailFilters) string {
 	switch filters.SortBy {
 	case "sender":
@@ -116,47 +130,50 @@ templ MailListToolbar(accounts []models.Account, activeFolder string, viewMode s
 			</span>
 			<span data-mail-selection-summary>0</span>
 		}
-		<div class="relative inline-flex h-7 rounded-lg border border-border bg-background p-0.5 gap-0.5" data-mail-list-view-toggle>
-			<div
-				data-mail-list-view-indicator
-				class="absolute top-0.5 bottom-0.5 left-0.5 w-[calc(50%-2px)] rounded-md border border-border bg-card shadow-sm transition-transform duration-200 ease-out"
-				style={ mailListViewIndicatorStyle(viewMode) }
-			></div>
-			<button
-				type="button"
-				data-mail-list-view-button="cards"
-				aria-pressed={ fmt.Sprintf("%t", viewMode == "cards") }
-				aria-label="Cards view"
-				class={
-					"relative z-10 inline-flex h-6 items-center gap-1 px-2 rounded-md text-xs font-medium transition-colors duration-200",
-					templ.KV("text-foreground", viewMode == "cards"),
-					templ.KV("text-muted-foreground hover:text-foreground", viewMode != "cards"),
-				}
-			>
-				@icon.LayoutList(icon.Props{Class: "size-3.5"})
-				Cards
-			</button>
-			<button
-				type="button"
-				data-mail-list-view-button="table"
-				aria-pressed={ fmt.Sprintf("%t", viewMode == "table") }
-				aria-label="Table view"
-				class={
-					"relative z-10 inline-flex h-6 items-center gap-1 px-2 rounded-md text-xs font-medium transition-colors duration-200",
-					templ.KV("text-foreground", viewMode == "table"),
-					templ.KV("text-muted-foreground hover:text-foreground", viewMode != "table"),
-				}
-			>
-				@icon.Table2(icon.Props{Class: "size-3.5"})
-				Table
-			</button>
+		<div class="inline-flex h-7 shrink-0 items-center rounded-lg border border-border bg-background p-0.5 gap-0.5" data-mail-list-view-capsule>
+			<div class="relative inline-flex h-6 gap-0.5" data-mail-list-view-toggle>
+				<div
+					data-mail-list-view-indicator
+					class="absolute inset-y-0 left-0 w-[calc(50%-1px)] rounded-md border border-border bg-card shadow-sm transition-transform duration-200 ease-out"
+					style={ mailListViewIndicatorStyle(viewMode) }
+				></div>
+				<button
+					type="button"
+					data-mail-list-view-button="cards"
+					aria-pressed={ fmt.Sprintf("%t", viewMode == "cards") }
+					aria-label="Cards view"
+					class={
+						"relative z-10 inline-flex h-6 items-center gap-1 px-2 rounded-md text-xs font-medium transition-colors duration-200",
+						templ.KV("text-foreground", viewMode == "cards"),
+						templ.KV("text-muted-foreground hover:text-foreground", viewMode != "cards"),
+					}
+				>
+					@icon.LayoutList(icon.Props{Class: "size-3.5"})
+					<span class="mail-toolbar-collapsible" style="--collapse-gap: 0.25rem" data-mail-view-label>Cards</span>
+				</button>
+				<button
+					type="button"
+					data-mail-list-view-button="table"
+					aria-pressed={ fmt.Sprintf("%t", viewMode == "table") }
+					aria-label="Table view"
+					class={
+						"relative z-10 inline-flex h-6 items-center gap-1 px-2 rounded-md text-xs font-medium transition-colors duration-200",
+						templ.KV("text-foreground", viewMode == "table"),
+						templ.KV("text-muted-foreground hover:text-foreground", viewMode != "table"),
+					}
+				>
+					@icon.Table2(icon.Props{Class: "size-3.5"})
+					<span class="mail-toolbar-collapsible" style="--collapse-gap: 0.25rem" data-mail-view-label>Table</span>
+				</button>
+			</div>
+			<div class="mx-0.5 h-4 w-px bg-border" data-mail-list-view-divider aria-hidden="true"></div>
+			@MailListColumnSelector()
 		</div>
-		<div class="mail-list-toolbar-spacer flex-1"></div>
 		@dropdown.Dropdown() {
 			@dropdown.Trigger() {
 				<button type="button" class="mail-list-sort-trigger inline-flex h-7 shrink-0 items-center gap-1.5 rounded-md px-2 text-xs font-medium text-muted-foreground hover:bg-accent hover:text-foreground" aria-label="Sort messages" data-mail-sort-trigger>
 					@icon.ArrowUpDown(icon.Props{Class: "size-3.5"})
-					<span class="hidden sm:inline">{ mailSortLabel(filters) }</span>
+					<span class="mail-toolbar-collapsible" style="--collapse-gap: 0.375rem" data-mail-sort-label>{ mailSortLabel(filters) }</span>
 				</button>
 			}
 			@dropdown.Content(dropdown.ContentProps{Placement: dropdown.PlacementBottomEnd, Class: "mobile-sheet w-64 normal-case tracking-normal p-3"}) {
@@ -182,145 +199,237 @@ templ MailListToolbar(accounts []models.Account, activeFolder string, viewMode s
 					</div>
 					<div class="space-y-1 text-[11px] font-medium text-muted-foreground">
 						<span>Order</span>
-						@selectbox.SelectBox() {
-							@selectbox.Trigger(selectbox.TriggerProps{Name: "sort_order", Class: "h-8 bg-background text-xs", DisableClear: true}) {
-								@selectbox.Value(selectbox.ValueProps{Placeholder: "Descending"})
-							}
-							@selectbox.Content(selectbox.ContentProps{NoSearch: true, DisableExclusive: true}) {
-								@selectbox.Item(selectbox.ItemProps{Value: "desc", Selected: filters.SortOrder == "" || filters.SortOrder == "desc"}) {
-									Descending
-								}
-								@selectbox.Item(selectbox.ItemProps{Value: "asc", Selected: filters.SortOrder == "asc"}) {
-									Ascending
-								}
-							}
-						}
+						<div class="mail-sort-order grid h-8 grid-cols-2 gap-0.5 rounded-lg border border-border bg-background p-0.5" role="radiogroup" aria-label="Order">
+							<div class="mail-sort-order-indicator rounded-md border border-border bg-card shadow-sm" aria-hidden="true"></div>
+							@mailSortOrderOption("desc", "Descending", filters.SortOrder != "asc")
+							@mailSortOrderOption("asc", "Ascending", filters.SortOrder == "asc")
+						</div>
 					</div>
 					<button type="submit" class="inline-flex h-8 w-full items-center justify-center rounded-md bg-primary px-3 text-xs font-semibold text-primary-foreground hover:bg-primary/90">Apply sort</button>
 				</form>
 			}
 		}
-		@tooltip.Tooltip() {
-			@tooltip.Trigger() {
-				@button.Button(button.Props{
-					Variant:    button.VariantGhost,
-					Size:       button.SizeIcon,
-					Class:      "h-7 w-7",
-					Disabled:   true,
-					Attributes: templ.Attributes{"data-mail-selection-action": "archive", "aria-label": mailArchiveSelectionLabel(mailFolderIDIsArchive(activeFolder, accounts))},
-				}) {
-					<span class={ mailHiddenClass("", mailFolderIDIsArchive(activeFolder, accounts)) } data-mail-archive-icon>
-						@icon.Archive(icon.Props{Class: "size-3.5"})
-					</span>
-					<span class={ mailHiddenClass("", !mailFolderIDIsArchive(activeFolder, accounts)) } data-mail-unarchive-icon>
-						@icon.ArchiveRestore(icon.Props{Class: "size-3.5"})
-					</span>
-				}
-			}
-			@tooltip.Content(tooltip.ContentProps{
-				Position:  tooltip.PositionBottom,
-				ShowArrow: true,
-			}) {
-				<span data-mail-archive-tooltip>
-					if mailFolderIDIsArchive(activeFolder, accounts) {
-						Move to Inbox
-					} else {
-						Archive
+		<div class="mail-list-toolbar-spacer flex-1"></div>
+		<div class="items-center gap-1" data-mail-selection-actions>
+			@tooltip.Tooltip() {
+				@tooltip.Trigger() {
+					@button.Button(button.Props{
+						Variant:    button.VariantGhost,
+						Size:       button.SizeIcon,
+						Class:      "h-7 w-7",
+						Disabled:   true,
+						Attributes: templ.Attributes{"data-mail-selection-action": "archive", "aria-label": mailArchiveSelectionLabel(mailFolderIDIsArchive(activeFolder, accounts))},
+					}) {
+						<span class={ mailHiddenClass("", mailFolderIDIsArchive(activeFolder, accounts)) } data-mail-archive-icon>
+							@icon.Archive(icon.Props{Class: "size-3.5"})
+						</span>
+						<span class={ mailHiddenClass("", !mailFolderIDIsArchive(activeFolder, accounts)) } data-mail-unarchive-icon>
+							@icon.ArchiveRestore(icon.Props{Class: "size-3.5"})
+						</span>
 					}
-				</span>
-			}
-		}
-		@tooltip.Tooltip() {
-			@tooltip.Trigger() {
-				@button.Button(button.Props{
-					Variant:  button.VariantGhost,
-					Size:     button.SizeIcon,
-					Class:    mailDeleteActionClass("h-7 w-7", "", mailFolderIDIsTrash(activeFolder, accounts)),
-					Disabled: true,
-					Attributes: templ.Attributes{
-						"data-mail-selection-action": "delete",
-						"data-mail-delete-permanent": fmt.Sprintf("%t", mailFolderIDIsTrash(activeFolder, accounts)),
-						"aria-label":                 mailDeleteSelectionLabel(mailFolderIDIsTrash(activeFolder, accounts)),
-					},
+				}
+				@tooltip.Content(tooltip.ContentProps{
+					Position:  tooltip.PositionBottom,
+					ShowArrow: true,
 				}) {
-					@icon.Trash2(icon.Props{Class: "size-3.5"})
+					<span data-mail-archive-tooltip>
+						if mailFolderIDIsArchive(activeFolder, accounts) {
+							Move to Inbox
+						} else {
+							Archive
+						}
+					</span>
 				}
 			}
-			@tooltip.Content(tooltip.ContentProps{
-				Position:  tooltip.PositionBottom,
-				ShowArrow: true,
-			}) {
-				<span data-mail-delete-tooltip>
-					if mailFolderIDIsTrash(activeFolder, accounts) {
-						Permanently delete
-					} else {
-						Delete
+			@tooltip.Tooltip() {
+				@tooltip.Trigger() {
+					@button.Button(button.Props{
+						Variant:  button.VariantGhost,
+						Size:     button.SizeIcon,
+						Class:    mailDeleteActionClass("h-7 w-7", "", mailFolderIDIsTrash(activeFolder, accounts)),
+						Disabled: true,
+						Attributes: templ.Attributes{
+							"data-mail-selection-action": "delete",
+							"data-mail-delete-permanent": fmt.Sprintf("%t", mailFolderIDIsTrash(activeFolder, accounts)),
+							"aria-label":                 mailDeleteSelectionLabel(mailFolderIDIsTrash(activeFolder, accounts)),
+						},
+					}) {
+						@icon.Trash2(icon.Props{Class: "size-3.5"})
 					}
-				</span>
-			}
-		}
-		@tooltip.Tooltip() {
-			@tooltip.Trigger() {
-				@button.Button(button.Props{
-					Variant:    button.VariantGhost,
-					Size:       button.SizeIcon,
-					Class:      "h-7 w-7",
-					Disabled:   true,
-					Attributes: templ.Attributes{"data-mail-selection-action": "read", "aria-label": "Mark selected messages as read"},
-				}) {
-					@icon.MailOpen(icon.Props{Class: "size-3.5"})
 				}
-			}
-			@tooltip.Content(tooltip.ContentProps{
-				Position:  tooltip.PositionBottom,
-				ShowArrow: true,
-			}) {
-				Mark as read
-			}
-		}
-		<div class="mail-list-toolbar-divider h-5 w-px bg-border/70 mx-1"></div>
-		@MailListColumnSelector()
-		@dropdown.Dropdown() {
-			@dropdown.Trigger() {
-				@button.Button(button.Props{
-					Variant: button.VariantGhost,
-					Size:    button.SizeIcon,
-					Class:   "h-7 w-7",
+				@tooltip.Content(tooltip.ContentProps{
+					Position:  tooltip.PositionBottom,
+					ShowArrow: true,
 				}) {
-					@icon.EllipsisVertical(icon.Props{Class: "size-3.5"})
-				}
-			}
-			@dropdown.Content(dropdown.ContentProps{Class: "mobile-sheet", Placement: dropdown.PlacementBottomEnd}) {
-				@dropdown.Item(dropdown.ItemProps{Attributes: templ.Attributes{"data-mail-selection-action": "labels"}}) {
-					<span class="flex items-center gap-2">
-						@icon.Tag(icon.Props{Class: "size-4"})
-						Labels…
+					<span data-mail-delete-tooltip>
+						if mailFolderIDIsTrash(activeFolder, accounts) {
+							Permanently delete
+						} else {
+							Delete
+						}
 					</span>
 				}
-				@dropdown.Item(dropdown.ItemProps{Attributes: templ.Attributes{"data-mail-selection-action": "star"}}) {
-					<span class="flex items-center gap-2">
-						@icon.Star(icon.Props{Class: "size-4"})
-						Star selected
-					</span>
+			}
+			@tooltip.Tooltip() {
+				@tooltip.Trigger() {
+					@button.Button(button.Props{
+						Variant:    button.VariantGhost,
+						Size:       button.SizeIcon,
+						Class:      "h-7 w-7",
+						Disabled:   true,
+						Attributes: templ.Attributes{"data-mail-selection-action": "read", "aria-label": "Mark selected messages as read"},
+					}) {
+						<span data-mail-read-icon>
+							@icon.MailOpen(icon.Props{Class: "size-3.5"})
+						</span>
+						<span class="hidden" data-mail-unread-icon>
+							@icon.Mail(icon.Props{Class: "size-3.5"})
+						</span>
+					}
 				}
-				@dropdown.Separator()
-				if mailFolderIDIsSpam(activeFolder, accounts) {
-					@dropdown.Item(dropdown.ItemProps{Attributes: templ.Attributes{"data-mail-selection-action": "not-spam"}}) {
-						<span class="flex items-center gap-2 font-medium text-emerald-700 dark:text-emerald-300">
-							@icon.ShieldCheck(icon.Props{Class: "size-4"})
+				@tooltip.Content(tooltip.ContentProps{
+					Position:  tooltip.PositionBottom,
+					ShowArrow: true,
+				}) {
+					<span data-mail-read-tooltip>Mark as read</span>
+				}
+			}
+			<div class="mail-toolbar-collapsible" data-mail-overflow-rank="3">
+				@tooltip.Tooltip() {
+					@tooltip.Trigger() {
+						@button.Button(button.Props{
+							Variant:    button.VariantGhost,
+							Size:       button.SizeIcon,
+							Class:      "h-7 w-7",
+							Disabled:   true,
+							Attributes: templ.Attributes{"data-mail-selection-action": "star", "aria-label": "Star selected messages"},
+						}) {
+							<span data-mail-star-icon>
+								@icon.Star(icon.Props{Class: "size-3.5"})
+							</span>
+							<span class="hidden" data-mail-unstar-icon>
+								@icon.StarOff(icon.Props{Class: "size-3.5"})
+							</span>
+						}
+					}
+					@tooltip.Content(tooltip.ContentProps{
+						Position:  tooltip.PositionBottom,
+						ShowArrow: true,
+					}) {
+						<span data-mail-star-tooltip>Star</span>
+					}
+				}
+			</div>
+			<div class="mail-toolbar-collapsible" data-mail-overflow-rank="2">
+				@tooltip.Tooltip() {
+					@tooltip.Trigger() {
+						@button.Button(button.Props{
+							Variant:    button.VariantGhost,
+							Size:       button.SizeIcon,
+							Class:      "h-7 w-7",
+							Disabled:   true,
+							Attributes: templ.Attributes{"data-mail-selection-action": "labels", "aria-label": "Label selected messages"},
+						}) {
+							@icon.Tag(icon.Props{Class: "size-3.5"})
+						}
+					}
+					@tooltip.Content(tooltip.ContentProps{
+						Position:  tooltip.PositionBottom,
+						ShowArrow: true,
+					}) {
+						Labels
+					}
+				}
+			</div>
+			if mailFolderIDIsSpam(activeFolder, accounts) {
+				<div class="mail-toolbar-collapsible" data-mail-overflow-rank="1">
+					@tooltip.Tooltip() {
+						@tooltip.Trigger() {
+							@button.Button(button.Props{
+								Variant:    button.VariantGhost,
+								Size:       button.SizeIcon,
+								Class:      "h-7 w-7",
+								Disabled:   true,
+								Attributes: templ.Attributes{"data-mail-selection-action": "not-spam", "aria-label": "Mark selected messages as not spam"},
+							}) {
+								@icon.ShieldCheck(icon.Props{Class: "size-3.5"})
+							}
+						}
+						@tooltip.Content(tooltip.ContentProps{
+							Position:  tooltip.PositionBottom,
+							ShowArrow: true,
+						}) {
 							Not spam
-						</span>
+						}
 					}
-				} else {
-					@dropdown.Item(dropdown.ItemProps{Attributes: templ.Attributes{"data-mail-selection-action": "spam"}}) {
-						<span class="flex items-center gap-2">
-							@icon.ShieldAlert(icon.Props{Class: "size-4"})
+				</div>
+			} else {
+				<div class="mail-toolbar-collapsible" data-mail-overflow-rank="1">
+					@tooltip.Tooltip() {
+						@tooltip.Trigger() {
+							@button.Button(button.Props{
+								Variant:    button.VariantGhost,
+								Size:       button.SizeIcon,
+								Class:      "h-7 w-7",
+								Disabled:   true,
+								Attributes: templ.Attributes{"data-mail-selection-action": "spam", "aria-label": "Report selected messages as spam"},
+							}) {
+								@icon.ShieldAlert(icon.Props{Class: "size-3.5"})
+							}
+						}
+						@tooltip.Content(tooltip.ContentProps{
+							Position:  tooltip.PositionBottom,
+							ShowArrow: true,
+						}) {
 							Report spam
-						</span>
+						}
+					}
+				</div>
+			}
+			<div class="mail-toolbar-collapsible" data-mail-collapsed data-mail-overflow-menu>
+				@dropdown.Dropdown() {
+					@dropdown.Trigger() {
+						@button.Button(button.Props{
+							Variant:    button.VariantGhost,
+							Size:       button.SizeIcon,
+							Class:      "h-7 w-7",
+							Attributes: templ.Attributes{"aria-label": "More actions"},
+						}) {
+							@icon.EllipsisVertical(icon.Props{Class: "size-3.5"})
+						}
+					}
+					@dropdown.Content(dropdown.ContentProps{Class: "mobile-sheet", Placement: dropdown.PlacementBottomEnd}) {
+						@dropdown.Item(dropdown.ItemProps{Attributes: templ.Attributes{"data-mail-selection-action": "star", "data-mail-overflow-rank": "3", "data-mail-overflow-menu-item": ""}}) {
+							<span class="flex items-center gap-2">
+								@icon.Star(icon.Props{Class: "size-4"})
+								<span data-mail-star-menu-label>Star</span>
+							</span>
+						}
+						@dropdown.Item(dropdown.ItemProps{Attributes: templ.Attributes{"data-mail-selection-action": "labels", "data-mail-overflow-rank": "2", "data-mail-overflow-menu-item": ""}}) {
+							<span class="flex items-center gap-2">
+								@icon.Tag(icon.Props{Class: "size-4"})
+								Labels…
+							</span>
+						}
+						if mailFolderIDIsSpam(activeFolder, accounts) {
+							@dropdown.Item(dropdown.ItemProps{Attributes: templ.Attributes{"data-mail-selection-action": "not-spam", "data-mail-overflow-rank": "1", "data-mail-overflow-menu-item": ""}}) {
+								<span class="flex items-center gap-2 font-medium text-emerald-700 dark:text-emerald-300">
+									@icon.ShieldCheck(icon.Props{Class: "size-4"})
+									Not spam
+								</span>
+							}
+						} else {
+							@dropdown.Item(dropdown.ItemProps{Attributes: templ.Attributes{"data-mail-selection-action": "spam", "data-mail-overflow-rank": "1", "data-mail-overflow-menu-item": ""}}) {
+								<span class="flex items-center gap-2">
+									@icon.ShieldAlert(icon.Props{Class: "size-4"})
+									Report spam
+								</span>
+							}
+						}
 					}
 				}
-			}
-		}
+			</div>
+		</div>
 	</div>
 }
 
@@ -755,7 +864,7 @@ templ MailListColumnSelector() {
 	<div data-mail-card-layout-trigger-wrapper>
 		@tooltip.Tooltip() {
 			@tooltip.Trigger() {
-				@button.Button(button.Props{Variant: button.VariantGhost, Size: button.SizeIcon, Class: "h-7 w-7", Attributes: templ.Attributes{"aria-label": "Customize card layout", "data-mail-card-layout-dialog-open": ""}}) {
+				@button.Button(button.Props{Variant: button.VariantGhost, Size: button.SizeIcon, Class: "h-6 w-6 rounded-md", Attributes: templ.Attributes{"aria-label": "Customize card layout", "data-mail-card-layout-dialog-open": ""}}) {
 					@icon.LayoutTemplate(icon.Props{Class: "size-3.5"})
 				}
 			}
@@ -767,7 +876,7 @@ templ MailListColumnSelector() {
 	<div data-mail-table-column-trigger-wrapper>
 		@dropdown.Dropdown() {
 			@dropdown.Trigger(dropdown.TriggerProps{Attributes: templ.Attributes{"data-mail-list-display-menu-button": ""}}) {
-				@button.Button(button.Props{Variant: button.VariantGhost, Size: button.SizeIcon, Class: "h-7 w-7", Attributes: templ.Attributes{"aria-label": "Customize table columns"}}) {
+				@button.Button(button.Props{Variant: button.VariantGhost, Size: button.SizeIcon, Class: "h-6 w-6 rounded-md", Attributes: templ.Attributes{"aria-label": "Customize table columns"}}) {
 					@icon.Settings(icon.Props{Class: "size-3.5"})
 				}
 			}
@@ -839,7 +948,6 @@ templ MailCardLayoutDialog() {
 								<span data-mail-card-field="from" class="truncate text-sm font-semibold text-foreground">Cristian Braun</span>
 								<span data-mail-card-field="date" class="text-xs font-medium tabular-nums text-primary">10:42</span>
 								<span data-mail-card-field="account" class="mail-list-card-account inline-flex min-w-0 max-w-[42%] items-center gap-1 rounded-full border border-border/70 bg-background/40 px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground">
-									<span class="account-color-marker size-2 shrink-0 bg-primary"></span>
 									<span class="truncate">Work</span>
 								</span>
 							</div>
@@ -962,7 +1070,6 @@ templ MailListCardItem(accounts []models.Account, email models.Email, position i
 					data-mail-card-field="date"
 				>{ email.Date }</span>
 				<span data-mail-card-field="account" class="mail-list-card-account inline-flex min-w-0 max-w-[42%] items-center gap-1 rounded-full border border-border/70 bg-background/40 px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground">
-					<span class="account-color-marker size-2 shrink-0" style={ accountColorStyle(email.AccountColor) }></span>
 					<span class="truncate">{ mailListAccountDisplay(accounts, email.AccountID) }</span>
 				</span>
 			</div>

@@ -6084,6 +6084,7 @@ func (h *Handler) handleMarkMessagesRead(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
+	targetRead := payload.State != "unread" && payload.State != "false"
 	ctx := h.messageMutationContext(r.Context())
 	targets, err := h.resolveOwnedMessageTargets(ctx, messageBulkTargets(payload), strings.TrimSpace(payload.FolderID), true)
 	if err != nil {
@@ -6096,7 +6097,7 @@ func (h *Handler) handleMarkMessagesRead(w http.ResponseWriter, r *http.Request)
 		for _, info := range target.Infos {
 			messageIDs = append(messageIDs, info.MessageID)
 		}
-		if err := h.db.SetMessagesReadAndQueueForUser(ctx, messageIDs, true, h.userID(ctx)); err != nil {
+		if err := h.db.SetMessagesReadAndQueueForUser(ctx, messageIDs, targetRead, h.userID(ctx)); err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
