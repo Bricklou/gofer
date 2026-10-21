@@ -46,23 +46,6 @@ func findProviderCopyMessage(ctx context.Context, q rowQueryer, accountID, provi
 	return msgID, nil
 }
 
-// hasOtherLiveProviderCopyTx reports whether a row is also in a folder as
-// another copy than providerMessageID.
-func hasOtherLiveProviderCopyTx(ctx context.Context, tx *sql.Tx, messageID int64, providerMessageID string) (bool, error) {
-	var exists bool
-	err := tx.QueryRowContext(ctx, `
-		SELECT EXISTS(
-			SELECT 1 FROM message_folder_state
-			WHERE message_id = ? AND is_deleted = 0
-			  AND COALESCE(remote_message_id, '') NOT IN ('', ?)
-		) OR EXISTS(
-			SELECT 1 FROM message_folder_copies c
-			JOIN message_folder_state mfs ON mfs.message_id = c.message_id AND mfs.folder_id = c.folder_id
-			WHERE c.message_id = ? AND mfs.is_deleted = 0 AND c.remote_message_id != ?
-		)`, messageID, providerMessageID, messageID, providerMessageID).Scan(&exists)
-	return exists, err
-}
-
 // Two copies of a message can sit in one folder, such as both copies of mail
 // sent to oneself in Trash. The folder's state belongs to one of them, and
 // message_folder_copies records the others there. When the state's copy
@@ -142,6 +125,12 @@ func replaceProviderCopyIDTx(ctx context.Context, tx *sql.Tx, messageID int64, p
 		WHERE message_id = ? AND (folder_id = ? OR (? != '' AND remote_message_id = ?))`,
 		providerMessageID, messageID, destinationFolderID, previousID, previousID); err != nil {
 		return err
+	}
+	if previousID != "" {
+		if _, err := tx.ExecContext(ctx, `UPDATE OR IGNORE message_label_copies SET remote_message_id = ? WHERE message_id = ? AND remote_message_id = ?`,
+			providerMessageID, messageID, previousID); err != nil {
+			return err
+		}
 	}
 	return nil
 }

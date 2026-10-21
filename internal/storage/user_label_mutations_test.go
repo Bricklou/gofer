@@ -63,7 +63,7 @@ func TestUserLabelsTransactionCoalescesIntentAndRejectsStaleCompletion(t *testin
 	if err := db.Read().QueryRow(`SELECT attempts FROM label_mutation_queue WHERE id=?`, current.ID).Scan(&attempts); err != nil || attempts != 0 {
 		t.Fatalf("old failure changed new row: %d %v", attempts, err)
 	}
-	if err := db.ReplaceMessageLabelsForProvider(t.Context(), 1, "acc", LabelProviderGmail, []LabelInput{{Name: "Projects", ProviderType: LabelProviderGmail, ProviderID: "label-id"}}); err != nil {
+	if err := db.ReplaceMessageLabelsForProvider(t.Context(), 1, "acc", LabelProviderGmail, "", []LabelInput{{Name: "Projects", ProviderType: LabelProviderGmail, ProviderID: "label-id"}}); err != nil {
 		t.Fatal(err)
 	}
 	if err := db.Read().QueryRow(`SELECT count(*) FROM message_labels`).Scan(&count); err != nil || count != 0 {
@@ -178,7 +178,7 @@ func TestUserLabelsIMAPAliasSurvivesServerKeywordCasing(t *testing.T) {
 	if err := db.CompleteUserLabelMutation(t.Context(), entry, info.MessageMutationInfo, "", "", 42, LabelInput{Name: "Important", ProviderID: "$label1", ProviderType: LabelProviderKeyword}); err != nil {
 		t.Fatal(err)
 	}
-	if err := db.ReplaceMessageLabelsForProvider(t.Context(), 1, "acc", LabelProviderKeyword, []LabelInput{{Name: "$LABEL1", ProviderID: "$LABEL1", ProviderType: LabelProviderKeyword}}); err != nil {
+	if err := db.ReplaceMessageLabelsForProvider(t.Context(), 1, "acc", LabelProviderKeyword, "", []LabelInput{{Name: "$LABEL1", ProviderID: "$LABEL1", ProviderType: LabelProviderKeyword}}); err != nil {
 		t.Fatal(err)
 	}
 	labels, err := db.GetProviderMessageLabels(t.Context(), 1, "acc", LabelProviderKeyword)

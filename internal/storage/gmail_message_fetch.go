@@ -221,6 +221,9 @@ func (db *DB) MarkProviderMessageDeleted(ctx context.Context, accountID, provide
 		WHERE `+deleted, providerMessageID, accountID); err != nil {
 		return nil, err
 	}
+	if err := dropDeadCopyLabelsTx(ctx, tx, accountID); err != nil {
+		return nil, err
+	}
 	// A delete is confirmed once no copy of the message is left.
 	if _, err := tx.ExecContext(ctx, `
 		DELETE FROM message_mutations

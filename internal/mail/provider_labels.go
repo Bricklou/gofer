@@ -2,6 +2,7 @@ package mail
 
 import (
 	"bytes"
+	"cmp"
 	"context"
 	"encoding/json"
 	"errors"
@@ -511,7 +512,8 @@ func (o *SyncOrchestrator) applyGmailMessageState(ctx context.Context, msg stora
 		}
 	}
 	labels := gmailLabelInputs(msg.AccountID, state.LabelIDs, labelsByID)
-	if err := o.db.ReplaceMessageLabelsForProvider(ctx, msg.ID, msg.AccountID, storage.LabelProviderGmail, labels); err != nil {
+	copyID := cmp.Or(strings.TrimSpace(state.ID), strings.TrimSpace(msg.ProviderMessageID), strings.TrimSpace(providerMessageID))
+	if err := o.db.ReplaceMessageLabelsForProvider(ctx, msg.ID, msg.AccountID, storage.LabelProviderGmail, copyID, labels); err != nil {
 		return gmailLabelSyncResult{}, err
 	}
 	if err := o.db.SyncGmailInboxMembership(ctx, msg.ID, msg.AccountID, state.LabelIDs); err != nil {
@@ -951,7 +953,7 @@ func (o *SyncOrchestrator) syncOutlookMessageCategories(ctx context.Context, tok
 			log.Printf("cache outlook message id failed: %v", err)
 		}
 	}
-	return o.db.ReplaceMessageLabelsForProvider(ctx, msg.ID, msg.AccountID, storage.LabelProviderOutlook, outlookCategoryLabelInputs(msg.AccountID, state.Categories, categoriesByName))
+	return o.db.ReplaceMessageLabelsForProvider(ctx, msg.ID, msg.AccountID, storage.LabelProviderOutlook, cmp.Or(strings.TrimSpace(state.ID), providerMessageID), outlookCategoryLabelInputs(msg.AccountID, state.Categories, categoriesByName))
 }
 
 func (o *SyncOrchestrator) syncOutlookMessageCategoriesBatch(ctx context.Context, token string, messages []storage.ProviderLabelSyncMessage, categoriesByName map[string]outlookCategory) (outlookCategoryBatchResult, error) {
@@ -1042,7 +1044,7 @@ func (o *SyncOrchestrator) syncOutlookMessageCategoriesBatchChunk(ctx context.Co
 			}
 		}
 		labels := outlookCategoryLabelInputs(msg.AccountID, state.Categories, categoriesByName)
-		if err := o.db.ReplaceMessageLabelsForProvider(ctx, msg.ID, msg.AccountID, storage.LabelProviderOutlook, labels); err != nil {
+		if err := o.db.ReplaceMessageLabelsForProvider(ctx, msg.ID, msg.AccountID, storage.LabelProviderOutlook, cmp.Or(strings.TrimSpace(state.ID), strings.TrimSpace(msg.ProviderMessageID)), labels); err != nil {
 			return result, err
 		}
 		result.Synced++
