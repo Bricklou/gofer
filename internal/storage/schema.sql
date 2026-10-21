@@ -167,6 +167,16 @@ CREATE TABLE IF NOT EXISTS message_folder_state (
     PRIMARY KEY (message_id, folder_id)
 );
 
+-- Further provider copies of a message in a folder whose state belongs to
+-- another copy, such as both copies of mail sent to oneself in Trash.
+CREATE TABLE IF NOT EXISTS message_folder_copies (
+    message_id INTEGER NOT NULL,
+    folder_id TEXT NOT NULL,
+    remote_message_id TEXT NOT NULL CHECK (remote_message_id != ''),
+    PRIMARY KEY (message_id, folder_id, remote_message_id),
+    FOREIGN KEY (message_id, folder_id) REFERENCES message_folder_state(message_id, folder_id) ON DELETE CASCADE
+);
+
 CREATE TABLE IF NOT EXISTS folder_thread_state (
     folder_id TEXT NOT NULL REFERENCES folders(id) ON DELETE CASCADE,
     thread_key TEXT NOT NULL,
@@ -494,6 +504,9 @@ ON message_folder_state(folder_id, remote_uid);
 
 CREATE INDEX IF NOT EXISTS idx_message_folder_state_remote_message
 ON message_folder_state(remote_message_id) WHERE remote_message_id IS NOT NULL;
+
+CREATE INDEX IF NOT EXISTS idx_message_folder_copies_remote_message
+ON message_folder_copies(remote_message_id);
 
 CREATE INDEX IF NOT EXISTS idx_recipients_email
 ON message_recipients(email);
@@ -1653,4 +1666,4 @@ CREATE TABLE IF NOT EXISTS calendar_invitation_messages (
 );
 
 -- Schema version marker for fresh installs
-INSERT OR REPLACE INTO schema_version (version) VALUES (119);
+INSERT OR REPLACE INTO schema_version (version) VALUES (120);
