@@ -6528,8 +6528,10 @@ document.addEventListener("DOMContentLoaded", function () {
     '</div>'
   }
 
+  // Mirrors mailSortLabel in maillist.templ.
   function mailSortLabelText(sortBy) {
-    return sortBy === "sender" ? "Sender" : (sortBy === "subject" ? "Subject" : "Date")
+    var labels = { sender: "Sender", subject: "Subject", size: "Size", unread: "Unread first", starred: "Starred first", attachments: "Attachments first" }
+    return labels[sortBy] || "Date"
   }
 
   function mailPendingToolbarHTML(viewMode) {

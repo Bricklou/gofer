@@ -2622,7 +2622,8 @@ func applyEmailSortDefaults(filters models.EmailFilters, r *http.Request, settin
 }
 
 func normalizeEmailSortBy(value string) string {
-	if value == "sender" || value == "subject" {
+	switch value {
+	case "sender", "subject", "size", "unread", "starred", "attachments":
 		return value
 	}
 	return "date"

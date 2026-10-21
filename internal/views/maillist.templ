@@ -121,6 +121,14 @@ func mailSortLabel(filters models.EmailFilters) string {
 		return "Sender"
 	case "subject":
 		return "Subject"
+	case "size":
+		return "Size"
+	case "unread":
+		return "Unread first"
+	case "starred":
+		return "Starred first"
+	case "attachments":
+		return "Attachments first"
 	default:
 		return "Date"
 	}
@@ -203,6 +211,18 @@ templ MailListToolbar(accounts []models.Account, activeFolder string, viewMode s
 								}
 								@selectbox.Item(selectbox.ItemProps{Value: "subject", Selected: filters.SortBy == "subject"}) {
 									Subject
+								}
+								@selectbox.Item(selectbox.ItemProps{Value: "size", Selected: filters.SortBy == "size"}) {
+									Size
+								}
+								@selectbox.Item(selectbox.ItemProps{Value: "unread", Selected: filters.SortBy == "unread"}) {
+									Unread first
+								}
+								@selectbox.Item(selectbox.ItemProps{Value: "starred", Selected: filters.SortBy == "starred"}) {
+									Starred first
+								}
+								@selectbox.Item(selectbox.ItemProps{Value: "attachments", Selected: filters.SortBy == "attachments"}) {
+									Attachments first
 								}
 							}
 						}
@@ -1026,7 +1046,6 @@ templ MailCardLayoutDialog() {
 								}
 							}
 						</div>
-						<div class="h-1.5 w-1.5 rounded-full bg-border"></div>
 					</div>
 					<div class="mail-card-layout-available-list min-h-10 rounded-md border border-dashed border-border/80 bg-card/70 p-1.5" data-mail-card-layout-zone-items="hidden"></div>
 				</div>

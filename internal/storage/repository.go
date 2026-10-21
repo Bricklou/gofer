@@ -4942,8 +4942,9 @@ func (db *DB) GetFolderEmailCountFilteredForUser(ctx context.Context, userID, fo
 		`WITH `+filterSQL.withClause+`visible AS (
 		 SELECT ROW_NUMBER() OVER (PARTITION BY COALESCE(NULLIF(m.thread_id, ''), printf('msg:%d', m.id)) ORDER BY m.date_received DESC, m.id DESC) AS rn,
 		        MIN(mfs.is_read) OVER (PARTITION BY COALESCE(NULLIF(m.thread_id, ''), printf('msg:%d', m.id))) AS thread_is_read,
-		        MAX(mfs.is_starred) OVER (PARTITION BY COALESCE(NULLIF(m.thread_id, ''), printf('msg:%d', m.id))) AS thread_is_starred,
+		        MAX(mfs.is_starred) OVER (PARTITION BY COALESCE(NULLIF(m.thread_id, ''), printf('msg:%d', m.id))) AS thread_is_starred,		        
 		        MAX(m.has_attachments) OVER (PARTITION BY COALESCE(NULLIF(m.thread_id, ''), printf('msg:%d', m.id))) AS thread_has_attachments,
+		        SUM(COALESCE(m.size_bytes, 0)) OVER (PARTITION BY COALESCE(NULLIF(m.thread_id, ''), printf('msg:%d', m.id))) AS thread_size_bytes,
 		        COUNT(*) OVER (PARTITION BY COALESCE(NULLIF(m.thread_id, ''), printf('msg:%d', m.id))) AS thread_count
 		 FROM message_folder_state mfs
 		 JOIN messages m ON mfs.message_id = m.id
@@ -4972,8 +4973,9 @@ func (db *DB) GetFolderEmailCountFiltered(ctx context.Context, folderID string, 
 			`WITH `+filterSQL.withClause+`visible AS (
 			 SELECT ROW_NUMBER() OVER (PARTITION BY COALESCE(NULLIF(m.thread_id, ''), printf('msg:%d', m.id)) ORDER BY m.date_received DESC, m.id DESC) AS rn,
 			        MIN(mfs.is_read) OVER (PARTITION BY COALESCE(NULLIF(m.thread_id, ''), printf('msg:%d', m.id))) AS thread_is_read,
-			        MAX(mfs.is_starred) OVER (PARTITION BY COALESCE(NULLIF(m.thread_id, ''), printf('msg:%d', m.id))) AS thread_is_starred,
+			        MAX(mfs.is_starred) OVER (PARTITION BY COALESCE(NULLIF(m.thread_id, ''), printf('msg:%d', m.id))) AS thread_is_starred,			        
 			        MAX(m.has_attachments) OVER (PARTITION BY COALESCE(NULLIF(m.thread_id, ''), printf('msg:%d', m.id))) AS thread_has_attachments,
+			        SUM(COALESCE(m.size_bytes, 0)) OVER (PARTITION BY COALESCE(NULLIF(m.thread_id, ''), printf('msg:%d', m.id))) AS thread_size_bytes,
 			        COUNT(*) OVER (PARTITION BY COALESCE(NULLIF(m.thread_id, ''), printf('msg:%d', m.id))) AS thread_count
 			 FROM messages m
 			 JOIN message_folder_state mfs ON m.id = mfs.message_id
@@ -4991,8 +4993,9 @@ func (db *DB) GetFolderEmailCountFiltered(ctx context.Context, folderID string, 
 		`WITH `+filterSQL.withClause+`visible AS (
 		 SELECT ROW_NUMBER() OVER (PARTITION BY COALESCE(NULLIF(m.thread_id, ''), printf('msg:%d', m.id)) ORDER BY m.date_received DESC, m.id DESC) AS rn,
 		        MIN(mfs.is_read) OVER (PARTITION BY COALESCE(NULLIF(m.thread_id, ''), printf('msg:%d', m.id))) AS thread_is_read,
-		        MAX(mfs.is_starred) OVER (PARTITION BY COALESCE(NULLIF(m.thread_id, ''), printf('msg:%d', m.id))) AS thread_is_starred,
+		        MAX(mfs.is_starred) OVER (PARTITION BY COALESCE(NULLIF(m.thread_id, ''), printf('msg:%d', m.id))) AS thread_is_starred,		        
 		        MAX(m.has_attachments) OVER (PARTITION BY COALESCE(NULLIF(m.thread_id, ''), printf('msg:%d', m.id))) AS thread_has_attachments,
+		        SUM(COALESCE(m.size_bytes, 0)) OVER (PARTITION BY COALESCE(NULLIF(m.thread_id, ''), printf('msg:%d', m.id))) AS thread_size_bytes,
 		        COUNT(*) OVER (PARTITION BY COALESCE(NULLIF(m.thread_id, ''), printf('msg:%d', m.id))) AS thread_count
 		 FROM message_folder_state mfs JOIN messages m ON mfs.message_id = m.id
 		 `+filterSQL.joinClause+`
@@ -5254,9 +5257,35 @@ func emailOrderSQL(filters models.EmailFilters) string {
 		return "LOWER(COALESCE(NULLIF(from_name, ''), from_email, '')) " + direction + ", date_received DESC, id DESC"
 	case "subject":
 		return "LOWER(COALESCE(subject, '')) " + direction + ", date_received DESC, id DESC"
+	case "size":
+		// A conversation's size is all of its messages together.
+		return "thread_size_bytes " + direction + ", date_received DESC, id DESC"
+	case "unread", "starred", "attachments":
+		return emailFlagOrderSQL(filters, "thread_is_read", "thread_is_starred", "thread_has_attachments") + ", date_received DESC, id DESC"
 	default:
 		return "date_received " + direction + ", id " + direction
 	}
+}
+
+// emailFlagOrderSQL orders by a yes/no state. Descending (the default) puts
+// the messages that have it first: unread, starred or with attachments.
+func emailFlagOrderSQL(filters models.EmailFilters, readColumn, starredColumn, attachmentsColumn string) string {
+	column, wantedFirst := attachmentsColumn, "DESC"
+	switch filters.SortBy {
+	case "unread":
+		// Unread is is_read = 0, so it comes first in ascending order.
+		column, wantedFirst = readColumn, "ASC"
+	case "starred":
+		column = starredColumn
+	}
+	if filters.SortOrder == "asc" {
+		if wantedFirst == "ASC" {
+			wantedFirst = "DESC"
+		} else {
+			wantedFirst = "ASC"
+		}
+	}
+	return "COALESCE(" + column + ", 0) " + wantedFirst
 }
 
 // searchMatchQuery is the full-text query for the search and body filters,
@@ -6085,8 +6114,9 @@ func (db *DB) listEmailsFilteredForUser(ctx context.Context, userID, folderID st
 			         ROW_NUMBER() OVER (PARTITION BY COALESCE(NULLIF(m.thread_id, ''), printf('msg:%d', m.id)) ORDER BY m.date_received DESC, m.id DESC) AS rn,
 			         COUNT(*) OVER (PARTITION BY COALESCE(NULLIF(m.thread_id, ''), printf('msg:%d', m.id))) AS thread_count,
 			         MIN(mfs.is_read) OVER (PARTITION BY COALESCE(NULLIF(m.thread_id, ''), printf('msg:%d', m.id))) AS thread_is_read,
-			         MAX(mfs.is_starred) OVER (PARTITION BY COALESCE(NULLIF(m.thread_id, ''), printf('msg:%d', m.id))) AS thread_is_starred,
-			         MAX(m.has_attachments) OVER (PARTITION BY COALESCE(NULLIF(m.thread_id, ''), printf('msg:%d', m.id))) AS thread_has_attachments
+			         MAX(mfs.is_starred) OVER (PARTITION BY COALESCE(NULLIF(m.thread_id, ''), printf('msg:%d', m.id))) AS thread_is_starred,			         
+			         MAX(m.has_attachments) OVER (PARTITION BY COALESCE(NULLIF(m.thread_id, ''), printf('msg:%d', m.id))) AS thread_has_attachments,
+			         SUM(COALESCE(m.size_bytes, 0)) OVER (PARTITION BY COALESCE(NULLIF(m.thread_id, ''), printf('msg:%d', m.id))) AS thread_size_bytes
 			  FROM messages m
 			  JOIN message_folder_state mfs ON m.id = mfs.message_id
 			  ` + filterSQL.joinClause + `
@@ -6118,8 +6148,9 @@ func (db *DB) listEmailsFiltered(ctx context.Context, folderID string, offset, l
 			         ROW_NUMBER() OVER (PARTITION BY COALESCE(NULLIF(m.thread_id, ''), printf('msg:%d', m.id)) ORDER BY m.date_received DESC, m.id DESC) AS rn,
 			         COUNT(*) OVER (PARTITION BY COALESCE(NULLIF(m.thread_id, ''), printf('msg:%d', m.id))) AS thread_count,
 			         MIN(mfs.is_read) OVER (PARTITION BY COALESCE(NULLIF(m.thread_id, ''), printf('msg:%d', m.id))) AS thread_is_read,
-			         MAX(mfs.is_starred) OVER (PARTITION BY COALESCE(NULLIF(m.thread_id, ''), printf('msg:%d', m.id))) AS thread_is_starred,
-			         MAX(m.has_attachments) OVER (PARTITION BY COALESCE(NULLIF(m.thread_id, ''), printf('msg:%d', m.id))) AS thread_has_attachments
+			         MAX(mfs.is_starred) OVER (PARTITION BY COALESCE(NULLIF(m.thread_id, ''), printf('msg:%d', m.id))) AS thread_is_starred,			         
+			         MAX(m.has_attachments) OVER (PARTITION BY COALESCE(NULLIF(m.thread_id, ''), printf('msg:%d', m.id))) AS thread_has_attachments,
+			         SUM(COALESCE(m.size_bytes, 0)) OVER (PARTITION BY COALESCE(NULLIF(m.thread_id, ''), printf('msg:%d', m.id))) AS thread_size_bytes
 			  FROM messages m
 			  JOIN message_folder_state mfs ON m.id = mfs.message_id
 			  JOIN accounts a ON m.account_id = a.id
@@ -6141,8 +6172,9 @@ func (db *DB) listEmailsFiltered(ctx context.Context, folderID string, offset, l
 				        ROW_NUMBER() OVER (PARTITION BY COALESCE(NULLIF(m.thread_id, ''), printf('msg:%d', m.id)) ORDER BY m.date_received DESC, m.id DESC) AS rn,
 				        COUNT(*) OVER (PARTITION BY COALESCE(NULLIF(m.thread_id, ''), printf('msg:%d', m.id))) AS thread_count,
 				        MIN(mfs.is_read) OVER (PARTITION BY COALESCE(NULLIF(m.thread_id, ''), printf('msg:%d', m.id))) AS thread_is_read,
-				        MAX(mfs.is_starred) OVER (PARTITION BY COALESCE(NULLIF(m.thread_id, ''), printf('msg:%d', m.id))) AS thread_is_starred,
-				        MAX(m.has_attachments) OVER (PARTITION BY COALESCE(NULLIF(m.thread_id, ''), printf('msg:%d', m.id))) AS thread_has_attachments
+				        MAX(mfs.is_starred) OVER (PARTITION BY COALESCE(NULLIF(m.thread_id, ''), printf('msg:%d', m.id))) AS thread_is_starred,				        
+				        MAX(m.has_attachments) OVER (PARTITION BY COALESCE(NULLIF(m.thread_id, ''), printf('msg:%d', m.id))) AS thread_has_attachments,
+				        SUM(COALESCE(m.size_bytes, 0)) OVER (PARTITION BY COALESCE(NULLIF(m.thread_id, ''), printf('msg:%d', m.id))) AS thread_size_bytes
 			 FROM messages m
 			 JOIN message_folder_state mfs ON m.id = mfs.message_id
 			 JOIN folders f ON mfs.folder_id = f.id

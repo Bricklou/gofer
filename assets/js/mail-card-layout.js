@@ -153,7 +153,9 @@
 
       layoutTooltip = document.createElement("div")
       layoutTooltip.id = "mail-card-layout-tooltip"
-      layoutTooltip.className = "mail-card-layout-tooltip"
+      // bg-foreground marks it as a tooltip, as templui tooltips are, so themes
+      // style it like one (Express turns tooltips into yellow info tips).
+      layoutTooltip.className = "mail-card-layout-tooltip bg-foreground"
       layoutTooltip.setAttribute("role", "tooltip")
       layoutTooltip.setAttribute("data-tui-popover-content", "")
       layoutTooltip.setAttribute("data-tui-popover-open", "false")
