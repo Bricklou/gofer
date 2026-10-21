@@ -973,6 +973,89 @@ func TestSyncGmailAPIHistoryAppliesExplicitMessageDeletion(t *testing.T) {
 	}
 }
 
+// Messages Gmail's history reports as added are announced as new mail, per
+// folder, like IMAP's; label changes to known mail are not.
+func TestSyncGmailAPIHistoryAnnouncesAddedMail(t *testing.T) {
+	ctx := context.Background()
+	db := newLabelSyncTestDB(t)
+	seedGmailAPIHistoryTestState(t, db, "gmail-known")
+	message := func(id, subject, from, date string, labels ...string) map[string]any {
+		return map[string]any{
+			"id": id, "threadId": "thread-" + id, "labelIds": labels, "historyId": "110", "internalDate": date,
+			"payload": map[string]any{"headers": []map[string]string{
+				{"name": "Message-ID", "value": "<" + id + "@example.com>"},
+				{"name": "Subject", "value": subject},
+				{"name": "From", "value": from},
+			}},
+		}
+	}
+	messages := map[string]map[string]any{
+		"gmail-known": message("gmail-known", "Gmail history message", "sender@example.com", "1760000000000", "INBOX", "STARRED"),
+		"gmail-older": message("gmail-older", "Garden plans", "Neighbour <neighbour@example.test>", "1760000100000", "INBOX", "UNREAD"),
+		"gmail-new":   message("gmail-new", "Invoice 42", "Billing <billing@example.test>", "1760000200000", "INBOX", "UNREAD"),
+		"gmail-mine":  message("gmail-mine", "Re: Lunch", "Me <user@example.com>", "1760000300000", "SENT"),
+	}
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case r.Method == http.MethodGet && r.URL.Path == "/users/me/labels":
+			_ = json.NewEncoder(w).Encode(map[string]any{"labels": []map[string]any{
+				{"id": "INBOX", "name": "INBOX", "type": "system"},
+				{"id": "SENT", "name": "SENT", "type": "system"},
+			}})
+		case r.Method == http.MethodGet && r.URL.Path == "/users/me/history":
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"historyId": "110",
+				"history": []map[string]any{{
+					"labelsAdded": []map[string]any{{"message": map[string]string{"id": "gmail-known"}, "labelIds": []string{"STARRED"}}},
+					"messagesAdded": []map[string]any{
+						{"message": map[string]string{"id": "gmail-older"}},
+						{"message": map[string]string{"id": "gmail-new"}},
+						{"message": map[string]string{"id": "gmail-mine"}},
+					},
+				}},
+			})
+		case r.Method == http.MethodGet && strings.HasPrefix(r.URL.Path, "/users/me/messages/"):
+			msg, ok := messages[strings.TrimPrefix(r.URL.Path, "/users/me/messages/")]
+			if !ok {
+				http.NotFound(w, r)
+				return
+			}
+			_ = json.NewEncoder(w).Encode(msg)
+		default:
+			t.Fatalf("unexpected Gmail request %s %s", r.Method, r.URL.String())
+		}
+	}))
+	defer server.Close()
+
+	previousBaseURL := gmailAPIBaseURL
+	gmailAPIBaseURL = server.URL
+	t.Cleanup(func() { gmailAPIBaseURL = previousBaseURL })
+
+	orchestrator := NewSyncOrchestrator(db, nil, store.NewBlobStore(filepath.Join(t.TempDir(), "blobs")), labelSyncTestTokens{})
+	events := orchestrator.Events().Subscribe()
+	defer orchestrator.Events().Unsubscribe(events)
+	if err := orchestrator.syncGmailAPIAccount(ctx, "acc", true); err != nil {
+		t.Fatalf("syncGmailAPIAccount() error = %v", err)
+	}
+	got := map[string]Event{}
+	for len(events) > 0 {
+		if event := <-events; event.Type == EventNewMail {
+			got[event.FolderID] = event
+		}
+	}
+	if len(got) != 2 {
+		t.Fatalf("new mail events = %+v, want Inbox and Sent", got)
+	}
+	inbox := got[gmailAPITestFolderID("INBOX")]
+	if inbox.FolderRole != "inbox" || inbox.Payload["count"] != 2 || inbox.Payload["unread_count"] != 2 ||
+		inbox.Payload["subject"] != "Invoice 42" || inbox.Payload["from_name"] != "Billing" || inbox.Payload["from_email"] != "billing@example.test" {
+		t.Fatalf("inbox new mail = %+v", inbox)
+	}
+	if sent := got[gmailAPITestFolderID("SENT")]; sent.FolderRole != "sent" || sent.Payload["count"] != 1 || sent.Payload["unread_count"] != 0 {
+		t.Fatalf("sent new mail = %+v", sent)
+	}
+}
+
 func TestSyncGmailAPIHistoryQueuesAndRecoversTransientMessage404(t *testing.T) {
 	ctx := context.Background()
 	db := newLabelSyncTestDB(t)

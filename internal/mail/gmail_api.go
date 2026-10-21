@@ -113,8 +113,10 @@ type gmailAPIMessageSyncResult struct {
 	LocalMessageID    int64
 	HistoryID         string
 	FolderIDs         []string
-	Synced            bool
-	Skipped           bool
+	// NewMail is what a new-mail notification shows of the message.
+	NewMail storage.SyncMessage
+	Synced  bool
+	Skipped bool
 }
 
 type gmailAPIMessageFetchResult struct {
@@ -698,6 +700,13 @@ func (o *SyncOrchestrator) syncGmailAPIHistoryChanges(ctx context.Context, accou
 	stats.Cursor = newerGmailHistoryID(stats.Cursor, delta.LatestCursor)
 	targetsByLabelID := gmailAPITargetsByLabelID(targets)
 	targetsByFolderID := gmailAPITargetsByFolderID(targets)
+	added := make(map[string]bool, len(delta.AddedMessageIDs))
+	for _, providerID := range delta.AddedMessageIDs {
+		added[providerID] = true
+	}
+	// Added messages are new mail, announced per folder as IMAP does once
+	// they are stored.
+	fresh := map[string]*newMailSummary{}
 	dueEntries, err := o.gmailRepository().ListDueGmailMessageFetches(ctx, accountID, gmailAPIUnresolvedMessageReplayLimit)
 	if err != nil {
 		return err
@@ -778,6 +787,14 @@ func (o *SyncOrchestrator) syncGmailAPIHistoryChanges(ctx context.Context, accou
 			return err
 		}
 		recordResult(result)
+		if added[providerID] && result.Synced {
+			for _, folderID := range result.FolderIDs {
+				if fresh[folderID] == nil {
+					fresh[folderID] = &newMailSummary{}
+				}
+				fresh[folderID].Add([]storage.SyncMessage{result.NewMail})
+			}
+		}
 		if processed%25 == 0 {
 			total := stats.TotalMessages
 			if total < processed {
@@ -842,6 +859,9 @@ func (o *SyncOrchestrator) syncGmailAPIHistoryChanges(ctx context.Context, accou
 	}
 	o.publishGmailAPIFolderSyncEvent(ctx, EventSyncProgress, accountID, touchedFolders, targetsByFolderID, processed, total, true, false)
 	o.publishGmailAPIFolderSyncEvent(ctx, EventSyncComplete, accountID, syncedFolders, targetsByFolderID, processed, total, false, false)
+	for folderID, summary := range fresh {
+		o.publishNewMail(ctx, accountID, folderID, targetsByFolderID[folderID].Folder.RemoteID, *summary)
+	}
 	o.replayGmailLabelMutationQueue(ctx, accountID, token)
 	if failed > 0 {
 		return fmt.Errorf("%d Gmail API message change import(s) failed", failed)
@@ -895,7 +915,17 @@ func (o *SyncOrchestrator) syncGmailAPIProviderMessage(ctx context.Context, acco
 		return gmailAPIMessageSyncResult{ProviderMessageID: msg.ID, HistoryID: msg.HistoryID, Skipped: true}, nil
 	}
 	folderIDs := gmailAPIProviderSyncFolderIDs(upserts)
-	return gmailAPIMessageSyncResult{ProviderMessageID: msg.ID, LocalMessageID: localID, HistoryID: msg.HistoryID, FolderIDs: folderIDs, Synced: true}, nil
+	return gmailAPIMessageSyncResult{ProviderMessageID: msg.ID, LocalMessageID: localID, HistoryID: msg.HistoryID, FolderIDs: folderIDs, NewMail: providerNewMail(upserts[0]), Synced: true}, nil
+}
+
+// providerNewMail is what a new-mail notification shows of a message synced
+// through a provider API.
+func providerNewMail(msg storage.ProviderSyncMessage) storage.SyncMessage {
+	date := msg.DateReceived
+	if date.IsZero() {
+		date = msg.DateSent
+	}
+	return storage.SyncMessage{Subject: msg.Subject, FromName: msg.FromName, FromEmail: msg.FromEmail, DateSent: date, IsRead: msg.IsRead}
 }
 
 func (o *SyncOrchestrator) syncGmailAPIProviderMessageWithAuthRetry(ctx context.Context, accountID string, token *string, providerMessageID string, labelsByID map[string]gmailAPILabel, targetsByLabelID map[string]gmailAPIFolderSyncTarget) (gmailAPIMessageSyncResult, error) {

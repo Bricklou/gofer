@@ -223,7 +223,10 @@ type gmailHistoryRecord struct {
 type gmailHistoryDelta struct {
 	ChangedMessageIDs []string
 	DeletedMessageIDs []string
-	LatestCursor      string
+	// AddedMessageIDs are the changed messages Gmail reports as added since
+	// the cursor, that is new mail.
+	AddedMessageIDs []string
+	LatestCursor    string
 }
 
 type gmailHistoryMessageChange struct {
@@ -623,6 +626,7 @@ func gmailHistoryChanges(ctx context.Context, token, cursor string) (gmailHistor
 	}
 	changed := map[string]bool{}
 	deleted := map[string]bool{}
+	added := map[string]bool{}
 	latestCursor := cursor
 	pageToken := ""
 	for {
@@ -657,11 +661,15 @@ func gmailHistoryChanges(ctx context.Context, token, cursor string) (gmailHistor
 				return
 			}
 			delete(changed, providerID)
+			delete(added, providerID)
 			deleted[providerID] = true
 		}
 		for _, record := range response.History {
 			for _, change := range record.MessagesAdded {
 				markChanged(change.Message.ID)
+				if providerID := strings.TrimSpace(change.Message.ID); providerID != "" {
+					added[providerID] = true
+				}
 			}
 			for _, change := range record.LabelsAdded {
 				markChanged(change.Message.ID)
@@ -685,8 +693,12 @@ func gmailHistoryChanges(ctx context.Context, token, cursor string) (gmailHistor
 	for providerID := range deleted {
 		delta.DeletedMessageIDs = append(delta.DeletedMessageIDs, providerID)
 	}
+	for providerID := range added {
+		delta.AddedMessageIDs = append(delta.AddedMessageIDs, providerID)
+	}
 	sort.Strings(delta.ChangedMessageIDs)
 	sort.Strings(delta.DeletedMessageIDs)
+	sort.Strings(delta.AddedMessageIDs)
 	return delta, nil
 }
 
