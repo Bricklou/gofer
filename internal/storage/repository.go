@@ -7351,6 +7351,9 @@ type MessageMutationInfo struct {
 	RemoteUID         uint32
 	FolderRole        string
 	RemoteMessageID   string
+	// FolderCopyIDs are further provider copies of the message in the same
+	// folder, which a delete or move there reaches too.
+	FolderCopyIDs     []string
 	InternetMessageID string
 	ThreadID          string
 	ProviderThreadID  string
@@ -7503,6 +7506,9 @@ func (db *DB) getMessageMutationInfo(ctx context.Context, messageID int64, folde
 	}
 	info.IsRead = isRead == 1
 	info.IsStarred = isStarred == 1
+	if info.FolderCopyIDs, err = folderCopyIDs(ctx, db.Read(), messageID, info.FolderID); err != nil {
+		return nil, err
+	}
 	return &info, nil
 }
 

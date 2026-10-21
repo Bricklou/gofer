@@ -25,6 +25,9 @@ func (s *UserIMAP) applyProviderMutation(ctx context.Context, scope *userIMAPSco
 	if err != nil {
 		return err
 	}
+	if err := applyUserProviderFolderCopies(ctx, scope, m, info, request); err != nil {
+		return err
+	}
 
 	original := strings.TrimSpace(info.RemoteMessageID)
 	id := original
@@ -149,6 +152,55 @@ func (s *UserIMAP) applyProviderMutation(ctx context.Context, scope *userIMAPSco
 		return nil
 	} // Newer intent remains durable.
 	return err
+}
+
+// applyUserProviderFolderCopies makes a delete or move reach the further
+// copies of the message in its folder. It runs before the folder state's own
+// copy, so a retry repeats it; a copy the provider no longer has is done.
+func applyUserProviderFolderCopies(ctx context.Context, scope *userIMAPScope, m storage.MessageMutation, info storage.MessageMutationInfo, request userMutationRequest) error {
+	if len(info.FolderCopyIDs) == 0 || (m.Kind != storage.MessageMutationDelete && m.Kind != storage.MessageMutationMove) {
+		return nil
+	}
+	provider := scope.config.Provider
+	var destinationID, role, sourceID string
+	if m.Kind == storage.MessageMutationMove {
+		if err := scope.call(ctx, func(db *storage.DB) error {
+			var err error
+			destinationID, role, err = db.GetFolderProviderRemoteInfo(ctx, m.DestinationFolderID)
+			if err != nil {
+				return err
+			}
+			sourceID, err = db.GetFolderProviderRemoteID(ctx, m.FolderID)
+			return err
+		}); err != nil {
+			return err
+		}
+		if provider == "outlook" && destinationID == "" {
+			return errors.New("Outlook move destination has no provider identity")
+		}
+	}
+	for _, id := range info.FolderCopyIDs {
+		endpoint := gmailAPIBaseURL + "/users/me/messages/" + url.PathEscape(id)
+		if provider == "outlook" {
+			endpoint = outlookGraphBaseURL + "/me/messages/" + url.PathEscape(id)
+		}
+		var err error
+		switch {
+		case m.Kind == storage.MessageMutationDelete:
+			err = request(http.MethodDelete, endpoint, nil, nil)
+		case provider == "gmail":
+			err = applyUserGmailMove(id, destinationID, role, sourceID, info.FolderRole, request)
+		default:
+			err = request(http.MethodPost, endpoint+"/move", map[string]string{"destinationId": destinationID}, nil)
+		}
+		if status, ok := providerAPIStatus(err); ok && status == 404 {
+			err = nil
+		}
+		if err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func userProviderMutationRequest(ctx context.Context, scope *userIMAPScope) (userMutationRequest, error) {

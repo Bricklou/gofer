@@ -1387,3 +1387,80 @@ func TestSyncReplaysJMAPDeletesOfBothCopies(t *testing.T) {
 		t.Fatalf("copies after both deletes = %v", got)
 	}
 }
+
+// Both copies of mail sent to oneself can end up in one mailbox, such as
+// Trash. Gofer shows the message there once, and deleting or moving it there
+// reaches both emails.
+func TestSyncReplaysJMAPChangesToBothCopiesInOneMailbox(t *testing.T) {
+	for _, tc := range []struct {
+		name   string
+		change func(db *storage.DB, msgID int64, account string) error
+		want   map[string][]string // email id -> mailboxes; absent is destroyed
+		shown  []string            // mailboxes showing the message afterwards
+	}{
+		{"delete", func(db *storage.DB, msgID int64, account string) error {
+			return db.PermanentlyDeleteMessageAndQueue(t.Context(), msgID, jmapLocalFolderID(account, "mb-trash"))
+		}, map[string][]string{}, nil},
+		{"move", func(db *storage.DB, msgID int64, account string) error {
+			return db.MoveMessageAndQueue(t.Context(), msgID, jmapLocalFolderID(account, "mb-trash"), jmapLocalFolderID(account, "mb-in"))
+		}, map[string][]string{"sent-1": {"mb-in"}, "in-1": {"mb-in"}}, []string{"mb-in"}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			f := newUserGmailFixture(t)
+			server := newFakeJMAPServer(t)
+			server.emailState = "c0"
+			server.setMailboxes(
+				jmap.Mailbox{ID: "mb-in", Name: "Inbox", Role: "inbox", MyRights: readable()},
+				jmap.Mailbox{ID: "mb-sent", Name: "Sent", Role: "sent", MyRights: readable()},
+				jmap.Mailbox{ID: "mb-trash", Name: "Trash", Role: "trash", MyRights: readable()},
+			)
+			sent := testJMAPEmail("sent-1", "Reminder to self", 2, "mb-trash")
+			received := testJMAPEmail("in-1", "Reminder to self", 1, "mb-trash")
+			sent.MessageID = []string{"reminder@example.test"}
+			received.MessageID = []string{"reminder@example.test"}
+			server.emails = []jmap.Email{sent, received}
+			useFakeJMAPAccount(t, f, server)
+			account := f.ids["alice"]
+			if err := f.worker.Sync(t.Context(), "alice", account); err != nil {
+				t.Fatalf("first Sync() error = %v", err)
+			}
+			if got := jmapCopies(t, f, "<reminder@example.test>"); len(got) != 1 || got["mb-trash"] == "" {
+				t.Fatalf("copies after import = %v, want one in Trash", got)
+			}
+			var msgID int64
+			f.local(t, "alice", func(db *storage.DB) error {
+				return db.Read().QueryRow(`SELECT id FROM messages WHERE account_id=? AND internet_message_id='<reminder@example.test>'`, account).Scan(&msgID)
+			})
+			f.local(t, "alice", func(db *storage.DB) error { return tc.change(db, msgID, account) })
+			if err := f.worker.Sync(t.Context(), "alice", account); err != nil {
+				t.Fatalf("Sync() replaying %s error = %v", tc.name, err)
+			}
+			for _, id := range []string{"sent-1", "in-1"} {
+				email, ok := server.email(id)
+				mailboxes, want := tc.want[id]
+				if ok != want {
+					t.Fatalf("%s on the server = %v, want present %v", id, ok, want)
+				}
+				for _, mailbox := range mailboxes {
+					if !email.MailboxIDs[mailbox] || len(email.MailboxIDs) != len(mailboxes) {
+						t.Fatalf("%s mailboxes = %v, want %v", id, email.MailboxIDs, mailboxes)
+					}
+				}
+			}
+			got := jmapCopies(t, f, "<reminder@example.test>")
+			if len(got) != len(tc.shown) {
+				t.Fatalf("copies after the %s = %v, want one in each of %v", tc.name, got, tc.shown)
+			}
+			for _, mailbox := range tc.shown {
+				var others int
+				f.local(t, "alice", func(db *storage.DB) error {
+					return db.Read().QueryRow(`SELECT COUNT(*) FROM message_folder_copies WHERE message_id = ? AND folder_id = ? AND remote_message_id != ?`,
+						msgID, jmapLocalFolderID(account, mailbox), got[mailbox]).Scan(&others)
+				})
+				if got[mailbox] == "" || others != 1 {
+					t.Fatalf("%s after the %s shows %q with %d further copies, want one of each", mailbox, tc.name, got[mailbox], others)
+				}
+			}
+		})
+	}
+}

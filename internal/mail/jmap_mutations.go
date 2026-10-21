@@ -14,10 +14,13 @@ import (
 
 // JMAPMutation is one queued change to a JMAP email, with the server ids it
 // needs: the email, and for a move the mailboxes it leaves and enters.
+// FolderCopyIDs are further emails of the same message in that mailbox, which
+// the change reaches too.
 type JMAPMutation struct {
 	Kind          string
 	TargetValue   bool
 	EmailID       string
+	FolderCopyIDs []string
 	FromMailboxID string
 	ToMailboxID   string
 }
@@ -26,7 +29,7 @@ type JMAPMutation struct {
 // Email/set. Read and starred set or clear one keyword; a move swaps one
 // mailbox for another, leaving others the email is in; a delete destroys the
 // email for good, as Gofer's delete does for Gmail and Outlook. It reports
-// gone when the server no longer has the email, which needs no retry.
+// gone when the server has none of the emails any more, which needs no retry.
 func ApplyJMAPMutation(ctx context.Context, cfg *models.AccountConfig, password string, m JMAPMutation) (gone bool, err error) {
 	if m.EmailID == "" {
 		return false, errors.New("JMAP email identity is unavailable")
@@ -35,37 +38,49 @@ func ApplyJMAPMutation(ctx context.Context, cfg *models.AccountConfig, password 
 	if err != nil {
 		return false, err
 	}
-	args := jmap.EmailSet{AccountID: account}
+	emailIDs := append([]string{m.EmailID}, m.FolderCopyIDs...)
+	var patch jmap.PatchObject
 	switch m.Kind {
 	case storage.MessageMutationRead:
-		args.Update = map[string]jmap.PatchObject{m.EmailID: jmap.KeywordPatch(jmap.KeywordSeen, m.TargetValue)}
+		patch = jmap.KeywordPatch(jmap.KeywordSeen, m.TargetValue)
 	case storage.MessageMutationStarred:
-		args.Update = map[string]jmap.PatchObject{m.EmailID: jmap.KeywordPatch(jmap.KeywordFlagged, m.TargetValue)}
+		patch = jmap.KeywordPatch(jmap.KeywordFlagged, m.TargetValue)
 	case storage.MessageMutationMove:
 		if m.ToMailboxID == "" {
 			return false, errors.New("JMAP move destination has no mailbox identity")
 		}
-		args.Update = map[string]jmap.PatchObject{m.EmailID: jmap.MovePatch(m.FromMailboxID, m.ToMailboxID)}
+		patch = jmap.MovePatch(m.FromMailboxID, m.ToMailboxID)
 	case storage.MessageMutationDelete:
-		args.Destroy = []string{m.EmailID}
 	default:
 		return false, fmt.Errorf("unsupported JMAP mutation %q", m.Kind)
+	}
+	args := jmap.EmailSet{AccountID: account}
+	if m.Kind == storage.MessageMutationDelete {
+		args.Destroy = emailIDs
+	} else {
+		args.Update = map[string]jmap.PatchObject{}
+		for _, id := range emailIDs {
+			args.Update[id] = patch
+		}
 	}
 	result, err := client.SetEmails(ctx, session, args)
 	if err != nil {
 		return false, err
 	}
-	failure, failed := result.NotUpdated[m.EmailID]
-	if m.Kind == storage.MessageMutationDelete {
-		failure, failed = result.NotDestroyed[m.EmailID]
+	gone = true
+	for _, id := range emailIDs {
+		failure, failed := result.NotUpdated[id]
+		if m.Kind == storage.MessageMutationDelete {
+			failure, failed = result.NotDestroyed[id]
+		}
+		switch {
+		case !failed:
+			gone = false
+		case failure.Type != "notFound":
+			return false, &failure
+		}
 	}
-	if !failed {
-		return false, nil
-	}
-	if failure.Type == "notFound" {
-		return true, nil
-	}
-	return false, &failure
+	return gone, nil
 }
 
 // openJMAPMail opens the account's JMAP session and gives its mail account.
@@ -148,6 +163,9 @@ func (s *UserIMAP) applyJMAPMutation(ctx context.Context, scope *userIMAPScope, 
 		return errors.New("queued mutation account or provider changed")
 	}
 	request := JMAPMutation{Kind: mutation.Kind, TargetValue: mutation.TargetValue, EmailID: info.RemoteMessageID}
+	if mutation.Kind == storage.MessageMutationMove || mutation.Kind == storage.MessageMutationDelete {
+		request.FolderCopyIDs = info.FolderCopyIDs
+	}
 	if mutation.Kind == storage.MessageMutationMove {
 		if err := scope.call(ctx, func(db *storage.DB) error {
 			var err error

@@ -22,6 +22,10 @@ type rowQueryer interface {
 	QueryRowContext(ctx context.Context, query string, args ...any) *sql.Row
 }
 
+type rowsQueryer interface {
+	QueryContext(ctx context.Context, query string, args ...any) (*sql.Rows, error)
+}
+
 // findProviderCopyMessage returns the row holding a copy with this provider id.
 func findProviderCopyMessage(ctx context.Context, q rowQueryer, accountID, providerMessageID string) (int64, error) {
 	var msgID int64
@@ -255,5 +259,30 @@ func deleteCopyMutationsTx(ctx context.Context, tx *sql.Tx, messageID int64, kee
 				  AND other.folder_id NOT IN (`+list+`)
 			))
 		)`, args...)
+	return err
+}
+
+// folderCopyIDs returns the further copies recorded in a message's folder.
+func folderCopyIDs(ctx context.Context, q rowsQueryer, messageID int64, folderID string) ([]string, error) {
+	rows, err := q.QueryContext(ctx, `SELECT remote_message_id FROM message_folder_copies WHERE message_id = ? AND folder_id = ? ORDER BY remote_message_id`, messageID, folderID)
+	if err != nil {
+		return nil, fmt.Errorf("query folder copies: %w", err)
+	}
+	defer rows.Close()
+	var ids []string
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		ids = append(ids, id)
+	}
+	return ids, rows.Err()
+}
+
+// dropFolderCopiesTx forgets the further copies in a folder once a delete
+// made there has removed them with the state's copy.
+func dropFolderCopiesTx(ctx context.Context, tx *sql.Tx, messageID int64, folderID string) error {
+	_, err := tx.ExecContext(ctx, `DELETE FROM message_folder_copies WHERE message_id = ? AND folder_id = ?`, messageID, folderID)
 	return err
 }

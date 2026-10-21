@@ -164,9 +164,14 @@ func TestOutlookGraphPermanentDeleteUsesProviderAPI(t *testing.T) {
 	}}); err != nil {
 		t.Fatalf("UpsertFolders() error = %v", err)
 	}
+	// Both copies of mail sent to oneself are in Trash.
 	ids, err := db.UpsertProviderSyncMessages(ctx, []storage.ProviderSyncMessage{{
 		AccountID: "acc", FolderID: "acc_trash", ProviderMessageID: "graph-delete-1",
-		InternetMessageID: "<graph-delete@example.com>", Subject: "Delete", FromEmail: "sender@example.com",
+		InternetMessageID: "<graph-delete@example.com>", Subject: "Delete", FromEmail: "user@example.com",
+		DateSent: time.Now(), DateReceived: time.Now(), IsRead: true,
+	}, {
+		AccountID: "acc", FolderID: "acc_trash", ProviderMessageID: "graph-delete-2",
+		InternetMessageID: "<graph-delete@example.com>", Subject: "Delete", FromEmail: "user@example.com",
 		DateSent: time.Now(), DateReceived: time.Now(), IsRead: true,
 	}})
 	if err != nil {
@@ -179,15 +184,20 @@ func TestOutlookGraphPermanentDeleteUsesProviderAPI(t *testing.T) {
 		"https://graph.microsoft.com/Mail.ReadWrite https://graph.microsoft.com/Mail.Send https://graph.microsoft.com/MailboxSettings.ReadWrite"); err != nil {
 		t.Fatalf("UpsertOAuthAccount() error = %v", err)
 	}
-	sawDelete := false
+	deleted := map[string]bool{}
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.Method != http.MethodDelete || r.URL.Path != "/me/messages/graph-delete-1" {
+		if r.Method != http.MethodDelete || (r.URL.Path != "/me/messages/graph-delete-1" && r.URL.Path != "/me/messages/graph-delete-2") {
 			t.Fatalf("unexpected request %s %s", r.Method, r.URL.String())
 		}
 		if !strings.Contains(r.Header.Get("Prefer"), `IdType="ImmutableId"`) {
 			t.Fatalf("Prefer = %q", r.Header.Get("Prefer"))
 		}
-		sawDelete = true
+		deleted[r.URL.Path] = true
+		// The copy without the folder state is already gone.
+		if r.URL.Path == "/me/messages/graph-delete-2" {
+			w.WriteHeader(http.StatusNotFound)
+			return
+		}
 		w.WriteHeader(http.StatusNoContent)
 	}))
 	defer server.Close()
@@ -201,8 +211,12 @@ func TestOutlookGraphPermanentDeleteUsesProviderAPI(t *testing.T) {
 
 	h.runDueMessageMutations(ctx)
 
-	if !sawDelete {
-		t.Fatal("Graph DELETE was not observed")
+	if !deleted["/me/messages/graph-delete-1"] || !deleted["/me/messages/graph-delete-2"] {
+		t.Fatalf("Graph DELETEs = %v, want both copies", deleted)
+	}
+	var copies int
+	if err := db.Read().QueryRow(`SELECT COUNT(*) FROM message_folder_copies WHERE message_id = ?`, messageID).Scan(&copies); err != nil || copies != 0 {
+		t.Fatalf("folder copies after delete = %d, %v", copies, err)
 	}
 	var status string
 	if err := db.Read().QueryRow(`SELECT status FROM message_mutations WHERE message_id = ? AND kind = 'delete'`, messageID).Scan(&status); err != nil || status != storage.MessageMutationApplied {

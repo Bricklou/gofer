@@ -719,3 +719,45 @@ func TestUserProviderActionsSlowPayloadDoesNotLeaseStore(t *testing.T) {
 		t.Fatalf("oversized action: %d", rec.Code)
 	}
 }
+
+// A message can have two provider copies in one folder, such as both copies
+// of mail sent to oneself. Moving or deleting it there reaches both.
+func TestUserProviderActionsReachEveryCopyInTheFolder(t *testing.T) {
+	for _, provider := range []string{"gmail", "outlook"} {
+		t.Run(provider, func(t *testing.T) {
+			f, api := newProviderActionFixture(t, provider)
+			id := f.accounts["alice"].ID
+			if err := f.routing.WithUser(t.Context(), "alice", func(db *storage.DB) error {
+				_, err := db.Write().Exec(`INSERT INTO message_folder_copies(message_id,folder_id,remote_message_id) VALUES(1,?,'m2')`, id+"-inbox")
+				return err
+			}); err != nil {
+				t.Fatal(err)
+			}
+			if rec := f.request("alice", "POST", "/api/messages/1/move", url.Values{"folder_id": {id + "-junk"}}.Encode()); rec.Code != 200 {
+				t.Fatalf("move: %d %s", rec.Code, rec.Body.String())
+			}
+			waitUserIMAP(t, func() bool { return f.pendingMutations(t, "alice") == 0 })
+			// Deleting from Junk moves to Trash, and deleting there is for good.
+			for _, folder := range []string{"junk", "trash"} {
+				if rec := f.request("alice", "DELETE", "/api/messages/1?folder_id="+url.QueryEscape(id+"-"+folder), ""); rec.Code != 200 {
+					t.Fatalf("delete from %s: %d %s", folder, rec.Code, rec.Body.String())
+				}
+				waitUserIMAP(t, func() bool { return f.pendingMutations(t, "alice") == 0 })
+			}
+			want := map[string]int{"alice|POST|/me/messages/m2/move": 2, "alice|DELETE|/me/messages/m2": 1}
+			if provider == "gmail" {
+				want = map[string]int{"alice|POST|/users/me/messages/m2/modify": 1, "alice|POST|/users/me/messages/m2/trash": 1, "alice|DELETE|/users/me/messages/m2": 1}
+			}
+			api.mu.Lock()
+			calls := fmt.Sprint(api.calls)
+			reached := true
+			for call, count := range want {
+				reached = reached && api.calls[call] == count
+			}
+			api.mu.Unlock()
+			if !reached {
+				t.Fatalf("provider calls = %s, want the second copy moved and deleted: %v", calls, want)
+			}
+		})
+	}
+}

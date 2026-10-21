@@ -209,6 +209,9 @@ func (h *Handler) applyGmailMessageMutation(ctx context.Context, mutation storag
 	if err != nil {
 		return fmt.Errorf("get Gmail token: %w", err)
 	}
+	if err := h.applyProviderFolderCopies(ctx, mutation, info, token); err != nil {
+		return err
+	}
 	providerMessageID := strings.TrimSpace(info.RemoteMessageID)
 	if providerMessageID == "" {
 		providerMessageID, err = h.resolveGmailMessageID(ctx, token, mutation.MessageID, info)
@@ -254,6 +257,9 @@ func (h *Handler) applyOutlookMessageMutation(ctx context.Context, mutation stor
 	token, err := h.mailCredentials().GetMicrosoftGraphMailTokenForAccount(ctx, info.AccountID)
 	if err != nil {
 		return fmt.Errorf("get Outlook token: %w", err)
+	}
+	if err := h.applyProviderFolderCopies(ctx, mutation, info, token); err != nil {
+		return err
 	}
 	providerMessageID := strings.TrimSpace(info.RemoteMessageID)
 	if providerMessageID == "" {
@@ -398,6 +404,14 @@ func (h *Handler) applyIMAPMessageMutation(ctx context.Context, mutation storage
 }
 
 func (h *Handler) applyGmailMessageMove(ctx context.Context, mutation storage.MessageMutation, info storage.MessageMutationInfo, token, providerMessageID string) error {
+	if err := h.moveGmailMessage(ctx, mutation, info, token, providerMessageID); err != nil {
+		return err
+	}
+	return h.db.AdvanceMessageMoveMutation(ctx, mutation.ID, mutation.DestinationFolderID, providerMessageID, 0)
+}
+
+// moveGmailMessage changes one Gmail message's labels for a queued move.
+func (h *Handler) moveGmailMessage(ctx context.Context, mutation storage.MessageMutation, info storage.MessageMutationInfo, token, providerMessageID string) error {
 	destinationProviderID, destinationRole, err := h.db.GetFolderProviderRemoteInfo(ctx, mutation.DestinationFolderID)
 	if err != nil {
 		return fmt.Errorf("load Gmail destination: %w", err)
@@ -438,10 +452,53 @@ func (h *Handler) applyGmailMessageMove(ctx context.Context, mutation storage.Me
 		removeLabels = append(removeLabels, "INBOX")
 		err = h.modifyGmailMessageLabels(ctx, token, providerMessageID, []string{destinationProviderID}, removeLabels)
 	}
-	if err != nil {
-		return err
+	return err
+}
+
+// applyProviderFolderCopies makes a delete or move reach the further copies
+// of the message in its folder. It runs before the folder state's own copy,
+// so a retry repeats it; a copy the provider no longer has is done.
+func (h *Handler) applyProviderFolderCopies(ctx context.Context, mutation storage.MessageMutation, info storage.MessageMutationInfo, token string) error {
+	if mutation.Kind != storage.MessageMutationDelete && mutation.Kind != storage.MessageMutationMove {
+		return nil
 	}
-	return h.db.AdvanceMessageMoveMutation(ctx, mutation.ID, mutation.DestinationFolderID, providerMessageID, 0)
+	outlookDestination := ""
+	if len(info.FolderCopyIDs) > 0 && mutation.Kind == storage.MessageMutationMove && mutation.ProviderType == storage.MessageMutationProviderOutlook {
+		var err error
+		if outlookDestination, err = h.db.GetFolderProviderRemoteID(ctx, mutation.DestinationFolderID); err != nil {
+			return fmt.Errorf("load Outlook destination: %w", err)
+		}
+		if outlookDestination = strings.TrimSpace(outlookDestination); outlookDestination == "" {
+			return fmt.Errorf("Outlook destination has no provider identity")
+		}
+	}
+	for _, id := range info.FolderCopyIDs {
+		var err error
+		if mutation.ProviderType == storage.MessageMutationProviderGmail {
+			if mutation.Kind == storage.MessageMutationDelete {
+				err = h.deleteGmailAPIMessage(ctx, token, id)
+			} else {
+				err = h.moveGmailMessage(ctx, mutation, info, token, id)
+			}
+			if googleAPIStatus(err, http.StatusNotFound) {
+				err = nil
+			}
+		} else {
+			endpoint := outlookGraphBaseURL + "/me/messages/" + url.PathEscape(id)
+			if mutation.Kind == storage.MessageMutationDelete {
+				err = h.doOutlookJSON(ctx, http.MethodDelete, endpoint, token, nil, nil)
+			} else {
+				err = h.doOutlookJSON(ctx, http.MethodPost, endpoint+"/move", token, map[string]string{"destinationId": outlookDestination}, nil)
+			}
+			if outlookAPIStatus(err, http.StatusNotFound) {
+				err = nil
+			}
+		}
+		if err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func (h *Handler) applyIMAPMessageMove(ctx context.Context, client messageMutationIMAPClient, mutation storage.MessageMutation, info storage.MessageMutationInfo) error {

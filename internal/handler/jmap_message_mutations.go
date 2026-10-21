@@ -25,6 +25,9 @@ func (h *Handler) applyJMAPMessageMutation(ctx context.Context, mutation storage
 		return err
 	}
 	request := mail.JMAPMutation{Kind: mutation.Kind, TargetValue: mutation.TargetValue, EmailID: info.RemoteMessageID}
+	if mutation.Kind == storage.MessageMutationMove || mutation.Kind == storage.MessageMutationDelete {
+		request.FolderCopyIDs = info.FolderCopyIDs
+	}
 	if mutation.Kind == storage.MessageMutationMove {
 		if request.FromMailboxID, err = h.db.GetFolderProviderRemoteID(ctx, mutation.FolderID); err != nil {
 			return fmt.Errorf("load JMAP source mailbox: %w", err)
