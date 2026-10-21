@@ -16,7 +16,9 @@
     }
     var sideZones = ["railTop", "railMiddle", "railBottom", "meta", "status", "corner"]
     var centerZones = ["header", "body", "footer"]
+    // Matches MAIL_CARD_SIDE_ZONE_MAX in ui-settings.js.
     var sideZoneMax = {
+      body: 2,
       railTop: 1,
       railMiddle: 1,
       railBottom: 1,
@@ -39,6 +41,11 @@
       starred: "Star",
       unread: "Unread dot",
     }
+    // Fields with their own options, opened from a ⚙ on the field's token.
+    var fieldsWithOptions = { date: true }
+    // Lucide's settings icon, named with data-lucide so themes that replace icons
+    // (Express) replace this one too.
+    var GEAR_SVG = '<svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" data-lucide="settings"><path d="M9.671 4.136a2.34 2.34 0 0 1 4.659 0 2.34 2.34 0 0 0 3.319 1.915 2.34 2.34 0 0 1 2.33 4.033 2.34 2.34 0 0 0 0 3.831 2.34 2.34 0 0 1-2.33 4.033 2.34 2.34 0 0 0-3.319 1.915 2.34 2.34 0 0 1-4.659 0 2.34 2.34 0 0 0-3.32-1.915 2.34 2.34 0 0 1-2.33-4.033 2.34 2.34 0 0 0 0-3.831A2.34 2.34 0 0 1 6.35 6.051a2.34 2.34 0 0 0 3.319-1.915" /> <circle cx="12" cy="12" r="3" /></svg>'
     var activeDrag = null
     var layoutTooltip = null
     var layoutTooltipTarget = null
@@ -253,23 +260,20 @@
 
     function dropListFromTarget(target) {
       if (!target || !target.closest) return null
-      var list = target.closest("[data-mail-card-layout-zone-items], [data-mail-card-zone]")
+      // A drop zone may be the list itself (card zones) or wrap it (the tray).
+      var zone = target.closest("[data-mail-card-layout-dropzone]")
+      var list = zone && (zone.matches("[data-mail-card-layout-zone-items]") ? zone : zone.querySelector("[data-mail-card-layout-zone-items]"))
       var dialog = dialogRoot(list)
       if (!dialog || !list || !dialog.contains(list)) return null
       return list
     }
 
     function dropZoneName(list) {
-      if (!list) return ""
-      if (list.dataset.mailCardZone) return list.dataset.mailCardZone
-      if (list.dataset.mailCardLayoutZoneItems) return list.dataset.mailCardLayoutZoneItems
-      return ""
+      return list && list.dataset.mailCardLayoutZoneItems || ""
     }
 
     function tokenZone(token) {
       if (!token || !token.closest) return ""
-      var previewList = token.closest("[data-mail-card-zone]")
-      if (previewList) return previewList.dataset.mailCardZone || ""
       var list = token.closest("[data-mail-card-layout-zone-items]")
       return list ? list.dataset.mailCardLayoutZoneItems || "" : ""
     }
@@ -318,7 +322,71 @@
       label.className = "truncate"
       label.textContent = fieldLabels[id] || id
       token.appendChild(label)
+
+      addFieldOptionsButton(token, id)
       return token
+    }
+
+    // Adds the ⚙ that opens a field's options, to a hidden-tray token or to the
+    // field itself on the preview card.
+    function addFieldOptionsButton(target, id) {
+      if (!fieldsWithOptions[id] || target.querySelector(":scope > [data-mail-card-layout-token-options]")) return
+      // Not a <button>: tokens already are buttons, and buttons cannot nest.
+      var options = document.createElement("span")
+      options.className = "mail-card-layout-token-options"
+      options.setAttribute("role", "button")
+      options.setAttribute("tabindex", "0")
+      options.setAttribute("aria-label", (fieldLabels[id] || id) + " options")
+      options.setAttribute("aria-expanded", "false")
+      options.dataset.mailCardLayoutTokenOptions = id
+      options.innerHTML = GEAR_SVG
+      target.appendChild(options)
+    }
+
+    function optionsPanel(dialog) {
+      return dialog && dialog.querySelector("[data-mail-card-layout-options]")
+    }
+
+    function syncOptionInputs(dialog) {
+      var inputs = dialog ? dialog.querySelectorAll("[data-mail-card-option]") : []
+      for (var i = 0; i < inputs.length; i++) {
+        var value = window.GoferSettings ? GoferSettings.get(inputs[i].dataset.mailCardOption) : null
+        inputs[i].checked = value === "true"
+      }
+      var previewCard = preview(dialog)
+      if (previewCard) previewCard.toggleAttribute("data-mail-date-time", !!(window.GoferSettings && GoferSettings.get("mail_card_date_time") === "true"))
+    }
+
+    function closeFieldOptions(dialog) {
+      var panel = optionsPanel(dialog || document.getElementById("mail-card-layout-dialog"))
+      if (!panel) return
+      if (panel.matches(":popover-open")) panel.hidePopover()
+      var open = document.querySelectorAll('[data-mail-card-layout-token-options][aria-expanded="true"]')
+      for (var i = 0; i < open.length; i++) open[i].setAttribute("aria-expanded", "false")
+    }
+
+    function openFieldOptions(button) {
+      var dialog = dialogRoot(button)
+      var panel = optionsPanel(dialog)
+      if (!panel) return
+      var id = button.dataset.mailCardLayoutTokenOptions
+      var wasOpen = button.getAttribute("aria-expanded") === "true"
+      closeFieldOptions(dialog)
+      if (wasOpen) return
+      var sections = panel.querySelectorAll("[data-mail-card-layout-options-for]")
+      for (var i = 0; i < sections.length; i++) sections[i].hidden = sections[i].dataset.mailCardLayoutOptionsFor !== id
+      syncOptionInputs(dialog)
+      panel.showPopover()
+      button.setAttribute("aria-expanded", "true")
+      var rect = button.getBoundingClientRect()
+      var width = panel.offsetWidth
+      var left = Math.min(Math.max(8, rect.left + rect.width / 2 - width / 2), window.innerWidth - width - 8)
+      var top = rect.bottom + 6
+      if (top + panel.offsetHeight > window.innerHeight - 8) top = Math.max(8, rect.top - panel.offsetHeight - 6)
+      panel.style.left = left + "px"
+      panel.style.top = top + "px"
+      var input = panel.querySelector("[data-mail-card-layout-options-for='" + id + "'] input")
+      if (input) input.focus({ preventScroll: true })
     }
 
     function categoryLabel(category) {
@@ -422,6 +490,7 @@
         fields[i].classList.add("mail-card-layout-preview-token")
         fields[i].setAttribute("aria-label", fieldLabels[id] || id)
         fields[i].removeAttribute("title")
+        addFieldOptionsButton(fields[i], id)
       }
     }
 
@@ -471,6 +540,7 @@
       decoratePreviewFields(dialog)
       renderHiddenTray(dialog, layout)
       syncFieldState(dialog)
+      syncOptionInputs(dialog)
     }
 
     function persistLayout(dialog, layout) {
@@ -621,7 +691,7 @@
       positionVisualToken(activeDrag, event)
 
       var target = document.elementFromPoint(event.clientX, event.clientY)
-      var list = dropListFromTarget(target)
+      var list = dropListFromTarget(target) || nearestAcceptingList(activeDrag, event.clientX, event.clientY)
       var dialog = activeDrag.dialog
       clearDropState(dialog)
       activeDrag.dropZone = ""
@@ -640,9 +710,44 @@
       activeDrag.dropAllowed = movePlaceholderToList(activeDrag, list, event)
     }
 
+    // Between slots, the closest one that takes the field is the target, so
+    // drops need not land exactly on a slot.
+    var SNAP_DISTANCE = 56
+
+    function nearestAcceptingList(drag, x, y) {
+      var zonesEls = drag.dialog.querySelectorAll("[data-mail-card-layout-dropzone]")
+      var best = null
+      var bestDistance = SNAP_DISTANCE
+      for (var i = 0; i < zonesEls.length; i++) {
+        var list = dropListFromTarget(zonesEls[i])
+        var zone = dropZoneName(list)
+        if (!list || !canDropFromZone(drag.fromZone, zone, drag.dialog, drag.id)) continue
+        var rect = zonesEls[i].getBoundingClientRect()
+        var dx = Math.max(rect.left - x, 0, x - rect.right)
+        var dy = Math.max(rect.top - y, 0, y - rect.bottom)
+        var distance = Math.sqrt(dx * dx + dy * dy)
+        if (distance < bestDistance) {
+          best = list
+          bestDistance = distance
+        }
+      }
+      return best
+    }
+
+    // Marks every slot as taking the dragged field or not, so the others dim.
+    function markSlotStates(drag) {
+      var zonesEls = drag.dialog.querySelectorAll("[data-mail-card-layout-dropzone]")
+      for (var i = 0; i < zonesEls.length; i++) {
+        var zone = dropZoneName(dropListFromTarget(zonesEls[i]))
+        zonesEls[i].dataset.mailCardLayoutSlotState = canDropFromZone(drag.fromZone, zone, drag.dialog, drag.id) ? "accepts" : "denied"
+      }
+    }
+
     function endBodyDragState(dialog) {
       document.body.classList.remove("mail-card-layout-drag-active")
       clearDropState(dialog)
+      var zonesEls = dialog ? dialog.querySelectorAll("[data-mail-card-layout-slot-state]") : []
+      for (var i = 0; i < zonesEls.length; i++) delete zonesEls[i].dataset.mailCardLayoutSlotState
     }
 
     function animateVisualTokenToRect(drag, rect, done) {
@@ -792,6 +897,7 @@
       token.style.transition = "none"
       layer.appendChild(token)
       document.body.classList.add("mail-card-layout-drag-active")
+      markSlotStates(activeDrag)
       positionVisualToken(activeDrag, event)
       void token.offsetWidth
 
@@ -815,6 +921,14 @@
         var dialog = document.getElementById("mail-card-layout-dialog")
         renderEditor(dialog, currentLayout())
         if (window.tui && window.tui.dialog) window.tui.dialog.open("mail-card-layout-dialog")
+        return
+      }
+
+      var optionsButton = e.target.closest && e.target.closest("[data-mail-card-layout-token-options]")
+      if (optionsButton) {
+        e.preventDefault()
+        e.stopPropagation()
+        openFieldOptions(optionsButton)
         return
       }
 
@@ -848,6 +962,12 @@
 
     document.body.addEventListener("pointerdown", function (e) {
       if (e.button !== undefined && e.button !== 0) return
+      // The ⚙ on a token opens its options instead of starting a drag.
+      if (e.target.closest && e.target.closest("[data-mail-card-layout-token-options]")) {
+        e.preventDefault()
+        return
+      }
+      if (e.target.closest && !e.target.closest("[data-mail-card-layout-options]")) closeFieldOptions()
       var token = e.target.closest && e.target.closest("[data-mail-card-layout-token]")
       if (!token) return
       hideLayoutTooltip(true)
@@ -879,7 +999,31 @@
       cancelDrag()
     })
 
+    document.body.addEventListener("change", function (e) {
+      var input = e.target.closest && e.target.closest("[data-mail-card-option]")
+      if (!input || !window.GoferSettings) return
+      GoferSettings.set(input.dataset.mailCardOption, input.checked ? "true" : "false")
+      syncOptionInputs(dialogRoot(input))
+    })
+
     document.addEventListener("keydown", function (e) {
+      var optionsButton = e.target.closest && e.target.closest("[data-mail-card-layout-token-options]")
+      if (optionsButton && (e.key === "Enter" || e.key === " ")) {
+        e.preventDefault()
+        e.stopPropagation()
+        openFieldOptions(optionsButton)
+        return
+      }
+      var panel = document.querySelector("[data-mail-card-layout-options]:popover-open")
+      if (panel && e.key === "Escape") {
+        // Close only the options, not the whole dialog.
+        e.preventDefault()
+        e.stopPropagation()
+        var opener = document.querySelector('[data-mail-card-layout-token-options][aria-expanded="true"]')
+        closeFieldOptions()
+        if (opener) opener.focus()
+        return
+      }
       if (e.key === "Escape") hideLayoutTooltip(true)
       if (e.key === "Escape" && activeDrag) {
         e.preventDefault()

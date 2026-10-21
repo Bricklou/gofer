@@ -122,6 +122,19 @@ func formatRelativeDate(t, now time.Time, loc *time.Location) string {
 	return t.Format("Jan 2, 2006")
 }
 
+// formatRelativeDateWithTime is formatRelativeDate with the time added to
+// dates before today, for lists set to always show the time.
+func formatRelativeDateWithTime(t, now time.Time, loc *time.Location) string {
+	if loc == nil {
+		loc = time.Local
+	}
+	date := formatRelativeDate(t, now, loc)
+	if t.In(loc).Format("2006-01-02") == now.In(loc).Format("2006-01-02") {
+		return date
+	}
+	return date + ", " + t.In(loc).Format("3:04 PM")
+}
+
 func formatFullDateTime(t time.Time, loc *time.Location) string {
 	if loc == nil {
 		loc = time.Local
@@ -5556,6 +5569,7 @@ func (db *DB) getThreadMessages(ctx context.Context, accountID, threadID, userID
 		}
 		if dateReceived.Valid {
 			item.Date = formatRelativeDate(dateReceived.Time, now, loc)
+			item.DateWithTime = formatRelativeDateWithTime(dateReceived.Time, now, loc)
 			item.DateFull = formatFullDateTime(dateReceived.Time, loc)
 		}
 		items = append(items, item)
@@ -5714,6 +5728,7 @@ func (db *DB) getEmailByID(ctx context.Context, id, userID string) (*models.Emai
 	}
 	if dateReceived.Valid {
 		email.Date = formatRelativeDate(dateReceived.Time, now, loc)
+		email.DateWithTime = formatRelativeDateWithTime(dateReceived.Time, now, loc)
 		email.DateFull = formatFullDateTime(dateReceived.Time, loc)
 	}
 
@@ -6201,6 +6216,7 @@ func (db *DB) scanEmailRows(ctx context.Context, rows *sql.Rows) ([]models.Email
 		}
 		if dateReceived.Valid {
 			r.email.Date = formatRelativeDate(dateReceived.Time, now, loc)
+			r.email.DateWithTime = formatRelativeDateWithTime(dateReceived.Time, now, loc)
 		}
 		items = append(items, r)
 	}
@@ -6559,6 +6575,7 @@ func (db *DB) SearchMessages(ctx context.Context, userID string, query string, l
 		r.email.HasAttachment = hasAttach == 1
 		if dateReceived.Valid {
 			r.email.Date = formatRelativeDate(dateReceived.Time, now, loc)
+			r.email.DateWithTime = formatRelativeDateWithTime(dateReceived.Time, now, loc)
 		}
 		items = append(items, r)
 	}
@@ -8414,6 +8431,7 @@ func defaultUISettings() map[string]string {
 		"notification_mode":                 "auto",
 		"mail_card_fields":                  "avatar,thread,from,attachment,date,unread,subject,preview,labels,starred",
 		"mail_card_layout":                  "railTop:avatar|header:from,date|meta:attachment,unread|railMiddle:|body:subject|status:|railBottom:thread|footer:preview,labels|corner:starred|hidden:account,accountMarker,to",
+		"mail_card_date_time":               "false",
 		"mail_table_columns":                "accountMarker,starred,attachment,thread,from,to,subject,date",
 		"mail_table_column_widths":          "0.8,0.8,0.8,1,3,3,5,2",
 		"sidebar_account_collapsed":         "{}",

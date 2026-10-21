@@ -15,6 +15,7 @@ import (
 	"github.com/cristianadrielbraun/gofer/components/popover"
 	"github.com/cristianadrielbraun/gofer/components/radio"
 	"github.com/cristianadrielbraun/gofer/components/selectbox"
+	switchcomp "github.com/cristianadrielbraun/gofer/components/switch"
 	"github.com/cristianadrielbraun/gofer/components/tooltip"
 	"github.com/cristianadrielbraun/gofer/internal/models"
 )
@@ -103,6 +104,15 @@ templ mailSortOrderOption(value string, label string, checked bool) {
 		}
 		{ label }
 	</label>
+}
+
+// mailListDate renders a list date both ways; the list's "always show time"
+// setting picks which one shows, so changing it needs no reload.
+templ mailListDate(short string, withTime string) {
+	<span data-mail-date-short>{ short }</span>
+	if withTime != "" && withTime != short {
+		<span data-mail-date-with-time>{ withTime }</span>
+	}
 }
 
 func mailSortLabel(filters models.EmailFilters) string {
@@ -916,6 +926,20 @@ templ MailCardLayoutDialog() {
 					Card layout
 				}
 			}
+			// Options for card fields, opened from a field's ⚙. Rendered as a
+			// popover so it sits above the dialog, next to the field.
+			<div popover="manual" class="mail-card-layout-options" data-mail-card-layout-options>
+				<div class="space-y-2" data-mail-card-layout-options-for="date">
+					<div class="text-xs font-semibold text-foreground">Date</div>
+					<div class="flex items-center justify-between gap-4">
+						<span id="mail-card-option-date-time-label" class="text-xs text-muted-foreground">Always show time</span>
+						@switchcomp.Switch(switchcomp.Props{
+							ID:         "mail-card-option-date-time",
+							Attributes: templ.Attributes{"aria-labelledby": "mail-card-option-date-time-label", "data-mail-card-option": "mail_card_date_time"},
+						})
+					</div>
+				</div>
+			</div>
 			<div class="mail-card-layout-dialog-grid grid gap-3">
 				<div class="space-y-2 min-w-0">
 					<div class="flex items-center justify-between gap-2">
@@ -931,7 +955,7 @@ templ MailCardLayoutDialog() {
 					<div class="mail-card-layout-preview-shell rounded-lg border border-border bg-background/45 p-3">
 						<div class="mail-card-layout-preview-card mail-list-card rounded-lg border border-border bg-card px-3.5 py-2.5 shadow-sm" data-mail-card-layout-preview data-mail-card-layout-scope>
 							<div class="mail-list-card-zone mail-list-card-zone-rail-top" data-mail-card-zone="railTop" data-mail-card-layout-zone-items="railTop" data-mail-card-layout-dropzone="railTop">
-								<span data-mail-card-field="avatar" class="inline-flex size-6 items-center justify-center rounded-full bg-primary/15 text-[10px] font-semibold text-primary shadow-[0_1px_3px_rgba(0,0,0,0.15)]">CB</span>
+								<span data-mail-card-field="avatar"><span class="inline-flex size-6 items-center justify-center rounded-full bg-primary/15 text-[10px] font-semibold text-primary shadow-[0_1px_3px_rgba(0,0,0,0.15)]">CB</span></span>
 							</div>
 							<div class="mail-list-card-zone mail-list-card-zone-rail-middle" data-mail-card-zone="railMiddle" data-mail-card-layout-zone-items="railMiddle" data-mail-card-layout-dropzone="railMiddle">
 								<span data-mail-card-field="accountMarker" class="inline-flex items-center justify-center shrink-0">
@@ -946,9 +970,13 @@ templ MailCardLayoutDialog() {
 							</div>
 							<div class="mail-list-card-zone mail-list-card-zone-header" data-mail-card-zone="header" data-mail-card-layout-zone-items="header" data-mail-card-layout-dropzone="header">
 								<span data-mail-card-field="from" class="truncate text-sm font-semibold text-foreground">Cristian Braun</span>
-								<span data-mail-card-field="date" class="text-xs font-medium tabular-nums text-primary">10:42</span>
-								<span data-mail-card-field="account" class="mail-list-card-account inline-flex min-w-0 max-w-[42%] items-center gap-1 rounded-full border border-border/70 bg-background/40 px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground">
-									<span class="truncate">Work</span>
+								<span data-mail-card-field="date" class="text-xs font-medium tabular-nums text-primary">
+									@mailListDate("Yesterday", "Yesterday, 10:42 AM")
+								</span>
+								<span data-mail-card-field="account" class="inline-flex min-w-0">
+									<span class="mail-list-card-account inline-flex min-w-0 items-center gap-1 rounded-full border border-border/70 bg-background/40 px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground">
+										<span class="truncate">Work</span>
+									</span>
 								</span>
 							</div>
 							<div class="mail-list-card-zone mail-list-card-zone-meta" data-mail-card-zone="meta" data-mail-card-layout-zone-items="meta" data-mail-card-layout-dropzone="meta">
@@ -968,7 +996,9 @@ templ MailCardLayoutDialog() {
 							</div>
 							<div class="mail-list-card-zone mail-list-card-zone-footer" data-mail-card-zone="footer" data-mail-card-layout-zone-items="footer" data-mail-card-layout-dropzone="footer">
 								<p data-mail-card-field="preview" class="min-w-0 flex-1 truncate text-xs leading-relaxed text-muted-foreground">Preview text stays attached to the selected card section.</p>
-								<span data-mail-card-field="labels" class="shrink-0 rounded bg-primary/10 px-1.5 py-0.5 text-[10px] font-medium text-primary shadow-[0_1px_2px_rgba(0,0,0,0.08)]">Design</span>
+								<span class="mail-list-card-labels" data-mail-card-field="labels">
+									<span class="shrink-0 rounded bg-primary/10 px-1.5 py-0.5 text-[10px] font-medium text-primary shadow-[0_1px_2px_rgba(0,0,0,0.08)]">Design</span>
+								</span>
 							</div>
 							<div class="mail-list-card-zone mail-list-card-zone-status" data-mail-card-zone="status" data-mail-card-layout-zone-items="status" data-mail-card-layout-dropzone="status"></div>
 							<div class="mail-list-card-zone mail-list-card-zone-corner" data-mail-card-zone="corner" data-mail-card-layout-zone-items="corner" data-mail-card-layout-dropzone="corner">
@@ -1068,7 +1098,9 @@ templ MailListCardItem(accounts []models.Account, email models.Email, position i
 						templ.KV("text-muted-foreground", email.IsRead),
 					}
 					data-mail-card-field="date"
-				>{ email.Date }</span>
+				>
+					@mailListDate(email.Date, email.DateWithTime)
+				</span>
 				<span data-mail-card-field="account" class="mail-list-card-account inline-flex min-w-0 max-w-[42%] items-center gap-1 rounded-full border border-border/70 bg-background/40 px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground">
 					<span class="truncate">{ mailListAccountDisplay(accounts, email.AccountID) }</span>
 				</span>
@@ -1108,11 +1140,14 @@ templ MailListCardItem(accounts []models.Account, email models.Email, position i
 			<div class="mail-list-card-zone mail-list-card-zone-footer" data-mail-card-zone="footer">
 				<p class="min-w-0 flex-1 text-xs text-muted-foreground truncate leading-relaxed" data-mail-card-field="preview">{ email.Preview }</p>
 				if len(email.Labels) > 0 {
-					for _, label := range email.Labels {
-						<span class={ "text-[10px] px-1.5 py-0.5 rounded font-medium shrink-0 shadow-[0_1px_2px_rgba(0,0,0,0.08)]", label.Color } data-mail-card-field="labels">
-							{ label.Name }
-						</span>
-					}
+					// One field for all labels, so it moves and sizes as a unit.
+					<span class="mail-list-card-labels" data-mail-card-field="labels">
+						for _, label := range email.Labels {
+							<span class={ "text-[10px] px-1.5 py-0.5 rounded font-medium shrink-0 shadow-[0_1px_2px_rgba(0,0,0,0.08)]", label.Color }>
+								{ label.Name }
+							</span>
+						}
+					</span>
 				}
 			</div>
 			<div class="mail-list-card-zone mail-list-card-zone-status" data-mail-card-zone="status"></div>
@@ -1208,7 +1243,9 @@ templ MailListTableItem(email models.Email, position int, selectedEmail *models.
 				}
 			</div>
 			<div class="flex items-center justify-end shrink-0 text-muted-foreground tabular-nums" data-mail-table-cell="date">
-				<span class={ templ.Classes("min-w-12 text-right", templ.KV("text-primary font-medium", !email.IsRead)) }>{ email.Date }</span>
+				<span class={ templ.Classes("min-w-12 text-right", templ.KV("text-primary font-medium", !email.IsRead)) }>
+					@mailListDate(email.Date, email.DateWithTime)
+				</span>
 			</div>
 		</a>
 	</div>
@@ -1293,7 +1330,9 @@ templ MailListThreadSubItems(items []models.ThreadItem, senderDisplayMode string
 								}
 							</div>
 							<div class="flex items-center gap-1.5 shrink-0" data-mail-table-cell="date">
-								<span class="text-[11px] text-muted-foreground tabular-nums">{ item.Date }</span>
+								<span class="text-[11px] text-muted-foreground tabular-nums">
+									@mailListDate(item.Date, item.DateWithTime)
+								</span>
 							</div>
 						</div>
 						<p class="text-[11px] text-muted-foreground truncate leading-relaxed" data-mail-table-cell="subject">{ item.Preview }</p>

@@ -146,7 +146,10 @@ var GoferSettings;
   };
   var MAIL_CARD_SIDE_ZONES = ["railTop", "railMiddle", "railBottom", "meta", "status", "corner"];
   var MAIL_CARD_CENTER_ZONES = ["header", "body", "footer"];
+  // How many fields a zone holds. The body is capped at two rows: more would
+  // not fit in the card's height.
   var MAIL_CARD_SIDE_ZONE_MAX = {
+    body: 2,
     railTop: 1,
     railMiddle: 1,
     railBottom: 1,
@@ -286,7 +289,8 @@ var GoferSettings;
       for (var j = 0; j < ids.length; j++) {
         var id = ids[j].trim();
         if (!allowed[id] || seen[id]) continue;
-        layout[zone].push(id);
+        // A saved layout over a zone's limit moves the extra fields elsewhere.
+        layout[mailCardZoneHasRoom(layout, zone) ? zone : compatibleMailCardZone(layout, id, zone)].push(id);
         seen[id] = true;
       }
     }
@@ -354,6 +358,14 @@ var GoferSettings;
     return rows.join(" ");
   }
 
+  function mailCardEmptyLeftRows(layout) {
+    var rows = [];
+    if (!((layout.railTop || []).length)) rows.push("railTop");
+    if (!((layout.railMiddle || []).length)) rows.push("railMiddle");
+    if (!((layout.railBottom || []).length)) rows.push("railBottom");
+    return rows.join(" ");
+  }
+
   function cssEscape(value) {
     if (window.CSS && CSS.escape) return CSS.escape(value);
     return String(value).replace(/["\\]/g, "\\$&");
@@ -373,6 +385,9 @@ var GoferSettings;
       var emptyRightRows = mailCardEmptyRightRows(layout);
       if (emptyRightRows) card.dataset.mailCardEmptyRightRows = emptyRightRows;
       else delete card.dataset.mailCardEmptyRightRows;
+      var emptyLeftRows = mailCardEmptyLeftRows(layout);
+      if (emptyLeftRows) card.dataset.mailCardEmptyLeftRows = emptyLeftRows;
+      else delete card.dataset.mailCardEmptyLeftRows;
       for (var z = 0; z < MAIL_CARD_LAYOUT_ZONES.length; z++) {
         var zone = MAIL_CARD_LAYOUT_ZONES[z];
         var target = card.querySelector('[data-mail-card-zone="' + zone + '"]');
@@ -448,6 +463,7 @@ var GoferSettings;
       scroll.dataset.mailCardHidden = hidden;
       scroll.dataset.mailCardFields = visibleIds.join(",");
       scroll.dataset.mailCardLayout = serializeMailCardLayout(layout);
+      scroll.toggleAttribute("data-mail-date-time", _cache.mail_card_date_time === "true");
     }
     applyMailCardLayoutToScopes(scope, layout);
   }
@@ -614,6 +630,9 @@ var GoferSettings;
     if (key === "mail_card_fields") {
       _cache.mail_card_fields = normalizeMailCardFieldIds(value).join(",");
       _cache.mail_card_layout = serializeMailCardLayout(normalizeMailCardLayout(_cache.mail_card_layout, _cache.mail_card_fields));
+      applyMailCardSettings();
+    }
+    if (key === "mail_card_date_time") {
       applyMailCardSettings();
     }
     if (key === "mail_card_layout") {

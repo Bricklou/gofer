@@ -73,6 +73,7 @@ type Email struct {
 	OriginalHTMLBody  string
 	TextBody          string
 	Date              string
+	DateWithTime      string
 	DateFull          string
 	IsRead            bool
 	IsStarred         bool
@@ -287,6 +288,7 @@ type ThreadItem struct {
 	Preview           string
 	TextBody          string
 	Date              string
+	DateWithTime      string
 	DateFull          string
 	IsRead            bool
 	IsStarred         bool
