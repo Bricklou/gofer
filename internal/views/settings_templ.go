@@ -4644,7 +4644,7 @@ func SettingsSyncTab(settings models.SyncSettings, uiSettings map[string]string)
 							if templ_7745c5c3_Err != nil {
 								return templ_7745c5c3_Err
 							}
-							templ_7745c5c3_Err = icon.Zap(icon.Props{Class: "size-3 text-amber-700/70 dark:text-amber-300/70"}).Render(ctx, templ_7745c5c3_Buffer)
+							templ_7745c5c3_Err = icon.Zap(icon.Props{Class: "size-3 text-amber-700 opacity-70 dark:text-amber-300"}).Render(ctx, templ_7745c5c3_Buffer)
 							if templ_7745c5c3_Err != nil {
 								return templ_7745c5c3_Err
 							}

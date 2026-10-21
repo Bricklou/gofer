@@ -7116,7 +7116,7 @@ document.addEventListener("DOMContentLoaded", function () {
   }
 
   function mailViewSkeletonToolbarButton(name, className) {
-    return '<button type="button" disabled tabindex="-1" class="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-ink/25">' + mailViewSkeletonIcon(name, className) + '</button>'
+    return '<button type="button" disabled tabindex="-1" class="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-ink opacity-25">' + mailViewSkeletonIcon(name, className) + '</button>'
   }
 
   function mailViewSkeletonReplyButton(name, label) {
@@ -7149,7 +7149,7 @@ document.addEventListener("DOMContentLoaded", function () {
               mailViewSkeletonToolbarButton("archive") +
               mailViewSkeletonToolbarButton("trash-2") +
               '<div>' + mailViewSkeletonToolbarButton("shield-alert").replace('<button ', '<button data-mail-action="spam" ') + '</div>' +
-              mailViewSkeletonToolbarButton("star", "size-4 text-muted-foreground") +
+              mailViewSkeletonToolbarButton("star", "size-4") +
               mailViewSkeletonToolbarButton("mail") +
             '</div>' +
             '<div class="mail-view-meta flex items-center gap-2">' +
@@ -7610,7 +7610,7 @@ function setMailViewEmptyNow() {
     '<div class="flex flex-col items-center justify-center h-full text-center" data-mail-view-empty>' +
       '<div class="space-y-4 animate-fade-in">' +
         '<div class="size-20 rounded-2xl bg-card flex items-center justify-center mx-auto raised">' +
-          '<svg class="size-9 text-muted-foreground/30" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m22 7-8.991 5.727a2 2 0 0 1-2.009 0L2 7"/><rect x="2" y="4" width="20" height="16" rx="2"/></svg>' +
+          '<svg class="size-9 text-muted-foreground opacity-30" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m22 7-8.991 5.727a2 2 0 0 1-2.009 0L2 7"/><rect x="2" y="4" width="20" height="16" rx="2"/></svg>' +
         '</div>' +
         '<div>' +
           '<h3 class="font-semibold mb-1">Select an email</h3>' +

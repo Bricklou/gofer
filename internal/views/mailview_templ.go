@@ -357,7 +357,7 @@ func MailViewLoading() templ.Component {
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 12, "<div><button type=\"button\" disabled tabindex=\"-1\" data-mail-action=\"spam\" class=\"inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-ink/25\">")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 12, "<div><button type=\"button\" disabled tabindex=\"-1\" data-mail-action=\"spam\" class=\"inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-ink opacity-25\">")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -381,7 +381,7 @@ func MailViewLoading() templ.Component {
 				}()
 			}
 			ctx = templ.InitializeContext(ctx)
-			templ_7745c5c3_Err = icon.Star(icon.Props{Class: "size-4 text-muted-foreground"}).Render(ctx, templ_7745c5c3_Buffer)
+			templ_7745c5c3_Err = icon.Star(icon.Props{Class: "size-4"}).Render(ctx, templ_7745c5c3_Buffer)
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
@@ -538,7 +538,7 @@ func mailViewLoadingToolbarButton() templ.Component {
 			templ_7745c5c3_Var16 = templ.NopComponent
 		}
 		ctx = templ.ClearChildren(ctx)
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 17, "<button type=\"button\" disabled tabindex=\"-1\" class=\"inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-ink/25\">")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 17, "<button type=\"button\" disabled tabindex=\"-1\" class=\"inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-ink opacity-25\">")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -1144,7 +1144,7 @@ func MailViewThreadItemSender(email *models.Email, item *models.ThreadItem) temp
 					}()
 				}
 				ctx = templ.InitializeContext(ctx)
-				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 68, "<button type=\"button\" class=\"shrink-0 size-7 rounded flex items-center justify-center text-muted-foreground hover:text-ink hover:bg-ink/5 transition-colors mt-0.5\">")
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 68, "<button type=\"button\" class=\"shrink-0 size-7 rounded flex items-center justify-center text-icon hover:text-ink hover:bg-ink/5 transition-colors mt-0.5\">")
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
@@ -1572,7 +1572,7 @@ func MailViewThreadItemMiniHeader(item *models.ThreadItem) templ.Component {
 							return templ_7745c5c3_Err
 						}
 					} else {
-						templ_7745c5c3_Err = icon.Star(icon.Props{Class: "size-3.5 text-muted-foreground"}).Render(ctx, templ_7745c5c3_Buffer)
+						templ_7745c5c3_Err = icon.Star(icon.Props{Class: "size-3.5 text-icon"}).Render(ctx, templ_7745c5c3_Buffer)
 						if templ_7745c5c3_Err != nil {
 							return templ_7745c5c3_Err
 						}
@@ -1674,7 +1674,7 @@ func MailViewThreadItemMiniHeader(item *models.ThreadItem) templ.Component {
 				templ_7745c5c3_Err = button.Button(button.Props{
 					Variant:    button.VariantGhost,
 					Size:       button.SizeIcon,
-					Class:      mailDeleteActionClass("h-7 w-7", "text-muted-foreground hover:text-ink hover:bg-ink/5", mailThreadItemIsTrash(item)),
+					Class:      mailDeleteActionClass("h-7 w-7", "text-icon hover:text-ink hover:bg-ink/5", mailThreadItemIsTrash(item)),
 					Attributes: templ.Attributes{"data-on-click": onAction("deleteMessage", item.ID)},
 				}).Render(templ.WithChildren(ctx, templ_7745c5c3_Var63), templ_7745c5c3_Buffer)
 				if templ_7745c5c3_Err != nil {
@@ -1780,7 +1780,7 @@ func MailViewThreadItemMiniHeader(item *models.ThreadItem) templ.Component {
 				templ_7745c5c3_Err = button.Button(button.Props{
 					Variant:    button.VariantGhost,
 					Size:       button.SizeIcon,
-					Class:      "h-7 w-7 text-muted-foreground hover:text-ink hover:bg-ink/5",
+					Class:      "h-7 w-7 text-icon hover:text-ink hover:bg-ink/5",
 					Attributes: templ.Attributes{"data-on-click": onAction("toggleRead", item.ID), "data-read-email": item.ID, "data-is-read": fmt.Sprintf("%t", item.IsRead)},
 				}).Render(templ.WithChildren(ctx, templ_7745c5c3_Var67), templ_7745c5c3_Buffer)
 				if templ_7745c5c3_Err != nil {
@@ -2455,7 +2455,7 @@ func EmailBodyStyleCycleButton(emailID string) templ.Component {
 		templ_7745c5c3_Err = button.Button(button.Props{
 			Variant: button.VariantGhost,
 			Size:    button.SizeIcon,
-			Class:   "email-body-mode-cycle h-7 w-7 text-muted-foreground hover:text-ink hover:bg-ink/5",
+			Class:   "email-body-mode-cycle h-7 w-7 text-icon hover:text-ink hover:bg-ink/5",
 			Attributes: templ.Attributes{
 				"data-on-click":              onAction("toggleEmailBodySchemeById", emailID),
 				"data-email-body-mode-cycle": emailID,
@@ -2507,7 +2507,7 @@ func EmailTranslateIconButton(emailID string) templ.Component {
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 139, "\" data-translated=\"false\" class=\"inline-flex h-7 overflow-hidden rounded-md text-muted-foreground transition-colors data-[translated=true]:bg-copper/10 data-[translated=true]:text-copper\"><button type=\"button\" data-translate-email-icon=\"")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 139, "\" data-translated=\"false\" class=\"inline-flex h-7 overflow-hidden rounded-md text-icon transition-colors data-[translated=true]:bg-copper/10 data-[translated=true]:text-copper\"><button type=\"button\" data-translate-email-icon=\"")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -2758,7 +2758,7 @@ func MailViewHeader(email *models.Email, thread []models.ThreadItem) templ.Compo
 					templ_7745c5c3_Err = button.Button(button.Props{
 						Variant:    button.VariantGhost,
 						Size:       button.SizeIcon,
-						Class:      "h-8 w-8 text-muted-foreground hover:text-ink hover:bg-ink/5",
+						Class:      "h-8 w-8 text-icon hover:text-ink hover:bg-ink/5",
 						Attributes: templ.Attributes{"data-on-click": onAction("unarchiveThread", email.ID)},
 					}).Render(templ.WithChildren(ctx, templ_7745c5c3_Var104), templ_7745c5c3_Buffer)
 					if templ_7745c5c3_Err != nil {
@@ -2786,7 +2786,7 @@ func MailViewHeader(email *models.Email, thread []models.ThreadItem) templ.Compo
 					templ_7745c5c3_Err = button.Button(button.Props{
 						Variant:    button.VariantGhost,
 						Size:       button.SizeIcon,
-						Class:      "h-8 w-8 text-muted-foreground hover:text-ink hover:bg-ink/5",
+						Class:      "h-8 w-8 text-icon hover:text-ink hover:bg-ink/5",
 						Attributes: templ.Attributes{"data-on-click": onAction("archiveThread", email.ID)},
 					}).Render(templ.WithChildren(ctx, templ_7745c5c3_Var105), templ_7745c5c3_Buffer)
 					if templ_7745c5c3_Err != nil {
@@ -2896,7 +2896,7 @@ func MailViewHeader(email *models.Email, thread []models.ThreadItem) templ.Compo
 				templ_7745c5c3_Err = button.Button(button.Props{
 					Variant:    button.VariantGhost,
 					Size:       button.SizeIcon,
-					Class:      mailDeleteActionClass("h-8 w-8", "text-muted-foreground hover:text-ink hover:bg-ink/5", mailEmailIsTrash(email)),
+					Class:      mailDeleteActionClass("h-8 w-8", "text-icon hover:text-ink hover:bg-ink/5", mailEmailIsTrash(email)),
 					Attributes: templ.Attributes{"data-on-click": threadAwareAction("deleteMessage", "deleteThread", email)},
 				}).Render(templ.WithChildren(ctx, templ_7745c5c3_Var111), templ_7745c5c3_Buffer)
 				if templ_7745c5c3_Err != nil {
@@ -3034,7 +3034,7 @@ func MailViewHeader(email *models.Email, thread []models.ThreadItem) templ.Compo
 					templ_7745c5c3_Err = button.Button(button.Props{
 						Variant:    button.VariantGhost,
 						Size:       button.SizeIcon,
-						Class:      "h-8 w-8 text-muted-foreground hover:text-ink hover:bg-ink/5",
+						Class:      "h-8 w-8 text-icon hover:text-ink hover:bg-ink/5",
 						Attributes: templ.Attributes{"data-on-click": threadAwareAction("markSpam", "markThreadSpam", email), "data-mail-action": "spam"},
 					}).Render(templ.WithChildren(ctx, templ_7745c5c3_Var118), templ_7745c5c3_Buffer)
 					if templ_7745c5c3_Err != nil {
@@ -3141,7 +3141,7 @@ func MailViewHeader(email *models.Email, thread []models.ThreadItem) templ.Compo
 							return templ_7745c5c3_Err
 						}
 					} else {
-						templ_7745c5c3_Err = icon.Star(icon.Props{Class: "size-4 text-muted-foreground"}).Render(ctx, templ_7745c5c3_Buffer)
+						templ_7745c5c3_Err = icon.Star(icon.Props{Class: "size-4 text-icon"}).Render(ctx, templ_7745c5c3_Buffer)
 						if templ_7745c5c3_Err != nil {
 							return templ_7745c5c3_Err
 						}
@@ -3255,7 +3255,7 @@ func MailViewHeader(email *models.Email, thread []models.ThreadItem) templ.Compo
 				templ_7745c5c3_Err = button.Button(button.Props{
 					Variant:    button.VariantGhost,
 					Size:       button.SizeIcon,
-					Class:      "h-8 w-8 text-muted-foreground hover:text-ink hover:bg-ink/5",
+					Class:      "h-8 w-8 text-icon hover:text-ink hover:bg-ink/5",
 					Attributes: mailViewReadAttributes(email, thread),
 				}).Render(templ.WithChildren(ctx, templ_7745c5c3_Var129), templ_7745c5c3_Buffer)
 				if templ_7745c5c3_Err != nil {
@@ -3453,7 +3453,7 @@ func MailViewHeader(email *models.Email, thread []models.ThreadItem) templ.Compo
 				templ_7745c5c3_Err = button.Button(button.Props{
 					Variant: button.VariantGhost,
 					Size:    button.SizeIcon,
-					Class:   "h-8 w-8 text-muted-foreground hover:text-ink",
+					Class:   "h-8 w-8 text-icon hover:text-ink",
 				}).Render(templ.WithChildren(ctx, templ_7745c5c3_Var140), templ_7745c5c3_Buffer)
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
@@ -4044,7 +4044,7 @@ func MailViewSender(email *models.Email) templ.Component {
 					}()
 				}
 				ctx = templ.InitializeContext(ctx)
-				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 211, "<button type=\"button\" class=\"shrink-0 size-7 rounded flex items-center justify-center text-muted-foreground hover:text-ink hover:bg-ink/5 transition-colors mt-0.5\">")
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 211, "<button type=\"button\" class=\"shrink-0 size-7 rounded flex items-center justify-center text-icon hover:text-ink hover:bg-ink/5 transition-colors mt-0.5\">")
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
@@ -5296,7 +5296,7 @@ func MailViewEmpty() templ.Component {
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = icon.Mail(icon.Props{Class: "size-9 text-muted-foreground/30"}).Render(ctx, templ_7745c5c3_Buffer)
+		templ_7745c5c3_Err = icon.Mail(icon.Props{Class: "size-9 text-muted-foreground opacity-30"}).Render(ctx, templ_7745c5c3_Buffer)
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}

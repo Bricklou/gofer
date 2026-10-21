@@ -440,7 +440,7 @@ templ SidebarSyncControls(accounts []models.Account, activeApp string) {
 								@icon.RefreshCw(icon.Props{Class: "size-4"})
 							</button>
 						} else {
-							<button type="button" disabled class="inline-flex h-8 w-8 items-center justify-center text-sidebar-foreground/45 disabled:cursor-not-allowed" aria-label="No calendars selected">
+							<button type="button" disabled class="inline-flex h-8 w-8 items-center justify-center text-sidebar-foreground opacity-45 disabled:cursor-not-allowed" aria-label="No calendars selected">
 								@icon.RefreshCw(icon.Props{Class: "size-4"})
 							</button>
 						}

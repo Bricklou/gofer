@@ -2451,6 +2451,9 @@ html:root[data-theme="express"] :is([data-calendar-month-event], [data-calendar-
 
 [data-theme="express"] .mail-list-toolbar,
 [data-theme="express"] .mail-view-toolbar {
+  /* Less side padding than the other themes: the pane's frame and the
+     buttons' bevels already add room, so 1.5rem pushed the icons inward. */
+  padding-inline: 0.75rem;
   background: var(--xp-face);
   box-shadow: inset 0 -1px 0 var(--xp-mid), inset 0 1px 0 var(--xp-light);
 }

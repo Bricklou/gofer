@@ -161,12 +161,12 @@ templ MailViewLoading() {
 							@icon.Trash2(icon.Props{Class: "size-4"})
 						}
 						<div>
-							<button type="button" disabled tabindex="-1" data-mail-action="spam" class="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-ink/25">
+							<button type="button" disabled tabindex="-1" data-mail-action="spam" class="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-ink opacity-25">
 								@icon.ShieldAlert(icon.Props{Class: "size-4"})
 							</button>
 						</div>
 						@mailViewLoadingToolbarButton() {
-							@icon.Star(icon.Props{Class: "size-4 text-muted-foreground"})
+							@icon.Star(icon.Props{Class: "size-4"})
 						}
 						@mailViewLoadingToolbarButton() {
 							@icon.Mail(icon.Props{Class: "size-4"})
@@ -227,7 +227,7 @@ templ MailViewLoading() {
 }
 
 templ mailViewLoadingToolbarButton() {
-	<button type="button" disabled tabindex="-1" class="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-ink/25">
+	<button type="button" disabled tabindex="-1" class="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-ink opacity-25">
 		{ children... }
 	</button>
 }
@@ -369,7 +369,7 @@ templ MailViewThreadItemSender(email *models.Email, item *models.ThreadItem) {
 		</div>
 		@popover.Root() {
 			@popover.Trigger() {
-				<button type="button" class="shrink-0 size-7 rounded flex items-center justify-center text-muted-foreground hover:text-ink hover:bg-ink/5 transition-colors mt-0.5">
+				<button type="button" class="shrink-0 size-7 rounded flex items-center justify-center text-icon hover:text-ink hover:bg-ink/5 transition-colors mt-0.5">
 					@icon.EllipsisVertical(icon.Props{Class: "size-3.5"})
 				</button>
 			}
@@ -475,7 +475,7 @@ templ MailViewThreadItemMiniHeader(item *models.ThreadItem) {
 					if item.IsStarred {
 						@icon.Star(icon.Props{Class: "size-3.5 text-amber-500 fill-amber-500 drop-shadow-[0_1px_1px_rgba(180,120,0,0.3)]"})
 					} else {
-						@icon.Star(icon.Props{Class: "size-3.5 text-muted-foreground"})
+						@icon.Star(icon.Props{Class: "size-3.5 text-icon"})
 					}
 				}
 			}
@@ -491,7 +491,7 @@ templ MailViewThreadItemMiniHeader(item *models.ThreadItem) {
 				@button.Button(button.Props{
 					Variant:    button.VariantGhost,
 					Size:       button.SizeIcon,
-					Class:      mailDeleteActionClass("h-7 w-7", "text-muted-foreground hover:text-ink hover:bg-ink/5", mailThreadItemIsTrash(item)),
+					Class:      mailDeleteActionClass("h-7 w-7", "text-icon hover:text-ink hover:bg-ink/5", mailThreadItemIsTrash(item)),
 					Attributes: templ.Attributes{"data-on-click": onAction("deleteMessage", item.ID)},
 				}) {
 					@icon.Trash2(icon.Props{Class: "size-3.5"})
@@ -513,7 +513,7 @@ templ MailViewThreadItemMiniHeader(item *models.ThreadItem) {
 				@button.Button(button.Props{
 					Variant:    button.VariantGhost,
 					Size:       button.SizeIcon,
-					Class:      "h-7 w-7 text-muted-foreground hover:text-ink hover:bg-ink/5",
+					Class:      "h-7 w-7 text-icon hover:text-ink hover:bg-ink/5",
 					Attributes: templ.Attributes{"data-on-click": onAction("toggleRead", item.ID), "data-read-email": item.ID, "data-is-read": fmt.Sprintf("%t", item.IsRead)},
 				}) {
 					if item.IsRead {
@@ -628,7 +628,7 @@ templ EmailBodyStyleCycleButton(emailID string) {
 	@button.Button(button.Props{
 		Variant: button.VariantGhost,
 		Size:    button.SizeIcon,
-		Class:   "email-body-mode-cycle h-7 w-7 text-muted-foreground hover:text-ink hover:bg-ink/5",
+		Class:   "email-body-mode-cycle h-7 w-7 text-icon hover:text-ink hover:bg-ink/5",
 		Attributes: templ.Attributes{
 			"data-on-click": onAction("toggleEmailBodySchemeById", emailID),
 			"data-email-body-mode-cycle": emailID,
@@ -652,7 +652,7 @@ templ EmailBodyStyleCycleButton(emailID string) {
 // that translates the message or shows the original again, and a menu of languages. It
 // shares the desktop control's behavior and its colors while a translation is shown.
 templ EmailTranslateIconButton(emailID string) {
-	<div data-translate-email-icon-shell={ emailID } data-translated="false" class="inline-flex h-7 overflow-hidden rounded-md text-muted-foreground transition-colors data-[translated=true]:bg-copper/10 data-[translated=true]:text-copper">
+	<div data-translate-email-icon-shell={ emailID } data-translated="false" class="inline-flex h-7 overflow-hidden rounded-md text-icon transition-colors data-[translated=true]:bg-copper/10 data-[translated=true]:text-copper">
 		<button type="button" data-translate-email-icon={ emailID } data-translated="false" aria-pressed="false" aria-label="Translate" class="inline-flex h-full items-center pl-1.5 pr-0.5 transition-colors hover:text-ink">
 			@icon.Languages(icon.Props{Class: "size-3.5"})
 		</button>
@@ -696,7 +696,7 @@ templ MailViewHeader(email *models.Email, thread []models.ThreadItem) {
 						@button.Button(button.Props{
 							Variant:    button.VariantGhost,
 							Size:       button.SizeIcon,
-							Class:      "h-8 w-8 text-muted-foreground hover:text-ink hover:bg-ink/5",
+							Class:      "h-8 w-8 text-icon hover:text-ink hover:bg-ink/5",
 							Attributes: templ.Attributes{"data-on-click": onAction("unarchiveThread", email.ID)},
 						}) {
 							@icon.ArchiveRestore(icon.Props{Class: "size-4"})
@@ -705,7 +705,7 @@ templ MailViewHeader(email *models.Email, thread []models.ThreadItem) {
 						@button.Button(button.Props{
 							Variant:    button.VariantGhost,
 							Size:       button.SizeIcon,
-							Class:      "h-8 w-8 text-muted-foreground hover:text-ink hover:bg-ink/5",
+							Class:      "h-8 w-8 text-icon hover:text-ink hover:bg-ink/5",
 							Attributes: templ.Attributes{"data-on-click": onAction("archiveThread", email.ID)},
 						}) {
 							@icon.Archive(icon.Props{Class: "size-4"})
@@ -728,7 +728,7 @@ templ MailViewHeader(email *models.Email, thread []models.ThreadItem) {
 					@button.Button(button.Props{
 						Variant:    button.VariantGhost,
 						Size:       button.SizeIcon,
-						Class:      mailDeleteActionClass("h-8 w-8", "text-muted-foreground hover:text-ink hover:bg-ink/5", mailEmailIsTrash(email)),
+						Class:      mailDeleteActionClass("h-8 w-8", "text-icon hover:text-ink hover:bg-ink/5", mailEmailIsTrash(email)),
 						Attributes: templ.Attributes{"data-on-click": threadAwareAction("deleteMessage", "deleteThread", email)},
 					}) {
 						@icon.Trash2(icon.Props{Class: "size-4"})
@@ -760,7 +760,7 @@ templ MailViewHeader(email *models.Email, thread []models.ThreadItem) {
 							@button.Button(button.Props{
 								Variant:    button.VariantGhost,
 								Size:       button.SizeIcon,
-								Class:      "h-8 w-8 text-muted-foreground hover:text-ink hover:bg-ink/5",
+								Class:      "h-8 w-8 text-icon hover:text-ink hover:bg-ink/5",
 								Attributes: templ.Attributes{"data-on-click": threadAwareAction("markSpam", "markThreadSpam", email), "data-mail-action": "spam"},
 							}) {
 								@icon.ShieldAlert(icon.Props{Class: "size-4"})
@@ -789,7 +789,7 @@ templ MailViewHeader(email *models.Email, thread []models.ThreadItem) {
 						if mailViewStarred(email, thread) {
 							@icon.Star(icon.Props{Class: "size-4 text-amber-500 fill-amber-500 drop-shadow-[0_1px_1px_rgba(180,120,0,0.3)]"})
 						} else {
-							@icon.Star(icon.Props{Class: "size-4 text-muted-foreground"})
+							@icon.Star(icon.Props{Class: "size-4 text-icon"})
 						}
 					}
 				}
@@ -805,7 +805,7 @@ templ MailViewHeader(email *models.Email, thread []models.ThreadItem) {
 					@button.Button(button.Props{
 						Variant:    button.VariantGhost,
 						Size:       button.SizeIcon,
-						Class:      "h-8 w-8 text-muted-foreground hover:text-ink hover:bg-ink/5",
+						Class:      "h-8 w-8 text-icon hover:text-ink hover:bg-ink/5",
 						Attributes: mailViewReadAttributes(email, thread),
 					}) {
 						if mailViewRead(email, thread) {
@@ -849,7 +849,7 @@ templ MailViewHeader(email *models.Email, thread []models.ThreadItem) {
 					@button.Button(button.Props{
 						Variant: button.VariantGhost,
 						Size:    button.SizeIcon,
-						Class:   "h-8 w-8 text-muted-foreground hover:text-ink",
+						Class:   "h-8 w-8 text-icon hover:text-ink",
 					}) {
 						@icon.EllipsisVertical(icon.Props{Class: "size-4"})
 					}
@@ -954,7 +954,7 @@ templ MailViewSender(email *models.Email) {
 		</div>
 		@popover.Root() {
 			@popover.Trigger() {
-				<button type="button" class="shrink-0 size-7 rounded flex items-center justify-center text-muted-foreground hover:text-ink hover:bg-ink/5 transition-colors mt-0.5">
+				<button type="button" class="shrink-0 size-7 rounded flex items-center justify-center text-icon hover:text-ink hover:bg-ink/5 transition-colors mt-0.5">
 					@icon.EllipsisVertical(icon.Props{Class: "size-3.5"})
 				</button>
 			}
@@ -1217,7 +1217,7 @@ templ MailViewEmpty() {
 	<div class="flex flex-col items-center justify-center h-full text-center" data-mail-view-empty>
 		<div class="space-y-4 animate-fade-in">
 			<div class="size-20 rounded-2xl bg-card flex items-center justify-center mx-auto raised">
-				@icon.Mail(icon.Props{Class: "size-9 text-muted-foreground/30"})
+				@icon.Mail(icon.Props{Class: "size-9 text-muted-foreground opacity-30"})
 			</div>
 			<div>
 				<h3 class="font-semibold mb-1">Select an email</h3>

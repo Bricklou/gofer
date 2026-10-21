@@ -1123,7 +1123,7 @@ templ MailListCardItem(accounts []models.Account, email models.Email, position i
 					</button>
 				} else {
 					<button class="opacity-0 group-hover:opacity-100 transition-opacity star-btn shrink-0" data-email-id={ email.ID } data-mail-card-field="starred">
-						@icon.Star(icon.Props{Class: "size-3.5 text-muted-foreground/70"})
+						@icon.Star(icon.Props{Class: "size-3.5 text-muted-foreground opacity-70"})
 					</button>
 				}
 			</div>
@@ -1155,7 +1155,7 @@ templ MailListTableItem(email models.Email, position int, selectedEmail *models.
 					</button>
 				} else {
 					<button class="opacity-0 group-hover:opacity-100 transition-opacity star-btn" data-email-id={ email.ID }>
-						@icon.Star(icon.Props{Class: "size-3.5 text-muted-foreground/70"})
+						@icon.Star(icon.Props{Class: "size-3.5 text-muted-foreground opacity-70"})
 					</button>
 				}
 			</div>
@@ -1217,7 +1217,7 @@ templ MailListTableItem(email models.Email, position int, selectedEmail *models.
 templ MailListEmpty() {
 	<div class="flex flex-col items-center justify-center py-20 px-4 text-center">
 		<div class="empty-icon-box size-16 rounded-2xl bg-muted/50 flex items-center justify-center mb-4 raised">
-			@icon.Inbox(icon.Props{Class: "size-7 text-muted-foreground/40"})
+			@icon.Inbox(icon.Props{Class: "size-7 text-muted-foreground opacity-40"})
 		</div>
 		<h3 class="font-semibold text-sm mb-1">No emails</h3>
 		<p class="text-xs text-muted-foreground">Your inbox is empty</p>
@@ -1288,7 +1288,7 @@ templ MailListThreadSubItems(items []models.ThreadItem, senderDisplayMode string
 									</button>
 								} else {
 									<button class="opacity-0 group-hover:opacity-100 transition-opacity star-btn" data-email-id={ item.ID }>
-										@icon.Star(icon.Props{Class: "size-3 text-muted-foreground/70"})
+										@icon.Star(icon.Props{Class: "size-3 text-muted-foreground opacity-70"})
 									</button>
 								}
 							</div>

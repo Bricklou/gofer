@@ -1565,7 +1565,7 @@ func SidebarSyncControls(accounts []models.Account, activeApp string) templ.Comp
 							return templ_7745c5c3_Err
 						}
 					} else {
-						templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 97, "<button type=\"button\" disabled class=\"inline-flex h-8 w-8 items-center justify-center text-sidebar-foreground/45 disabled:cursor-not-allowed\" aria-label=\"No calendars selected\">")
+						templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 97, "<button type=\"button\" disabled class=\"inline-flex h-8 w-8 items-center justify-center text-sidebar-foreground opacity-45 disabled:cursor-not-allowed\" aria-label=\"No calendars selected\">")
 						if templ_7745c5c3_Err != nil {
 							return templ_7745c5c3_Err
 						}

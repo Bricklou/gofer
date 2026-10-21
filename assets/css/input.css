@@ -24,6 +24,8 @@
   --color-secondary-foreground: var(--secondary-foreground);
   --color-muted: var(--muted);
   --color-muted-foreground: var(--muted-foreground);
+  /* Icon buttons: clearer than secondary text, a step quieter than body text. */
+  --color-icon: color-mix(in oklab, var(--foreground) 80%, var(--muted-foreground));
   --color-accent: var(--accent);
   --color-accent-foreground: var(--accent-foreground);
   --color-destructive: var(--destructive);

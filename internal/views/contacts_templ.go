@@ -4000,7 +4000,7 @@ func ContactsEmptyDetail() templ.Component {
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = icon.BookUser(icon.Props{Class: "size-9 text-muted-foreground/30"}).Render(ctx, templ_7745c5c3_Buffer)
+		templ_7745c5c3_Err = icon.BookUser(icon.Props{Class: "size-9 text-muted-foreground opacity-30"}).Render(ctx, templ_7745c5c3_Buffer)
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
