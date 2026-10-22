@@ -14,7 +14,8 @@ function mailCardRowRem() {
 // Contact rows use one 4rem phone layout on small screens, in either view.
 function contactRowRem(viewMode) {
   if (window.matchMedia("(max-width: 1023.98px)").matches) return 4
-  return viewMode === "table" ? 2.75 : 6.25
+  // Cards are two lines beside the avatar (.contact-card in input.css).
+  return viewMode === "table" ? 2.75 : 3.875
 }
 
 class VirtualMailList {
@@ -2903,7 +2904,7 @@ class VirtualContactsList {
     if (this.viewMode === "table") {
       return '<div class="mail-list-skeleton mail-list-table-skeleton"><div class="mail-list-table-grid grid items-center gap-3 w-full px-3 py-1.5" style="' + this.tableGridStyle() + '"><div class="h-3 w-32 rounded bg-muted animate-pulse"></div><div class="h-3 w-24 rounded bg-muted animate-pulse"></div><div class="ml-auto h-3 w-8 rounded bg-muted animate-pulse"></div></div></div>'
     }
-    return '<div class="mail-list-skeleton"><div class="flex items-start gap-3 px-3.5 py-2.5"><div class="size-6 rounded-full bg-muted animate-pulse"></div><div class="flex-1 min-w-0 space-y-2"><div class="h-3 w-28 rounded bg-muted animate-pulse"></div><div class="h-3 w-40 rounded bg-muted animate-pulse"></div><div class="h-2.5 w-24 rounded bg-muted animate-pulse"></div></div></div></div>'
+    return '<div class="mail-list-skeleton"><div class="flex items-center gap-3 px-3.5 py-1.5"><div class="size-8 rounded-full bg-muted animate-pulse"></div><div class="flex-1 min-w-0 space-y-1.5"><div class="h-3 w-28 rounded bg-muted animate-pulse"></div><div class="h-3 w-40 rounded bg-muted animate-pulse"></div></div></div></div>'
   }
 
   async ensureRangeLoaded(first, last) {

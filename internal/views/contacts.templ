@@ -710,6 +710,104 @@ func contactFiltersActiveCount(filters models.ContactFilters) int {
 	return count
 }
 
+// contactAccountMarker is an account a contact syncs with: its name and
+// color, and a title naming its address books too.
+type contactAccountMarker struct {
+	Name  string
+	Color string
+	Title string
+}
+
+// contactAccountMarkers gives one marker per account a contact syncs with,
+// in the order its address books come, or for a contact imported from an
+// account, that account's.
+func contactAccountMarkers(contact models.Contact, accounts []models.Account) []contactAccountMarker {
+	byID := make(map[string]models.Account, len(accounts))
+	for _, account := range accounts {
+		byID[account.ID] = account
+	}
+	var order []string
+	books := make(map[string][]string)
+	for _, book := range contact.SourceBooks {
+		if _, known := byID[book.AccountID]; !known {
+			continue
+		}
+		if _, seen := books[book.AccountID]; !seen {
+			order = append(order, book.AccountID)
+		}
+		books[book.AccountID] = append(books[book.AccountID], contactAddressBookDisplayName(book))
+	}
+	if accountID, ok := strings.CutPrefix(contact.Source, "synced:"); ok && len(order) == 0 {
+		if _, known := byID[accountID]; known {
+			order = append(order, accountID)
+		}
+	}
+	markers := make([]contactAccountMarker, 0, len(order))
+	for _, id := range order {
+		account := byID[id]
+		title := accountContactOriginLabel(account)
+		if names := books[id]; len(names) > 0 {
+			title += " / " + strings.Join(names, ", ")
+		}
+		markers = append(markers, contactAccountMarker{Name: accountContactOriginLabel(account), Color: account.Color, Title: title})
+	}
+	return markers
+}
+
+// contactOrigin is where a contact card says the contact comes from.
+type contactOrigin struct {
+	Label string
+	Title string
+	// Color is the account's, for a contact one of them holds.
+	Color string
+}
+
+// contactCardOrigin names the account a contact belongs to, the first and how
+// many more when it is in several, or else how it got into Gofer: observed
+// in mail, added by hand.
+func contactCardOrigin(contact models.Contact, accounts []models.Account) contactOrigin {
+	if markers := contactAccountMarkers(contact, accounts); len(markers) > 0 {
+		origin := contactOrigin{Label: markers[0].Name, Color: markers[0].Color}
+		titles := make([]string, 0, len(markers))
+		for _, marker := range markers {
+			titles = append(titles, marker.Title)
+		}
+		if len(markers) > 1 {
+			origin.Label += fmt.Sprintf(" +%d", len(markers)-1)
+		}
+		origin.Title = strings.Join(titles, "\n")
+		return origin
+	}
+	label := contactSourceLabel(contact.Source, contact.IsManual, accounts)
+	title := label
+	switch label {
+	case "Observed":
+		title = "Collected from your mail"
+	case "Manual":
+		title = "Added in Gofer"
+	}
+	return contactOrigin{Label: label, Title: title}
+}
+
+// contactCardDate is the date a contact card shows: when the contact was last
+// seen in mail, or else when it was added, with what it means.
+func contactCardDate(contact models.Contact) (string, string) {
+	if seen := strings.TrimSpace(contact.LastSeenAt); seen != "" {
+		return seen, "Last seen " + seen
+	}
+	if added := strings.TrimSpace(contact.CreatedAt); added != "" {
+		return added, "Added " + added
+	}
+	return "", ""
+}
+
+func contactMessageCountTitle(count int) string {
+	if count == 1 {
+		return "1 message"
+	}
+	return fmt.Sprintf("%d messages", count)
+}
+
 func contactFiltersActive(filters models.ContactFilters) bool {
 	return filters.Source != "" || filters.SaveTarget != "" || filters.Activity != ""
 }
@@ -1638,6 +1736,10 @@ templ ContactsViewPane(selected *models.Contact, selectedProfile *models.Contact
 	</section>
 }
 
+// ContactListCard is a contact in the list's cards view: two lines, the name
+// with its organization and message count, then the address with the
+// accounts it syncs with and when it was last seen. On a phone the list's own
+// CSS lays it out as a 4rem row and leaves the date and preview fields out.
 templ ContactListCard(contact models.Contact, filters models.ContactFilters, selected *models.Contact, accounts []models.Account, position int) {
 	{{ contactHref := contactsURL(filters, contact.ID) }}
 	{{ contactDetailHref := contactsDetailURL(filters, contact.ID) }}
@@ -1651,43 +1753,46 @@ templ ContactListCard(contact models.Contact, filters models.ContactFilters, sel
 			data-contact-list-item={ contact.ID }
 			data-active={ fmt.Sprintf("%t", selected != nil && selected.ID == contact.ID) }
 			class={
-				"contact-list-item mail-list-card px-3.5 py-2.5 rounded-lg cursor-pointer transition-all duration-200 group",
+				"contact-list-item contact-card mail-list-card px-3.5 rounded-lg cursor-pointer transition-all duration-200 group",
 				templ.KV("envelope-active", selected != nil && selected.ID == contact.ID),
 				templ.KV("envelope", selected == nil || selected.ID != contact.ID),
 			}
 		>
 			<div class="mail-list-card-zone mail-list-card-zone-rail-top" data-mail-card-zone="railTop">
 				<div data-mail-card-field="avatar">
-					@ContactAvatar(contact, "size-6 rounded-full text-[10px] font-semibold shadow-[0_1px_3px_rgba(0,0,0,0.15)]", "bg-gradient-to-b from-amber-700/70 to-amber-900/70 text-amber-100")
+					@ContactAvatar(contact, "size-8 rounded-full text-[11px] font-semibold shadow-[0_1px_3px_rgba(0,0,0,0.15)]", "bg-gradient-to-b from-amber-700/70 to-amber-900/70 text-amber-100")
 				</div>
 			</div>
 			<div class="mail-list-card-zone mail-list-card-zone-header" data-mail-card-zone="header">
-				<span class="truncate text-sm font-semibold text-foreground" data-contact-name data-mail-card-field="from">{ contact.Name }</span>
-				if contact.CreatedAt != "" {
-					<span class="shrink-0 text-xs tabular-nums font-medium text-muted-foreground" data-mail-card-field="date">{ contact.CreatedAt }</span>
+				<span class="truncate text-sm text-foreground" data-mail-card-field="from">
+					<span class="font-semibold" data-contact-name>{ contact.Name }</span>
+					if org := strings.TrimSpace(contact.Organization); org != "" && org != strings.TrimSpace(contact.Name) {
+						<span class="text-muted-foreground"> · { org }</span>
+					}
+				</span>
+				if contact.MessageCount > 0 {
+					<span class="ml-auto inline-flex shrink-0 items-center gap-1 text-xs tabular-nums text-muted-foreground" data-mail-card-field="date" title={ contactMessageCountTitle(contact.MessageCount) }>
+						@icon.Mail(icon.Props{Class: "size-3"})
+						{ fmt.Sprint(contact.MessageCount) }
+					</span>
 				}
 			</div>
 			<div class="mail-list-card-zone mail-list-card-zone-body" data-mail-card-zone="body">
-				<p class="truncate text-[13px] font-medium text-muted-foreground" data-contact-email data-mail-card-field="subject">{ contactListDetail(contact) }</p>
-			</div>
-			<div class="mail-list-card-zone mail-list-card-zone-footer" data-mail-card-zone="footer">
-				@ContactSourceChips(contact, accounts)
+				<p class="truncate text-[13px] text-muted-foreground" data-contact-email data-mail-card-field="subject">{ contactListDetail(contact) }</p>
+				<span class="ml-auto flex shrink-0 items-center gap-2" data-mail-card-field="preview">
+					{{ origin := contactCardOrigin(contact, accounts) }}
+					<span class="inline-flex max-w-[9rem] items-center gap-1 rounded-full border border-border bg-background px-1.5 py-px text-[10px] font-medium text-muted-foreground" title={ origin.Title }>
+						if origin.Color != "" {
+							<span class="account-color-marker size-2 shrink-0" style={ accountColorStyle(origin.Color) } aria-hidden="true"></span>
+						}
+						<span class="truncate">{ origin.Label }</span>
+					</span>
+					if date, label := contactCardDate(contact); date != "" {
+						<span class="text-xs tabular-nums text-muted-foreground" title={ label }>{ date }</span>
+					}
+				</span>
 			</div>
 		</a>
-	</div>
-}
-
-templ ContactSourceChips(contact models.Contact, accounts []models.Account) {
-	<div class="flex min-w-0 flex-nowrap items-center gap-1 overflow-hidden" data-mail-card-field="preview">
-		if len(contact.SourceBooks) > 0 {
-			for _, book := range contact.SourceBooks {
-				<span class="min-w-0 max-w-full shrink truncate rounded-full border border-border bg-background px-2 py-0.5 text-[10px] font-medium text-muted-foreground">
-					{ book.AccountName } / { contactAddressBookDisplayName(book) }
-				</span>
-			}
-		} else {
-			<p class="text-xs text-muted-foreground truncate flex-1 leading-relaxed">{ contactSourceLabel(contact.Source, contact.IsManual, accounts) }</p>
-		}
 	</div>
 }
 
