@@ -505,6 +505,8 @@ func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
 	})
 	mux.HandleFunc("GET /settings/operations/content", h.handleSettingsMailOperationsContent)
 	mux.HandleFunc("POST /api/settings/sync", h.handleSaveSyncSettings)
+	mux.HandleFunc("POST /api/settings/accounts/{id}/outlook-push", h.handleOutlookPushSetting)
+	mux.HandleFunc("POST /api/settings/accounts/{id}/outlook-push/check", h.handleOutlookPushCheck)
 	mux.HandleFunc("GET /api/settings/signatures/manage", h.handleManageSignaturesSettings)
 	mux.HandleFunc("GET /api/settings/ui", h.handleGetUISettings)
 	h.registerProfileTransferRoutes(func(pattern string, handler http.HandlerFunc) {
@@ -3781,6 +3783,9 @@ func (h *Handler) buildSyncSettings(ctx context.Context, accounts []models.Accou
 			})
 		}
 		status.Folders = folderStatuses
+		if account.Provider == providers.ProviderOutlook {
+			status.OutlookPush = h.outlookPushSettings(ctx, account.ID)
+		}
 
 		accountStatuses = append(accountStatuses, status)
 	}

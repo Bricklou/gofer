@@ -352,6 +352,8 @@ func (h *Handler) RegisterUserStorageRoutes(ctx context.Context, mux *http.Serve
 		private("POST /api/contacts/{id}/sync-setup/preview", routed.handleUserPreviewContactSyncSetup)
 		private("POST /api/mail-operations/{id}/retry", routed.handleUserRetryMailOperation)
 		private("POST /api/settings/sync", routed.handleUserSaveSyncSettings)
+		private("POST /api/settings/accounts/{id}/outlook-push", routed.handleOutlookPushSetting)
+		private("POST /api/settings/accounts/{id}/outlook-push/check", routed.handleOutlookPushCheck)
 		private("POST /api/accounts/{id}/services", routed.handleUserEmailService)
 		// Retain the earlier opt-in URL while the application uses /services.
 		private("POST /api/accounts/{id}/service", routed.handleUserEmailService)
