@@ -1124,3 +1124,19 @@ func TestContactSyncClaimsSkipDisabledUsers(t *testing.T) {
 		t.Fatalf("queued contact sync status=%q attempts=%d, want pending/0", status, attempts)
 	}
 }
+
+// Contact dates come stored in several forms, the SQLite driver's own among
+// them; each shows as a plain date.
+func TestFormatContactTimeReadsEveryStoredForm(t *testing.T) {
+	for _, raw := range []string{
+		"2014-12-22 17:50:37 +0000 UTC",
+		"2014-12-22 17:50:37.25 +0000 UTC",
+		"2014-12-22 17:50:37 +0000 +0000",
+		"2014-12-22T17:50:37Z",
+		"2014-12-22 17:50:37",
+	} {
+		if got := formatContactTime(raw, time.UTC); got != "Dec 22, 2014" {
+			t.Errorf("formatContactTime(%q) = %q, want Dec 22, 2014", raw, got)
+		}
+	}
+}

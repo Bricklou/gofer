@@ -889,6 +889,8 @@ func parseSQLiteDateTime(raw string) (time.Time, bool) {
 		time.RFC3339,
 		"2006-01-02 15:04:05.999999999 -0700 -0700",
 		"2006-01-02 15:04:05 -0700 -0700",
+		// How the SQLite driver writes a time.Time whose zone has a name.
+		"2006-01-02 15:04:05.999999999 -0700 MST",
 		"2006-01-02 15:04:05.999999999Z07:00",
 		"2006-01-02 15:04:05.999999999",
 		"2006-01-02 15:04:05",
