@@ -12,11 +12,11 @@ import (
 	"time"
 )
 
-// Outlook subscriptions ask Graph to post to Gofer's webhook when the Inbox
-// changes. Graph keeps a mail subscription for at most a few days, so Gofer
-// renews it well before it ends.
+// Outlook subscriptions ask Graph to post to Gofer's webhook when anything in
+// the mailbox changes, in any folder. Graph keeps a mail subscription for at
+// most a few days, so Gofer renews it well before it ends.
 const (
-	outlookSubscriptionResource = "me/mailFolders('Inbox')/messages"
+	outlookSubscriptionResource = "me/messages"
 	outlookSubscriptionLifetime = 70 * time.Hour
 	outlookSubscriptionRenewal  = 24 * time.Hour
 	outlookSubscriptionTimeout  = 30 * time.Second
@@ -85,7 +85,7 @@ func (s outlookGraphSubscription) expires() time.Time {
 	return at.UTC()
 }
 
-// createOutlookSubscription subscribes to the account's Inbox. Graph answers
+// createOutlookSubscription subscribes to the account's whole mailbox. Graph answers
 // only after the webhook repeated its validation token.
 func createOutlookSubscription(ctx context.Context, request graphJSONRequest, token, notificationURL, clientState string, now time.Time) (outlookGraphSubscription, error) {
 	body := outlookGraphSubscription{

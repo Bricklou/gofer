@@ -33,7 +33,7 @@ Runtime data is stored in `data/` by default. Protect the data directory, config
 
 ## outlook change notifications
 
-Outlook accounts are checked for new mail on a schedule, and more often while Gofer is open. If your installation is reachable from the internet over HTTPS, Microsoft can instead tell Gofer about Inbox changes as they happen. Set `GOFER_OUTLOOK_WEBHOOKS=true` and Gofer subscribes each Outlook account that receives mail, renews the subscriptions in the background, and syncs an account when Microsoft reports a change. This needs:
+Outlook accounts are checked for new mail on a schedule, and more often while Gofer is open. If your installation is reachable from the internet over HTTPS, Microsoft can instead tell Gofer about changes in any folder as they happen. Set `GOFER_OUTLOOK_WEBHOOKS=true` and Gofer subscribes each Outlook account that receives mail, renews the subscriptions in the background, and syncs an account when Microsoft reports a change. This needs:
 
 - Personal or managed authentication.
 - A `GOFER_BASE_URL` on a public host name or address, served over HTTPS with a certificate Microsoft trusts. Self-signed certificates and private addresses don't work.

@@ -11,7 +11,7 @@ import (
 )
 
 // EnableOutlookWebhooks makes each successful sync of an Outlook account keep
-// the account subscribed to its Inbox changes, announced at notificationURL.
+// the account subscribed to its mailbox changes, announced at notificationURL.
 // key signs each subscription's client state. It is called before Start.
 func (s *UserIMAP) EnableOutlookWebhooks(notificationURL string, key []byte) {
 	s.outlookSubs = newOutlookSubscriptions(notificationURL, key)
@@ -56,7 +56,7 @@ func userOutlookSubscriptionToken(scope *userIMAPScope) outlookSubscriptionToken
 
 // ReceiveOutlookNotifications queues a sync of each account Graph announced
 // changes for. A sync already running is followed by another, since it may
-// have read the Inbox before the change.
+// have read the changed folder before the change.
 func (s *UserIMAP) ReceiveOutlookNotifications(notifications []OutlookNotification) {
 	ids := s.outlookSubs.receive(notifications)
 	if len(ids) == 0 {

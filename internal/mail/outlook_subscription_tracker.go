@@ -46,7 +46,7 @@ type outlookSubscriptionState struct {
 type OutlookPushStatus struct {
 	// Available is false while GOFER_OUTLOOK_WEBHOOKS is off.
 	Available bool
-	// Subscribed is set while Graph announces the account's Inbox changes.
+	// Subscribed is set while Graph announces the account's mailbox changes.
 	Subscribed bool
 	Expires    time.Time
 	// Error is the last failure to subscribe, kept until one succeeds, and
@@ -80,7 +80,7 @@ func newOutlookSubscriptions(notificationURL string, key []byte) *outlookSubscri
 	}
 }
 
-// subscribed reports whether Graph currently announces the account's Inbox
+// subscribed reports whether Graph currently announces the account's mailbox
 // changes, so the quick checks while Gofer is open can leave it alone.
 func (t *outlookSubscriptions) subscribed(accountID string, now time.Time) bool {
 	if t == nil {
@@ -274,7 +274,7 @@ func (t *outlookSubscriptions) drop(ctx context.Context, accountID string, token
 }
 
 // receive checks notifications and returns the accounts to sync: those with
-// Inbox changes, changes Graph could not deliver, or a subscription Graph
+// mailbox changes, changes Graph could not deliver, or a subscription Graph
 // ended or wants reauthorized, so their sync can also mend the subscription.
 // Notifications whose client state Gofer did not sign are ignored.
 func (t *outlookSubscriptions) receive(notifications []OutlookNotification) []string {
