@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log"
 	"net/http"
 	"net/url"
 	"strconv"
@@ -35,6 +36,26 @@ func ProviderStatusError(status int, err error) error {
 // and an Outlook message with more copies than one $batch takes. They go one
 // by one.
 var ErrBatchRefused = errors.New("provider refused the batched change")
+
+// LogRefusedBatch notes when a provider turned a batch down, so its messages
+// go one by one, with the provider's answer. It says nothing when every
+// message went in the batch.
+func LogRefusedBatch(accountID, provider, kind string, failures []error) {
+	refused := 0
+	var first error
+	for _, err := range failures {
+		if errors.Is(err, ErrBatchRefused) {
+			refused++
+			if first == nil {
+				first = err
+			}
+		}
+	}
+	if refused > 0 {
+		log.Printf("message-mutation: %s refused a batched %s for %d of %d message(s) in account %s; sending them one by one: %v",
+			provider, kind, refused, len(failures), accountID, first)
+	}
+}
 
 const (
 	// gmailBatchIDs is the most ids one batchModify or batchDelete takes.

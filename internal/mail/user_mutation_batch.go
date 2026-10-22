@@ -122,6 +122,7 @@ func (s *UserIMAP) applyMutationBatch(ctx context.Context, scope *userIMAPScope,
 	case storage.MessageMutationProviderGmail, storage.MessageMutationProviderOutlook:
 		groupFailures, gone = s.sendProviderBatch(ctx, scope, lead, groupedInfos)
 	}
+	LogRefusedBatch(scope.id, lead.ProviderType, lead.Kind, groupFailures)
 	var applied []int
 	for i, m := range grouped {
 		switch {

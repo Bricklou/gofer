@@ -95,6 +95,7 @@ func (h *Handler) applyQueuedMessageMutationBatch(parent context.Context, group 
 	default:
 		failures = sameMutationError(len(grouped), fmt.Errorf("unsupported batched provider %q", lead.ProviderType))
 	}
+	mail.LogRefusedBatch(lead.AccountID, lead.ProviderType, lead.Kind, failures)
 	for i, m := range grouped {
 		if errors.Is(failures[i], mail.ErrBatchRefused) {
 			h.applyQueuedMessageMutation(ctx, m)
