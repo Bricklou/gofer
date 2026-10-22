@@ -67,7 +67,9 @@ type UserIMAP struct {
 	workers           sync.WaitGroup
 	operations        sync.WaitGroup
 	userRuns          map[*userIMAPOperation]string
-	closing           bool
+	// outlookSubs is set while GOFER_OUTLOOK_WEBHOOKS is on.
+	outlookSubs *outlookSubscriptions
+	closing     bool
 }
 type userIMAPJob struct{ owner, account string }
 type userIMAPKey struct {
@@ -556,9 +558,9 @@ func (s *UserIMAP) sync(ctx context.Context, owner, id string, repair, backgroun
 				return mutationErr
 			}
 		}
-		var enabled int
+		var enabled, push int
 		if err := scope.call(ctx, func(db *storage.DB) error {
-			return db.Read().QueryRowContext(ctx, `SELECT COALESCE(email_sync_enabled,1) FROM accounts WHERE id=?`, id).Scan(&enabled)
+			return db.Read().QueryRowContext(ctx, `SELECT COALESCE(email_sync_enabled,1),provider_push_enabled FROM accounts WHERE id=?`, id).Scan(&enabled, &push)
 		}); err != nil {
 			return err
 		}
@@ -566,6 +568,7 @@ func (s *UserIMAP) sync(ctx context.Context, owner, id string, repair, backgroun
 			s.mu.Lock()
 			s.stopWatchesLocked(id)
 			s.mu.Unlock()
+			s.dropOutlookSubscription(ctx, scope)
 			if progress, ok := ctx.Value(accountSyncProgressScopeKey{}).(accountSyncProgressScope); ok && progress.kind == string(accountSyncManual) {
 				return errUserIMAPDisabled
 			}
@@ -582,6 +585,7 @@ func (s *UserIMAP) sync(ctx context.Context, owner, id string, repair, backgroun
 		}
 		receiveErr = err
 		if err == nil {
+			s.keepOutlookSubscription(ctx, o, scope, push == 1)
 			err = s.reconcileWatches(ctx, scope)
 		}
 		if (scope.config.Provider == providers.ProviderIMAP || scope.config.Provider == providers.ProviderJMAP) && scope.config.AuthMethod == "plain" {
@@ -883,6 +887,8 @@ func (s *UserIMAP) Cleanup(ctx context.Context, id string) error {
 			return err
 		}
 	}
+	// The sign-in is gone; Graph ends the subscription on its own.
+	s.outlookSubs.drop(ctx, id, nil, nil)
 	return s.blobs.DeleteAccount(id)
 }
 

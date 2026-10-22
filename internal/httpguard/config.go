@@ -29,9 +29,15 @@ type Config struct {
 	AllowUnauthenticatedRemote bool
 	// AllowInsecureLAN permits a plain-HTTP base URL on a private network address while
 	// authentication is enabled. Sign-in cookies then travel unencrypted on that network.
-	AllowInsecureLAN  bool
-	allowedCIDRs      []netip.Prefix
-	trustedProxyCIDRs []netip.Prefix
+	AllowInsecureLAN bool
+	// OutlookWebhooks asks Microsoft Graph to announce Outlook changes at
+	// OutlookWebhookPath instead of waiting for the next check.
+	OutlookWebhooks bool
+	// OutlookWebhooksSkipAllowedCIDRs lets Microsoft's servers reach
+	// OutlookWebhookPath even when GOFER_ALLOWED_CIDRS doesn't list them.
+	OutlookWebhooksSkipAllowedCIDRs bool
+	allowedCIDRs                    []netip.Prefix
+	trustedProxyCIDRs               []netip.Prefix
 
 	baseOrigin     requestOrigin
 	listenLoopback bool
@@ -58,6 +64,14 @@ func LoadConfig() (*Config, error) {
 		return nil, err
 	}
 	cfg.AllowInsecureLAN = allowInsecureLAN
+	cfg.OutlookWebhooks, err = parseOptionalBool("GOFER_OUTLOOK_WEBHOOKS")
+	if err != nil {
+		return nil, err
+	}
+	cfg.OutlookWebhooksSkipAllowedCIDRs, err = parseOptionalBool("GOFER_OUTLOOK_WEBHOOKS_SKIP_ALLOWED_CIDRS")
+	if err != nil {
+		return nil, err
+	}
 	cfg.allowedCIDRs, err = parseCIDRs("GOFER_ALLOWED_CIDRS", os.Getenv("GOFER_ALLOWED_CIDRS"))
 	if err != nil {
 		return nil, err
@@ -121,7 +135,7 @@ func (c *Config) ValidateExposure(authEnabled bool) error {
 	if authEnabled && !c.baseLoopback && c.baseOrigin.scheme != "https" && !c.insecureLANBase() {
 		return fmt.Errorf("GOFER_BASE_URL must use https for authenticated non-loopback access, or a private network address with GOFER_ALLOW_INSECURE_LAN=true")
 	}
-	return nil
+	return c.validateOutlookWebhooks(authEnabled)
 }
 
 // WarnInsecureLAN reports whether authenticated access is served over plain HTTP on a

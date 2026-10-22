@@ -559,7 +559,9 @@
       e.preventDefault();
       saveSyncSettings();
     });
-    form.addEventListener('change', function() {
+    form.addEventListener('change', function(e) {
+      // Controls that save themselves, such as Outlook change notifications.
+      if (e.target && e.target.closest && e.target.closest('[data-sync-autosave-ignore]')) return;
       syncPollingIntervalDisplay();
       scheduleAutoSave();
     });

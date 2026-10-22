@@ -5,6 +5,8 @@ import (
 	"log"
 	"net/http"
 	"strings"
+
+	"github.com/cristianadrielbraun/gofer/internal/httpguard"
 )
 
 func (m *Manager) Middleware(next http.Handler) http.Handler {
@@ -219,6 +221,8 @@ func isPublicPath(path string) bool {
 		"/account/enroll", "/account/enroll/google", "/account/enroll/complete",
 		"/account/redeem", "/account/redeem/complete", "/account/recover",
 		"/auth/google", "/auth/google/login/callback", "/auth/microsoft", "/auth/microsoft/login/callback", "/auth/oidc", "/auth/oidc/callback", "/sw.js",
+		// Outlook notifications prove themselves with their subscription's secret.
+		httpguard.OutlookWebhookPath,
 	}
 	for _, p := range public {
 		if path == p {

@@ -34,11 +34,43 @@ type routedOutlookState struct {
 	rename                                                                              string
 }
 type routedOutlookAPI struct {
-	mu     sync.Mutex
-	states map[string]routedOutlookState
-	calls  map[string]int
-	block  *routedGmailBlock
-	base   string
+	mu            sync.Mutex
+	states        map[string]routedOutlookState
+	calls         map[string]int
+	block         *routedGmailBlock
+	base          string
+	subscriptions map[string]outlookGraphSubscription
+	deletedSubs   []string
+}
+
+// serveSubscriptions answers Graph's subscription calls for an owner.
+func (a *routedOutlookAPI) serveSubscriptions(w http.ResponseWriter, r *http.Request, owner string) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	if a.subscriptions == nil {
+		a.subscriptions = map[string]outlookGraphSubscription{}
+	}
+	w.Header().Set("Content-Type", "application/json")
+	id := strings.TrimPrefix(r.URL.Path, "/subscriptions/")
+	switch {
+	case r.Method == http.MethodGet && r.URL.Path == "/subscriptions":
+		_ = json.NewEncoder(w).Encode(map[string]any{"value": []any{}})
+	case r.Method == http.MethodPost && r.URL.Path == "/subscriptions":
+		var created outlookGraphSubscription
+		_ = json.NewDecoder(r.Body).Decode(&created)
+		created.ID = fmt.Sprintf("%s-sub-%d", owner, len(a.subscriptions)+1)
+		a.subscriptions[created.ID] = created
+		_ = json.NewEncoder(w).Encode(created)
+	case r.Method == http.MethodPatch && strings.HasPrefix(id, owner+"-"):
+		var renewed outlookGraphSubscription
+		_ = json.NewDecoder(r.Body).Decode(&renewed)
+		_ = json.NewEncoder(w).Encode(renewed)
+	case r.Method == http.MethodDelete && strings.HasPrefix(id, owner+"-"):
+		a.deletedSubs = append(a.deletedSubs, id)
+		w.WriteHeader(http.StatusNoContent)
+	default:
+		http.Error(w, "unexpected subscription call", 400)
+	}
 }
 
 func (a *routedOutlookAPI) change(owner string, fn func(*routedOutlookState)) {
@@ -100,6 +132,10 @@ func (a *routedOutlookAPI) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(map[string]any{"access_token": owner + "-fresh", "refresh_token": owner + "-rotated", "expires_in": 3600, "scope": userOutlookScopes})
+		return
+	}
+	if strings.HasPrefix(r.URL.Path, "/subscriptions") {
+		a.serveSubscriptions(w, r, owner)
 		return
 	}
 	if !strings.Contains(r.Header.Get("Prefer"), `IdType="ImmutableId"`) {
@@ -900,5 +936,139 @@ func TestUserOutlookActivePollQueuesSyncOnInboxChange(t *testing.T) {
 	}
 	if f.api.count("bob", delta) != 0 {
 		t.Fatal("an owner without Gofer open was checked")
+	}
+}
+
+// With webhooks on, each sync keeps the account subscribed, a notification
+// queues its sync, and the quick check while Gofer is open leaves it alone.
+func TestUserOutlookWebhookSubscriptionFollowsSyncs(t *testing.T) {
+	f := newUserOutlookFixture(t)
+	key := []byte("fedcba9876543210fedcba9876543210")
+	f.worker.EnableOutlookWebhooks("https://mail.example.com/webhooks/outlook", key)
+	alice := f.ids["alice"]
+	if err := f.worker.Sync(t.Context(), "alice", alice); err != nil {
+		t.Fatal(err)
+	}
+	if got := f.api.count("alice", "/subscriptions"); got != 2 {
+		t.Fatalf("subscription calls after the first sync: %d, want a listing and a creation", got)
+	}
+	f.api.mu.Lock()
+	var subscription outlookGraphSubscription
+	for _, created := range f.api.subscriptions {
+		subscription = created
+	}
+	f.api.mu.Unlock()
+	if account, ok := outlookClientStateAccount(key, subscription.ClientState); !ok || account != alice {
+		t.Fatalf("client state %q names %q %t", subscription.ClientState, account, ok)
+	}
+	if !f.worker.outlookSubs.subscribed(alice, time.Now()) || f.worker.outlookSubs.subscribed(f.ids["bob"], time.Now()) {
+		t.Fatal("subscribed accounts are wrong")
+	}
+	if err := f.worker.Sync(t.Context(), "alice", alice); err != nil {
+		t.Fatal(err)
+	}
+	if got := f.api.count("alice", "/subscriptions"); got != 2 || f.api.count("alice", "/subscriptions/"+subscription.ID) != 0 {
+		t.Fatal("a fresh subscription was made again or renewed")
+	}
+
+	release, err := f.worker.BeginActiveUserSession(t.Context(), "alice")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer release()
+	f.worker.mu.Lock()
+	job := userActivePollJob{owner: "alice", account: alice, session: f.worker.activePollUsers["alice"]}
+	f.worker.mu.Unlock()
+	const delta = "/me/mailFolders/inbox-id/messages/delta"
+	before := f.api.count("alice", delta)
+	if err := f.worker.pollActiveGmailAccount(job); err != nil {
+		t.Fatal(err)
+	}
+	if got := f.api.count("alice", delta); got != before {
+		t.Fatalf("a subscribed Inbox was checked: %d delta requests, want %d", got, before)
+	}
+
+	f.api.change("alice", func(state *routedOutlookState) { state.phase = 1 })
+	f.worker.ReceiveOutlookNotifications([]OutlookNotification{{SubscriptionID: subscription.ID, ClientState: subscription.ClientState}})
+	deadline := time.Now().Add(15 * time.Second)
+	var found int64
+	for time.Now().Before(deadline) && found == 0 {
+		f.local(t, "alice", func(db *storage.DB) error {
+			return db.Read().QueryRow(`SELECT COUNT(*) FROM message_folder_state s JOIN folders f ON f.id=s.folder_id WHERE f.account_id=? AND s.remote_message_id='m2'`, alice).Scan(&found)
+		})
+		time.Sleep(10 * time.Millisecond)
+	}
+	if found == 0 {
+		t.Fatal("the notification did not sync the new message")
+	}
+
+	f.local(t, "alice", func(db *storage.DB) error {
+		_, err := db.Write().Exec(`UPDATE accounts SET email_sync_enabled=0 WHERE id=?`, alice)
+		return err
+	})
+	if err := f.worker.Sync(t.Context(), "alice", alice); err != nil {
+		t.Fatal(err)
+	}
+	f.api.mu.Lock()
+	deleted := append([]string(nil), f.api.deletedSubs...)
+	f.api.mu.Unlock()
+	if len(deleted) != 1 || deleted[0] != subscription.ID {
+		t.Fatalf("deleted subscriptions %v, want %s", deleted, subscription.ID)
+	}
+	if f.worker.outlookSubs.subscribed(alice, time.Now()) {
+		t.Fatal("account still subscribed after receiving stopped")
+	}
+}
+
+// Checking makes a new subscription in place of the old one, and an account
+// set to scheduled checks loses its subscription on the next sync.
+func TestUserOutlookPushCheckAndScheduledChecks(t *testing.T) {
+	f := newUserOutlookFixture(t)
+	f.worker.EnableOutlookWebhooks("https://mail.example.com/webhooks/outlook", []byte("fedcba9876543210fedcba9876543210"))
+	alice := f.ids["alice"]
+	if err := f.worker.Sync(t.Context(), "alice", alice); err != nil {
+		t.Fatal(err)
+	}
+	f.api.mu.Lock()
+	var first string
+	for id := range f.api.subscriptions {
+		first = id
+	}
+	f.api.mu.Unlock()
+
+	if err := f.worker.CheckOutlookPush(t.Context(), "alice", alice); err != nil {
+		t.Fatal(err)
+	}
+	if got := f.api.count("alice", "/subscriptions"); got != 3 {
+		t.Fatalf("subscription calls after the check: %d, want a second creation", got)
+	}
+	f.api.mu.Lock()
+	deleted := append([]string(nil), f.api.deletedSubs...)
+	f.api.mu.Unlock()
+	if len(deleted) != 1 || deleted[0] != first {
+		t.Fatalf("deleted subscriptions %v, want the replaced %s", deleted, first)
+	}
+	if status := f.worker.OutlookPushStatus(alice); !status.Available || !status.Subscribed || status.Error != "" {
+		t.Fatalf("status after the check = %+v", status)
+	}
+	if err := f.worker.CheckOutlookPush(t.Context(), "bob", alice); err == nil {
+		t.Fatal("another user checked the account")
+	}
+
+	f.local(t, "alice", func(db *storage.DB) error { return db.SetProviderPushEnabled(t.Context(), "alice", alice, false) })
+	if err := f.worker.Sync(t.Context(), "alice", alice); err != nil {
+		t.Fatal(err)
+	}
+	f.api.mu.Lock()
+	deleted = append([]string(nil), f.api.deletedSubs...)
+	f.api.mu.Unlock()
+	if len(deleted) != 2 {
+		t.Fatalf("deleted subscriptions %v, want the current one too", deleted)
+	}
+	if status := f.worker.OutlookPushStatus(alice); status.Subscribed {
+		t.Fatalf("status with scheduled checks = %+v", status)
+	}
+	if err := f.worker.CheckOutlookPush(t.Context(), "alice", alice); !errors.Is(err, errOutlookPushOff) {
+		t.Fatalf("check with scheduled checks: %v", err)
 	}
 }

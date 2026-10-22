@@ -1,5 +1,7 @@
 package models
 
+import "time"
+
 type AccountConfig struct {
 	AccountID          string
 	Provider           string
@@ -105,6 +107,30 @@ type AccountSyncStatus struct {
 	Color        string
 	Initials     string
 	Folders      []FolderSyncStatus
+	// OutlookPush is set for Outlook accounts.
+	OutlookPush *OutlookPushSettings
+}
+
+// OutlookPushSettings is an Outlook account's choice between Microsoft's
+// change notifications and scheduled checks, with the subscription's state.
+type OutlookPushSettings struct {
+	AccountID string
+	// Enabled is the account's choice; it only takes effect while Available.
+	Enabled bool
+	// Available is false while GOFER_OUTLOOK_WEBHOOKS is off on the server.
+	Available bool
+	// Managed hides server settings from people who can't change them.
+	Managed    bool
+	Subscribed bool
+	Expires    time.Time
+	// Error is the last failure to subscribe and RetryAt when Gofer tries
+	// again on its own.
+	Error   string
+	RetryAt time.Time
+	// Checked is set after Check now, with CheckError empty when Microsoft
+	// accepted the new subscription.
+	Checked    bool
+	CheckError string
 }
 
 type FolderSyncStatus struct {

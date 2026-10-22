@@ -77,6 +77,7 @@ func (h *Handler) handleUserSyncSettingsView(w http.ResponseWriter, r *http.Requ
 	}
 	h.renderMailboxView(w, r, &ctx, func(local *Handler) (templ.Component, error) {
 		local.userIdleStatuses = statuses
+		local.userIMAP = h.userIMAP
 		userID := local.userID(ctx)
 		accounts, err := local.db.GetAccounts(ctx, userID)
 		if err != nil {

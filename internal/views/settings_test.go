@@ -880,3 +880,43 @@ func TestThemeClassKeepsExpressLight(t *testing.T) {
 		}
 	}
 }
+
+func TestOutlookPushControlStates(t *testing.T) {
+	render := func(push models.OutlookPushSettings) string {
+		t.Helper()
+		var out bytes.Buffer
+		if err := OutlookPushControl(push).Render(context.Background(), &out); err != nil {
+			t.Fatal(err)
+		}
+		return out.String()
+	}
+
+	off := render(models.OutlookPushSettings{AccountID: "acc", Enabled: true})
+	if !strings.Contains(off, `id="outlook-push-acc-notifications"`) || !strings.Contains(off, "disabled") || !strings.Contains(off, "GOFER_OUTLOOK_WEBHOOKS=true") || strings.Contains(off, "Test connection") {
+		t.Fatalf("control with notifications off on the server = %s", off)
+	}
+	if !strings.Contains(off, "data-sync-autosave-ignore") {
+		t.Fatal("the sync form would save the control's changes")
+	}
+	managed := render(models.OutlookPushSettings{AccountID: "acc", Enabled: true, Managed: true})
+	if strings.Contains(managed, "GOFER_OUTLOOK_WEBHOOKS") || !strings.Contains(managed, "administrator") {
+		t.Fatalf("managed control names server settings = %s", managed)
+	}
+
+	subscribed := render(models.OutlookPushSettings{AccountID: "acc", Enabled: true, Available: true, Subscribed: true, Expires: time.Now().Add(70 * time.Hour)})
+	if !strings.Contains(subscribed, "Working") || strings.Contains(subscribed, "days") || !strings.Contains(subscribed, `hx-post="/api/settings/accounts/acc/outlook-push/check"`) {
+		t.Fatalf("subscribed control = %s", subscribed)
+	}
+	refused := render(models.OutlookPushSettings{AccountID: "acc", Enabled: true, Available: true, Checked: true, CheckError: "Subscription validation request failed."})
+	if !strings.Contains(refused, "Microsoft says: Subscription validation request failed.") {
+		t.Fatalf("refused check = %s", refused)
+	}
+	failing := render(models.OutlookPushSettings{AccountID: "acc", Enabled: true, Available: true, Error: "Forbidden", RetryAt: time.Now().Add(10 * time.Minute)})
+	if !strings.Contains(failing, "Not working") || !strings.Contains(failing, "Microsoft says: Forbidden") || strings.Contains(failing, "minutes") {
+		t.Fatalf("failing subscription = %s", failing)
+	}
+	checks := render(models.OutlookPushSettings{AccountID: "acc", Available: true})
+	if !strings.Contains(checks, "invisible") || strings.Contains(checks, "Working") || !strings.Contains(checks, `id="outlook-push-acc-checks"`) {
+		t.Fatalf("control with scheduled checks = %s", checks)
+	}
+}

@@ -19,6 +19,10 @@ func (c *Config) Middleware(next http.Handler) http.Handler {
 			handleScriptPolicyReport(w, r)
 			return
 		}
+		if c.isOutlookWebhook(r.URL.Path) {
+			next.ServeHTTP(w, r)
+			return
+		}
 		if requiresSameOrigin(r) && !c.isSameOriginRequest(r) {
 			http.Error(w, "cross-origin request blocked", http.StatusForbidden)
 			return

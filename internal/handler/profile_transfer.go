@@ -63,26 +63,29 @@ type profileSignature struct {
 }
 
 type profileAccount struct {
-	Ref               string                    `json:"ref"`
-	Provider          string                    `json:"provider"`
-	ProviderAccountID string                    `json:"provider_account_id,omitempty"`
-	EmailAddress      string                    `json:"email_address"`
-	DisplayName       string                    `json:"display_name,omitempty"`
-	Color             string                    `json:"color,omitempty"`
-	AuthMethod        string                    `json:"auth_method,omitempty"`
-	IMAPHost          string                    `json:"imap_host,omitempty"`
-	IMAPPort          int                       `json:"imap_port,omitempty"`
-	IMAPTLSMode       string                    `json:"imap_tls_mode,omitempty"`
-	SMTPHost          string                    `json:"smtp_host,omitempty"`
-	SMTPPort          int                       `json:"smtp_port,omitempty"`
-	SMTPTLSMode       string                    `json:"smtp_tls_mode,omitempty"`
-	Username          string                    `json:"username,omitempty"`
-	SMTPUsername      string                    `json:"smtp_username,omitempty"`
-	JMAPSessionURL    string                    `json:"jmap_session_url,omitempty"`
-	EmailSync         bool                      `json:"email_sync"`
-	Contacts          *profileContactSync       `json:"contacts,omitempty"`
-	Calendar          *profileCalendarSync      `json:"calendar,omitempty"`
-	Signatures        *profileAccountSignatures `json:"signatures,omitempty"`
+	Ref               string `json:"ref"`
+	Provider          string `json:"provider"`
+	ProviderAccountID string `json:"provider_account_id,omitempty"`
+	EmailAddress      string `json:"email_address"`
+	DisplayName       string `json:"display_name,omitempty"`
+	Color             string `json:"color,omitempty"`
+	AuthMethod        string `json:"auth_method,omitempty"`
+	IMAPHost          string `json:"imap_host,omitempty"`
+	IMAPPort          int    `json:"imap_port,omitempty"`
+	IMAPTLSMode       string `json:"imap_tls_mode,omitempty"`
+	SMTPHost          string `json:"smtp_host,omitempty"`
+	SMTPPort          int    `json:"smtp_port,omitempty"`
+	SMTPTLSMode       string `json:"smtp_tls_mode,omitempty"`
+	Username          string `json:"username,omitempty"`
+	SMTPUsername      string `json:"smtp_username,omitempty"`
+	JMAPSessionURL    string `json:"jmap_session_url,omitempty"`
+	EmailSync         bool   `json:"email_sync"`
+	// ScheduledChecks is set when the account chose scheduled checks over
+	// its provider's notifications; older exports leave notifications on.
+	ScheduledChecks bool                      `json:"scheduled_checks,omitempty"`
+	Contacts        *profileContactSync       `json:"contacts,omitempty"`
+	Calendar        *profileCalendarSync      `json:"calendar,omitempty"`
+	Signatures      *profileAccountSignatures `json:"signatures,omitempty"`
 }
 
 type profileContactSync struct {
@@ -265,6 +268,11 @@ func exportProfileAccount(ctx context.Context, store *config.AccountStore, db *s
 		JMAPSessionURL:    data.JMAPSessionURL,
 		EmailSync:         data.EmailSyncEnabled,
 	}
+	push, err := db.ProviderPushEnabled(ctx, account.ID)
+	if err != nil {
+		return profileAccount{}, err
+	}
+	exported.ScheduledChecks = !push
 
 	contacts := data.ContactSync
 	if contacts.Enabled || strings.TrimSpace(contacts.BaseURL) != "" {
@@ -717,6 +725,9 @@ func (h *Handler) importProfileAccount(ctx context.Context, owner string, accoun
 			if err := store.UpdateAccountColor(ctx, owner, id, color); err != nil {
 				return err
 			}
+		}
+		if err := db.SetProviderPushEnabled(ctx, owner, id, !account.ScheduledChecks); err != nil {
+			return err
 		}
 		if err := importProfileAccountServices(ctx, store, db, owner, id, account); err != nil {
 			return err
@@ -1179,6 +1190,9 @@ func (h *Handler) replaceProfileAccount(ctx context.Context, owner, id string, a
 			}
 		}
 		if err := db.SaveAccountSignatureSettings(ctx, owner, profileSignatureSettings(id, account.Signatures, signatureIDs)); err != nil {
+			return err
+		}
+		if err := db.SetProviderPushEnabled(ctx, owner, id, !account.ScheduledChecks); err != nil {
 			return err
 		}
 		if waiting {

@@ -360,3 +360,53 @@ func TestProviderChangesQueueOncePerCopy(t *testing.T) {
 		t.Fatalf("copies shown while their deletes are pending = %v", got)
 	}
 }
+
+// A draft edited in another app keeps its provider id, so a sync that sees
+// it again drops the stored body; other messages keep theirs.
+func TestProviderSyncDropsTheBodyOfAnEditedDraft(t *testing.T) {
+	ctx := context.Background()
+	db := newContactsTestDB(t)
+
+	if _, err := db.Write().ExecContext(ctx, `INSERT INTO accounts (id, user_id, email_address) VALUES ('acc', 'default', 'user@example.com')`); err != nil {
+		t.Fatalf("insert account: %v", err)
+	}
+	if err := db.UpsertFolders(ctx, []UpsertFolderInput{
+		{ID: "acc_drafts", AccountID: "acc", RemoteID: "Drafts", ProviderRemoteID: "mb-drafts", Name: "Drafts", Role: "drafts", Selectable: true},
+		{ID: "acc_inbox", AccountID: "acc", RemoteID: "INBOX", ProviderRemoteID: "mb-inbox", Name: "Inbox", Role: "inbox", Selectable: true},
+	}); err != nil {
+		t.Fatalf("UpsertFolders() error = %v", err)
+	}
+	draft := ProviderSyncMessage{AccountID: "acc", FolderID: "acc_drafts", ProviderMessageID: "draft-1", InternetMessageID: "<draft@example.com>", Subject: "Picnic plans", Snippet: "Bring", FromEmail: "user@example.com", IsDraft: true}
+	mail := ProviderSyncMessage{AccountID: "acc", FolderID: "acc_inbox", ProviderMessageID: "mail-1", InternetMessageID: "<mail@example.com>", Subject: "Hello", Snippet: "Hi", FromEmail: "friend@example.com"}
+	ids, err := db.UpsertProviderSyncMessages(ctx, []ProviderSyncMessage{draft, mail})
+	if err != nil {
+		t.Fatalf("first sync: %v", err)
+	}
+	for _, id := range ids {
+		if err := db.UpdateMessageBodyInternal(ctx, id, "body.txt", "body.html", "raw.eml", "", 0); err != nil {
+			t.Fatalf("store body: %v", err)
+		}
+	}
+
+	draft.Snippet = "Bring a blanket"
+	if _, err := db.UpsertProviderSyncMessages(ctx, []ProviderSyncMessage{draft, mail}); err != nil {
+		t.Fatalf("second sync: %v", err)
+	}
+	bodyPath := func(id int64) string {
+		t.Helper()
+		var path *string
+		if err := db.Read().QueryRowContext(ctx, `SELECT body_html_path FROM messages WHERE id = ?`, id).Scan(&path); err != nil {
+			t.Fatalf("read body path: %v", err)
+		}
+		if path == nil {
+			return ""
+		}
+		return *path
+	}
+	if got := bodyPath(ids["draft-1"]); got != "" {
+		t.Fatalf("edited draft kept its body %q", got)
+	}
+	if got := bodyPath(ids["mail-1"]); got != "body.html" {
+		t.Fatalf("received mail body = %q, want it kept", got)
+	}
+}
