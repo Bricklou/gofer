@@ -3237,10 +3237,13 @@ class VirtualContactsList {
       htmx.ajax("GET", "/contacts?partial=detail&contact=" + encodeURIComponent(this.selectedContactId), "#contacts-detail")
       return
     }
-    if (!this.selectedContactId) {
-      var detail = document.getElementById("contacts-detail")
-      if (detail) detail.innerHTML = '<div class="flex flex-col items-center justify-center h-full text-center"><div class="space-y-4 animate-fade-in"><div class="size-20 rounded-2xl bg-card flex items-center justify-center mx-auto raised"><svg class="size-9 text-muted-foreground/30" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18a3 3 0 1 0-6 0"></path><circle cx="12" cy="10" r="2"></circle><rect width="18" height="18" x="3" y="4" rx="2"></rect><path d="M8 2v4"></path><path d="M16 2v4"></path></svg></div><div><h3 class="font-semibold mb-1">Select a contact</h3><p class="text-sm text-muted-foreground">Choose a contact from the list to view or edit it</p></div></div></div>'
-    }
+    if (!this.selectedContactId) this.showEmptyDetail()
+  }
+
+  // The detail pane's "Select a contact" screen, for when none is open.
+  showEmptyDetail() {
+    var detail = document.getElementById("contacts-detail")
+    if (detail) detail.innerHTML = '<div class="flex flex-col items-center justify-center h-full text-center"><div class="space-y-4 animate-fade-in"><div class="size-20 rounded-2xl bg-card flex items-center justify-center mx-auto raised"><svg class="size-9 text-muted-foreground/30" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18a3 3 0 1 0-6 0"></path><circle cx="12" cy="10" r="2"></circle><rect width="18" height="18" x="3" y="4" rx="2"></rect><path d="M8 2v4"></path><path d="M16 2v4"></path></svg></div><div><h3 class="font-semibold mb-1">Select a contact</h3><p class="text-sm text-muted-foreground">Choose a contact from the list to view or edit it</p></div></div></div>'
   }
 
   updateHeader() {

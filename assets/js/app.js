@@ -277,17 +277,21 @@ document.addEventListener("DOMContentLoaded", function () {
 
     init(document)
 
-    // Escape deselects the open contact, like the mail list.
+    // Escape clears the selection and deselects the open contact, like the
+    // mail list.
     document.addEventListener("keydown", function (e) {
       if (e.key !== "Escape" || e.defaultPrevented || e.metaKey || e.ctrlKey || e.altKey) return
       var list = currentList()
-      if (!list || !list.selectedContactId) return
+      if (!list || (!list.selectedContactId && selectedContactIds.size === 0)) return
       var target = e.target
       if (target && target.closest && target.closest("input, textarea, select, [contenteditable='true']")) return
       // Leave open dialogs, menus and an unsaved contact editor to handle Escape.
-      if (document.querySelector("dialog[open], [data-tui-popover-open='true'], #contacts-detail [data-contact-editor-form]")) return
+      // The contact page always holds its Edit dialog's form, closed; only the
+      // new-contact editor, which fills the page, keeps Escape for itself.
+      if (document.querySelector("dialog[open], [data-tui-popover-open='true'], #contacts-detail [data-contact-editor-form]:not([data-contact-edit-form])")) return
       e.preventDefault()
-      closeMobileContactView()
+      if (typeof window.clearContactSelection === "function") window.clearContactSelection()
+      if (list.selectedContactId) closeMobileContactView()
     })
 
     document.addEventListener("click", function (e) {
@@ -8620,12 +8624,18 @@ function closeMobileContactView() {
   if (list) {
     list.selectedContactId = null
     list.render()
+    // render keeps rows it has already drawn; take the open contact's
+    // highlight off them too.
+    list.syncSelectionClasses(list.itemsContainer)
     list.updateURLForState()
   }
   function clearDetail() {
     var detail = document.getElementById("contacts-detail")
     if (!detail) return
-    detail.innerHTML = ""
+    // On a phone the pane slides away empty; beside the list it asks for a
+    // contact, as after a search leaves none open.
+    if (list && !window.matchMedia("(max-width: 1023.98px)").matches) list.showEmptyDetail()
+    else detail.innerHTML = ""
     detail.removeAttribute("data-contact-detail-id")
     detail.setAttribute("data-mail-view-empty", "")
   }
