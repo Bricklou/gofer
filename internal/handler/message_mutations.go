@@ -23,6 +23,7 @@ var errProviderDeleteAlreadyGone = errors.New("provider message was already dele
 
 type messageMutationIMAPClient interface {
 	StoreFlags(ctx context.Context, folderRemoteName string, uid uint32, op goimap.StoreFlagsOp, flags []goimap.Flag) error
+	StoreFlagsBatch(ctx context.Context, folderRemoteName string, uids []uint32, op goimap.StoreFlagsOp, flags []goimap.Flag) error
 	MoveMessageWithDestUID(ctx context.Context, folderRemoteName string, uid uint32, destFolderRemoteName string) (uint32, error)
 	DeleteMessagesIfUIDValidity(ctx context.Context, folderRemoteName string, uids []uint32, expectedUIDValidity uint32) (bool, error)
 	FindUIDByMessageID(ctx context.Context, remoteName, messageID string) (uint32, error)
@@ -107,8 +108,25 @@ func (h *Handler) runDueMessageMutations(ctx context.Context) {
 		if len(mutations) == 0 {
 			return
 		}
-		for _, mutation := range mutations {
-			h.applyQueuedMessageMutation(ctx, mutation)
+		// Read and starred changes of one folder and value go together.
+		batched := make(map[string]bool)
+		for i, mutation := range mutations {
+			if !storage.MessageFlagBatchable(mutation) {
+				h.applyQueuedMessageMutation(ctx, mutation)
+				continue
+			}
+			key := messageFlagBatchKey(mutation)
+			if batched[key] {
+				continue
+			}
+			batched[key] = true
+			group := []storage.MessageMutation{mutation}
+			for _, other := range mutations[i+1:] {
+				if storage.MessageFlagBatchable(other) && messageFlagBatchKey(other) == key {
+					group = append(group, other)
+				}
+			}
+			h.applyQueuedMessageFlagBatch(ctx, group)
 		}
 	}
 }

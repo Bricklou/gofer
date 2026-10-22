@@ -83,6 +83,74 @@ func ApplyJMAPMutation(ctx context.Context, cfg *models.AccountConfig, password 
 	return gone, nil
 }
 
+// JMAPFlagEmail is one message of a batched read or starred change: its
+// email, and the further emails of the same message in that mailbox.
+type JMAPFlagEmail struct {
+	EmailID       string
+	FolderCopyIDs []string
+}
+
+// jmapDefaultObjectsInSet is used when the server does not say how many
+// objects one Email/set may name.
+const jmapDefaultObjectsInSet = 500
+
+// ApplyJMAPFlagBatch sets or clears one keyword on many messages' emails,
+// in as few Email/set requests as the server's maxObjectsInSet allows.
+// failures[i] is nil when emails[i] changed or the server no longer has it;
+// otherwise it says why that message did not change. err is set when no
+// request could be sent at all.
+func ApplyJMAPFlagBatch(ctx context.Context, cfg *models.AccountConfig, password, kind string, target bool, emails []JMAPFlagEmail) (failures []error, err error) {
+	var patch jmap.PatchObject
+	switch kind {
+	case storage.MessageMutationRead:
+		patch = jmap.KeywordPatch(jmap.KeywordSeen, target)
+	case storage.MessageMutationStarred:
+		patch = jmap.KeywordPatch(jmap.KeywordFlagged, target)
+	default:
+		return nil, fmt.Errorf("unsupported JMAP batch mutation %q", kind)
+	}
+	client, session, account, err := openJMAPMail(ctx, cfg, password)
+	if err != nil {
+		return nil, err
+	}
+	limit := session.Core.MaxObjectsInSet
+	if limit <= 0 {
+		limit = jmapDefaultObjectsInSet
+	}
+	failures = make([]error, len(emails))
+	send := func(first, end int, update map[string]jmap.PatchObject) {
+		result, err := client.SetEmails(ctx, session, jmap.EmailSet{AccountID: account, Update: update})
+		for i := first; i < end; i++ {
+			if err != nil {
+				failures[i] = err
+				continue
+			}
+			for _, id := range append([]string{emails[i].EmailID}, emails[i].FolderCopyIDs...) {
+				if failure, failed := result.NotUpdated[id]; failed && failure.Type != "notFound" {
+					failures[i] = &failure
+					break
+				}
+			}
+		}
+	}
+	update := map[string]jmap.PatchObject{}
+	first := 0
+	for i, email := range emails {
+		ids := append([]string{email.EmailID}, email.FolderCopyIDs...)
+		if len(update) > 0 && len(update)+len(ids) > limit {
+			send(first, i, update)
+			update, first = map[string]jmap.PatchObject{}, i
+		}
+		for _, id := range ids {
+			update[id] = patch
+		}
+	}
+	if len(update) > 0 {
+		send(first, len(emails), update)
+	}
+	return failures, nil
+}
+
 // openJMAPMail opens the account's JMAP session and gives its mail account.
 func openJMAPMail(ctx context.Context, cfg *models.AccountConfig, password string) (*jmap.Client, *jmap.Session, string, error) {
 	client, err := newJMAPAccountClient(cfg, password)

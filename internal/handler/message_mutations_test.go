@@ -3,6 +3,7 @@ package handler
 import (
 	"context"
 	"errors"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"strconv"
@@ -23,6 +24,7 @@ type fakeMessageMutationIMAPClient struct {
 	storeCalls      int
 	folder          string
 	uid             uint32
+	batchUIDs       []uint32
 	op              goimap.StoreFlagsOp
 	flags           []goimap.Flag
 	findUID         uint32
@@ -44,6 +46,18 @@ func (c *fakeMessageMutationIMAPClient) StoreFlags(_ context.Context, folder str
 	c.storeCalls++
 	c.folder = folder
 	c.uid = uid
+	c.op = op
+	c.flags = append([]goimap.Flag(nil), flags...)
+	return c.storeErr
+}
+
+func (c *fakeMessageMutationIMAPClient) StoreFlagsBatch(_ context.Context, folder string, uids []uint32, op goimap.StoreFlagsOp, flags []goimap.Flag) error {
+	c.storeCalls++
+	c.folder = folder
+	c.batchUIDs = append([]uint32(nil), uids...)
+	if len(uids) > 0 {
+		c.uid = uids[0]
+	}
 	c.op = op
 	c.flags = append([]goimap.Flag(nil), flags...)
 	return c.storeErr
@@ -517,5 +531,80 @@ func TestEmailPartialResolvesOwnedFolderAlias(t *testing.T) {
 	}
 	if response := ownerRequest("attacker", "legacy-inbox"); response.Code != http.StatusNotFound {
 		t.Fatalf("cross-user alias status = %d body=%s, want 404", response.Code, response.Body.String())
+	}
+}
+
+// recordingStoreClient keeps every STORE the worker sends.
+type recordingStoreClient struct {
+	fakeMessageMutationIMAPClient
+	stores []recordedStore
+}
+
+type recordedStore struct {
+	folder string
+	uids   []uint32
+	op     goimap.StoreFlagsOp
+}
+
+func (c *recordingStoreClient) StoreFlagsBatch(_ context.Context, folder string, uids []uint32, op goimap.StoreFlagsOp, _ []goimap.Flag) error {
+	c.stores = append(c.stores, recordedStore{folder: folder, uids: append([]uint32(nil), uids...), op: op})
+	return nil
+}
+
+func TestMessageMutationWorkerSendsAFolderOfReadChangesInOneStore(t *testing.T) {
+	h, db := newAccountOwnershipTestHandler(t)
+	if err := db.UpsertFolders(t.Context(), []storage.UpsertFolderInput{{
+		ID: "victim-inbox", AccountID: "victim-account", RemoteID: "INBOX", Name: "Inbox", Role: "inbox", Selectable: true,
+	}}); err != nil {
+		t.Fatalf("UpsertFolders() error = %v", err)
+	}
+	var ids []int64
+	for i, subject := range []string{"Quilt fair", "Pottery class", "Tool library", "Ferry times"} {
+		internetID := fmt.Sprintf("<batch-%d@example.com>", i)
+		if err := db.UpsertSyncMessages(t.Context(), []storage.SyncMessage{{
+			AccountID: "victim-account", FolderID: "victim-inbox", RemoteUID: uint32(70 + i),
+			MessageID: internetID, Subject: subject, FromEmail: "lena@example.com", DateSent: time.Now(),
+		}}); err != nil {
+			t.Fatalf("UpsertSyncMessages() error = %v", err)
+		}
+		id, err := db.GetMessageLocalIDByInternetIDInternal(t.Context(), "victim-account", internetID)
+		if err != nil || id == 0 {
+			t.Fatalf("GetMessageLocalIDByInternetIDInternal() = %d, %v", id, err)
+		}
+		ids = append(ids, id)
+	}
+	if err := db.SetMessagesReadAndQueue(t.Context(), ids[:3], true); err != nil {
+		t.Fatalf("SetMessagesReadAndQueue(read) error = %v", err)
+	}
+	if err := db.SetMessagesReadAndQueue(t.Context(), ids[3:], false); err != nil {
+		t.Fatalf("SetMessagesReadAndQueue(unread) error = %v", err)
+	}
+	client := &recordingStoreClient{}
+	logins := 0
+	h.messageMutationIMAPFactory = func(context.Context, *models.AccountConfig, string) (messageMutationIMAPClient, error) {
+		logins++
+		return client, nil
+	}
+
+	h.runDueMessageMutations(t.Context())
+
+	if logins != 2 || len(client.stores) != 2 {
+		t.Fatalf("logins = %d, stores = %#v; want one of each per value", logins, client.stores)
+	}
+	for _, store := range client.stores {
+		switch store.op {
+		case goimap.StoreFlagsAdd:
+			if store.folder != "INBOX" || len(store.uids) != 3 {
+				t.Fatalf("read store = %#v, want the 3 UIDs in INBOX", store)
+			}
+		case goimap.StoreFlagsDel:
+			if len(store.uids) != 1 || store.uids[0] != 73 {
+				t.Fatalf("unread store = %#v, want UID 73", store)
+			}
+		}
+	}
+	var pending int
+	if err := db.Read().QueryRow(`SELECT COUNT(*) FROM message_mutations WHERE status != 'applied'`).Scan(&pending); err != nil || pending != 0 {
+		t.Fatalf("changes not applied = %d, %v", pending, err)
 	}
 }

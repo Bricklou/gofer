@@ -613,6 +613,17 @@ func (db *DB) claimDueMessageMutations(ctx context.Context, accountID string, no
 	if err := rows.Close(); err != nil {
 		return nil, err
 	}
+	if err := markMessageMutationsProcessingTx(ctx, tx, mutations, now); err != nil {
+		return nil, err
+	}
+	if err := tx.Commit(); err != nil {
+		return nil, err
+	}
+	return mutations, nil
+}
+
+// markMessageMutationsProcessingTx claims selected rows, counting an attempt.
+func markMessageMutationsProcessingTx(ctx context.Context, tx *sql.Tx, mutations []MessageMutation, now time.Time) error {
 	for i := range mutations {
 		result, err := tx.ExecContext(ctx, `
 			UPDATE message_mutations
@@ -623,12 +634,73 @@ func (db *DB) claimDueMessageMutations(ctx context.Context, accountID string, no
 				WHERE a.id = message_mutations.account_id AND COALESCE(a.is_deleting, 0) = 0 AND u.status = 'active'
 			  )`, MessageMutationProcessing, now.UTC(), mutations[i].ID, mutations[i].Status)
 		if err != nil {
-			return nil, err
+			return err
 		}
 		if changed, _ := result.RowsAffected(); changed != 1 {
-			return nil, fmt.Errorf("message mutation %s was claimed concurrently", mutations[i].ID)
+			return fmt.Errorf("message mutation %s was claimed concurrently", mutations[i].ID)
 		}
 		mutations[i].AttemptCount++
+	}
+	return nil
+}
+
+// MessageFlagBatchable reports whether a claimed change can travel with
+// others in one provider request: a read or starred change of an IMAP or
+// JMAP account. ClaimMessageFlagBatch finds the ones that can join it.
+func MessageFlagBatchable(m MessageMutation) bool {
+	if m.Kind != MessageMutationRead && m.Kind != MessageMutationStarred {
+		return false
+	}
+	switch m.ProviderType {
+	case MessageMutationProviderIMAP:
+		// An IMAP change is scoped to the folder its request selects.
+		return m.FolderID != ""
+	case MessageMutationProviderJMAP:
+		return true
+	}
+	return false
+}
+
+// ClaimMessageFlagBatch claims up to limit further due changes that set the
+// same flag to the same value as lead, in the same account and folder scope,
+// so they can go to the provider in one request. Each row is its message's
+// latest intent, so sending them together keeps every message's order.
+func (db *DB) ClaimMessageFlagBatch(ctx context.Context, lead MessageMutation, now time.Time, limit int) ([]MessageMutation, error) {
+	if !MessageFlagBatchable(lead) || limit <= 0 {
+		return nil, nil
+	}
+	tx, err := db.Write().BeginTx(ctx, nil)
+	if err != nil {
+		return nil, err
+	}
+	defer tx.Rollback()
+	rows, err := tx.QueryContext(ctx, messageMutationSelect+`
+		WHERE status IN (?, ?) AND next_attempt_at <= ? AND id != ?
+		  AND account_id = ? AND provider_type = ? AND kind = ? AND target_value = ? AND folder_id = ?
+		  AND EXISTS (
+			SELECT 1 FROM accounts a JOIN users u ON u.id = a.user_id
+			WHERE a.id = message_mutations.account_id AND COALESCE(a.is_deleting, 0) = 0 AND u.status = 'active'
+		  )
+		ORDER BY created_at ASC, id ASC LIMIT ?`,
+		MessageMutationPending, MessageMutationFailed, now.UTC(), lead.ID,
+		lead.AccountID, lead.ProviderType, lead.Kind, boolInt(lead.TargetValue), lead.FolderID, limit)
+	if err != nil {
+		return nil, err
+	}
+	var mutations []MessageMutation
+	for rows.Next() {
+		mutation, err := scanMessageMutation(rows)
+		if err != nil {
+			rows.Close()
+			return nil, err
+		}
+		mutations = append(mutations, mutation)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := markMessageMutationsProcessingTx(ctx, tx, mutations, now); err != nil {
+		return nil, err
 	}
 	if err := tx.Commit(); err != nil {
 		return nil, err

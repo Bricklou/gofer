@@ -60,7 +60,14 @@ func (s *UserIMAP) replayMutations(ctx context.Context, scope *userIMAPScope) er
 		}
 		mutation := claimed[0]
 		work, cancel := context.WithTimeout(ctx, 2*time.Minute)
-		err := s.applyMutation(work, scope, mutation)
+		var failed []mutationFailure
+		var err error
+		if storage.MessageFlagBatchable(mutation) {
+			// Read and starred changes of one folder go together.
+			failed, err = s.applyFlagBatch(work, scope, mutation)
+		} else if applyErr := s.applyMutation(work, scope, mutation); applyErr != nil {
+			failed = []mutationFailure{{mutation, applyErr}}
+		}
 		cancel()
 		if ctx.Err() != nil {
 			// Leave the durable claim for the next serialized pass/startup. Never
@@ -68,23 +75,38 @@ func (s *UserIMAP) replayMutations(ctx context.Context, scope *userIMAPScope) er
 			return errors.Join(failures, ctx.Err())
 		}
 		if err != nil {
-			attempt := min(max(mutation.AttemptCount, 1), 7)
-			next := time.Now().Add(30 * time.Second * time.Duration(1<<(attempt-1)))
-			if saveErr := scope.call(ctx, func(db *storage.DB) error {
-				if scope.retryAt.After(next) {
-					next = scope.retryAt
-				}
-				return db.FinishMessageMutationAttempt(ctx, mutation, err.Error(), next)
-			}); saveErr != nil {
-				return errors.Join(failures, err, saveErr)
+			return errors.Join(failures, err)
+		}
+		for _, f := range failed {
+			if saveErr := s.recordMutationFailure(ctx, scope, f.mutation, f.err); saveErr != nil {
+				return errors.Join(failures, f.err, saveErr)
 			}
-			failures = errors.Join(failures, fmt.Errorf("queued %s: %w", mutation.Kind, err))
-			if scope.retryAt.After(time.Now()) {
-				return failures
-			}
+			failures = errors.Join(failures, fmt.Errorf("queued %s: %w", f.mutation.Kind, f.err))
+		}
+		if len(failed) > 0 && scope.retryAt.After(time.Now()) {
+			return failures
 		}
 	}
 	return failures
+}
+
+// mutationFailure is a queued change that did not reach the provider.
+type mutationFailure struct {
+	mutation storage.MessageMutation
+	err      error
+}
+
+// recordMutationFailure schedules a failed change's retry, backing off with
+// each attempt and never before the provider allows.
+func (s *UserIMAP) recordMutationFailure(ctx context.Context, scope *userIMAPScope, mutation storage.MessageMutation, err error) error {
+	attempt := min(max(mutation.AttemptCount, 1), 7)
+	next := time.Now().Add(30 * time.Second * time.Duration(1<<(attempt-1)))
+	return scope.call(ctx, func(db *storage.DB) error {
+		if scope.retryAt.After(next) {
+			next = scope.retryAt
+		}
+		return db.FinishMessageMutationAttempt(ctx, mutation, err.Error(), next)
+	})
 }
 
 func (s *UserIMAP) applyMutation(ctx context.Context, scope *userIMAPScope, mutation storage.MessageMutation) error {

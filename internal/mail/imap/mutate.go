@@ -26,6 +26,20 @@ func (c *Client) StoreFlagsIfUIDValidity(ctx context.Context, folder string, uid
 	return c.storeFlagsBatch(ctx, folder, []uint32{uid}, op, flags, validity)
 }
 
+// StoreFlagsBatchIfUIDValidity sets or clears flags on many messages of one
+// folder, as long as the folder's UIDVALIDITY is still validity. Large sets
+// go in several STORE commands, so no command line grows past what servers
+// accept, all in one selection of the folder.
+func (c *Client) StoreFlagsBatchIfUIDValidity(ctx context.Context, folder string, uids []uint32, op imap.StoreFlagsOp, flags []imap.Flag, validity uint32) error {
+	if validity == 0 {
+		return fmt.Errorf("IMAP UIDVALIDITY is unavailable")
+	}
+	return c.storeFlagsBatch(ctx, folder, uids, op, flags, validity)
+}
+
+// storeFlagsChunk is how many UIDs one STORE command names.
+const storeFlagsChunk = 500
+
 func (c *Client) storeFlagsBatch(ctx context.Context, folderRemoteName string, uids []uint32, op imap.StoreFlagsOp, flags []imap.Flag, validity uint32) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -46,18 +60,24 @@ func (c *Client) storeFlagsBatch(ctx context.Context, folderRemoteName string, u
 		return ErrMutationUIDValidityChanged
 	}
 
-	var uidSet imap.UIDSet
-	for _, uid := range uids {
-		uidSet.AddNum(imap.UID(uid))
+	for start := 0; start < len(uids); start += storeFlagsChunk {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
+		var uidSet imap.UIDSet
+		for _, uid := range uids[start:min(start+storeFlagsChunk, len(uids))] {
+			uidSet.AddNum(imap.UID(uid))
+		}
+		storeCmd := c.client.Store(uidSet, &imap.StoreFlags{
+			Op:     op,
+			Silent: true,
+			Flags:  flags,
+		}, nil)
+		if err := storeCmd.Close(); err != nil {
+			return err
+		}
 	}
-
-	storeCmd := c.client.Store(uidSet, &imap.StoreFlags{
-		Op:     op,
-		Silent: true,
-		Flags:  flags,
-	}, nil)
-
-	return storeCmd.Close()
+	return nil
 }
 
 func (c *Client) StoreKeyword(ctx context.Context, folderRemoteName string, uid uint32, op imap.StoreFlagsOp, keyword string) error {

@@ -31,6 +31,8 @@ type fakeJMAPServer struct {
 	emails          []jmap.Email
 	emailState      string
 	maxObjectsInGet int
+	// emailSets counts Email/set calls.
+	emailSets int
 	// loseAnchorOnce answers the first anchored query with anchorNotFound, as
 	// when the anchor email was deleted between two pages.
 	loseAnchorOnce bool
@@ -341,6 +343,7 @@ func (f *fakeJMAPServer) answer(w http.ResponseWriter, r *http.Request) {
 			queryIDs[callID] = ids
 			responses = append(responses, []any{name, map[string]any{"accountId": "a1", "queryState": "q1", "position": start, "ids": ids, "limit": limit}, callID})
 		case "Email/set":
+			f.emailSets++
 			var update map[string]map[string]any
 			var destroy []string
 			_ = json.Unmarshal(args["update"], &update)
@@ -1436,6 +1439,63 @@ func TestSyncReplaysJMAPMessageChanges(t *testing.T) {
 	}
 	if m := jmapMessages(t, f)["e2"]; m == nil || !m.Folders["mb-arch"] || m.Folders["mb-in"] {
 		t.Fatalf("e2 in Gofer after the move = %+v", m)
+	}
+}
+
+// Marking a whole mailbox read reaches the server as one Email/set naming
+// every email, not one request per email.
+func TestSyncSendsAFolderMarkedReadToJMAPInOneRequest(t *testing.T) {
+	f := newUserGmailFixture(t)
+	server := newFakeJMAPServer(t)
+	server.emailState = "c0"
+	server.setMailboxes(
+		jmap.Mailbox{ID: "mb-in", Name: "Inbox", Role: "inbox", MyRights: readable()},
+		jmap.Mailbox{ID: "mb-arch", Name: "Archive", Role: "archive", MyRights: readable()},
+	)
+	subjects := []string{"Book club picks", "Bake sale rota", "Trail cleanup", "Choir schedule", "Seed swap"}
+	for i, subject := range subjects {
+		server.emails = append(server.emails, testJMAPEmail(fmt.Sprintf("e%d", i+1), subject, i+1, "mb-in"))
+	}
+	server.emails = append(server.emails, testJMAPEmail("kept", "Library hours", 9, "mb-arch"))
+	useFakeJMAPAccount(t, f, server)
+	if err := f.worker.Sync(t.Context(), "alice", f.ids["alice"]); err != nil {
+		t.Fatalf("first Sync() error = %v", err)
+	}
+	inbox := jmapLocalFolderID(f.ids["alice"], "mb-in")
+	f.local(t, "alice", func(db *storage.DB) error {
+		result, err := db.MarkFolderReadForUser(t.Context(), inbox, "alice", nil)
+		if err == nil && result.Marked != len(subjects) {
+			err = fmt.Errorf("marked %d, want %d", result.Marked, len(subjects))
+		}
+		return err
+	})
+	server.mu.Lock()
+	server.emailSets = 0
+	server.mu.Unlock()
+
+	if err := f.worker.Sync(t.Context(), "alice", f.ids["alice"]); err != nil {
+		t.Fatalf("Sync() replaying the change error = %v", err)
+	}
+	server.mu.Lock()
+	sets := server.emailSets
+	server.mu.Unlock()
+	if sets != 1 {
+		t.Fatalf("Email/set calls = %d, want 1 for the whole mailbox", sets)
+	}
+	for i := range subjects {
+		if email, _ := server.email(fmt.Sprintf("e%d", i+1)); !email.Keywords["$seen"] {
+			t.Fatalf("e%d on the server = %v, want $seen", i+1, email.Keywords)
+		}
+	}
+	if kept, _ := server.email("kept"); kept.Keywords["$seen"] {
+		t.Fatal("the Archive email was marked read too")
+	}
+	var pending int
+	f.local(t, "alice", func(db *storage.DB) error {
+		return db.Read().QueryRow(`SELECT COUNT(*) FROM message_mutations WHERE status != 'applied'`).Scan(&pending)
+	})
+	if pending != 0 {
+		t.Fatalf("%d changes still queued after replay", pending)
 	}
 }
 
