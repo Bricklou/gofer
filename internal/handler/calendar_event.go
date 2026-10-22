@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"context"
 	"database/sql"
 	"encoding/json"
 	"errors"
@@ -22,7 +23,7 @@ func (h *Handler) handleCalendarEvent(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "event id required", http.StatusBadRequest)
 		return
 	}
-	event, err := h.db.GetCalendarEvent(ctx, userID, eventID)
+	details, err := h.sharedCalendarEventDetails(ctx, userID, eventID)
 	if errors.Is(err, sql.ErrNoRows) {
 		http.NotFound(w, r)
 		return
@@ -30,6 +31,21 @@ func (h *Handler) handleCalendarEvent(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		http.Error(w, "could not load calendar event", http.StatusInternalServerError)
 		return
+	}
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	w.Header().Set("Cache-Control", "private, no-store")
+	location := viewsCalendarLocation(h.db.GetUISettings(ctx, userID))
+	if err := views.CalendarEventDialog(details, location).Render(ctx, w); err != nil {
+		http.Error(w, "could not render calendar event", http.StatusInternalServerError)
+	}
+}
+
+// sharedCalendarEventDetails is what an event's details dialog shows and
+// allows, read from the local database.
+func (h *Handler) sharedCalendarEventDetails(ctx context.Context, userID, eventID string) (views.CalendarEventDetails, error) {
+	event, err := h.db.GetCalendarEvent(ctx, userID, eventID)
+	if err != nil {
+		return views.CalendarEventDetails{}, err
 	}
 	details := calendarEventDetails(event)
 	if calendarDeliveryAvailable(event) {
@@ -61,12 +77,7 @@ func (h *Handler) handleCalendarEvent(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 	}
-	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	w.Header().Set("Cache-Control", "private, no-store")
-	location := viewsCalendarLocation(h.db.GetUISettings(ctx, userID))
-	if err := views.CalendarEventDialog(details, location).Render(ctx, w); err != nil {
-		http.Error(w, "could not render calendar event", http.StatusInternalServerError)
-	}
+	return details, nil
 }
 
 func calendarEventDetails(event storage.CalendarEvent) views.CalendarEventDetails {

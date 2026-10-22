@@ -144,6 +144,7 @@ func (h *Handler) RegisterUserStorageRoutes(ctx context.Context, mux *http.Serve
 				pattern != "GET /api/calendar/meeting-options" &&
 				pattern != "GET /api/calendar/teams-options" &&
 				pattern != "GET /api/calendar/events/{id}" &&
+				pattern != "GET /api/calendar/events/{id}/actions" &&
 				pattern != "DELETE /api/calendar/events/{id}" &&
 				pattern != "GET /api/calendar/events/{id}/delivery" &&
 				pattern != "POST /api/calendar/events/{id}/delivery/{sendID}/retry" &&
@@ -318,6 +319,7 @@ func (h *Handler) RegisterUserStorageRoutes(ctx context.Context, mux *http.Serve
 		private("GET /api/calendar/meeting-options", routed.handleUserCalendarMeetingOptions)
 		private("GET /api/calendar/teams-options", routed.handleUserCalendarMeetingOptions)
 		private("GET /api/calendar/events/{id}", routed.handleUserCalendarEvent)
+		private("GET /api/calendar/events/{id}/actions", routed.handleUserCalendarEventActions)
 		private("DELETE /api/calendar/events/{id}", routed.handleUserDeleteCalendarEvent)
 		private("GET /api/calendar/events/{id}/delivery", routed.handleUserCalendarDeliveryStatus)
 		private("POST /api/calendar/events/{id}/delivery/{sendID}/retry", routed.handleUserCalendarDeliveryRetry)

@@ -12893,6 +12893,323 @@ document.body.addEventListener("htmx:afterRequest", function (event) {
   updateCalendarDeleteForm(form)
 })
 
+// Right-clicking an event opens its menu. The server says what the event
+// allows, as for its details dialog; the menu then sends what the dialog
+// would, and leaves to the dialog what needs its extra steps: deleting a
+// whole series, and a reply that must be checked with the server first.
+var _calendarContext = null
+
+function calendarContextClose() {
+  if (!window.tui || !window.tui.popover) return
+  ;["calendar-context-respond", "calendar-context-edit", "calendar-context-delete", "calendar-context-menu"].forEach(function (id) { window.tui.popover.close(id) })
+}
+
+function calendarContextEventID(trigger) {
+  var match = (trigger.getAttribute("hx-get") || "").match(/^\/api\/calendar\/events\/([^/?#]+)$/)
+  if (!match) return ""
+  try { return decodeURIComponent(match[1]) } catch (_) { return "" }
+}
+
+function calendarContextBase(eventID) {
+  return "/api/calendar/events/" + encodeURIComponent(eventID)
+}
+
+function calendarContextShow(root, name, shown) {
+  root.querySelectorAll('[data-calendar-context-action="' + name + '"], [data-calendar-context-sub="' + name + '"]').forEach(function (el) { el.hidden = !shown })
+}
+
+// Shows the items an event allows; with no answer yet, only Open.
+function fillCalendarContextMenu(root, actions) {
+  var a = actions || {}
+  var response = a.response || null
+  calendarContextShow(root, "join", !!a.join_url)
+  calendarContextShow(root, "forward", !!a.forward)
+  var respond = root.querySelector('[data-calendar-context-group="respond"]')
+  if (respond) respond.hidden = !response
+  root.querySelectorAll("[data-calendar-context-response]").forEach(function (item) {
+    item.setAttribute("aria-current", String(!!response && response.status === item.getAttribute("data-calendar-context-response")))
+  })
+  var occurrence = !!a.has_occurrence
+  calendarContextShow(root, "edit", !!a.can_edit && !occurrence && !a.edit_series)
+  calendarContextShow(root, "edit-series", !!a.can_edit && !occurrence && !!a.edit_series)
+  var editSub = root.querySelector('[data-calendar-context-sub="edit"]')
+  if (editSub) editSub.hidden = !(a.can_edit && occurrence)
+  calendarContextShow(root, "delete", !!a.can_delete && !occurrence && !a.delete_series)
+  calendarContextShow(root, "delete-series", !!a.can_delete && !occurrence && !!a.delete_series)
+  var deleteSub = root.querySelector('[data-calendar-context-sub="delete"]')
+  if (deleteSub) deleteSub.hidden = !(a.can_delete && occurrence)
+  var change = root.querySelector('[data-calendar-context-group="change"]')
+  if (change) change.hidden = !(a.can_edit || a.can_delete)
+}
+
+// How long the menu waits for an event's actions before saying it is loading.
+var CALENDAR_CONTEXT_LOADING_DELAY = 400
+
+// Changes what the menu shows, growing or shrinking it smoothly to its new
+// size and fading in what appears, instead of jumping.
+function animateCalendarContextChange(root, change) {
+  var content = root.querySelector(":scope > [data-tui-popover-content]")
+  if (!content) {
+    change()
+    return
+  }
+  var rows = content.querySelectorAll("[data-calendar-context-action], [data-calendar-context-sub], [data-calendar-context-group], [data-calendar-context-loading]")
+  var hidden = new Map()
+  rows.forEach(function (row) { hidden.set(row, row.hidden) })
+  // Measured mid-animation too, so a change during a resize carries on from
+  // where the menu is.
+  var before = content.offsetHeight
+  if (content._calendarContextResize) content._calendarContextResize.cancel()
+  change()
+  if (!content.animate || !content.matches(":popover-open") || window.matchMedia("(prefers-reduced-motion: reduce)").matches) return
+  var after = content.offsetHeight
+  if (Math.abs(after - before) > 1) {
+    content.style.overflow = "hidden"
+    var resize = content.animate([{height: before + "px"}, {height: after + "px"}], {duration: 200, easing: "ease"})
+    var done = function () {
+      if (content._calendarContextResize !== resize) return
+      content._calendarContextResize = null
+      content.style.overflow = ""
+    }
+    content._calendarContextResize = resize
+    resize.onfinish = done
+    resize.oncancel = done
+  }
+  rows.forEach(function (row) {
+    if (hidden.get(row) && !row.hidden && row.animate) row.animate([{opacity: 0}, {opacity: 1}], {duration: 200, easing: "ease"})
+  })
+}
+
+document.addEventListener("contextmenu", function (event) {
+  var root = document.getElementById("calendar-context-menu")
+  if (!root || !window.tui || !window.tui.popover || !event.target.closest) return
+  var trigger = event.target.closest("#calendar-main [data-calendar-event-trigger]")
+  var eventID = trigger && !window.matchMedia("(max-width: 1023.98px)").matches && !(_calendarDrag && _calendarDrag.started) ? calendarContextEventID(trigger) : ""
+  if (!eventID) {
+    if (!event.target.closest("#calendar-context-menu")) calendarContextClose()
+    return
+  }
+  event.preventDefault()
+  var context = {id: eventID, trigger: trigger, actions: null}
+  _calendarContext = context
+  var title = root.querySelector("[data-calendar-context-title]")
+  if (title) title.textContent = trigger.getAttribute("title") || (trigger.getAttribute("aria-label") || "").replace(/^Open (all-day )?event: /, "") || "Event"
+  var loading = root.querySelector("[data-calendar-context-loading]")
+  fillCalendarContextMenu(root, null)
+  if (loading) loading.hidden = true
+  calendarContextClose()
+  placePointPopover(root, event.clientX, event.clientY)
+  window.tui.popover.open("calendar-context-menu")
+  // A quick answer just grows the menu; a slow one first says it's loading.
+  var slow = setTimeout(function () {
+    if (_calendarContext !== context || !loading) return
+    animateCalendarContextChange(root, function () { loading.hidden = false })
+  }, CALENDAR_CONTEXT_LOADING_DELAY)
+  var settle = function (actions) {
+    clearTimeout(slow)
+    if (_calendarContext !== context) return
+    context.actions = actions
+    animateCalendarContextChange(root, function () {
+      if (loading) loading.hidden = true
+      if (actions) fillCalendarContextMenu(root, actions)
+    })
+  }
+  fetch(calendarContextBase(eventID) + "/actions", {headers: {Accept: "application/json"}})
+    .then(function (response) {
+      if (!response.ok) throw new Error("event actions: " + response.status)
+      return response.json()
+    })
+    .then(settle)
+    .catch(function () { settle(null) })
+})
+
+document.addEventListener("pointerdown", function (event) {
+  if (!window.tui || !window.tui.popover || !window.tui.popover.isOpen("calendar-context-menu")) return
+  if (event.target && event.target.closest && event.target.closest("#calendar-context-menu")) return
+  calendarContextClose()
+}, true)
+
+document.addEventListener("scroll", function (event) {
+  if (!window.tui || !window.tui.popover || !window.tui.popover.isOpen("calendar-context-menu")) return
+  if (event.target && event.target.closest && event.target.closest("#calendar-context-menu")) return
+  calendarContextClose()
+}, true)
+
+document.addEventListener("click", function (event) {
+  var item = event.target.closest && event.target.closest("#calendar-context-menu [data-calendar-context-action]")
+  if (!item) return
+  event.preventDefault()
+  var context = _calendarContext
+  calendarContextClose()
+  if (context) runCalendarContextAction(item.getAttribute("data-calendar-context-action"), item.getAttribute("data-calendar-context-response"), context)
+})
+
+function runCalendarContextAction(action, response, context) {
+  var a = context.actions || {}
+  switch (action) {
+  case "open":
+    if (context.trigger.isConnected) context.trigger.click()
+    return
+  case "join":
+    if (a.join_url) window.open(a.join_url, "_blank", "noopener,noreferrer")
+    return
+  case "forward":
+    // Forwarding is a form in the details dialog; it opens there, ready to fill.
+    openCalendarContextDialog(context, function (dialog) {
+      var forward = dialog.querySelector("[data-calendar-forward-trigger]")
+      if (forward) forward.click()
+    })
+    return
+  case "respond":
+    if (a.response && a.response.ready) sendCalendarContextResponse(context, response)
+    else if (context.trigger.isConnected) context.trigger.click()
+    return
+  case "edit":
+    openCalendarContextEditor(context, "")
+    return
+  case "edit-series":
+  case "edit-whole-series":
+    openCalendarContextEditor(context, "series")
+    return
+  case "edit-occurrence":
+    openCalendarContextEditor(context, "occurrence")
+    return
+  case "delete":
+    deleteCalendarContextEvent(context, false)
+    return
+  case "delete-occurrence":
+    deleteCalendarContextEvent(context, true)
+    return
+  case "delete-series":
+  case "delete-whole-series":
+    openCalendarSeriesDelete(context)
+  }
+}
+
+// The editor opens as from the details dialog's Edit, through a button with
+// the same attributes, since its request handlers read them.
+function openCalendarContextEditor(context, scope) {
+  var calendar = document.getElementById("calendar-main")
+  if (!calendar || !window.htmx) return
+  var button = document.createElement("button")
+  button.type = "button"
+  button.hidden = true
+  button.setAttribute("data-calendar-create-trigger", "")
+  button.setAttribute("data-calendar-edit-trigger", "")
+  button.setAttribute("hx-get", calendarContextBase(context.id) + "/edit" + (scope ? "?scope=" + scope : ""))
+  button.setAttribute("hx-target", "#app-pane-dialogs")
+  button.setAttribute("hx-swap", "innerHTML")
+  button.setAttribute("hx-sync", "#app-pane-dialogs:replace")
+  calendar.appendChild(button)
+  window.htmx.process(button)
+  button.addEventListener("htmx:afterRequest", function () { button.remove() }, {once: true})
+  button.click()
+}
+
+function calendarContextLabel(context) {
+  var title = document.querySelector("#calendar-context-menu [data-calendar-context-title]")
+  return title && title.textContent ? title.textContent : "This event"
+}
+
+// One event, or one occurrence of a series: asked here, then deleted as the
+// dialog's confirmation does.
+function deleteCalendarContextEvent(context, occurrence) {
+  var a = context.actions || {}
+  if (!a.delete_version) {
+    openCalendarSeriesDelete(context)
+    return
+  }
+  window.goferConfirm({
+    title: occurrence ? "Delete this occurrence?" : "Delete this event?",
+    message: calendarContextLabel(context) + (occurrence ? " will be removed. The rest of the series is unchanged." : " will be removed from your calendar."),
+    destructive: true,
+    confirmLabel: "Delete event",
+  }).then(function (accepted) {
+    if (!accepted) return
+    var params = new URLSearchParams({version: a.delete_version})
+    if (occurrence) params.set("scope", "occurrence")
+    return fetch(calendarContextBase(context.id) + "?" + params.toString(), {method: "DELETE", headers: {Accept: "application/json"}})
+      .then(function (response) {
+        return response.json().then(function (result) { return {ok: response.ok, result: result} })
+      })
+      .then(function (answer) {
+        var result = answer.result || {}
+        if (!answer.ok) {
+          showGoferToast({title: "Couldn't delete the event", description: result.error || (result.uncertain || result.conflict ? "Refresh the calendar and reopen the event before trying again." : "Try again."), variant: "error", icon: "error", duration: 8000})
+          return
+        }
+        if (result.deleted !== true || result.event_id !== context.id || (occurrence && result.scope !== "occurrence")) throw new Error("Unconfirmed deletion")
+        showGoferToast({title: "Event deleted", description: occurrence ? "Only this occurrence was removed. The rest of the series is unchanged." : "Removed from your calendar.", variant: "success", icon: "success", duration: 4500})
+        scheduleCalendarCacheRefresh()
+      })
+      .catch(function () {
+        showGoferToast({title: "Deletion not confirmed", description: "Refresh the calendar and reopen the event before trying again.", variant: "error", icon: "error", duration: 8000})
+      })
+  })
+}
+
+// Opens the event's details dialog, as clicking it would, then hands it to
+// then once it shows.
+function openCalendarContextDialog(context, then) {
+  if (!context.trigger.isConnected) return
+  var settled = function () {
+    var dialog = document.getElementById("calendar-event-details-dialog")
+    if (!dialog || !dialog.querySelector("[data-calendar-event-details-body]")) return
+    document.body.removeEventListener("htmx:afterSettle", settled)
+    clearTimeout(giveUp)
+    then(dialog)
+  }
+  var giveUp = setTimeout(function () { document.body.removeEventListener("htmx:afterSettle", settled) }, 15000)
+  document.body.addEventListener("htmx:afterSettle", settled)
+  context.trigger.click()
+}
+
+// A whole series' deletion loads its own confirmation, so it happens in the
+// event's details dialog, opened at that confirmation.
+function openCalendarSeriesDelete(context) {
+  openCalendarContextDialog(context, function (dialog) {
+    var trigger = dialog.querySelector("[data-calendar-delete-trigger]")
+    if (!trigger) return
+    trigger.click()
+    if (!(context.actions && context.actions.has_occurrence)) return
+    // An occurrence's confirmation starts at "This event"; pick the series.
+    setTimeout(function () {
+      var series = dialog.querySelector('[data-calendar-delete-load][hx-get$="/delete-series-confirmation"]')
+      if (series && series.getAttribute("aria-pressed") !== "true") series.click()
+    }, 0)
+  })
+}
+
+// Sends a reply as the dialog's reply menu does, and says how it went the
+// same way.
+function sendCalendarContextResponse(context, response) {
+  var state = (context.actions && context.actions.response) || {}
+  if (["accepted", "tentative", "declined"].indexOf(response) < 0) return
+  var body = new URLSearchParams({version: state.version || "", scope: state.scope || "", response: response})
+  fetch(calendarContextBase(context.id) + "/response", {method: "POST", headers: {"Content-Type": "application/x-www-form-urlencoded", Accept: "application/json"}, body: body.toString()})
+    .then(function (answer) {
+      return answer.json().then(function (result) { return {ok: answer.ok, result: result} })
+    })
+    .then(function (answer) {
+      var result = answer.result || {}
+      if (!answer.ok) {
+        showGoferToast({title: "Couldn't send your response", description: result.error || (result.uncertain || result.conflict ? "Refresh the calendar and reopen the invitation before trying again." : "Try again."), variant: "error", icon: "error", duration: 8000})
+        return
+      }
+      if ((result.responded !== true && result.pending !== true) || (result.responded === true && result.pending === true) || result.event_id !== context.id || result.scope !== state.scope || result.response !== response) throw new Error("Unconfirmed response")
+      if (result.delivery === "email") {
+        showGoferToast({title: "Reply queued", description: "The email reply will send in the background. Reopen the invitation to check delivery.", variant: "info", duration: 5000})
+        return
+      }
+      var pending = result.pending || result.refresh_pending
+      showGoferToast({title: result.pending ? "Response submitted" : "Response saved", description: result.pending ? "The provider is still processing your reply. Refresh the calendar to check its status; don't send it again." : result.refresh_pending ? "Your response was confirmed, but the calendar could not refresh yet." : state.scope === "series" ? "Your response to the series was confirmed." : "Your response was confirmed.", variant: pending ? "warning" : "success", icon: pending ? "warning" : "success", duration: pending ? 8000 : 4500})
+      scheduleCalendarCacheRefresh()
+    })
+    .catch(function () {
+      showGoferToast({title: "Response not confirmed", description: "Refresh the calendar and reopen the invitation before trying again.", variant: "error", icon: "error", duration: 8000})
+    })
+}
+
 var _calendarSyncRequest = null
 var _calendarSyncStates = new Map()
 var _calendarCacheRequest = null

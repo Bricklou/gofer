@@ -71,6 +71,19 @@ func calendarResponseLabel(status string) string {
 	}
 }
 
+// calendarResponseChoiceLabel names a reply as the reply menus offer it.
+func calendarResponseChoiceLabel(status string) string {
+	switch status {
+	case "accepted":
+		return "Accept"
+	case "tentative":
+		return "Maybe"
+	case "declined":
+		return "Decline"
+	}
+	return status
+}
+
 type CalendarEventParticipant struct {
 	Name           string
 	Email          string

@@ -192,6 +192,7 @@ templ CalendarMainPane(month CalendarMonthData, uiSettings map[string]string) {
 	<section id="mail-list" class="flex w-full max-lg:!w-full lg:flex flex-col border-r border-border bg-card h-full min-w-0 overflow-hidden" style={ "width:" + mailListWidthCSS(PanelSetting(uiSettings, "calendar", "mail_list_width", "50%")) } data-panel-section="calendar" aria-busy={ strconv.FormatBool(month.Loading) }>
 		@CalendarMainContent(month)
 		@CalendarMoveConfirm()
+		@CalendarContextMenu()
 		<button type="button" class="mobile-compose-fab" data-on-click='["goferClickElement","[data-calendar-create-trigger]"]' aria-label="New event">
 			@icon.CalendarPlus(icon.Props{Class: "size-6"})
 		</button>
@@ -427,4 +428,108 @@ templ CalendarDayDots(events []CalendarEvent) {
 			<span class="calendar-day-dot" hidden?={ event.SourceHidden } data-calendar-day-dot data-calendar-source-id={ event.SourceID } data-calendar-source-hidden={ strconv.FormatBool(event.SourceHidden) } style={ calendarEventColorStyle(event) }></span>
 		}
 	</span>
+}
+
+// CalendarContextMenu opens where an event is right-clicked. app.js asks the
+// server what the event allows, then shows the items that apply: the edit
+// and delete ones in the shape the details dialog offers them.
+templ CalendarContextMenu() {
+	@popover.Root(popover.RootProps{ID: "calendar-context-menu", Attributes: templ.Attributes{"data-calendar-context-menu": ""}}) {
+		@popover.Trigger() {
+			<span class="pointer-events-none fixed left-0 top-0 size-px" aria-hidden="true" data-point-popover-anchor></span>
+		}
+		@popover.Content(popover.ContentProps{
+			Placement:  popover.PlacementBottomStart,
+			Offset:     2,
+			Class:      "z-50 w-52 rounded-md border border-border bg-popover p-1 shadow-md focus:outline-none",
+			Attributes: templ.Attributes{"role": "menu", "aria-label": "Event actions"},
+		}) {
+			@dropdown.Label(dropdown.LabelProps{Class: "truncate text-xs font-medium text-muted-foreground", Attributes: templ.Attributes{"data-calendar-context-title": ""}})
+			@calendarContextItem("open", "Open", "") {
+				@icon.CalendarDays(icon.Props{Class: "size-4"})
+			}
+			@calendarContextItem("join", "Join meeting", "") {
+				@icon.Video(icon.Props{Class: "size-4"})
+			}
+			@calendarContextItem("forward", "Forward…", "") {
+				@icon.Forward(icon.Props{Class: "size-4"})
+			}
+			// Shown only when the event's actions are slow to arrive.
+			<div class="flex items-center gap-2 px-2 py-1.5 text-sm text-muted-foreground" role="status" data-calendar-context-loading hidden>
+				@icon.LoaderCircle(icon.Props{Class: "size-4 animate-spin"})
+				Loading actions…
+			</div>
+			<div data-calendar-context-group="respond">
+				@dropdown.Separator()
+				@dropdown.Sub(dropdown.SubProps{ID: "calendar-context-respond"}) {
+					@dropdown.SubTrigger() {
+						<span class="flex items-center gap-2">
+							@icon.CircleCheck(icon.Props{Class: "size-4"})
+							Going?
+						</span>
+					}
+					@dropdown.SubContent(dropdown.SubContentProps{Class: "w-40", Attributes: templ.Attributes{"role": "menu", "aria-label": "Respond to invitation"}}) {
+						for _, status := range []string{"accepted", "tentative", "declined"} {
+							@dropdown.Item(dropdown.ItemProps{Class: "aria-[current=true]:bg-accent aria-[current=true]:text-accent-foreground", Attributes: templ.Attributes{"role": "menuitem", "data-calendar-context-action": "respond", "data-calendar-context-response": status}}) {
+								<span class="flex items-center gap-2">
+									<span class="flex size-4 items-center justify-center">
+										@CalendarResponseIcon(status)
+									</span>
+									{ calendarResponseChoiceLabel(status) }
+								</span>
+							}
+						}
+					}
+				}
+			</div>
+			<div data-calendar-context-group="change">
+				@dropdown.Separator()
+				@calendarContextItem("edit", "Edit…", "") {
+					@icon.Pencil(icon.Props{Class: "size-4"})
+				}
+				@calendarContextItem("edit-series", "Edit series…", "") {
+					@icon.Pencil(icon.Props{Class: "size-4"})
+				}
+				@dropdown.Sub(dropdown.SubProps{ID: "calendar-context-edit", Attributes: templ.Attributes{"data-calendar-context-sub": "edit"}}) {
+					@dropdown.SubTrigger() {
+						<span class="flex items-center gap-2">
+							@icon.Pencil(icon.Props{Class: "size-4"})
+							Edit
+						</span>
+					}
+					@dropdown.SubContent(dropdown.SubContentProps{Class: "w-40", Attributes: templ.Attributes{"role": "menu", "aria-label": "Edit"}}) {
+						@calendarContextItem("edit-occurrence", "This event…", "") {}
+						@calendarContextItem("edit-whole-series", "Entire series…", "") {}
+					}
+				}
+				@calendarContextItem("delete", "Delete…", "text-destructive "+menuDestructiveClass) {
+					@icon.Trash2(icon.Props{Class: "size-4"})
+				}
+				@calendarContextItem("delete-series", "Delete series…", "text-destructive "+menuDestructiveClass) {
+					@icon.Trash2(icon.Props{Class: "size-4"})
+				}
+				@dropdown.Sub(dropdown.SubProps{ID: "calendar-context-delete", Attributes: templ.Attributes{"data-calendar-context-sub": "delete"}}) {
+					@dropdown.SubTrigger(dropdown.SubTriggerProps{Class: "text-destructive " + menuDestructiveClass}) {
+						<span class="flex items-center gap-2">
+							@icon.Trash2(icon.Props{Class: "size-4"})
+							Delete
+						</span>
+					}
+					@dropdown.SubContent(dropdown.SubContentProps{Class: "w-40", Attributes: templ.Attributes{"role": "menu", "aria-label": "Delete"}}) {
+						@calendarContextItem("delete-occurrence", "This event…", "text-destructive "+menuDestructiveClass) {}
+						@calendarContextItem("delete-whole-series", "Entire series…", "text-destructive "+menuDestructiveClass) {}
+					}
+				}
+			</div>
+		}
+	}
+}
+
+templ calendarContextItem(action string, label string, class string) {
+	@dropdown.Item(dropdown.ItemProps{Class: class, Attributes: templ.Attributes{"role": "menuitem", "data-calendar-context-action": action}}) {
+		<span class="flex items-center gap-2">
+			{ children... }
+			{ label }
+		</span>
+	}
 }
