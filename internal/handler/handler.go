@@ -567,6 +567,7 @@ func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("DELETE /api/drafts/{id}", h.handleDeleteDraft)
 	mux.HandleFunc("POST /api/messages/read", h.handleMarkMessagesRead)
 	mux.HandleFunc("POST /api/folders/{id}/mark-read", h.handleMarkFolderRead)
+	mux.HandleFunc("POST /api/folders/{id}/empty", h.handleEmptyFolder)
 	mux.HandleFunc("POST /api/messages/star", h.handleMarkMessagesStarred)
 	mux.HandleFunc("POST /api/messages/archive", h.handleArchiveMessages)
 	mux.HandleFunc("POST /api/messages/unarchive", h.handleUnarchiveMessages)

@@ -219,6 +219,7 @@ func foreignMessageActionRequests(fixture messageActionOwnershipFixture) []messa
 		{name: "bulk unlabel", method: http.MethodPost, path: "/api/messages/unlabel", body: bulk(`,"label":"Projects"`), contentType: "application/json", handle: fixture.handler.handleUnlabelMessages},
 		{name: "bulk move", method: http.MethodPost, path: "/api/messages/move", body: bulk(`,"folder_id":"attacker-archive"`), contentType: "application/json", handle: fixture.handler.handleMoveMessages},
 		{name: "mark folder read", method: http.MethodPost, path: "/api/folders/victim-inbox/mark-read", pathValues: map[string]string{"id": "victim-inbox"}, handle: fixture.handler.handleMarkFolderRead},
+		{name: "empty trash", method: http.MethodPost, path: "/api/folders/victim-trash/empty", pathValues: map[string]string{"id": "victim-trash"}, handle: fixture.handler.handleEmptyFolder},
 	}
 }
 
@@ -239,6 +240,16 @@ func TestMarkFolderReadMarksTheOwnersFolder(t *testing.T) {
 	}
 	if err := fixture.db.Read().QueryRowContext(t.Context(), `SELECT COUNT(*) FROM message_mutations WHERE message_id = ? AND kind = 'read' AND target_value = 1`, fixture.victimMessageID).Scan(&queued); err != nil || queued != 1 {
 		t.Fatalf("queued read mutations = %d, %v; want 1", queued, err)
+	}
+
+	inbox := executeMessageActionRequest(t, messageActionRequest{
+		method:     http.MethodPost,
+		path:       "/api/folders/victim-inbox/empty",
+		pathValues: map[string]string{"id": "victim-inbox"},
+		handle:     fixture.handler.handleEmptyFolder,
+	}, ownerRequest)
+	if inbox.Code != http.StatusBadRequest {
+		t.Fatalf("emptying Inbox status = %d body = %q, want 400", inbox.Code, inbox.Body.String())
 	}
 
 	starred := executeMessageActionRequest(t, messageActionRequest{

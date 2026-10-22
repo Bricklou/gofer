@@ -2538,28 +2538,29 @@ document.addEventListener("DOMContentLoaded", function () {
         if (!accepted) return
         mailSelectionBusy = true
         syncMailSelectionControls()
-        return fetch("/mail/folder/" + encodeURIComponent(folderID) + "/ids", { headers: { Accept: "application/json" } })
+        // The server takes the whole folder in one request, however large.
+        return fetch("/api/folders/" + encodeURIComponent(folderID) + "/empty", { method: "POST", headers: { Accept: "application/json" } })
           .then(function (response) {
             if (!response.ok) throw new Error("delete all in " + kind + ": " + response.status)
             return response.json()
           })
           .then(function (data) {
-            var items = (data && data.ids) || []
-            if (!items.length) return
-            var ids = items.map(function (item) { return item.id })
-            var current = virtualMailList && virtualMailList.selectedEmailId
-            if (current && ids.indexOf(current) !== -1) setMailViewEmpty()
-            applyOptimisticRemove(ids)
-            var targets = items.map(function (item) { return { id: item.id, thread: !!item.thread } })
-            return sendBulkMessageAction("/api/messages/delete", targets, { folder_id: folderID }).then(function () {
-              if (virtualMailList && typeof virtualMailList.refreshCurrentFolder === "function") {
-                virtualMailList.refreshCurrentFolder().catch(function () {})
-              }
-              refreshSidebarUnread()
-              if (data.truncated) {
-                showGoferToast({ id: "mail-delete-all-more", title: all.more, description: all.limit(formatMailCount(ids.length)), variant: "warning", position: "bottom-right", duration: 8000, dismissible: true })
-              }
-            })
+            if (!data || !data.removed) {
+              var note = data && data.no_trash ? all.noTrash : all.alreadyEmpty
+              showGoferToast({ id: "mail-delete-all-empty", title: note, variant: "info", icon: "info", position: "bottom-right", duration: 4000, dismissible: true })
+              return
+            }
+            if (folderID === currentMailListFolderID()) {
+              setMailViewEmpty()
+              applyOptimisticRemove(renderedMailRows().map(function (row) { return row.dataset.emailId }))
+            }
+            if (virtualMailList && typeof virtualMailList.refreshCurrentFolder === "function") {
+              virtualMailList.refreshCurrentFolder().catch(function () {})
+            }
+            refreshSidebarUnread()
+            if (data.skipped_accounts || data.no_trash) {
+              showGoferToast({ id: "mail-delete-all-partial", title: all.partial, description: data.no_trash ? all.noTrash : "Changes for one or more accounts can't be sent yet.", variant: "warning", position: "bottom-right", duration: 8000, dismissible: true })
+            }
           })
           .catch(function (err) {
             console.warn(err)
@@ -16718,8 +16719,8 @@ var MAIL_DELETE_ALL = {
     destructive: true,
     confirm: "Empty trash",
     failed: "Couldn't empty the trash",
-    more: "Trash still has messages",
-    limit: function (n) { return "Only " + n + " can be deleted at once. Empty it again for the rest." },
+    alreadyEmpty: "Trash is already empty",
+    partial: "Some accounts' Trash wasn't emptied",
   },
   spam: {
     tooltip: "Move all to Trash",
@@ -16729,8 +16730,9 @@ var MAIL_DELETE_ALL = {
     destructive: false,
     confirm: "Move to Trash",
     failed: "Couldn't move the spam to Trash",
-    more: "Spam still has messages",
-    limit: function (n) { return "Only " + n + " can be moved at once. Run it again for the rest." },
+    alreadyEmpty: "Spam is already empty",
+    partial: "Some accounts' spam wasn't moved",
+    noTrash: "An account has no Trash folder, so its spam stayed where it is.",
   },
 }
 

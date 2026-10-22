@@ -46,16 +46,9 @@ func (db *DB) MarkFolderReadForUser(ctx context.Context, folderID, userID string
 		return result, ErrFolderNotMarkable
 	}
 
-	where := ` AND s.folder_id = ?`
-	args := []any{userID, folderID}
-	if isUnifiedFolderID(folderID) {
-		rolePredicate, roleArgs := unifiedFolderRolePredicate("f", folderID)
-		accountFilter, accountArgs, err := db.unifiedFolderAccountFilter(ctx, userID, folderID, "a")
-		if err != nil {
-			return result, err
-		}
-		where = ` AND ` + rolePredicate + accountFilter
-		args = append(append([]any{userID}, roleArgs...), accountArgs...)
+	where, args, err := db.folderStateScope(ctx, folderID, userID)
+	if err != nil {
+		return result, err
 	}
 
 	rows, err := db.Read().QueryContext(ctx, `
@@ -116,4 +109,21 @@ func (db *DB) MarkFolderReadForUser(ctx context.Context, folderID, userID string
 		result.Marked += len(chunk)
 	}
 	return result, nil
+}
+
+// folderStateScope gives the SQL that narrows message_folder_state s, joined
+// to its folder f and account a, to one folder of the user, or for a unified
+// folder such as "inbox" to that folder of every account it shows. Its
+// arguments start with the user, for the a.user_id test the caller writes
+// before it.
+func (db *DB) folderStateScope(ctx context.Context, folderID, userID string) (string, []any, error) {
+	if !isUnifiedFolderID(folderID) {
+		return ` AND s.folder_id = ?`, []any{userID, folderID}, nil
+	}
+	rolePredicate, roleArgs := unifiedFolderRolePredicate("f", folderID)
+	accountFilter, accountArgs, err := db.unifiedFolderAccountFilter(ctx, userID, folderID, "a")
+	if err != nil {
+		return "", nil, err
+	}
+	return ` AND ` + rolePredicate + accountFilter, append(append([]any{userID}, roleArgs...), accountArgs...), nil
 }
