@@ -1536,6 +1536,7 @@ document.addEventListener("DOMContentLoaded", function () {
     setupMailDragAndDrop()
     setupMailContextMenu()
     setupSidebarContextMenu()
+    setupContactsContextMenu()
 
     function renderedMailRows() {
       return Array.prototype.slice.call(document.querySelectorAll("#mail-list-scroll .mail-list-item[data-email-id]"))
@@ -2104,6 +2105,157 @@ document.addEventListener("DOMContentLoaded", function () {
         e.preventDefault()
         var root = document.getElementById("sidebar-context-menu")
         runSidebarContextAction(item.getAttribute("data-sidebar-context-action"), root && root._sidebarContextTarget)
+      })
+    }
+
+    // Right-clicking a contact in the list offers what the contact page does,
+    // plus writing to it and copying its address. Phones keep the long press.
+    function setupContactsContextMenu() {
+      if (document.body._goferContactsContextMenuBound) return
+      document.body._goferContactsContextMenuBound = true
+
+      function close() {
+        if (window.tui && window.tui.popover) window.tui.popover.close("contacts-context-menu")
+      }
+
+      document.addEventListener("contextmenu", function (e) {
+        if (!e.target.closest) return
+        var root = document.getElementById("contacts-context-menu")
+        if (!root || !window.tui || !window.tui.popover) return
+        var row = mobileMailList.matches ? null : e.target.closest("#contacts-list-scroll .mail-list-item[data-contact-id]")
+        if (!row) {
+          if (!e.target.closest("#contacts-context-menu")) close()
+          return
+        }
+        e.preventDefault()
+        var target = {
+          id: row.dataset.contactId,
+          email: row.dataset.contactRowEmail || "",
+          name: row.dataset.contactRowName || "",
+          synced: row.dataset.contactRowSynced === "true",
+        }
+        root._contactsContextTarget = target
+        var title = root.querySelector("[data-contacts-context-title]")
+        if (title) title.textContent = target.name || target.email || "Contact"
+        var emailGroup = root.querySelector('[data-contacts-context-group="email"]')
+        if (emailGroup) emailGroup.hidden = !target.email
+        close()
+        placePointPopover(root, e.clientX, e.clientY)
+        window.tui.popover.open("contacts-context-menu")
+      })
+
+      // A press outside closes it, as the mail menus do.
+      document.addEventListener("pointerdown", function (e) {
+        if (!window.tui || !window.tui.popover || !window.tui.popover.isOpen("contacts-context-menu")) return
+        if (e.target && e.target.closest && e.target.closest("#contacts-context-menu")) return
+        close()
+      }, true)
+
+      document.addEventListener("scroll", function (e) {
+        if (!window.tui || !window.tui.popover || !window.tui.popover.isOpen("contacts-context-menu")) return
+        if (e.target && e.target.closest && e.target.closest("#contacts-context-menu")) return
+        close()
+      }, true)
+
+      // The contact page's Delete asks first too, then deletes as the menu does.
+      document.addEventListener("submit", function (e) {
+        var form = e.target.closest && e.target.closest("form[data-contact-delete-form]")
+        if (!form) return
+        e.preventDefault()
+        deleteContactFromMenu({
+          id: form.dataset.contactDeleteForm,
+          name: form.dataset.contactDeleteName || "",
+          email: form.dataset.contactDeleteEmail || "",
+          synced: form.dataset.contactDeleteSynced === "true",
+        })
+      })
+
+      document.addEventListener("click", function (e) {
+        var item = e.target.closest && e.target.closest("#contacts-context-menu [data-contacts-context-action]")
+        if (!item) return
+        e.preventDefault()
+        var root = document.getElementById("contacts-context-menu")
+        var target = root && root._contactsContextTarget
+        close()
+        if (target) runContactsContextAction(item.getAttribute("data-contacts-context-action"), target)
+      })
+    }
+
+    function runContactsContextAction(action, target) {
+      if (action === "compose" && target.email) {
+        // The same compose a mailto: link opens.
+        var values = parseMailtoIntent("mailto:" + encodeURIComponent(target.email))
+        if (values) openComposePrefill(values, "new")
+      } else if (action === "copy-email" && target.email) {
+        copyContactEmail(target.email)
+      } else if (action === "messages" && target.email) {
+        // The contact page's "See all" for its recent activity.
+        window.location.href = "/?participant=" + encodeURIComponent(target.email)
+      } else if (action === "edit") {
+        openContactEditor(target.id)
+      } else if (action === "export") {
+        window.location.href = "/api/contacts/" + encodeURIComponent(target.id) + "/export"
+      } else if (action === "delete") {
+        deleteContactFromMenu(target)
+      }
+    }
+
+    function copyContactEmail(email) {
+      var done = function () {
+        showGoferToast({ id: "contact-email-copied", title: "Email address copied", description: email, variant: "success", icon: "success", position: "bottom-right", duration: 3000, dismissible: true })
+      }
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(email).then(done).catch(function () {
+          showGoferToast({ id: "contact-email-copied", title: "Couldn't copy the address", description: email, variant: "error", icon: "error", position: "bottom-right", duration: 6000, dismissible: true })
+        })
+      }
+    }
+
+    // The edit dialog belongs to the contact's page, so a contact that isn't
+    // open is opened first, as clicking it would, and edited once it shows.
+    function openContactEditor(contactID) {
+      var dialogID = "contact-edit-" + contactID
+      if (document.getElementById(dialogID)) {
+        window.tui.dialog.open(dialogID)
+        return
+      }
+      var link = document.querySelector('#contacts-list-scroll .mail-list-item[data-contact-id="' + cssEscape(contactID) + '"] [data-contact-list-item]')
+      if (!link) return
+      var settled = function () {
+        if (!document.getElementById(dialogID)) return
+        document.body.removeEventListener("htmx:afterSettle", settled)
+        clearTimeout(giveUp)
+        window.tui.dialog.open(dialogID)
+      }
+      var giveUp = setTimeout(function () { document.body.removeEventListener("htmx:afterSettle", settled) }, 15000)
+      document.body.addEventListener("htmx:afterSettle", settled)
+      link.click()
+    }
+
+    function deleteContactFromMenu(target) {
+      var who = target.name || target.email || "This contact"
+      window.goferConfirm({
+        title: "Delete contact?",
+        message: who + " will be deleted." + (target.synced ? " It is also removed from the address books it syncs with." : ""),
+        destructive: true,
+        confirmLabel: "Delete",
+      }).then(function (accepted) {
+        if (!accepted) return
+        return fetch("/api/contacts/" + encodeURIComponent(target.id) + "/delete", { method: "POST" })
+          .then(function (response) {
+            if (response.ok) return
+            return response.text().then(function (text) { throw new Error(text.trim() || "Delete failed") })
+          })
+          .then(function () {
+            var scroll = document.getElementById("contacts-list-scroll")
+            var list = scroll && scroll._virtualContactsList
+            // Reloading the list drops the contact, and its page if it was open.
+            if (list && typeof list.applyFilters === "function") list.applyFilters(list.filters).catch(function () {})
+            showGoferToast({ id: "contact-deleted", title: "Contact deleted", description: who, variant: "success", icon: "success", position: "bottom-right", duration: 3000, dismissible: true })
+          })
+          .catch(function (err) {
+            showGoferToast({ id: "contact-delete-error", title: "Couldn't delete the contact", description: err.message, variant: "error", icon: "error", position: "bottom-right", duration: 8000, dismissible: true })
+          })
       })
     }
 

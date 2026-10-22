@@ -1463,7 +1463,58 @@ templ ContactsListPane(contacts []models.Contact, selected *models.Contact, filt
 		<a href="/contacts?new=1" hx-get="/contacts?new=1" hx-target="#main-content" hx-swap="outerHTML" hx-push-url="/contacts?new=1" class="mobile-compose-fab" aria-label="New contact">
 			@icon.UserPlus(icon.Props{Class: "size-5"})
 		</a>
+		@ContactsContextMenu()
 	</section>
+}
+
+// ContactsContextMenu opens where a contact in the list is right-clicked,
+// with what can be done to it. app.js places it and shows the items that
+// apply: the email ones only for a contact with an address.
+templ ContactsContextMenu() {
+	@popover.Root(popover.RootProps{ID: "contacts-context-menu", Attributes: templ.Attributes{"data-contacts-context-menu": ""}}) {
+		@popover.Trigger() {
+			<span class="pointer-events-none fixed left-0 top-0 size-px" aria-hidden="true" data-point-popover-anchor></span>
+		}
+		@popover.Content(popover.ContentProps{
+			Placement:  popover.PlacementBottomStart,
+			Offset:     2,
+			Class:      "z-50 w-52 rounded-md border border-border bg-popover p-1 shadow-md focus:outline-none",
+			Attributes: templ.Attributes{"role": "menu", "aria-label": "Contact actions"},
+		}) {
+			@dropdown.Label(dropdown.LabelProps{Class: "truncate text-xs font-medium text-muted-foreground", Attributes: templ.Attributes{"data-contacts-context-title": ""}})
+			<div data-contacts-context-group="email">
+				@contactsContextItem("compose", "New message", "") {
+					@icon.Pen(icon.Props{Class: "size-4"})
+				}
+				@contactsContextItem("copy-email", "Copy email address", "") {
+					@icon.Copy(icon.Props{Class: "size-4"})
+				}
+				@contactsContextItem("messages", "Show messages", "") {
+					@icon.Mail(icon.Props{Class: "size-4"})
+				}
+				@dropdown.Separator()
+			</div>
+			@contactsContextItem("edit", "Edit…", "") {
+				@icon.Pencil(icon.Props{Class: "size-4"})
+			}
+			@contactsContextItem("export", "Export vCard", "") {
+				@icon.Download(icon.Props{Class: "size-4"})
+			}
+			@dropdown.Separator()
+			@contactsContextItem("delete", "Delete…", "text-destructive "+menuDestructiveClass) {
+				@icon.Trash2(icon.Props{Class: "size-4"})
+			}
+		}
+	}
+}
+
+templ contactsContextItem(action string, label string, class string) {
+	@dropdown.Item(dropdown.ItemProps{Class: class, Attributes: templ.Attributes{"role": "menuitem", "data-contacts-context-action": action}}) {
+		<span class="flex items-center gap-2">
+			{ children... }
+			{ label }
+		</span>
+	}
 }
 
 templ ContactsViewPane(selected *models.Contact, selectedProfile *models.ContactProfile, showNew bool, syncQueued bool, accounts []models.Account) {
@@ -1475,7 +1526,7 @@ templ ContactsViewPane(selected *models.Contact, selectedProfile *models.Contact
 templ ContactListCard(contact models.Contact, filters models.ContactFilters, selected *models.Contact, accounts []models.Account, position int) {
 	{{ contactHref := contactsURL(filters, contact.ID) }}
 	{{ contactDetailHref := contactsDetailURL(filters, contact.ID) }}
-	<div class="mail-list-item" data-contact-id={ contact.ID } data-position={ fmt.Sprintf("%d", position) }>
+	<div class="mail-list-item" data-contact-id={ contact.ID } data-position={ fmt.Sprintf("%d", position) } data-contact-row-email={ strings.TrimSpace(contact.Email) } data-contact-row-name={ contact.Name } data-contact-row-synced={ fmt.Sprintf("%t", len(contact.SourceBooks) > 0) }>
 		<a
 			href={ contactHref }
 			hx-get={ templ.URL(contactDetailHref) }
@@ -1536,7 +1587,7 @@ templ ContactListTableHeader() {
 templ ContactListTableRow(contact models.Contact, filters models.ContactFilters, selected *models.Contact, accounts []models.Account, position int) {
 	{{ contactHref := contactsURL(filters, contact.ID) }}
 	{{ contactDetailHref := contactsDetailURL(filters, contact.ID) }}
-	<div class="mail-list-item mail-list-table-row" data-contact-id={ contact.ID } data-position={ fmt.Sprintf("%d", position) }>
+	<div class="mail-list-item mail-list-table-row" data-contact-id={ contact.ID } data-position={ fmt.Sprintf("%d", position) } data-contact-row-email={ strings.TrimSpace(contact.Email) } data-contact-row-name={ contact.Name } data-contact-row-synced={ fmt.Sprintf("%t", len(contact.SourceBooks) > 0) }>
 		<a
 			href={ contactHref }
 			hx-get={ templ.URL(contactDetailHref) }
@@ -1708,7 +1759,7 @@ templ ContactEditor(contact *models.Contact, profile *models.ContactProfile, syn
 			</div>
 		}
 		if contact != nil {
-			<form id={ "delete-contact-" + contact.ID } action={ fmt.Sprintf("/api/contacts/%s/delete", contact.ID) } method="post"></form>
+			<form id={ "delete-contact-" + contact.ID } action={ fmt.Sprintf("/api/contacts/%s/delete", contact.ID) } method="post" data-contact-delete-form={ contact.ID } data-contact-delete-name={ contact.Name } data-contact-delete-email={ strings.TrimSpace(contact.Email) } data-contact-delete-synced={ fmt.Sprintf("%t", len(contact.SourceBooks) > 0) }></form>
 		}
 	</div>
 }
