@@ -1392,6 +1392,12 @@ html[data-theme="classic"] .mail-list-search-input-wrap {
   margin-top: 0.25rem;
 }
 
+/* The list's message menu hides its reply items for some messages; the item
+   after them is then the first one shown. */
+#mail-context-menu [data-mail-context-group][hidden] + [data-tui-dropdown-item] {
+  margin-top: 0;
+}
+
 /* List dates come both ways; data-mail-date-time on the list (or the layout
    editor's preview) shows the version with the time. */
 [data-mail-date-with-time],

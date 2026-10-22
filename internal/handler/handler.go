@@ -5326,25 +5326,46 @@ func formValueAt(values []string, idx int, fallback string) string {
 
 func (h *Handler) handleComposeSource(w http.ResponseWriter, r *http.Request) {
 	q := r.URL.Query()
-	accountID := q.Get("account_id")
-	messageID := q.Get("message_id")
-	if accountID == "" || messageID == "" {
-		http.Error(w, "missing message", http.StatusBadRequest)
-		return
-	}
-	if !h.requireOwnedAccount(w, r, accountID) {
-		return
-	}
-	localID, err := h.db.GetMessageLocalIDByInternetIDInternal(r.Context(), accountID, messageID)
-	if err != nil || localID == 0 {
-		http.NotFound(w, r)
-		return
+	// The message comes by its local id from the message list, or by its
+	// account and Message-ID from an open message's reply bar.
+	var localID int64
+	if emailID := q.Get("email_id"); emailID != "" {
+		id, err := strconv.ParseInt(emailID, 10, 64)
+		if err != nil || id <= 0 {
+			http.NotFound(w, r)
+			return
+		}
+		localID = id
+	} else {
+		accountID := q.Get("account_id")
+		messageID := q.Get("message_id")
+		if accountID == "" || messageID == "" {
+			http.Error(w, "missing message", http.StatusBadRequest)
+			return
+		}
+		if !h.requireOwnedAccount(w, r, accountID) {
+			return
+		}
+		id, err := h.db.GetMessageLocalIDByInternetIDInternal(r.Context(), accountID, messageID)
+		if err != nil || id == 0 {
+			http.NotFound(w, r)
+			return
+		}
+		localID = id
 	}
 	userID := h.userID(r.Context())
 	email, err := h.db.GetEmailByIDForUser(r.Context(), strconv.FormatInt(localID, 10), userID)
 	if err != nil || email == nil {
 		http.NotFound(w, r)
 		return
+	}
+	// A message answered from the list may never have been opened, so its
+	// body may not be downloaded yet; the reply quotes it.
+	if !h.db.IsBodyFetchedInternal(r.Context(), localID) {
+		h.ensureBodyFetched(r.Context(), localID, email.AccountID)
+		if fetched, err := h.db.GetEmailByIDForUser(r.Context(), email.ID, userID); err == nil && fetched != nil {
+			email = fetched
+		}
 	}
 	type composeSourceAttachment struct {
 		ID          int64  `json:"id"`

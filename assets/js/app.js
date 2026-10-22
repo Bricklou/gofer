@@ -1534,6 +1534,8 @@ document.addEventListener("DOMContentLoaded", function () {
     syncMailSelectionControls()
     setupMailKeyboardShortcuts()
     setupMailDragAndDrop()
+    setupMailContextMenu()
+    setupSidebarContextMenu()
 
     function renderedMailRows() {
       return Array.prototype.slice.call(document.querySelectorAll("#mail-list-scroll .mail-list-item[data-email-id]"))
@@ -1902,6 +1904,333 @@ document.addEventListener("DOMContentLoaded", function () {
       })
     }
 
+    // Right-clicking a message opens its menu. A message outside the selection
+    // becomes the selection first, so the menu always acts on what is selected,
+    // as the toolbar does. Phones keep the long press for selecting.
+    function setupMailContextMenu() {
+      if (document.body._goferMailContextMenuBound) return
+      document.body._goferMailContextMenuBound = true
+
+      document.addEventListener("contextmenu", function (e) {
+        if (mobileMailList.matches || !e.target.closest) return
+        var row = e.target.closest("#mail-list-scroll .mail-list-item[data-email-id]")
+        var root = document.getElementById("mail-context-menu")
+        if (!root || !window.tui || !window.tui.popover) return
+        if (!row) {
+          // A right-click elsewhere isn't a click, which is what closes popovers.
+          if (!e.target.closest("#mail-context-menu")) closeMailContextMenu()
+          return
+        }
+        e.preventDefault()
+        var id = row.dataset.emailId
+        if (!selectedMailIds.has(id)) {
+          selectedMailIds.clear()
+          selectedMailThreads.clear()
+          setMailSelected(id, true)
+          lastSelectedMailId = id
+          syncMailSelectionControls()
+        }
+        fillMailContextMenu(root, row)
+        closeMailContextMenu()
+        placePointPopover(root, e.clientX, e.clientY)
+        window.tui.popover.open("mail-context-menu")
+      })
+
+      // A press outside closes it. Popovers close on a click reaching the
+      // document, which the sidebar's folder links stop on their way down.
+      document.addEventListener("pointerdown", function (e) {
+        if (!window.tui || !window.tui.popover || !window.tui.popover.isOpen("mail-context-menu")) return
+        if (e.target && e.target.closest && e.target.closest("#mail-context-menu")) return
+        closeMailContextMenu()
+      }, true)
+
+      // Scrolling moves the messages from under the menu, so it closes.
+      document.addEventListener("scroll", function (e) {
+        if (!window.tui || !window.tui.popover || !window.tui.popover.isOpen("mail-context-menu")) return
+        if (e.target && e.target.closest && e.target.closest("#mail-context-menu")) return
+        closeMailContextMenu()
+      }, true)
+
+      document.addEventListener("click", function (e) {
+        var item = e.target.closest && e.target.closest("#mail-context-menu [data-mail-context-action]")
+        if (!item) return
+        e.preventDefault()
+        var root = document.getElementById("mail-context-menu")
+        // An item in More closes only More by itself.
+        closeMailContextMenu()
+        runMailContextAction(item.getAttribute("data-mail-context-action"), root && root._mailContextTarget)
+      })
+    }
+
+    function closeMailContextMenu() {
+      if (!window.tui || !window.tui.popover) return
+      window.tui.popover.close("mail-context-more")
+      window.tui.popover.close("mail-context-menu")
+    }
+
+    function fillMailContextMenu(root, row) {
+      var count = selectedMailIds.size
+      var single = count === 1
+      var folderID = currentMailListFolderID()
+      // Kept apart from the row, which the list may redraw while the menu is open.
+      root._mailContextTarget = {
+        id: row.dataset.emailId,
+        thread: row.dataset.hasThread === "true",
+      }
+      var countLabel = root.querySelector("[data-mail-context-count]")
+      if (countLabel) {
+        countLabel.textContent = formatMailCount(count) + " messages"
+        countLabel.hidden = single
+      }
+      var replies = root.querySelector('[data-mail-context-group="reply"]')
+      if (replies) replies.hidden = !single || row.dataset.isDraft === "true"
+      // One message gets More; for several it would only hold spam, which
+      // then shows in the menu itself.
+      var more = root.querySelector('[data-mail-context-group="more"]')
+      if (more) more.hidden = !single
+      var spamGroup = root.querySelector('[data-mail-context-group="spam"]')
+      if (spamGroup) spamGroup.hidden = single
+      var unread = mailToolbarActionUndoes("read")
+      setMailContextItem(root, "read", unread ? "Mark as unread" : "Mark as read", unread ? "unread" : "read")
+      var unstar = mailToolbarActionUndoes("star")
+      setMailContextItem(root, "star", unstar ? "Unstar" : "Star", unstar ? "unstar" : "star")
+      var unarchive = mailFolderIsArchive(folderID)
+      setMailContextItem(root, "archive", unarchive ? "Move to Inbox" : "Archive", unarchive ? "unarchive" : "archive")
+      var spam = mailFolderIsSpam(folderID)
+      showMailContextItem(root, "spam", !spam)
+      showMailContextItem(root, "not-spam", spam)
+      // The move dialog takes one message; several are moved by dragging them.
+      showMailContextItem(root, "move", single)
+      var permanent = mailFolderIsTrash(folderID)
+      var remove = setMailContextItem(root, "delete", permanent ? "Permanently delete" : "Delete")
+      if (remove) remove.classList.toggle("text-destructive", permanent)
+    }
+
+    // Whether a toolbar toggle such as read or star undoes its state, because
+    // every selected message already has it.
+    function mailToolbarActionUndoes(action) {
+      var button = document.querySelector('.mail-list-toolbar button[data-mail-selection-action="' + action + '"]')
+      return !!(button && button.hasAttribute("data-mail-selection-undo"))
+    }
+
+    function setMailContextItem(root, action, label, iconName) {
+      var item = root.querySelector('[data-mail-context-action="' + action + '"]')
+      if (!item) return null
+      item.hidden = false
+      var text = item.querySelector("[data-mail-context-label]")
+      if (text) text.textContent = label
+      if (iconName) {
+        var icons = item.querySelectorAll("[data-mail-context-icon]")
+        for (var i = 0; i < icons.length; i++) icons[i].hidden = icons[i].getAttribute("data-mail-context-icon") !== iconName
+      }
+      return item
+    }
+
+    // Spam's items are both in the menu and in More.
+    function showMailContextItem(root, action, shown) {
+      var items = root.querySelectorAll('[data-mail-context-action="' + action + '"]')
+      for (var i = 0; i < items.length; i++) items[i].hidden = !shown
+    }
+
+    function runMailContextAction(action, target) {
+      if (action === "reply" || action === "reply-all" || action === "forward") {
+        if (!target || typeof handleReply !== "function") return
+        // handleReply reads the message from a reply bar's data; the server
+        // looks the message up by its id when the reply starts.
+        var source = document.createElement("div")
+        source.setAttribute("data-thread-reply-data", "")
+        source.dataset.emailId = target.id
+        handleReply(source, action)
+        return
+      }
+      if (action === "download") {
+        if (target) window.location.href = "/api/messages/" + encodeURIComponent(target.id) + "/source?download=1"
+        return
+      }
+      if (action === "source") {
+        if (target) openMessageSource(target.id)
+        return
+      }
+      if (action === "refetch") {
+        if (target) refetchListMessage(target.id)
+        return
+      }
+      if (action === "move") {
+        if (target) openMoveDialog(target.id, target.thread)
+        return
+      }
+      // The rest are the toolbar's actions, which follow its read and star state.
+      var button = document.querySelector('.mail-list-toolbar button[data-mail-selection-action="' + action + '"]')
+      performMailSelectionAction(button ? mailSelectionActionName(button) : action)
+    }
+
+    // Right-clicking a folder in the sidebar offers what applies to the whole
+    // folder; right-clicking an account offers to sync it. Phones keep the
+    // long press for the drawer's own gestures.
+    function setupSidebarContextMenu() {
+      if (document.body._goferSidebarContextMenuBound) return
+      document.body._goferSidebarContextMenuBound = true
+
+      document.addEventListener("contextmenu", function (e) {
+        if (!e.target.closest) return
+        var root = document.getElementById("sidebar-context-menu")
+        if (!root || !window.tui || !window.tui.popover) return
+        var target = mobileMailList.matches ? null : sidebarContextTarget(e.target)
+        if (!target || !fillSidebarContextMenu(root, target)) {
+          if (!e.target.closest("#sidebar-context-menu")) window.tui.popover.close("sidebar-context-menu")
+          return
+        }
+        e.preventDefault()
+        window.tui.popover.close("sidebar-context-menu")
+        placePointPopover(root, e.clientX, e.clientY)
+        window.tui.popover.open("sidebar-context-menu")
+      })
+
+      document.addEventListener("pointerdown", function (e) {
+        if (!window.tui || !window.tui.popover || !window.tui.popover.isOpen("sidebar-context-menu")) return
+        if (e.target && e.target.closest && e.target.closest("#sidebar-context-menu")) return
+        window.tui.popover.close("sidebar-context-menu")
+      }, true)
+
+      document.addEventListener("scroll", function (e) {
+        if (!window.tui || !window.tui.popover || !window.tui.popover.isOpen("sidebar-context-menu")) return
+        if (e.target && e.target.closest && e.target.closest("#sidebar-context-menu")) return
+        window.tui.popover.close("sidebar-context-menu")
+      }, true)
+
+      document.addEventListener("click", function (e) {
+        var item = e.target.closest && e.target.closest("#sidebar-context-menu [data-sidebar-context-action]")
+        if (!item) return
+        e.preventDefault()
+        var root = document.getElementById("sidebar-context-menu")
+        runSidebarContextAction(item.getAttribute("data-sidebar-context-action"), root && root._sidebarContextTarget)
+      })
+    }
+
+    // What a right-click in the mail sidebar landed on: a folder (not a tag
+    // filter or Scheduled) or an account's heading.
+    function sidebarContextTarget(el) {
+      var body = el.closest('[data-sidebar-app-body="mail"]')
+      if (!body) return null
+      var link = el.closest('a[hx-get^="/folder/"]')
+      if (link && body.contains(link) && !link.hasAttribute("data-sidebar-tag-filter")) {
+        var role = String(link.dataset.folderRole || "").toLowerCase()
+        if (role === "scheduled") return null
+        var path = (link.getAttribute("hx-get") || "").split("?")[0].replace(/^\/folder\//, "")
+        var name = link.querySelector(".flex-1")
+        return { kind: "folder", folderID: decodeURIComponent(path), role: role, name: name ? name.textContent.trim() : "this folder" }
+      }
+      var toggle = el.closest("[data-sidebar-account-toggle]")
+      var accountID = toggle && toggle.getAttribute("data-sidebar-account-toggle")
+      if (accountID && accountID !== "__unified__" && body.contains(toggle)) {
+        var title = toggle.querySelector(".flex-1")
+        return { kind: "account", accountID: accountID, name: title ? title.textContent.trim() : "this account" }
+      }
+      return null
+    }
+
+    // Shows the items for the target; false when none apply.
+    function fillSidebarContextMenu(root, target) {
+      var shown = {
+        // Starred is a view across folders, not a folder the server can mark.
+        "mark-read": target.kind === "folder" && target.role !== "starred" && !/^starred(-|$)/.test(target.folderID),
+        "empty-trash": target.kind === "folder" && target.role === "trash",
+        "spam-to-trash": target.kind === "folder" && target.role === "spam",
+        // A paused account has no sync button to press.
+        "sync-account": target.kind === "account" && !!sidebarAccountSyncButton(target.accountID),
+      }
+      var any = false
+      var items = root.querySelectorAll("[data-sidebar-context-action]")
+      for (var i = 0; i < items.length; i++) {
+        var show = !!shown[items[i].getAttribute("data-sidebar-context-action")]
+        items[i].hidden = !show
+        any = any || show
+      }
+      var title = root.querySelector("[data-sidebar-context-title]")
+      if (title) title.textContent = target.name
+      root._sidebarContextTarget = target
+      return any
+    }
+
+    function sidebarAccountSyncButton(accountID) {
+      return document.querySelector('[data-mail-account-sync-button="' + cssEscape(accountID) + '"]')
+    }
+
+    function runSidebarContextAction(action, target) {
+      if (!target) return
+      if (action === "mark-read") markAllReadInMailFolder(target.folderID, target.name)
+      else if (action === "empty-trash") deleteAllInMailFolder("trash", target.folderID)
+      else if (action === "spam-to-trash") deleteAllInMailFolder("spam", target.folderID)
+      else if (action === "sync-account") {
+        // The sync menu's own button, so progress and errors show as usual.
+        var button = sidebarAccountSyncButton(target.accountID)
+        if (button) button.click()
+      }
+    }
+
+    var markAllReadBusy = false
+
+    function markAllReadInMailFolder(folderID, name) {
+      if (!folderID || markAllReadBusy) return
+      window.goferConfirm({
+        title: "Mark all as read?",
+        message: "Every unread message in " + name + " will be marked as read.",
+        confirmLabel: "Mark all as read",
+      }).then(function (accepted) {
+        if (!accepted) return
+        markAllReadBusy = true
+        // The server marks the whole folder in one request, however large.
+        return fetch("/api/folders/" + encodeURIComponent(folderID) + "/mark-read", { method: "POST", headers: { Accept: "application/json" } })
+          .then(function (response) {
+            if (!response.ok) throw new Error("mark all read: " + response.status)
+            return response.json()
+          })
+          .then(function (data) {
+            if (!data || !data.marked) {
+              showGoferToast({ id: "mail-mark-all-read", title: "Nothing to mark", description: "There are no unread messages in " + name + ".", variant: "info", icon: "info", position: "bottom-right", duration: 4000, dismissible: true })
+              return
+            }
+            if (virtualMailList && typeof virtualMailList.refreshCurrentFolder === "function") {
+              virtualMailList.refreshCurrentFolder({ noAnimation: true }).catch(function () {})
+            }
+            refreshSidebarUnread()
+            if (data.skipped_accounts) {
+              showGoferToast({ id: "mail-mark-all-read-skipped", title: "Some accounts were left unread", description: "Changes for one or more accounts can't be sent yet.", variant: "warning", position: "bottom-right", duration: 8000, dismissible: true })
+            }
+          })
+          .catch(function (err) {
+            console.warn(err)
+            showGoferToast({ id: "mail-mark-all-read-error", title: "Couldn't mark the messages as read", description: "Try again in a moment.", variant: "error", icon: "error", position: "bottom-right", duration: 6000, dismissible: true })
+          })
+          .finally(function () {
+            markAllReadBusy = false
+          })
+      })
+    }
+
+    // Downloads a message again from the server. The reader only reloads when
+    // it shows that message.
+    function refetchListMessage(emailId) {
+      fetch("/api/messages/" + encodeURIComponent(emailId) + "/refetch", { method: "POST" })
+        .then(function (response) {
+          if (!response.ok) throw new Error("refetch: " + response.status)
+          return response.json()
+        })
+        .then(function (data) {
+          if (!data || data.status !== "refetched") throw new Error("refetch: " + (data && data.status))
+          invalidateMailListItem(emailId)
+          var open = virtualMailList && virtualMailList.selectedEmailId
+          if (open === emailId && typeof htmx !== "undefined") {
+            htmx.ajax("GET", mailViewRequestURL(emailId), { target: "#mail-view", swap: "innerHTML" })
+          }
+          showGoferToast({ id: "mail-refetch", title: "Message fetched again", variant: "success", icon: "success", position: "bottom-right", duration: 3000, dismissible: true })
+        })
+        .catch(function (err) {
+          console.warn(err)
+          showGoferToast({ id: "mail-refetch-error", title: "Couldn't fetch the message again", description: "Try again in a moment.", variant: "error", icon: "error", position: "bottom-right", duration: 6000, dismissible: true })
+        })
+    }
+
     // keepMode leaves a phone's selection mode open with nothing selected.
     function clearMailSelection(options) {
       keepMailSelectionModeWhenEmpty = !!(options && options.keepMode)
@@ -2195,9 +2524,10 @@ document.addEventListener("DOMContentLoaded", function () {
       slot._mailSlide = slot.animate([{ transform: "translateX(" + (from - to) + "px)" }, { transform: "translateX(0)" }], { duration: duration, easing: "ease" })
     }
 
-    function deleteAllInMailFolder(kind) {
+    // folderID defaults to the open folder; the sidebar's menu names another.
+    function deleteAllInMailFolder(kind, folderID) {
       var all = MAIL_DELETE_ALL[kind]
-      var folderID = currentMailListFolderID()
+      folderID = folderID || currentMailListFolderID()
       if (!all || !folderID || mailSelectionBusy) return
       window.goferConfirm({
         title: all.title,
@@ -15649,10 +15979,16 @@ function composeNormalizeMessageID(messageId) {
   return messageId.charAt(0) === "<" ? messageId : "<" + messageId + ">"
 }
 
+// The message list knows a message by its id; an open message's reply bar
+// names it by account and Message-ID.
 function composeSourceURL(bar) {
   var params = new URLSearchParams()
-  params.set("account_id", bar.dataset.accountId || "")
-  params.set("message_id", bar.dataset.messageId || "")
+  if (bar.dataset.emailId) {
+    params.set("email_id", bar.dataset.emailId)
+  } else {
+    params.set("account_id", bar.dataset.accountId || "")
+    params.set("message_id", bar.dataset.messageId || "")
+  }
   return "/api/compose/source?" + params.toString()
 }
 
