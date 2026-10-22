@@ -2,10 +2,12 @@ package mail
 
 import (
 	"context"
+	"errors"
 	"log"
 	"time"
 
 	"github.com/cristianadrielbraun/gofer/internal/providers"
+	"github.com/cristianadrielbraun/gofer/internal/storage"
 )
 
 // EnableOutlookWebhooks makes each successful sync of an Outlook account keep
@@ -17,10 +19,15 @@ func (s *UserIMAP) EnableOutlookWebhooks(notificationURL string, key []byte) {
 
 // keepOutlookSubscription subscribes or renews after the account's receive
 // succeeded, through the sync's orchestrator, so the Graph calls share its
-// token refresh and the account's provider retry deadline. Managed mode has
-// no subscription loop: background syncs come far more often than renewals.
-func (s *UserIMAP) keepOutlookSubscription(ctx context.Context, o *SyncOrchestrator, scope *userIMAPScope) {
+// token refresh and the account's provider retry deadline, and deletes the
+// subscription of an account set to scheduled checks. Managed mode has no
+// subscription loop: background syncs come far more often than renewals.
+func (s *UserIMAP) keepOutlookSubscription(ctx context.Context, o *SyncOrchestrator, scope *userIMAPScope, push bool) {
 	if s.outlookSubs == nil || scope.config.Provider != providers.ProviderOutlook || scope.tokens == nil {
+		return
+	}
+	if !push {
+		s.outlookSubs.drop(ctx, scope.id, userOutlookSubscriptionToken(scope), o.outlookJSON)
 		return
 	}
 	s.outlookSubs.keep(ctx, scope.id, userOutlookSubscriptionToken(scope), o.outlookJSON, time.Now().UTC())
@@ -84,4 +91,40 @@ func (s *UserIMAP) ReceiveOutlookNotifications(notifications []OutlookNotificati
 			}
 		}
 	}()
+}
+
+// OutlookPushStatus reports the account's subscription for the settings page.
+// The caller has checked that owner holds the account.
+func (s *UserIMAP) OutlookPushStatus(accountID string) OutlookPushStatus {
+	return s.outlookSubs.status(accountID, time.Now().UTC())
+}
+
+// CheckOutlookPush makes a new subscription for the owner's account now,
+// which shows whether Microsoft can reach Gofer.
+func (s *UserIMAP) CheckOutlookPush(ctx context.Context, owner, accountID string) error {
+	if s.outlookSubs == nil {
+		return ErrOutlookPushUnavailable
+	}
+	return s.operation(ctx, owner, accountID, 0, outlookSubscriptionTimeout, func(ctx context.Context) error {
+		scope, err := s.snapshot(ctx, owner, accountID)
+		if err != nil {
+			return err
+		}
+		if scope.config.Provider != providers.ProviderOutlook || scope.tokens == nil {
+			return errors.New("only Outlook accounts can use change notifications")
+		}
+		var push bool
+		if err := scope.call(ctx, func(db *storage.DB) error {
+			push, err = db.ProviderPushEnabled(ctx, accountID)
+			return err
+		}); err != nil {
+			return err
+		}
+		if !push {
+			return errOutlookPushOff
+		}
+		o := NewSyncOrchestrator(nil, nil, s.blobs, scope.tokens)
+		o.imapScope = scope
+		return s.outlookSubs.check(ctx, accountID, userOutlookSubscriptionToken(scope), o.outlookJSON, time.Now().UTC())
+	})
 }

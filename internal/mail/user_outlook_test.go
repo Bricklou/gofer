@@ -1019,3 +1019,56 @@ func TestUserOutlookWebhookSubscriptionFollowsSyncs(t *testing.T) {
 		t.Fatal("account still subscribed after receiving stopped")
 	}
 }
+
+// Checking makes a new subscription in place of the old one, and an account
+// set to scheduled checks loses its subscription on the next sync.
+func TestUserOutlookPushCheckAndScheduledChecks(t *testing.T) {
+	f := newUserOutlookFixture(t)
+	f.worker.EnableOutlookWebhooks("https://mail.example.com/webhooks/outlook", []byte("fedcba9876543210fedcba9876543210"))
+	alice := f.ids["alice"]
+	if err := f.worker.Sync(t.Context(), "alice", alice); err != nil {
+		t.Fatal(err)
+	}
+	f.api.mu.Lock()
+	var first string
+	for id := range f.api.subscriptions {
+		first = id
+	}
+	f.api.mu.Unlock()
+
+	if err := f.worker.CheckOutlookPush(t.Context(), "alice", alice); err != nil {
+		t.Fatal(err)
+	}
+	if got := f.api.count("alice", "/subscriptions"); got != 3 {
+		t.Fatalf("subscription calls after the check: %d, want a second creation", got)
+	}
+	f.api.mu.Lock()
+	deleted := append([]string(nil), f.api.deletedSubs...)
+	f.api.mu.Unlock()
+	if len(deleted) != 1 || deleted[0] != first {
+		t.Fatalf("deleted subscriptions %v, want the replaced %s", deleted, first)
+	}
+	if status := f.worker.OutlookPushStatus(alice); !status.Available || !status.Subscribed || status.Error != "" {
+		t.Fatalf("status after the check = %+v", status)
+	}
+	if err := f.worker.CheckOutlookPush(t.Context(), "bob", alice); err == nil {
+		t.Fatal("another user checked the account")
+	}
+
+	f.local(t, "alice", func(db *storage.DB) error { return db.SetProviderPushEnabled(t.Context(), "alice", alice, false) })
+	if err := f.worker.Sync(t.Context(), "alice", alice); err != nil {
+		t.Fatal(err)
+	}
+	f.api.mu.Lock()
+	deleted = append([]string(nil), f.api.deletedSubs...)
+	f.api.mu.Unlock()
+	if len(deleted) != 2 {
+		t.Fatalf("deleted subscriptions %v, want the current one too", deleted)
+	}
+	if status := f.worker.OutlookPushStatus(alice); status.Subscribed {
+		t.Fatalf("status with scheduled checks = %+v", status)
+	}
+	if err := f.worker.CheckOutlookPush(t.Context(), "alice", alice); !errors.Is(err, errOutlookPushOff) {
+		t.Fatalf("check with scheduled checks: %v", err)
+	}
+}

@@ -67,7 +67,16 @@ func (o *SyncOrchestrator) sweepOutlookSubscriptions(ctx context.Context, now ti
 	}
 	wanted := make(map[string]bool)
 	for _, accountID := range ids {
-		if provider, err := o.db.GetAccountProvider(ctx, accountID); err == nil && provider == providers.ProviderOutlook {
+		if provider, err := o.db.GetAccountProvider(ctx, accountID); err != nil || provider != providers.ProviderOutlook {
+			continue
+		}
+		push, err := o.db.ProviderPushEnabled(ctx, accountID)
+		if err != nil {
+			// Leave the subscription as it is until the choice can be read.
+			wanted[accountID] = true
+			continue
+		}
+		if push {
 			wanted[accountID] = true
 			o.outlookSubs.keep(ctx, accountID, o.outlookSubscriptionToken(accountID), o.outlookSubscriptionRequest(), now)
 		}
@@ -94,4 +103,26 @@ func (o *SyncOrchestrator) ReceiveOutlookNotifications(notifications []OutlookNo
 			}
 		}
 	}()
+}
+
+// OutlookPushStatus reports the account's subscription for the settings page.
+func (o *SyncOrchestrator) OutlookPushStatus(accountID string) OutlookPushStatus {
+	return o.outlookSubs.status(accountID, time.Now().UTC())
+}
+
+// CheckOutlookPush makes a new subscription for the account now, which shows
+// whether Microsoft can reach Gofer.
+func (o *SyncOrchestrator) CheckOutlookPush(ctx context.Context, accountID string) error {
+	if push, err := o.db.ProviderPushEnabled(ctx, accountID); err != nil {
+		return err
+	} else if !push {
+		return errOutlookPushOff
+	}
+	return o.outlookSubs.check(ctx, accountID, o.outlookSubscriptionToken(accountID), o.outlookSubscriptionRequest(), time.Now().UTC())
+}
+
+// OutlookPushChanged applies an account's new choice between notifications
+// and scheduled checks without waiting for the next sweep.
+func (o *SyncOrchestrator) OutlookPushChanged() {
+	o.outlookSubs.nudge()
 }

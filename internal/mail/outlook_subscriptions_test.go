@@ -254,3 +254,67 @@ func TestOutlookNotificationsActOnlyOnSignedAccounts(t *testing.T) {
 	o.sweepOutlookSubscriptions(ctx, now.Add(4*time.Minute))
 	equalCalls(t, "sweep after the subscription ended", graph.takeCalls(), "POST /subscriptions")
 }
+
+func TestOutlookPushCheckReplacesTheSubscriptionAndReportsFailures(t *testing.T) {
+	ctx := context.Background()
+	o, graph := newOutlookSubscriptionTest(t)
+	now := time.Date(2026, 10, 21, 12, 0, 0, 0, time.UTC)
+	o.sweepOutlookSubscriptions(ctx, now)
+	graph.takeCalls()
+
+	if err := o.CheckOutlookPush(ctx, "out-1"); err != nil {
+		t.Fatal(err)
+	}
+	equalCalls(t, "check", graph.takeCalls(), "POST /subscriptions", "DELETE /subscriptions/sub-1")
+	if status := o.OutlookPushStatus("out-1"); !status.Available || !status.Subscribed || status.Error != "" {
+		t.Fatalf("status after the check = %+v", status)
+	}
+
+	graph.createErr = &providerAPIError{StatusCode: http.StatusBadRequest, Body: "Subscription validation request failed"}
+	if err := o.CheckOutlookPush(ctx, "out-1"); err == nil {
+		t.Fatal("a refused check reported success")
+	}
+	equalCalls(t, "refused check", graph.takeCalls(), "POST /subscriptions")
+	status := o.OutlookPushStatus("out-1")
+	if !status.Subscribed || !strings.Contains(status.Error, "validation request failed") || status.RetryAt.IsZero() {
+		t.Fatalf("status after a refused check = %+v", status)
+	}
+
+	if err := o.CheckOutlookPush(ctx, "gm-1"); err == nil {
+		t.Fatal("checked an account that isn't Outlook")
+	}
+	plain := NewSyncOrchestrator(o.db, nil, nil, labelSyncTestTokens{})
+	if status := plain.OutlookPushStatus("out-1"); status.Available {
+		t.Fatalf("status with notifications off = %+v", status)
+	}
+	if err := plain.CheckOutlookPush(ctx, "out-1"); !errors.Is(err, ErrOutlookPushUnavailable) {
+		t.Fatalf("check with notifications off: %v", err)
+	}
+}
+
+func TestOutlookScheduledChecksDropTheSubscription(t *testing.T) {
+	ctx := context.Background()
+	o, graph := newOutlookSubscriptionTest(t)
+	now := time.Date(2026, 10, 21, 12, 0, 0, 0, time.UTC)
+	o.sweepOutlookSubscriptions(ctx, now)
+	graph.takeCalls()
+
+	if err := o.db.SetProviderPushEnabled(ctx, "default", "out-1", false); err != nil {
+		t.Fatal(err)
+	}
+	o.sweepOutlookSubscriptions(ctx, now.Add(time.Minute))
+	equalCalls(t, "sweep with scheduled checks", graph.takeCalls(), "DELETE /subscriptions/sub-1")
+	if o.outlookSubs.subscribed("out-1", now.Add(time.Minute)) {
+		t.Fatal("account still subscribed with scheduled checks")
+	}
+	if err := o.CheckOutlookPush(ctx, "out-1"); !errors.Is(err, errOutlookPushOff) {
+		t.Fatalf("check with scheduled checks: %v", err)
+	}
+	equalCalls(t, "check with scheduled checks", graph.takeCalls())
+
+	if err := o.db.SetProviderPushEnabled(ctx, "default", "out-1", true); err != nil {
+		t.Fatal(err)
+	}
+	o.sweepOutlookSubscriptions(ctx, now.Add(2*time.Minute))
+	equalCalls(t, "sweep with notifications again", graph.takeCalls(), "GET /subscriptions", "POST /subscriptions")
+}

@@ -2,6 +2,8 @@ package mail
 
 import (
 	"context"
+	"encoding/json"
+	"errors"
 	"log"
 	"net/http"
 	"strings"
@@ -33,7 +35,35 @@ type outlookSubscriptionState struct {
 	cleanedStale bool
 	failures     int
 	nextAttempt  time.Time
+	lastErr      string
+	// busy is set while a call to Graph for the account is running, so a
+	// check and a renewal cannot both make a subscription.
+	busy bool
 }
+
+// OutlookPushStatus describes an Outlook account's subscription for the
+// settings page.
+type OutlookPushStatus struct {
+	// Available is false while GOFER_OUTLOOK_WEBHOOKS is off.
+	Available bool
+	// Subscribed is set while Graph announces the account's Inbox changes.
+	Subscribed bool
+	Expires    time.Time
+	// Error is the last failure to subscribe, kept until one succeeds, and
+	// RetryAt is when Gofer tries again on its own.
+	Error   string
+	RetryAt time.Time
+}
+
+// ErrOutlookPushUnavailable refuses a check while GOFER_OUTLOOK_WEBHOOKS is off.
+var ErrOutlookPushUnavailable = errors.New("Outlook change notifications are off on this server")
+
+// errOutlookPushOff refuses a check of an account set to scheduled checks.
+var errOutlookPushOff = errors.New("this account uses scheduled checks")
+
+// errOutlookSubscriptionBusy reports a subscription call already running for
+// the account.
+var errOutlookSubscriptionBusy = errors.New("Gofer is already subscribing this account; try again in a moment")
 
 // outlookSubscriptionToken returns a Graph token for the account.
 type outlookSubscriptionToken func(context.Context) (string, error)
@@ -82,41 +112,103 @@ func (t *outlookSubscriptions) keep(ctx context.Context, accountID string, token
 	if t == nil {
 		return
 	}
+	t.attempt(ctx, accountID, token, request, now, false)
+}
+
+// check makes a new subscription for the account right away, replacing any
+// it has, and returns why Graph refused it. Only a new subscription shows
+// that Microsoft can reach Gofer: Graph calls the notification URL before
+// accepting one, and not when renewing.
+func (t *outlookSubscriptions) check(ctx context.Context, accountID string, token outlookSubscriptionToken, request graphJSONRequest, now time.Time) error {
+	if t == nil {
+		return ErrOutlookPushUnavailable
+	}
+	return t.attempt(ctx, accountID, token, request, now, true)
+}
+
+func (t *outlookSubscriptions) attempt(ctx context.Context, accountID string, token outlookSubscriptionToken, request graphJSONRequest, now time.Time, fresh bool) error {
 	t.mu.Lock()
 	state := t.accounts[accountID]
 	if state == nil {
 		state = &outlookSubscriptionState{}
 		t.accounts[accountID] = state
 	}
-	due := !now.Before(state.nextAttempt) && (state.id == "" || state.renewNow || state.expires.Sub(now) < outlookSubscriptionRenewal)
+	due := fresh || !now.Before(state.nextAttempt) && (state.id == "" || state.renewNow || state.expires.Sub(now) < outlookSubscriptionRenewal)
+	if !due || state.busy {
+		t.mu.Unlock()
+		if fresh {
+			return errOutlookSubscriptionBusy
+		}
+		return nil
+	}
+	state.busy = true
 	current := *state
 	t.mu.Unlock()
-	if !due {
-		return
-	}
 
+	previous := ""
+	if fresh {
+		previous, current.id = current.id, ""
+	}
 	err := t.subscribe(ctx, accountID, &current, token, request, now)
+	if err == nil && previous != "" {
+		// The new subscription is in place; the old one would announce the
+		// same changes again until it ended.
+		if err := t.deletePrevious(ctx, token, request, previous); err != nil && ctx.Err() == nil {
+			log.Printf("outlook webhook account=%s: delete replaced subscription: %v", accountID, err)
+		}
+	}
 	t.mu.Lock()
 	defer t.mu.Unlock()
+	state.busy = false
 	if t.accounts[accountID] != state {
-		return
+		return err
 	}
 	state.cleanedStale = state.cleanedStale || current.cleanedStale
 	if err != nil {
-		if ctx.Err() != nil {
-			return
+		if ctx.Err() != nil && !fresh {
+			return err
 		}
 		state.failures++
 		delay := min(outlookSubscriptionRetry*time.Duration(1<<min(state.failures-1, 4)), outlookSubscriptionMaxRetry)
 		state.nextAttempt = now.Add(delay)
+		state.lastErr = OutlookPushErrorMessage(err)
 		log.Printf("outlook webhook account=%s: %v; trying again in %s", accountID, err, delay)
-		return
+		return err
 	}
 	if state.id != current.id {
 		log.Printf("outlook webhook account=%s: subscribed until %s", accountID, current.expires.Format(time.RFC3339))
 	}
 	state.id, state.expires = current.id, current.expires
-	state.renewNow, state.failures, state.nextAttempt = false, 0, time.Time{}
+	state.renewNow, state.failures, state.nextAttempt, state.lastErr = false, 0, time.Time{}, ""
+	return nil
+}
+
+func (t *outlookSubscriptions) deletePrevious(ctx context.Context, token outlookSubscriptionToken, request graphJSONRequest, id string) error {
+	ctx, cancel := context.WithTimeout(ctx, outlookSubscriptionTimeout)
+	defer cancel()
+	access, err := token(ctx)
+	if err != nil {
+		return err
+	}
+	return deleteOutlookSubscription(ctx, request, access, id)
+}
+
+// status reports the account's subscription as Gofer last saw it.
+func (t *outlookSubscriptions) status(accountID string, now time.Time) OutlookPushStatus {
+	if t == nil {
+		return OutlookPushStatus{}
+	}
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	status := OutlookPushStatus{Available: true}
+	if state := t.accounts[accountID]; state != nil {
+		status.Subscribed = state.id != "" && now.Before(state.expires)
+		if status.Subscribed {
+			status.Expires = state.expires
+		}
+		status.Error, status.RetryAt = state.lastErr, state.nextAttempt
+	}
+	return status
 }
 
 // subscribe renews the account's subscription, or makes a new one when there
@@ -213,14 +305,40 @@ func (t *outlookSubscriptions) receive(notifications []OutlookNotification) []st
 	}
 	t.mu.Unlock()
 	if wake {
-		select {
-		case t.wake <- struct{}{}:
-		default:
-		}
+		t.nudge()
 	}
 	ids := make([]string, 0, len(changed))
 	for accountID := range changed {
 		ids = append(ids, accountID)
 	}
 	return ids
+}
+
+// nudge wakes the personal-mode subscription loop.
+func (t *outlookSubscriptions) nudge() {
+	if t == nil {
+		return
+	}
+	select {
+	case t.wake <- struct{}{}:
+	default:
+	}
+}
+
+// OutlookPushErrorMessage gives Graph's own reason for refusing a
+// subscription, such as a failed validation request, without the response
+// around it.
+func OutlookPushErrorMessage(err error) string {
+	var apiErr *providerAPIError
+	if errors.As(err, &apiErr) && apiErr != nil {
+		var body struct {
+			Error struct {
+				Message string `json:"message"`
+			} `json:"error"`
+		}
+		if json.Unmarshal([]byte(apiErr.Body), &body) == nil && strings.TrimSpace(body.Error.Message) != "" {
+			return strings.TrimSpace(body.Error.Message)
+		}
+	}
+	return err.Error()
 }

@@ -558,9 +558,9 @@ func (s *UserIMAP) sync(ctx context.Context, owner, id string, repair, backgroun
 				return mutationErr
 			}
 		}
-		var enabled int
+		var enabled, push int
 		if err := scope.call(ctx, func(db *storage.DB) error {
-			return db.Read().QueryRowContext(ctx, `SELECT COALESCE(email_sync_enabled,1) FROM accounts WHERE id=?`, id).Scan(&enabled)
+			return db.Read().QueryRowContext(ctx, `SELECT COALESCE(email_sync_enabled,1),provider_push_enabled FROM accounts WHERE id=?`, id).Scan(&enabled, &push)
 		}); err != nil {
 			return err
 		}
@@ -585,7 +585,7 @@ func (s *UserIMAP) sync(ctx context.Context, owner, id string, repair, backgroun
 		}
 		receiveErr = err
 		if err == nil {
-			s.keepOutlookSubscription(ctx, o, scope)
+			s.keepOutlookSubscription(ctx, o, scope, push == 1)
 			err = s.reconcileWatches(ctx, scope)
 		}
 		if (scope.config.Provider == providers.ProviderIMAP || scope.config.Provider == providers.ProviderJMAP) && scope.config.AuthMethod == "plain" {
