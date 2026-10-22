@@ -15063,6 +15063,23 @@ function _closeComposeDropChoice() {
 
 // placePointPopover moves a point popover's anchor (pointPopover in
 // app_dialogs.templ) to a spot on the screen, so its arrow points there.
+// Dropdowns inside a popup, such as the sort and filter panels' selects,
+// can't be exclusive: that would close the popup they are in. Opening one
+// closes the other dropdowns of the same popup instead, so only one shows.
+document.addEventListener("click", function (event) {
+  var trigger = event.target.closest && event.target.closest("[data-tui-popover-trigger]")
+  var root = trigger && trigger.closest("[data-tui-popover-root]")
+  var content = root && root.querySelector(":scope > [data-tui-popover-content]")
+  if (!content || content.getAttribute("data-tui-popover-exclusive") === "true" || !window.tui || !window.tui.popover) return
+  var host = root.parentElement && root.parentElement.closest("[data-tui-popover-content]")
+  if (!host) return
+  host.querySelectorAll("[data-tui-popover-root]").forEach(function (other) {
+    if (other === root || other.contains(root)) return
+    var otherContent = other.querySelector(":scope > [data-tui-popover-content]")
+    if (otherContent && otherContent.matches(":popover-open")) window.tui.popover.closeElement(other)
+  })
+}, true)
+
 function placePointPopover(root, x, y) {
   var anchor = root && root.querySelector("[data-point-popover-anchor]")
   if (!anchor) return
