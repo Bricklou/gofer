@@ -7144,9 +7144,9 @@ document.addEventListener("DOMContentLoaded", function () {
     var sortLabel = sortBy === "name" ? "Name" : (sortBy === "last_interaction" ? "Last interaction" : "Recently updated")
     return '<div class="flex items-center gap-1 px-4 py-1.5">' +
       pendingFilterButton("Filter contacts") +
-      '<div class="flex-1"></div>' +
-      '<button type="button" disabled class="inline-flex h-7 items-center gap-1.5 rounded-md px-2 text-xs font-medium text-muted-foreground opacity-60">' + pendingIcon("size-3.5") + '<span class="hidden sm:inline">' + sortLabel + '</span></button>' +
       pendingViewToggleHTML(viewMode) +
+      '<button type="button" disabled class="inline-flex h-7 items-center gap-1.5 rounded-md px-2 text-xs font-medium text-muted-foreground opacity-60">' + pendingIcon("size-3.5") + '<span class="hidden sm:inline">' + sortLabel + '</span></button>' +
+      '<div class="flex-1"></div>' +
     '</div>'
   }
 
