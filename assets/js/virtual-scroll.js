@@ -2884,6 +2884,8 @@ class VirtualContactsList {
     }
     shell.innerHTML = item.html
     if (typeof htmx !== "undefined" && htmx.process) htmx.process(shell)
+    // Rows are redrawn from cached HTML; app.js marks the selected ones again.
+    if (typeof window.markContactRowsSelected === "function") window.markContactRowsSelected(shell)
     var anchor = shell.querySelector("a")
     if (!anchor) return
     if (item.id === this.selectedContactId) {

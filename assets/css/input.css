@@ -1339,7 +1339,8 @@ html[data-theme="classic"] .mail-list-search-input-wrap {
 }
 
 [data-mail-selection-actions],
-[data-mail-delete-action] {
+[data-mail-delete-action],
+[data-contact-selection-actions] {
   position: absolute;
   right: 1rem;
   display: inline-flex;
@@ -1366,7 +1367,8 @@ html[data-theme="classic"] .mail-list-search-input-wrap {
 #mail-list[data-mail-has-selection] [data-mail-selection-actions],
 #mail-list[data-mail-selecting] [data-mail-selection-actions],
 #mail-list[data-mail-has-selection] [data-mail-delete-action],
-#mail-list[data-mail-selecting] [data-mail-delete-action] {
+#mail-list[data-mail-selecting] [data-mail-delete-action],
+#mail-list[data-contact-has-selection] [data-contact-selection-actions] {
   position: static;
   opacity: 1;
   visibility: visible;

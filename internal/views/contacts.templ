@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/cristianadrielbraun/gofer/components/button"
+	"github.com/cristianadrielbraun/gofer/components/checkbox"
 	"github.com/cristianadrielbraun/gofer/components/dialog"
 	"github.com/cristianadrielbraun/gofer/components/dropdown"
 	"github.com/cristianadrielbraun/gofer/components/icon"
@@ -14,6 +15,7 @@ import (
 	"github.com/cristianadrielbraun/gofer/components/radio"
 	"github.com/cristianadrielbraun/gofer/components/selectbox"
 	switchcomp "github.com/cristianadrielbraun/gofer/components/switch"
+	"github.com/cristianadrielbraun/gofer/components/tooltip"
 	"github.com/cristianadrielbraun/gofer/internal/models"
 )
 
@@ -697,6 +699,17 @@ func contactViewIndicatorStyle(mode string) string {
 	return "transform:translateX(0)"
 }
 
+// contactFiltersActiveCount is how many filters the Filters button counts.
+func contactFiltersActiveCount(filters models.ContactFilters) int {
+	count := 0
+	for _, value := range []string{filters.Source, filters.SaveTarget, filters.Activity} {
+		if value != "" {
+			count++
+		}
+	}
+	return count
+}
+
 func contactFiltersActive(filters models.ContactFilters) bool {
 	return filters.Source != "" || filters.SaveTarget != "" || filters.Activity != ""
 }
@@ -1231,113 +1244,138 @@ templ ContactsListPane(contacts []models.Contact, selected *models.Contact, filt
 						class="h-9 w-full rounded-lg border border-border/50 bg-background pl-8 pr-3 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
 					/>
 				</form>
-			</div>
-		</div>
-		<div class="contacts-list-toolbar flex items-center gap-1 px-4 py-1.5">
-			@dropdown.Dropdown() {
-				@dropdown.Trigger() {
-					<button type="button" data-contact-filter-trigger data-active={ fmt.Sprintf("%t", contactFiltersActive(filters)) } class="relative inline-flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground data-[active=true]:bg-accent data-[active=true]:text-foreground" aria-label="Filter contacts">
-						@icon.ListFilter(icon.Props{Class: "size-3.5"})
-						if contactFilterCount(filters) > 0 {
-							<span data-contact-filter-count class="absolute -right-1 -top-1 min-w-4 h-4 rounded-full bg-primary px-1 text-[10px] leading-4 text-primary-foreground font-semibold">{ fmt.Sprintf("%d", contactFilterCount(filters)) }</span>
+				// Beside the search, as the mail list's Filters.
+				<div class="mail-list-search-actions">
+					@dropdown.Dropdown() {
+						@dropdown.Trigger() {
+							<button type="button" data-contact-filter-trigger data-active={ fmt.Sprintf("%t", contactFiltersActive(filters)) } class="mail-list-advanced-filter-button relative inline-flex h-9 shrink-0 items-center gap-1.5 rounded-lg border border-border bg-card px-2.5 text-xs font-semibold text-foreground hover:bg-accent data-[active=true]:bg-accent data-[active=true]:text-foreground" aria-label="Filter contacts">
+								<span class="mail-list-filter-label">Filters</span>
+								@icon.SlidersHorizontal(icon.Props{Class: "size-3.5"})
+								if count := contactFiltersActiveCount(filters); count > 0 {
+									<span class="min-w-4 rounded-full bg-primary px-1 text-center text-[10px] leading-4 text-primary-foreground">{ fmt.Sprint(count) }</span>
+								}
+							</button>
 						}
-					</button>
-				}
-				@dropdown.Content(dropdown.ContentProps{Placement: dropdown.PlacementBottomStart, Class: "mobile-sheet w-[26rem] max-w-[calc(100vw-2rem)] normal-case tracking-normal p-3"}) {
-					<form action="/contacts" method="get" class="space-y-3" data-contact-filter-form>
-						<input type="hidden" name="q" value={ filters.Query }/>
-						<input type="hidden" name="view" value={ contactViewMode(filters.View) }/>
-						<input type="hidden" name="sort_by" value={ filters.SortBy }/>
-						<input type="hidden" name="sort_order" value={ filters.SortOrder }/>
-						<div class="flex items-center justify-between gap-2">
-							<div class="text-xs font-semibold text-muted-foreground">Quick filters</div>
-							<a href={ contactsURL(models.ContactFilters{Query: filters.Query, View: filters.View, SortBy: filters.SortBy, SortOrder: filters.SortOrder}, "") } class="text-[11px] font-medium text-muted-foreground hover:text-foreground" data-contact-filter-clear>Clear</a>
-						</div>
-						<div class="space-y-1 text-[11px] font-medium text-muted-foreground">
-							<span>Origin</span>
-							@selectbox.SelectBox() {
-								@selectbox.Trigger(selectbox.TriggerProps{Name: "source", Class: "h-8 bg-background text-xs", DisableClear: true}) {
-									@selectbox.Value(selectbox.ValueProps{Placeholder: "Any origin"})
-								}
-								@selectbox.Content(selectbox.ContentProps{NoSearch: true, DisableExclusive: true}) {
-									@selectbox.Item(selectbox.ItemProps{Value: "", Selected: filters.Source == ""}) {
-										Any origin
-									}
-									@selectbox.Item(selectbox.ItemProps{Value: "manual", Selected: filters.Source == "manual"}) {
-										Manual
-									}
-									@selectbox.Item(selectbox.ItemProps{Value: "observed", Selected: filters.Source == "observed"}) {
-										Observed
-									}
-									@selectbox.Item(selectbox.ItemProps{Value: "synced", Selected: filters.Source == "synced"}) {
-										{ contactOriginFilterLabel("synced", accounts) }
-									}
-									for _, account := range accounts {
-										if !account.IsDeleting && accountContactSyncCapable(account) {
-											@selectbox.Item(selectbox.ItemProps{Value: "synced:" + account.ID, Selected: filters.Source == "synced:"+account.ID}) {
-												{ contactOriginFilterLabel("synced:"+account.ID, accounts) }
+						@dropdown.Content(dropdown.ContentProps{Placement: dropdown.PlacementBottomEnd, Class: "mobile-sheet w-[26rem] max-w-[calc(100vw-2rem)] normal-case tracking-normal p-3"}) {
+							<form action="/contacts" method="get" class="space-y-3" data-contact-filter-form>
+								<input type="hidden" name="q" value={ filters.Query }/>
+								<input type="hidden" name="view" value={ contactViewMode(filters.View) }/>
+								<input type="hidden" name="sort_by" value={ filters.SortBy }/>
+								<input type="hidden" name="sort_order" value={ filters.SortOrder }/>
+								<div class="flex items-center justify-between gap-2">
+									<div class="text-xs font-semibold text-muted-foreground">Quick filters</div>
+									<a href={ contactsURL(models.ContactFilters{Query: filters.Query, View: filters.View, SortBy: filters.SortBy, SortOrder: filters.SortOrder}, "") } class="text-[11px] font-medium text-muted-foreground hover:text-foreground" data-contact-filter-clear>Clear</a>
+								</div>
+								<div class="space-y-1 text-[11px] font-medium text-muted-foreground">
+									<span>Origin</span>
+									@selectbox.SelectBox() {
+										@selectbox.Trigger(selectbox.TriggerProps{Name: "source", Class: "h-8 bg-background text-xs", DisableClear: true}) {
+											@selectbox.Value(selectbox.ValueProps{Placeholder: "Any origin"})
+										}
+										@selectbox.Content(selectbox.ContentProps{NoSearch: true, DisableExclusive: true}) {
+											@selectbox.Item(selectbox.ItemProps{Value: "", Selected: filters.Source == ""}) {
+												Any origin
 											}
-											for _, book := range account.ContactAddressBooks {
-												@selectbox.Item(selectbox.ItemProps{Value: "book:" + book.ID, Selected: filters.Source == "book:"+book.ID}) {
-													{ contactOriginFilterLabel("book:"+book.ID, accounts) }
+											@selectbox.Item(selectbox.ItemProps{Value: "manual", Selected: filters.Source == "manual"}) {
+												Manual
+											}
+											@selectbox.Item(selectbox.ItemProps{Value: "observed", Selected: filters.Source == "observed"}) {
+												Observed
+											}
+											@selectbox.Item(selectbox.ItemProps{Value: "synced", Selected: filters.Source == "synced"}) {
+												{ contactOriginFilterLabel("synced", accounts) }
+											}
+											for _, account := range accounts {
+												if !account.IsDeleting && accountContactSyncCapable(account) {
+													@selectbox.Item(selectbox.ItemProps{Value: "synced:" + account.ID, Selected: filters.Source == "synced:"+account.ID}) {
+														{ contactOriginFilterLabel("synced:"+account.ID, accounts) }
+													}
+													for _, book := range account.ContactAddressBooks {
+														@selectbox.Item(selectbox.ItemProps{Value: "book:" + book.ID, Selected: filters.Source == "book:"+book.ID}) {
+															{ contactOriginFilterLabel("book:"+book.ID, accounts) }
+														}
+													}
 												}
 											}
 										}
 									}
-								}
-							}
-						</div>
-						<div class="space-y-1 text-[11px] font-medium text-muted-foreground">
-							<span>Sync locations</span>
-							@selectbox.SelectBox() {
-								@selectbox.Trigger(selectbox.TriggerProps{Name: "save_target", Class: "h-8 bg-background text-xs", DisableClear: true}) {
-									@selectbox.Value(selectbox.ValueProps{Placeholder: "Any sync location"})
-								}
-								@selectbox.Content(selectbox.ContentProps{NoSearch: true, DisableExclusive: true}) {
-									@selectbox.Item(selectbox.ItemProps{Value: "", Selected: filters.SaveTarget == ""}) {
-										Any sync location
-									}
-									@selectbox.Item(selectbox.ItemProps{Value: "local", Selected: filters.SaveTarget == "local"}) {
-										Local
-									}
-									for _, account := range accounts {
-										if !account.IsDeleting && accountContactSyncCapable(account) {
-											@selectbox.Item(selectbox.ItemProps{Value: contactSaveTargetValue(account), Selected: filters.SaveTarget == contactSaveTargetValue(account)}) {
-												{ accountContactSaveLabel(account) }
+								</div>
+								<div class="space-y-1 text-[11px] font-medium text-muted-foreground">
+									<span>Sync locations</span>
+									@selectbox.SelectBox() {
+										@selectbox.Trigger(selectbox.TriggerProps{Name: "save_target", Class: "h-8 bg-background text-xs", DisableClear: true}) {
+											@selectbox.Value(selectbox.ValueProps{Placeholder: "Any sync location"})
+										}
+										@selectbox.Content(selectbox.ContentProps{NoSearch: true, DisableExclusive: true}) {
+											@selectbox.Item(selectbox.ItemProps{Value: "", Selected: filters.SaveTarget == ""}) {
+												Any sync location
 											}
-											for _, book := range account.ContactAddressBooks {
-												@selectbox.Item(selectbox.ItemProps{Value: contactBookTargetValue(book), Selected: filters.SaveTarget == contactBookTargetValue(book)}) {
-													{ accountContactOriginLabel(account) } / { contactAddressBookDisplayName(book) }
+											@selectbox.Item(selectbox.ItemProps{Value: "local", Selected: filters.SaveTarget == "local"}) {
+												Local
+											}
+											for _, account := range accounts {
+												if !account.IsDeleting && accountContactSyncCapable(account) {
+													@selectbox.Item(selectbox.ItemProps{Value: contactSaveTargetValue(account), Selected: filters.SaveTarget == contactSaveTargetValue(account)}) {
+														{ accountContactSaveLabel(account) }
+													}
+													for _, book := range account.ContactAddressBooks {
+														@selectbox.Item(selectbox.ItemProps{Value: contactBookTargetValue(book), Selected: filters.SaveTarget == contactBookTargetValue(book)}) {
+															{ accountContactOriginLabel(account) } / { contactAddressBookDisplayName(book) }
+														}
+													}
 												}
 											}
 										}
 									}
-								}
+								</div>
+								<div class="space-y-1 text-[11px] font-medium text-muted-foreground">
+									<span>Activity</span>
+									@selectbox.SelectBox() {
+										@selectbox.Trigger(selectbox.TriggerProps{Name: "activity", Class: "h-8 bg-background text-xs", DisableClear: true}) {
+											@selectbox.Value(selectbox.ValueProps{Placeholder: "Any activity"})
+										}
+										@selectbox.Content(selectbox.ContentProps{NoSearch: true, DisableExclusive: true}) {
+											@selectbox.Item(selectbox.ItemProps{Value: "", Selected: filters.Activity == ""}) {
+												Any activity
+											}
+											@selectbox.Item(selectbox.ItemProps{Value: "seen", Selected: filters.Activity == "seen"}) {
+												Seen in mail
+											}
+											@selectbox.Item(selectbox.ItemProps{Value: "none", Selected: filters.Activity == "none"}) {
+												No messages
+											}
+										}
+									}
+								</div>
+								<button type="submit" class="inline-flex h-8 w-full items-center justify-center rounded-md bg-primary px-3 text-xs font-semibold text-primary-foreground hover:bg-primary/90">Apply filters</button>
+							</form>
+						}
+					}
+				</div>
+			</div>
+			// Under the search, where the mail list shows its active filters.
+			if contactFiltersActive(filters) {
+				<div class="flex min-w-0 flex-wrap items-center gap-1 px-1 text-[11px] text-muted-foreground" data-contact-active-filters>
+					if filters.Source != "" {
+						<span class="truncate rounded-full border border-border bg-background px-2 py-0.5">Origin: { contactOriginFilterLabel(filters.Source, accounts) }</span>
+					}
+					if filters.SaveTarget != "" {
+						<span class="truncate rounded-full border border-border bg-background px-2 py-0.5">{ contactSaveTargetLabel(filters.SaveTarget, accounts) }</span>
+					}
+					if filters.Activity != "" {
+						<span class="shrink-0 rounded-full border border-border bg-background px-2 py-0.5">
+							if filters.Activity == "seen" {
+								Seen in mail
+							} else {
+								No messages
 							}
-						</div>
-						<div class="space-y-1 text-[11px] font-medium text-muted-foreground">
-							<span>Activity</span>
-							@selectbox.SelectBox() {
-								@selectbox.Trigger(selectbox.TriggerProps{Name: "activity", Class: "h-8 bg-background text-xs", DisableClear: true}) {
-									@selectbox.Value(selectbox.ValueProps{Placeholder: "Any activity"})
-								}
-								@selectbox.Content(selectbox.ContentProps{NoSearch: true, DisableExclusive: true}) {
-									@selectbox.Item(selectbox.ItemProps{Value: "", Selected: filters.Activity == ""}) {
-										Any activity
-									}
-									@selectbox.Item(selectbox.ItemProps{Value: "seen", Selected: filters.Activity == "seen"}) {
-										Seen in mail
-									}
-									@selectbox.Item(selectbox.ItemProps{Value: "none", Selected: filters.Activity == "none"}) {
-										No messages
-									}
-								}
-							}
-						</div>
-						<button type="submit" class="inline-flex h-8 w-full items-center justify-center rounded-md bg-primary px-3 text-xs font-semibold text-primary-foreground hover:bg-primary/90">Apply filters</button>
-					</form>
-				}
+						</span>
+					}
+				</div>
 			}
+		</div>
+		<div class="contacts-list-toolbar relative flex items-center gap-1 px-4 py-1.5">
+			@ContactsSelectAllControl()
 			<div class="relative inline-flex h-7 shrink-0 rounded-lg border border-border bg-background p-0.5 gap-0.5" data-contact-list-view-toggle>
 				<div class="absolute top-0.5 bottom-0.5 left-0.5 w-[calc(50%-2px)] rounded-md border border-border bg-card shadow-sm transition-transform duration-200 ease-out" style={ contactViewIndicatorStyle(filters.View) } data-contact-list-view-indicator></div>
 				<button
@@ -1403,28 +1441,10 @@ templ ContactsListPane(contacts []models.Contact, selected *models.Contact, filt
 					</form>
 				}
 			}
-			// Like the mail toolbar: the view and the sort first, then what's left of the row.
-			if contactFiltersActive(filters) {
-				<div class="flex min-w-0 flex-1 items-center gap-1 overflow-hidden px-1 text-[11px] text-muted-foreground">
-					if filters.Source != "" {
-						<span class="truncate rounded-full border border-border bg-background px-2 py-0.5">Origin: { contactOriginFilterLabel(filters.Source, accounts) }</span>
-					}
-					if filters.SaveTarget != "" {
-						<span class="truncate rounded-full border border-border bg-background px-2 py-0.5">{ contactSaveTargetLabel(filters.SaveTarget, accounts) }</span>
-					}
-					if filters.Activity != "" {
-						<span class="shrink-0 rounded-full border border-border bg-background px-2 py-0.5">
-							if filters.Activity == "seen" {
-								Seen in mail
-							} else {
-								No messages
-							}
-						</span>
-					}
-				</div>
-			}
 			<div class="flex-1"></div>
+			@ContactsSelectionActions()
 		</div>
+		@ContactsSelectAllBanner()
 		<hr class="divider-etched"/>
 		<div
 			id="contacts-list-scroll"
@@ -1468,6 +1488,98 @@ templ ContactsListPane(contacts []models.Contact, selected *models.Contact, filt
 	</section>
 }
 
+// ContactsSelectAllControl is the contacts list's select-all checkbox, with a
+// menu for all, none or the opposite of the selection. app.js keeps it
+// checked, mixed or empty, as the mail list's.
+templ ContactsSelectAllControl() {
+	<div class="mail-select-all inline-flex h-7 shrink-0 items-center gap-0.5 rounded-md pl-1.5 transition-colors" data-contact-select-all>
+		@checkbox.Checkbox(checkbox.Props{
+			Class:      "mail-select-all-toggle",
+			Attributes: templ.Attributes{"data-contact-select-all-toggle": "", "aria-label": "Select all contacts"},
+		})
+		@dropdown.Dropdown() {
+			@dropdown.Trigger() {
+				@button.Button(button.Props{
+					Variant:    button.VariantGhost,
+					Size:       button.SizeIcon,
+					Class:      "h-7 w-5 text-muted-foreground hover:bg-transparent dark:hover:bg-transparent",
+					Attributes: templ.Attributes{"aria-label": "Select contacts"},
+				}) {
+					@icon.ChevronDown(icon.Props{Class: "size-3.5"})
+				}
+			}
+			@dropdown.Content(dropdown.ContentProps{Placement: dropdown.PlacementBottomStart, Class: "mobile-sheet mail-select-all-menu w-44"}) {
+				@dropdown.Item(dropdown.ItemProps{Class: "text-xs", Attributes: templ.Attributes{"data-contact-select": "all"}}) {
+					All
+				}
+				@dropdown.Item(dropdown.ItemProps{Class: "text-xs", Attributes: templ.Attributes{"data-contact-select": "none"}}) {
+					None
+				}
+				@dropdown.Separator()
+				@dropdown.Item(dropdown.ItemProps{Class: "text-xs", Attributes: templ.Attributes{"data-contact-select": "invert"}}) {
+					Invert selection
+				}
+			}
+		}
+	</div>
+}
+
+// ContactsSelectionActions act on the selected contacts. They show only
+// while contacts are selected, fading in at the toolbar's right as the mail
+// list's message actions do.
+templ ContactsSelectionActions() {
+	<div class="items-center gap-1" data-contact-selection-actions>
+		@contactSelectionAction("compose", "New message", "Write to the selected contacts") {
+			@icon.Pen(icon.Props{Class: "size-3.5"})
+		}
+		@contactSelectionAction("export", "Export vCards", "Export the selected contacts") {
+			@icon.Download(icon.Props{Class: "size-3.5"})
+		}
+	</div>
+}
+
+templ contactSelectionAction(action, tip, label string) {
+	@tooltip.Tooltip() {
+		@tooltip.Trigger() {
+			@button.Button(button.Props{
+				Variant:    button.VariantGhost,
+				Size:       button.SizeIcon,
+				Class:      "h-7 w-7",
+				Disabled:   true,
+				Attributes: templ.Attributes{"data-contact-selection-action": action, "aria-label": label},
+			}) {
+				{ children... }
+			}
+		}
+		@tooltip.Content(tooltip.ContentProps{Position: tooltip.PositionBottom, ShowArrow: true}) {
+			{ tip }
+		}
+	}
+}
+
+// ContactsSelectAllBanner says how much of the list is selected, and offers
+// to extend the selection to every contact the filters match or to clear it.
+// app.js fills and shows it.
+templ ContactsSelectAllBanner() {
+	<div data-contact-select-all-banner class="mail-select-all-banner hidden items-center justify-center gap-x-3 gap-y-0.5 flex-wrap border-t border-border/60 bg-accent/60 px-4 py-1.5 text-center text-xs text-muted-foreground">
+		<span data-contact-select-all-banner-text></span>
+		@button.Button(button.Props{
+			Variant:    button.VariantLink,
+			Size:       button.SizeSm,
+			Class:      "h-auto p-0 text-xs",
+			Attributes: templ.Attributes{"data-contact-select-all-banner-action": ""},
+		})
+		@button.Button(button.Props{
+			Variant:    button.VariantLink,
+			Size:       button.SizeSm,
+			Class:      "h-auto p-0 text-xs",
+			Attributes: templ.Attributes{"data-contact-selection-clear": ""},
+		}) {
+			Clear selection
+		}
+	</div>
+}
+
 // ContactsContextMenu opens where a contact in the list is right-clicked,
 // with what can be done to it. app.js places it and shows the items that
 // apply: the email ones only for a contact with an address.
@@ -1501,10 +1613,12 @@ templ ContactsContextMenu() {
 			@contactsContextItem("export", "Export vCard", "") {
 				@icon.Download(icon.Props{Class: "size-4"})
 			}
-			@dropdown.Separator()
-			@contactsContextItem("delete", "Delete…", "text-destructive "+menuDestructiveClass) {
-				@icon.Trash2(icon.Props{Class: "size-4"})
-			}
+			<div data-contacts-context-group="delete">
+				@dropdown.Separator()
+				@contactsContextItem("delete", "Delete…", "text-destructive "+menuDestructiveClass) {
+					@icon.Trash2(icon.Props{Class: "size-4"})
+				}
+			</div>
 		}
 	}
 }

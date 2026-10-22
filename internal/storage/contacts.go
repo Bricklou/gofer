@@ -426,6 +426,21 @@ func (db *DB) CountContacts(ctx context.Context, userID string, filters models.C
 	return db.countProfileContacts(ctx, userID, filters)
 }
 
+// ListContactsForSelection gives every contact the list shows under these
+// filters, in list order, up to limit, with what the list rows show of them;
+// truncated says more matched.
+func (db *DB) ListContactsForSelection(ctx context.Context, userID string, filters models.ContactFilters, limit int) (contacts []models.Contact, truncated bool, err error) {
+	contacts, err = db.listProfileContacts(ctx, userID, filters, limit+1)
+	if err != nil {
+		return nil, false, err
+	}
+	sortContactsForList(contacts, filters)
+	if len(contacts) > limit {
+		contacts, truncated = contacts[:limit], true
+	}
+	return contacts, truncated, nil
+}
+
 func (db *DB) ListContactsForExport(ctx context.Context, userID string) ([]models.Contact, error) {
 	contacts, err := db.listProfileContacts(ctx, userID, models.ContactFilters{}, 1000000)
 	if err != nil {

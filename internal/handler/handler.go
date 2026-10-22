@@ -464,6 +464,8 @@ func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("POST /api/calendar/replies/{id}", h.handleCalendarReplyAction)
 	mux.HandleFunc("GET /search", h.handleSearch)
 	mux.HandleFunc("GET /api/contacts/export", h.handleExportContacts)
+	mux.HandleFunc("POST /api/contacts/export", h.handleExportSelectedContacts)
+	mux.HandleFunc("GET /api/contacts/ids", h.handleContactIDs)
 	mux.HandleFunc("GET /api/contacts/{id}/export", h.handleExportContact)
 	mux.HandleFunc("GET /api/contacts/search", h.handleContactSearch)
 	mux.HandleFunc("POST /api/contacts", h.handleSaveContact)

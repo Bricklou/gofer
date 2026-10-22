@@ -96,6 +96,15 @@ document.addEventListener("DOMContentLoaded", function () {
   var suppressEmailUrlPushFor = null
   var preserveMailListSelectionFor = null
   var selectedMailIds = new Set()
+  // The contacts list's selection, kept by setupContactsSelection.
+  var selectedContactIds = new Set()
+  // What the list shows of each selected contact, for writing to it.
+  var selectedContactInfo = new Map()
+  var lastSelectedContactId = null
+  // Set when the selection is every contact the filters match: { key, total, truncated }.
+  var contactSelectAllMatching = null
+  var contactSelectAllLoading = false
+  var contactSelectionSyncQueued = false
   var lastSelectedMailId = null
   var mailSelectionBusy = false
   // Set when the selection holds every message the list's folder and filters
@@ -1538,6 +1547,7 @@ document.addEventListener("DOMContentLoaded", function () {
     setupMailDragAndDrop()
     setupMailContextMenu()
     setupSidebarContextMenu()
+    setupContactsSelection()
     setupContactsContextMenu()
 
     function renderedMailRows() {
@@ -2110,6 +2120,334 @@ document.addEventListener("DOMContentLoaded", function () {
       })
     }
 
+    // The contacts list selects as the mail list does: a click opens a
+    // contact and selects only it, Ctrl or Cmd adds or removes one, Shift a
+    // range, and the toolbar's checkbox and banner take the rest of the list.
+    // The selected contacts' actions show at the toolbar's right.
+
+    function contactsListController() {
+      var scroll = document.getElementById("contacts-list-scroll")
+      return scroll && scroll._virtualContactsList
+    }
+
+    function contactRowInfoFromHTML(html) {
+      var tag = String(html || "").match(/^\s*<div\b[^>]*>/)
+      tag = tag ? tag[0] : ""
+      var attr = function (name) {
+        var match = tag.match(new RegExp("\\s" + name + "=\"([^\"]*)\""))
+        return match ? decodeHTMLEntities(match[1]) : ""
+      }
+      return { id: attr("data-contact-id"), email: attr("data-contact-row-email"), name: attr("data-contact-row-name"), synced: attr("data-contact-row-synced") === "true" }
+    }
+
+    function decodeHTMLEntities(text) {
+      var area = document.createElement("textarea")
+      area.innerHTML = text
+      return area.value
+    }
+
+    // The loaded contacts in list order.
+    function loadedContactRows() {
+      var list = contactsListController()
+      if (!list || !list.cache) return []
+      return Array.from(list.cache.keys()).sort(function (a, b) { return a - b }).map(function (pos) {
+        return contactRowInfoFromHTML(list.cache.get(pos).html)
+      }).filter(function (row) { return row.id })
+    }
+
+    function contactSelectAllKey(list) {
+      if (!list) return ""
+      var filters = list.filters || {}
+      return JSON.stringify([filters.query || "", filters.source || "", filters.saveTarget || "", filters.activity || "", filters.sortBy || "", filters.sortOrder || ""])
+    }
+
+    function setContactSelected(info, selected) {
+      if (!info || !info.id) return
+      contactSelectAllMatching = null
+      if (selected) {
+        selectedContactIds.add(info.id)
+        selectedContactInfo.set(info.id, info)
+      } else {
+        selectedContactIds.delete(info.id)
+        selectedContactInfo.delete(info.id)
+      }
+    }
+
+    function clearContactSelection() {
+      selectedContactIds.clear()
+      selectedContactInfo.clear()
+      contactSelectAllMatching = null
+      lastSelectedContactId = null
+      syncContactSelection()
+    }
+
+    // One open contact is what the selection starts from, not a selection the
+    // checkbox and banner report; two or more are.
+    function contactSelectionCounts() {
+      return selectedContactIds.size > 1
+    }
+
+    window.markContactRowsSelected = function (root) {
+      if (!root || !root.querySelectorAll) return
+      root.querySelectorAll(".mail-list-item[data-contact-id]").forEach(function (row) {
+        var selected = selectedContactIds.has(row.dataset.contactId)
+        row.toggleAttribute("data-mail-selected", selected)
+        var anchor = row.querySelector(":scope > a")
+        if (anchor) anchor.toggleAttribute("data-mail-selected", selected)
+      })
+      // A redraw may follow a new search or filters; check the banner after it.
+      if (!contactSelectionSyncQueued) {
+        contactSelectionSyncQueued = true
+        requestAnimationFrame(function () {
+          contactSelectionSyncQueued = false
+          syncContactSelection()
+        })
+      }
+    }
+
+    function syncContactSelection() {
+      var list = contactsListController()
+      var shell = document.querySelector("[data-contact-list-shell]")
+      if (!shell) return
+      if (contactSelectAllMatching && contactSelectAllMatching.key !== contactSelectAllKey(list)) {
+        // The filters changed under a whole-list selection; it no longer
+        // matches what the list shows.
+        selectedContactIds.clear()
+        selectedContactInfo.clear()
+        contactSelectAllMatching = null
+      }
+      var scroll = document.getElementById("contacts-list-scroll")
+      if (scroll) {
+        scroll.querySelectorAll(".mail-list-item[data-contact-id]").forEach(function (row) {
+          var selected = selectedContactIds.has(row.dataset.contactId)
+          row.toggleAttribute("data-mail-selected", selected)
+          var anchor = row.querySelector(":scope > a")
+          if (anchor) anchor.toggleAttribute("data-mail-selected", selected)
+        })
+      }
+      var count = selectedContactIds.size
+      shell.toggleAttribute("data-contact-has-selection", count > 0)
+      shell.querySelectorAll("[data-contact-selection-action]").forEach(function (button) {
+        button.disabled = count === 0 || contactSelectAllLoading
+      })
+
+      var counted = contactSelectionCounts() ? count : 0
+      var loaded = counted > 0 && !contactSelectAllMatching ? loadedContactRows() : []
+      var allLoaded = loaded.length > 0 && loaded.every(function (row) { return selectedContactIds.has(row.id) })
+      var state = counted === 0 ? "none" : (contactSelectAllMatching || allLoaded ? "all" : "some")
+      shell.querySelectorAll("[data-contact-select-all-toggle]").forEach(function (toggle) {
+        toggle.checked = state === "all"
+        toggle.indeterminate = state === "some"
+        toggle.setAttribute("aria-label", counted > 0 ? "Deselect all contacts" : "Select all contacts")
+      })
+
+      var banner = shell.querySelector("[data-contact-select-all-banner]")
+      if (!banner) return
+      var total = list ? (list.totalCount || 0) : 0
+      var text = ""
+      if (contactSelectAllMatching) {
+        text = contactSelectAllMatching.truncated
+          ? "The first " + formatMailCount(contactSelectAllMatching.total) + " contacts in this list are selected."
+          : "All " + formatMailCount(contactSelectAllMatching.total) + " contacts in this list are selected."
+      } else if (allLoaded && total > loaded.length) {
+        text = "All " + formatMailCount(loaded.length) + " loaded contacts are selected."
+      } else if (allLoaded) {
+        text = "All " + formatMailCount(counted) + " contacts are selected."
+      } else if (counted > 0) {
+        text = formatMailCount(counted) + " selected."
+      }
+      banner.classList.toggle("hidden", !text)
+      banner.classList.toggle("flex", !!text)
+      var label = banner.querySelector("[data-contact-select-all-banner-text]")
+      if (label) label.textContent = text
+      var more = banner.querySelector("[data-contact-select-all-banner-action]")
+      if (more) {
+        var canSelectAll = counted > 0 && !contactSelectAllMatching && total > counted
+        more.classList.toggle("hidden", !canSelectAll)
+        more.textContent = contactSelectAllLoading ? "Selecting\u2026" : "Select all " + formatMailCount(total) + " in this list"
+        more.disabled = contactSelectAllLoading
+      }
+    }
+
+    // A contact opened from its address, or from a link, is the selection's start.
+    function seedContactSelectionFromOpen() {
+      if (selectedContactIds.size > 0) return
+      var list = contactsListController()
+      var open = list && list.selectedContactId
+      if (!open) return
+      var row = document.querySelector('#contacts-list-scroll .mail-list-item[data-contact-id="' + cssEscape(open) + '"]')
+      setContactSelected(row ? contactRowInfoFromHTML(row.outerHTML) : { id: open, email: "", name: "" }, true)
+      lastSelectedContactId = open
+    }
+
+    function selectContactRange(fromId, toId) {
+      var rows = loadedContactRows()
+      var from = -1
+      var to = -1
+      rows.forEach(function (row, i) {
+        if (row.id === fromId) from = i
+        if (row.id === toId) to = i
+      })
+      if (from < 0 || to < 0) return false
+      for (var i = Math.min(from, to); i <= Math.max(from, to); i++) setContactSelected(rows[i], true)
+      return true
+    }
+
+    function selectAllMatchingContacts() {
+      var list = contactsListController()
+      if (!list || contactSelectAllLoading) return
+      var key = contactSelectAllKey(list)
+      var url = new URL(list.itemsURLFor(list.viewMode, list.filters, 0, 1), window.location.origin)
+      var params = url.searchParams
+      ;["start", "limit", "view", "selected"].forEach(function (name) { params.delete(name) })
+      contactSelectAllLoading = true
+      syncContactSelection()
+      fetch("/api/contacts/ids?" + params.toString(), { headers: { Accept: "application/json" } })
+        .then(function (response) {
+          if (!response.ok) throw new Error("select all contacts: " + response.status)
+          return response.json()
+        })
+        .then(function (data) {
+          if (contactSelectAllKey(contactsListController()) !== key) return
+          var contacts = (data && data.contacts) || []
+          selectedContactIds.clear()
+          selectedContactInfo.clear()
+          contacts.forEach(function (contact) { setContactSelected(contact, true) })
+          contactSelectAllMatching = { key: key, total: contacts.length, truncated: !!data.truncated }
+        })
+        .catch(function (err) {
+          console.warn(err)
+          showGoferToast({ id: "contact-select-all-error", title: "Couldn't select every contact", description: "Try again in a moment.", variant: "error", icon: "error", position: "bottom-right", duration: 6000, dismissible: true })
+        })
+        .finally(function () {
+          contactSelectAllLoading = false
+          syncContactSelection()
+        })
+    }
+
+    // Writes to the selected contacts that have an address.
+    function composeToSelectedContacts() {
+      var recipients = []
+      var missing = 0
+      selectedContactIds.forEach(function (id) {
+        var info = selectedContactInfo.get(id) || {}
+        if (!info.email) {
+          missing++
+          return
+        }
+        recipients.push(info.name && info.name !== info.email ? '"' + info.name.replace(/["\\]/g, "") + '" <' + info.email + ">" : info.email)
+      })
+      if (!recipients.length) {
+        showGoferToast({ id: "contact-compose-none", title: "No email addresses", description: "None of the selected contacts has an email address.", variant: "info", icon: "info", position: "bottom-right", duration: 5000, dismissible: true })
+        return
+      }
+      var values = parseMailtoIntent("mailto:" + recipients.map(encodeURIComponent).join(","))
+      if (values) openComposePrefill(values, "new")
+      if (missing) {
+        showGoferToast({ id: "contact-compose-missing", title: formatMailCount(missing) + (missing === 1 ? " contact has" : " contacts have") + " no email address", description: "They were left out of the recipients.", variant: "info", icon: "info", position: "bottom-right", duration: 5000, dismissible: true })
+      }
+    }
+
+    // Downloads the selected contacts as one vCard file.
+    function exportSelectedContacts(ids) {
+      if (!ids.length) return
+      var form = document.createElement("form")
+      form.method = "post"
+      form.action = "/api/contacts/export"
+      form.hidden = true
+      ids.forEach(function (id) {
+        var input = document.createElement("input")
+        input.type = "hidden"
+        input.name = "id"
+        input.value = id
+        form.appendChild(input)
+      })
+      document.body.appendChild(form)
+      form.submit()
+      form.remove()
+    }
+
+    function setupContactsSelection() {
+      if (document.body._goferContactsSelectionBound) return
+      document.body._goferContactsSelectionBound = true
+      // The contacts list's own Escape handler clears the selection too.
+      window.clearContactSelection = clearContactSelection
+
+      // Capture: a modified click must select before htmx opens the contact.
+      document.addEventListener("click", function (e) {
+        var link = e.target.closest && e.target.closest("#contacts-list-scroll .mail-list-item[data-contact-id] > a")
+        if (!link || e.button !== 0) return
+        var row = link.closest(".mail-list-item[data-contact-id]")
+        var info = contactRowInfoFromHTML(row.outerHTML)
+        if (e.shiftKey || e.metaKey || e.ctrlKey) {
+          e.preventDefault()
+          e.stopPropagation()
+          if (e.shiftKey && lastSelectedContactId && selectContactRange(lastSelectedContactId, info.id)) {
+            // The range is selected; the clicked contact anchors the next one.
+          } else {
+            setContactSelected(info, !selectedContactIds.has(info.id))
+          }
+        } else {
+          selectedContactIds.clear()
+          selectedContactInfo.clear()
+          setContactSelected(info, true)
+        }
+        lastSelectedContactId = info.id
+        syncContactSelection()
+      }, true)
+
+      document.addEventListener("click", function (e) {
+        if (!e.target.closest) return
+        var toggle = e.target.closest("[data-contact-select-all-toggle]")
+        if (toggle) {
+          // The checkbox shows what syncContactSelection decides, not the click.
+          e.preventDefault()
+          if (contactSelectionCounts()) clearContactSelection()
+          else {
+            loadedContactRows().forEach(function (row) { setContactSelected(row, true) })
+            syncContactSelection()
+          }
+          return
+        }
+        var pick = e.target.closest("[data-contact-select]")
+        if (pick) {
+          var which = pick.getAttribute("data-contact-select")
+          var rows = loadedContactRows()
+          if (which === "none") {
+            clearContactSelection()
+            return
+          }
+          var next = rows.filter(function (row) { return which === "all" || !selectedContactIds.has(row.id) })
+          selectedContactIds.clear()
+          selectedContactInfo.clear()
+          next.forEach(function (row) { setContactSelected(row, true) })
+          syncContactSelection()
+          return
+        }
+        if (e.target.closest("[data-contact-select-all-banner-action]")) {
+          selectAllMatchingContacts()
+          return
+        }
+        if (e.target.closest("[data-contact-selection-clear]")) {
+          clearContactSelection()
+          return
+        }
+        var action = e.target.closest("[data-contact-selection-action]")
+        if (action && !action.disabled) {
+          if (action.getAttribute("data-contact-selection-action") === "compose") composeToSelectedContacts()
+          else if (action.getAttribute("data-contact-selection-action") === "export") exportSelectedContacts(Array.from(selectedContactIds))
+        }
+      })
+
+      document.body.addEventListener("htmx:afterSettle", function () {
+        if (!document.querySelector("[data-contact-list-shell]")) return
+        seedContactSelectionFromOpen()
+        syncContactSelection()
+      })
+      seedContactSelectionFromOpen()
+      syncContactSelection()
+    }
+
     // Right-clicking a contact in the list offers what the contact page does,
     // plus writing to it and copying its address. Phones keep the long press.
     function setupContactsContextMenu() {
@@ -2136,11 +2474,27 @@ document.addEventListener("DOMContentLoaded", function () {
           name: row.dataset.contactRowName || "",
           synced: row.dataset.contactRowSynced === "true",
         }
+        // On a selected contact of several, the menu acts on all of them; any
+        // other contact becomes the selection first, as in the mail list.
+        target.multiple = selectedContactIds.has(target.id) && selectedContactIds.size > 1
+        if (!target.multiple) {
+          selectedContactIds.clear()
+          selectedContactInfo.clear()
+          setContactSelected(target, true)
+          lastSelectedContactId = target.id
+          syncContactSelection()
+        }
         root._contactsContextTarget = target
         var title = root.querySelector("[data-contacts-context-title]")
-        if (title) title.textContent = target.name || target.email || "Contact"
+        if (title) title.textContent = target.multiple ? formatMailCount(selectedContactIds.size) + " contacts" : target.name || target.email || "Contact"
         var emailGroup = root.querySelector('[data-contacts-context-group="email"]')
-        if (emailGroup) emailGroup.hidden = !target.email
+        if (emailGroup) emailGroup.hidden = !target.email && !target.multiple
+        var single = { "copy-email": true, messages: true, edit: true, delete: true }
+        root.querySelectorAll("[data-contacts-context-action]").forEach(function (item) {
+          item.hidden = target.multiple && !!single[item.getAttribute("data-contacts-context-action")]
+        })
+        var deleteGroup = root.querySelector('[data-contacts-context-group="delete"]')
+        if (deleteGroup) deleteGroup.hidden = target.multiple
         close()
         placePointPopover(root, e.clientX, e.clientY)
         window.tui.popover.open("contacts-context-menu")
@@ -2184,7 +2538,11 @@ document.addEventListener("DOMContentLoaded", function () {
     }
 
     function runContactsContextAction(action, target) {
-      if (action === "compose" && target.email) {
+      if (target.multiple && action === "compose") {
+        composeToSelectedContacts()
+      } else if (target.multiple && action === "export") {
+        exportSelectedContacts(Array.from(selectedContactIds))
+      } else if (action === "compose" && target.email) {
         // The same compose a mailto: link opens.
         var values = parseMailtoIntent("mailto:" + encodeURIComponent(target.email))
         if (values) openComposePrefill(values, "new")
@@ -7067,10 +7425,6 @@ document.addEventListener("DOMContentLoaded", function () {
     return '<span class="inline-block ' + (className || "size-3.5") + ' rounded-sm bg-current opacity-30"></span>'
   }
 
-  function pendingFilterButton(label, className) {
-    return '<button type="button" disabled aria-label="' + label + '" class="' + (className || "relative inline-flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground opacity-75") + '">' + pendingIcon("size-3.5") + '</button>'
-  }
-
   // The mail list's Cards/Table switch sits in a capsule with the layout
   // button; contacts has the switch alone, as it was before the capsule.
   function pendingViewToggleHTML(viewMode, withLayoutButton) {
@@ -7115,7 +7469,9 @@ document.addEventListener("DOMContentLoaded", function () {
       '<div class="flex items-center gap-2"><div class="relative groove rounded-lg flex-1 min-w-0">' +
         '<span class="absolute left-2.5 top-1/2 size-3.5 -translate-y-1/2 rounded-sm bg-muted-foreground/30"></span>' +
         '<input type="search" disabled placeholder="Search contacts" class="h-9 w-full rounded-lg border border-border/50 bg-background pl-8 pr-3 text-sm text-foreground placeholder:text-muted-foreground opacity-70"/>' +
-      '</div></div>' +
+      '</div>' +
+      '<button type="button" disabled class="mail-list-advanced-filter-button inline-flex h-9 shrink-0 items-center gap-1.5 rounded-lg border border-border bg-card px-2.5 text-xs font-semibold text-foreground opacity-70"><span>Filters</span>' + pendingIcon("size-3.5") + '</button>' +
+      '</div>' +
     '</div>'
   }
 
@@ -7144,8 +7500,13 @@ document.addEventListener("DOMContentLoaded", function () {
   function contactsPendingToolbarHTML(viewMode) {
     var sortBy = window.GoferSettings ? GoferSettings.get("contacts_list_sort_by") : "updated"
     var sortLabel = sortBy === "name" ? "Name" : (sortBy === "last_interaction" ? "Last interaction" : "Recently updated")
+    // Mirrors the contacts toolbar: select-all, the view and sort; filters
+    // sit beside the search.
     return '<div class="flex items-center gap-1 px-4 py-1.5">' +
-      pendingFilterButton("Filter contacts") +
+      '<div class="inline-flex h-7 shrink-0 items-center gap-0.5 pl-1.5 text-muted-foreground opacity-60">' +
+        '<span class="inline-block size-4 rounded-[4px] border border-current opacity-60"></span>' +
+        '<span class="inline-flex h-7 w-5 items-center justify-center">' + pendingIcon("size-2.5") + '</span>' +
+      '</div>' +
       pendingViewToggleHTML(viewMode) +
       '<button type="button" disabled class="inline-flex h-7 items-center gap-1.5 rounded-md px-2 text-xs font-medium text-muted-foreground opacity-60">' + pendingIcon("size-3.5") + '<span class="hidden sm:inline">' + sortLabel + '</span></button>' +
       '<div class="flex-1"></div>' +
