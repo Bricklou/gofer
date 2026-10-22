@@ -4283,101 +4283,113 @@ func syncSettingsProviderAPIDescription(provider string) string {
 
 // OutlookPushControl lets an Outlook account choose between Microsoft's
 // change notifications and scheduled checks. Its own requests save the
-// choice, so the sync form around it ignores its changes.
+// choice, so the sync form around it ignores its changes. The test button
+// keeps its column while scheduled checks are chosen, so switching options
+// doesn't reflow the descriptions.
 templ OutlookPushControl(push models.OutlookPushSettings) {
 	{{ id := "outlook-push-" + push.AccountID }}
 	{{ usesPush := push.Enabled && push.Available }}
 	<fieldset id={ id } class="rounded-md border border-border/70 bg-card/60 p-3" data-sync-autosave-ignore data-outlook-push={ push.AccountID }>
 		<legend class="sr-only">How Gofer learns about new Outlook mail</legend>
 		<div class="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Outlook Graph sync</div>
-		<div class="mt-3 space-y-3">
-			<div class={ "flex items-start gap-2.5", templ.KV("opacity-60", !push.Available) }>
-				@radio.Radio(radio.Props{
-					ID:       id + "-notifications",
-					Name:     id,
-					Value:    "true",
-					Checked:  usesPush,
-					Disabled: !push.Available,
-					Class:    "mt-0.5 shrink-0",
-					Attributes: outlookPushChoiceAttributes(push.AccountID, true),
-				})
-				<div class="min-w-0 flex-1">
-					<div class="flex items-center gap-1.5">
-						<label for={ id + "-notifications" } class={ "text-sm font-medium", templ.KV("cursor-not-allowed", !push.Available) }>Change notifications</label>
+		<div class="mt-3 flex items-start gap-4">
+			<div class="min-w-0 flex-1 space-y-3">
+				<div class={ templ.KV("opacity-60", !push.Available) }>
+					<div class="flex min-h-8 flex-wrap items-center gap-x-2.5 gap-y-1">
+						@radio.Radio(radio.Props{
+							ID:         id + "-notifications",
+							Name:       id,
+							Value:      "true",
+							Checked:    usesPush,
+							Disabled:   !push.Available,
+							Class:      "shrink-0",
+							Attributes: outlookPushChoiceAttributes(push.AccountID, true),
+						})
+						<label for={ id + "-notifications" } class={ "text-sm font-medium", templ.KV("cursor-not-allowed", !push.Available) }>Webhook notifications</label>
 						if !push.Available {
 							@outlookPushUnavailableNote(id+"-unavailable", push.Managed)
 						}
+						if usesPush {
+							@outlookPushStatus(id, push)
+						}
 					</div>
-					<p class="mt-0.5 text-xs leading-relaxed text-muted-foreground">Microsoft tells Gofer about Inbox changes as they happen.</p>
-					if usesPush {
-						@outlookPushStatusLine(push)
-					}
+					<p class="pl-[1.625rem] text-xs leading-relaxed text-muted-foreground">Microsoft tells Gofer the moment anything changes in the mailbox, so new mail shows up right away without waiting for a check. This server must be reachable from the internet.</p>
+				</div>
+				<div>
+					<div class="flex min-h-8 items-center gap-2.5">
+						@radio.Radio(radio.Props{
+							ID:         id + "-checks",
+							Name:       id,
+							Value:      "false",
+							Checked:    !usesPush,
+							Class:      "shrink-0",
+							Attributes: outlookPushChoiceAttributes(push.AccountID, false),
+						})
+						<label for={ id + "-checks" } class="text-sm font-medium">Scheduled checks</label>
+					</div>
+					<p class="pl-[1.625rem] text-xs leading-relaxed text-muted-foreground">Gofer asks Microsoft for new mail at the sync interval, and more often while Gofer is open. It works anywhere, but new mail can take a little longer to show up.</p>
 				</div>
 			</div>
-			<div class="flex items-start gap-2.5">
-				@radio.Radio(radio.Props{
-					ID:         id + "-checks",
-					Name:       id,
-					Value:      "false",
-					Checked:    !usesPush,
-					Class:      "mt-0.5 shrink-0",
-					Attributes: outlookPushChoiceAttributes(push.AccountID, false),
-				})
-				<div class="min-w-0">
-					<label for={ id + "-checks" } class="text-sm font-medium">Scheduled checks</label>
-					<p class="mt-0.5 text-xs leading-relaxed text-muted-foreground">Gofer checks at the sync interval, and more often while Gofer is open.</p>
-				</div>
-			</div>
+			if push.Available {
+				@button.Button(button.Props{
+					Variant:  button.VariantOutline,
+					Size:     button.SizeSm,
+					Class:    "shrink-0 group" + outlookPushHidden(!usesPush),
+					Disabled: !usesPush,
+					Attributes: templ.Attributes{
+						"hx-post":         "/api/settings/accounts/" + push.AccountID + "/outlook-push/check",
+						"hx-target":       "#" + id,
+						"hx-swap":         "outerHTML",
+						"hx-disabled-elt": "this",
+						"aria-hidden":     strconv.FormatBool(!usesPush),
+					},
+				}) {
+					@icon.RefreshCw(icon.Props{Class: "size-3.5 group-[.htmx-request]:animate-spin"})
+					Test connection
+				}
+			}
 		</div>
 	</fieldset>
 }
 
-templ outlookPushStatusLine(push models.OutlookPushSettings) {
-	<div class="mt-2 flex flex-wrap items-center gap-x-3 gap-y-2">
-		<div class="min-w-0 flex-1 text-xs leading-relaxed" role="status">
-			if push.Checked && push.CheckError == "" {
-				<p class="flex items-start gap-1.5 text-emerald-700 dark:text-emerald-400">
-					@icon.CircleCheck(icon.Props{Class: "mt-0.5 size-3.5 shrink-0"})
-					<span>Microsoft reached Gofer and accepted a new subscription{ outlookPushUntil(push) }.</span>
-				</p>
-			} else if push.Checked {
-				<p class="flex items-start gap-1.5 text-destructive">
-					@icon.CircleAlert(icon.Props{Class: "mt-0.5 size-3.5 shrink-0"})
-					<span>Microsoft refused the subscription: { push.CheckError }</span>
-				</p>
-				<p class="mt-1 text-muted-foreground">Microsoft has to reach this server's address from the internet over HTTPS, without signing in. Scheduled checks keep working meanwhile.</p>
-			} else if push.Subscribed {
-				<p class="flex items-start gap-1.5 text-muted-foreground">
-					@icon.CircleCheck(icon.Props{Class: "mt-0.5 size-3.5 shrink-0 text-emerald-700 dark:text-emerald-400"})
-					<span>Subscribed{ outlookPushUntil(push) }. Gofer renews it on its own.</span>
-				</p>
-			} else if push.Error != "" {
-				<p class="flex items-start gap-1.5 text-destructive">
-					@icon.CircleAlert(icon.Props{Class: "mt-0.5 size-3.5 shrink-0"})
-					<span>Subscribing failed: { push.Error }{ outlookPushRetry(push) }</span>
-				</p>
-			} else {
-				<p class="flex items-start gap-1.5 text-muted-foreground">
-					@icon.Clock(icon.Props{Class: "mt-0.5 size-3.5 shrink-0"})
-					<span>Not subscribed yet. Gofer subscribes after the account's next sync.</span>
-				</p>
+// outlookPushStatus only says whether webhook notifications work, on the
+// option's own line so switching options doesn't move the card.
+templ outlookPushStatus(id string, push models.OutlookPushSettings) {
+	<span class="inline-flex items-center gap-1 text-xs" role="status">
+		if (push.Checked && push.CheckError == "") || (!push.Checked && push.Subscribed) {
+			<span class="inline-flex items-center gap-1 text-emerald-700 dark:text-emerald-400">
+				@icon.CircleCheck(icon.Props{Class: "size-3.5 shrink-0"})
+				Working
+			</span>
+		} else if push.Checked || push.Error != "" {
+			<span class="inline-flex items-center gap-1 text-destructive">
+				@icon.CircleAlert(icon.Props{Class: "size-3.5 shrink-0"})
+				Not working
+			</span>
+			@popover.Root(popover.RootProps{ID: id + "-failure", Class: "shrink-0"}) {
+				@popover.Trigger() {
+					<button
+						type="button"
+						class="inline-flex size-4 items-center justify-center rounded-sm text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+						aria-label="Why webhook notifications aren't working"
+					>
+						@icon.Info(icon.Props{Class: "size-3.5"})
+					</button>
+				}
+				@popover.Content(popover.ContentProps{Placement: popover.PlacementBottomStart, Offset: 8, ShowArrow: true, Class: "mobile-sheet w-80 p-3"}) {
+					<div class="space-y-2 text-xs leading-relaxed text-muted-foreground">
+						<p class="text-foreground">Microsoft says: { outlookPushFailure(push) }</p>
+						<p>Microsoft has to reach this server's address from the internet over HTTPS, without signing in. Gofer keeps trying, and checks for new mail on schedule meanwhile.</p>
+					</div>
+				}
 			}
-		</div>
-		@button.Button(button.Props{
-			Variant: button.VariantOutline,
-			Size:    button.SizeSm,
-			Class:   "shrink-0 group",
-			Attributes: templ.Attributes{
-				"hx-post":         "/api/settings/accounts/" + push.AccountID + "/outlook-push/check",
-				"hx-target":       "#outlook-push-" + push.AccountID,
-				"hx-swap":         "outerHTML",
-				"hx-disabled-elt": "this",
-			},
-		}) {
-			@icon.RefreshCw(icon.Props{Class: "size-3.5 group-[.htmx-request]:animate-spin"})
-			Check now
+		} else {
+			<span class="inline-flex items-center gap-1 text-muted-foreground" title="Gofer sets it up after the account's next sync.">
+				@icon.Clock(icon.Props{Class: "size-3.5 shrink-0"})
+				Starting
+			</span>
 		}
-	</div>
+	</span>
 }
 
 templ outlookPushUnavailableNote(id string, managed bool) {
@@ -4386,17 +4398,17 @@ templ outlookPushUnavailableNote(id string, managed bool) {
 			<button
 				type="button"
 				class="inline-flex size-4 items-center justify-center rounded-sm text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-				aria-label="Why change notifications are unavailable"
+				aria-label="Why webhook notifications are unavailable"
 			>
 				@icon.Info(icon.Props{Class: "size-3.5"})
 			</button>
 		}
 		@popover.Content(popover.ContentProps{Placement: popover.PlacementBottomStart, Offset: 8, ShowArrow: true, Class: "mobile-sheet w-80 p-3"}) {
 			if managed {
-				<p class="text-xs leading-relaxed text-muted-foreground">Change notifications aren't turned on for this server. Ask your administrator if you'd like Outlook mail to arrive as it happens.</p>
+				<p class="text-xs leading-relaxed text-muted-foreground">Webhook notifications aren't turned on for this server. Ask your administrator if you'd like Outlook mail to arrive as it happens.</p>
 			} else {
 				<div class="space-y-2 text-xs leading-relaxed text-muted-foreground">
-					<p>Change notifications are off on this server. Microsoft has to reach Gofer from the internet to send them.</p>
+					<p>Webhook notifications are off on this server. Microsoft has to reach Gofer from the internet to send them.</p>
 					<p>To turn them on, set <code class="font-mono text-foreground">GOFER_OUTLOOK_WEBHOOKS=true</code> with <code class="font-mono text-foreground">GOFER_BASE_URL</code> on a public HTTPS address, and let <code class="font-mono text-foreground">/webhooks/outlook</code> through your proxy without signing in. Then restart Gofer.</p>
 				</div>
 			}
@@ -4414,31 +4426,18 @@ func outlookPushChoiceAttributes(accountID string, enabled bool) templ.Attribute
 	}
 }
 
-// outlookPushUntil says how long the subscription lasts, without a time of
-// day the server's time zone would get wrong.
-func outlookPushUntil(push models.OutlookPushSettings) string {
-	left := time.Until(push.Expires)
-	switch {
-	case push.Expires.IsZero() || left <= 0:
-		return ""
-	case left >= 48*time.Hour:
-		return fmt.Sprintf(" for the next %d days", int(left/(24*time.Hour)))
-	case left >= 2*time.Hour:
-		return fmt.Sprintf(" for the next %d hours", int(left/time.Hour))
-	default:
-		return " for less than two hours"
+func outlookPushHidden(hidden bool) string {
+	if hidden {
+		return " invisible"
 	}
+	return ""
 }
 
-func outlookPushRetry(push models.OutlookPushSettings) string {
-	left := time.Until(push.RetryAt)
-	if push.RetryAt.IsZero() || left <= 0 {
-		return ". Gofer tries again soon."
+func outlookPushFailure(push models.OutlookPushSettings) string {
+	if push.Checked {
+		return push.CheckError
 	}
-	if left < 2*time.Minute {
-		return ". Gofer tries again in a minute."
-	}
-	return fmt.Sprintf(". Gofer tries again in %d minutes.", int(left.Round(time.Minute)/time.Minute))
+	return push.Error
 }
 
 templ AccountFormError(message string) {
