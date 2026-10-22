@@ -1499,6 +1499,63 @@ func TestSyncSendsAFolderMarkedReadToJMAPInOneRequest(t *testing.T) {
 	}
 }
 
+// Emptying a Trash mailbox reaches the server as one Email/set destroying
+// every email, not one request per email.
+func TestSyncSendsAnEmptiedJMAPTrashInOneRequest(t *testing.T) {
+	f := newUserGmailFixture(t)
+	server := newFakeJMAPServer(t)
+	server.emailState = "c0"
+	server.setMailboxes(
+		jmap.Mailbox{ID: "mb-in", Name: "Inbox", Role: "inbox", MyRights: readable()},
+		jmap.Mailbox{ID: "mb-trash", Name: "Trash", Role: "trash", MyRights: readable()},
+	)
+	subjects := []string{"Old newsletter", "Cancelled meetup", "Draft flyer", "Stale reminder"}
+	for i, subject := range subjects {
+		server.emails = append(server.emails, testJMAPEmail(fmt.Sprintf("t%d", i+1), subject, i+1, "mb-trash"))
+	}
+	server.emails = append(server.emails, testJMAPEmail("keep", "Choir rehearsal", 9, "mb-in"))
+	useFakeJMAPAccount(t, f, server)
+	if err := f.worker.Sync(t.Context(), "alice", f.ids["alice"]); err != nil {
+		t.Fatalf("first Sync() error = %v", err)
+	}
+	trash := jmapLocalFolderID(f.ids["alice"], "mb-trash")
+	f.local(t, "alice", func(db *storage.DB) error {
+		result, err := db.EmptyFolderForUser(t.Context(), trash, "alice", nil)
+		if err == nil && result.Removed != len(subjects) {
+			err = fmt.Errorf("removed %d, want %d", result.Removed, len(subjects))
+		}
+		return err
+	})
+	server.mu.Lock()
+	server.emailSets = 0
+	server.mu.Unlock()
+
+	if err := f.worker.Sync(t.Context(), "alice", f.ids["alice"]); err != nil {
+		t.Fatalf("Sync() replaying the deletes error = %v", err)
+	}
+	server.mu.Lock()
+	sets := server.emailSets
+	server.mu.Unlock()
+	if sets != 1 {
+		t.Fatalf("Email/set calls = %d, want 1 for the whole mailbox", sets)
+	}
+	for i := range subjects {
+		if _, ok := server.email(fmt.Sprintf("t%d", i+1)); ok {
+			t.Fatalf("t%d is still on the server", i+1)
+		}
+	}
+	if _, ok := server.email("keep"); !ok {
+		t.Fatal("the Inbox email was deleted too")
+	}
+	var pending int
+	f.local(t, "alice", func(db *storage.DB) error {
+		return db.Read().QueryRow(`SELECT COUNT(*) FROM message_mutations WHERE status NOT IN ('applied')`).Scan(&pending)
+	})
+	if pending != 0 {
+		t.Fatalf("%d deletes still queued after replay", pending)
+	}
+}
+
 // jmapCopies maps each mailbox an account's message is shown in to the id of
 // the email it is there as.
 func jmapCopies(t *testing.T, f *userGmailFixture, internetMessageID string) map[string]string {

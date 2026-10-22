@@ -62,9 +62,9 @@ func (s *UserIMAP) replayMutations(ctx context.Context, scope *userIMAPScope) er
 		work, cancel := context.WithTimeout(ctx, 2*time.Minute)
 		var failed []mutationFailure
 		var err error
-		if storage.MessageFlagBatchable(mutation) {
-			// Read and starred changes of one folder go together.
-			failed, err = s.applyFlagBatch(work, scope, mutation)
+		if storage.MessageMutationBatchable(mutation) {
+			// Read, starred and delete changes of one folder go together.
+			failed, err = s.applyMutationBatch(work, scope, mutation)
 		} else if applyErr := s.applyMutation(work, scope, mutation); applyErr != nil {
 			failed = []mutationFailure{{mutation, applyErr}}
 		}

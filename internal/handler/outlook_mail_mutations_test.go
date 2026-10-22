@@ -212,19 +212,38 @@ func TestOutlookGraphPermanentDeleteUsesProviderAPI(t *testing.T) {
 	}
 	deleted := map[string]bool{}
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.Method != http.MethodDelete || (r.URL.Path != "/me/messages/graph-delete-1" && r.URL.Path != "/me/messages/graph-delete-2") {
+		// Both copies' deletes travel in one Graph $batch.
+		if r.Method != http.MethodPost || r.URL.Path != "/$batch" {
 			t.Fatalf("unexpected request %s %s", r.Method, r.URL.String())
 		}
-		if !strings.Contains(r.Header.Get("Prefer"), `IdType="ImmutableId"`) {
-			t.Fatalf("Prefer = %q", r.Header.Get("Prefer"))
+		var batch struct {
+			Requests []struct {
+				ID      string            `json:"id"`
+				Method  string            `json:"method"`
+				URL     string            `json:"url"`
+				Headers map[string]string `json:"headers"`
+			} `json:"requests"`
 		}
-		deleted[r.URL.Path] = true
-		// The copy without the folder state is already gone.
-		if r.URL.Path == "/me/messages/graph-delete-2" {
-			w.WriteHeader(http.StatusNotFound)
-			return
+		if err := json.NewDecoder(r.Body).Decode(&batch); err != nil {
+			t.Fatalf("decode $batch: %v", err)
 		}
-		w.WriteHeader(http.StatusNoContent)
+		var responses []map[string]any
+		for _, request := range batch.Requests {
+			if request.Method != http.MethodDelete || (request.URL != "/me/messages/graph-delete-1" && request.URL != "/me/messages/graph-delete-2") {
+				t.Fatalf("unexpected batched request %s %s", request.Method, request.URL)
+			}
+			if !strings.Contains(request.Headers["Prefer"], `IdType="ImmutableId"`) {
+				t.Fatalf("Prefer = %q", request.Headers["Prefer"])
+			}
+			deleted[request.URL] = true
+			// The copy without the folder state is already gone.
+			status := http.StatusNoContent
+			if request.URL == "/me/messages/graph-delete-2" {
+				status = http.StatusNotFound
+			}
+			responses = append(responses, map[string]any{"id": request.ID, "status": status})
+		}
+		_ = json.NewEncoder(w).Encode(map[string]any{"responses": responses})
 	}))
 	defer server.Close()
 	previousGraphBase := outlookGraphBaseURL

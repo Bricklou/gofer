@@ -375,7 +375,15 @@ func TestMessageMutationWorkerTreatsMissingGmailDeleteAsSuccess(t *testing.T) {
 	messageID := seedGmailAPIMessage(t, ctx, db, []storage.UpsertFolderInput{{
 		ID: "acc_trash", AccountID: "acc", RemoteID: "Trash", ProviderRemoteID: "TRASH", Name: "Trash", Role: "trash", Selectable: true,
 	}})
+	batches := 0
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// The batch is refused for its unknown id, and the delete then goes
+		// alone, where a missing message counts as deleted.
+		if r.Method == http.MethodPost && r.URL.Path == "/users/me/messages/batchDelete" {
+			batches++
+			http.Error(w, "Requested entity was not found.", http.StatusNotFound)
+			return
+		}
 		if r.Method != http.MethodDelete || r.URL.Path != "/users/me/messages/gmail-msg-1" {
 			t.Fatalf("unexpected request %s %s", r.Method, r.URL.String())
 		}
@@ -397,6 +405,9 @@ func TestMessageMutationWorkerTreatsMissingGmailDeleteAsSuccess(t *testing.T) {
 
 	if fakeIMAP.deleteCalls != 0 {
 		t.Fatalf("Gmail delete fell through to IMAP: %d", fakeIMAP.deleteCalls)
+	}
+	if batches != 1 {
+		t.Fatalf("batchDelete calls = %d, want 1", batches)
 	}
 	var remaining int
 	if err := db.Read().QueryRow(`SELECT COUNT(*) FROM message_mutations WHERE message_id = ? AND kind = 'delete'`, messageID).Scan(&remaining); err != nil {
@@ -606,5 +617,46 @@ func TestMessageMutationWorkerSendsAFolderOfReadChangesInOneStore(t *testing.T) 
 	var pending int
 	if err := db.Read().QueryRow(`SELECT COUNT(*) FROM message_mutations WHERE status != 'applied'`).Scan(&pending); err != nil || pending != 0 {
 		t.Fatalf("changes not applied = %d, %v", pending, err)
+	}
+}
+
+func TestMessageMutationWorkerEmptiesAnIMAPTrashWithOneExpunge(t *testing.T) {
+	h, db := newAccountOwnershipTestHandler(t)
+	if err := db.UpsertFolders(t.Context(), []storage.UpsertFolderInput{{
+		ID: "victim-trash", AccountID: "victim-account", RemoteID: "Trash", Name: "Trash", Role: "trash", Selectable: true,
+	}}); err != nil {
+		t.Fatalf("UpsertFolders() error = %v", err)
+	}
+	if _, err := db.Write().Exec(`UPDATE folders SET uid_validity = 7 WHERE id = 'victim-trash'`); err != nil {
+		t.Fatalf("set UIDVALIDITY: %v", err)
+	}
+	for i, subject := range []string{"Old flyer", "Expired raffle", "Last year's rota"} {
+		if err := db.UpsertSyncMessages(t.Context(), []storage.SyncMessage{{
+			AccountID: "victim-account", FolderID: "victim-trash", RemoteUID: uint32(90 + i),
+			MessageID: fmt.Sprintf("<trash-%d@example.com>", i), Subject: subject, FromEmail: "pia@example.com", DateSent: time.Now(),
+		}}); err != nil {
+			t.Fatalf("UpsertSyncMessages() error = %v", err)
+		}
+	}
+	result, err := db.EmptyFolderForUser(t.Context(), "victim-trash", "owner", nil)
+	if err != nil || result.Removed != 3 {
+		t.Fatalf("EmptyFolderForUser() = %#v, %v; want 3 removed", result, err)
+	}
+	fake := &fakeMessageMutationIMAPClient{}
+	logins := 0
+	h.messageMutationIMAPFactory = func(context.Context, *models.AccountConfig, string) (messageMutationIMAPClient, error) {
+		logins++
+		return fake, nil
+	}
+
+	h.runDueMessageMutations(t.Context())
+
+	if logins != 1 || fake.deleteCalls != 1 || len(fake.deleteUIDs) != 3 || fake.deleteFolder != "Trash" || fake.deleteValidity != 7 {
+		t.Fatalf("logins = %d, deletes = %d of %v in %q at UIDVALIDITY %d; want one expunge of 3 UIDs in Trash at 7",
+			logins, fake.deleteCalls, fake.deleteUIDs, fake.deleteFolder, fake.deleteValidity)
+	}
+	var pending int
+	if err := db.Read().QueryRow(`SELECT COUNT(*) FROM message_mutations WHERE kind = 'delete' AND status NOT IN ('applied')`).Scan(&pending); err != nil || pending != 0 {
+		t.Fatalf("deletes not applied = %d, %v", pending, err)
 	}
 }

@@ -83,9 +83,9 @@ func ApplyJMAPMutation(ctx context.Context, cfg *models.AccountConfig, password 
 	return gone, nil
 }
 
-// JMAPFlagEmail is one message of a batched read or starred change: its
-// email, and the further emails of the same message in that mailbox.
-type JMAPFlagEmail struct {
+// JMAPBatchEmail is one message of a batched change: its email, and the
+// further emails of the same message in that mailbox.
+type JMAPBatchEmail struct {
 	EmailID       string
 	FolderCopyIDs []string
 }
@@ -94,61 +94,82 @@ type JMAPFlagEmail struct {
 // objects one Email/set may name.
 const jmapDefaultObjectsInSet = 500
 
-// ApplyJMAPFlagBatch sets or clears one keyword on many messages' emails,
-// in as few Email/set requests as the server's maxObjectsInSet allows.
-// failures[i] is nil when emails[i] changed or the server no longer has it;
-// otherwise it says why that message did not change. err is set when no
-// request could be sent at all.
-func ApplyJMAPFlagBatch(ctx context.Context, cfg *models.AccountConfig, password, kind string, target bool, emails []JMAPFlagEmail) (failures []error, err error) {
+// ApplyJMAPBatch sends one read, starred or delete change for many
+// messages' emails, in as few Email/set requests as the server's
+// maxObjectsInSet allows: read and starred set or clear a keyword, and a
+// delete destroys the emails for good, as single changes do. failures[i] is
+// nil when emails[i] changed or the server no longer has it, and gone[i]
+// tells the latter apart. err is set when no request could be sent at all.
+func ApplyJMAPBatch(ctx context.Context, cfg *models.AccountConfig, password, kind string, target bool, emails []JMAPBatchEmail) (failures []error, gone []bool, err error) {
 	var patch jmap.PatchObject
 	switch kind {
 	case storage.MessageMutationRead:
 		patch = jmap.KeywordPatch(jmap.KeywordSeen, target)
 	case storage.MessageMutationStarred:
 		patch = jmap.KeywordPatch(jmap.KeywordFlagged, target)
+	case storage.MessageMutationDelete:
 	default:
-		return nil, fmt.Errorf("unsupported JMAP batch mutation %q", kind)
+		return nil, nil, fmt.Errorf("unsupported JMAP batch mutation %q", kind)
 	}
 	client, session, account, err := openJMAPMail(ctx, cfg, password)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	limit := session.Core.MaxObjectsInSet
 	if limit <= 0 {
 		limit = jmapDefaultObjectsInSet
 	}
 	failures = make([]error, len(emails))
-	send := func(first, end int, update map[string]jmap.PatchObject) {
-		result, err := client.SetEmails(ctx, session, jmap.EmailSet{AccountID: account, Update: update})
+	gone = make([]bool, len(emails))
+	var ids []string
+	first := 0
+	send := func(end int) {
+		args := jmap.EmailSet{AccountID: account}
+		if kind == storage.MessageMutationDelete {
+			args.Destroy = ids
+		} else {
+			args.Update = map[string]jmap.PatchObject{}
+			for _, id := range ids {
+				args.Update[id] = patch
+			}
+		}
+		result, err := client.SetEmails(ctx, session, args)
 		for i := first; i < end; i++ {
 			if err != nil {
 				failures[i] = err
 				continue
 			}
+			gone[i] = true
 			for _, id := range append([]string{emails[i].EmailID}, emails[i].FolderCopyIDs...) {
-				if failure, failed := result.NotUpdated[id]; failed && failure.Type != "notFound" {
-					failures[i] = &failure
+				failure, failed := result.NotUpdated[id]
+				if kind == storage.MessageMutationDelete {
+					failure, failed = result.NotDestroyed[id]
+				}
+				switch {
+				case !failed:
+					gone[i] = false
+				case failure.Type != "notFound":
+					failures[i], gone[i] = &failure, false
+				}
+				if failures[i] != nil {
 					break
 				}
 			}
 		}
+		ids = nil
 	}
-	update := map[string]jmap.PatchObject{}
-	first := 0
 	for i, email := range emails {
-		ids := append([]string{email.EmailID}, email.FolderCopyIDs...)
-		if len(update) > 0 && len(update)+len(ids) > limit {
-			send(first, i, update)
-			update, first = map[string]jmap.PatchObject{}, i
+		emailIDs := append([]string{email.EmailID}, email.FolderCopyIDs...)
+		if len(ids) > 0 && len(ids)+len(emailIDs) > limit {
+			send(i)
+			first = i
 		}
-		for _, id := range ids {
-			update[id] = patch
-		}
+		ids = append(ids, emailIDs...)
 	}
-	if len(update) > 0 {
-		send(first, len(emails), update)
+	if len(ids) > 0 {
+		send(len(emails))
 	}
-	return failures, nil
+	return failures, gone, nil
 }
 
 // openJMAPMail opens the account's JMAP session and gives its mail account.

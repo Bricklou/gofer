@@ -10,10 +10,10 @@ import (
 	"github.com/cristianadrielbraun/gofer/internal/storage"
 )
 
-func flagMessages(n int) []ProviderFlagMessage {
-	messages := make([]ProviderFlagMessage, n)
+func flagMessages(n int) []ProviderBatchMessage {
+	messages := make([]ProviderBatchMessage, n)
 	for i := range messages {
-		messages[i] = ProviderFlagMessage{IDs: []string{fmt.Sprintf("m%d", i)}}
+		messages[i] = ProviderBatchMessage{IDs: []string{fmt.Sprintf("m%d", i)}}
 	}
 	return messages
 }
@@ -52,15 +52,15 @@ func TestSendGmailFlagBatchSendsRefusedBatchesOneByOne(t *testing.T) {
 		return &providerAPIError{StatusCode: http.StatusBadRequest, Body: "Invalid id value"}
 	}
 	for i, err := range SendGmailFlagBatch(refused, "https://gmail.test", storage.MessageMutationRead, true, flagMessages(3)) {
-		if !errors.Is(err, ErrFlagBatchRefused) {
-			t.Fatalf("failures[%d] = %v, want ErrFlagBatchRefused", i, err)
+		if !errors.Is(err, ErrBatchRefused) {
+			t.Fatalf("failures[%d] = %v, want ErrBatchRefused", i, err)
 		}
 	}
 	throttled := func(string, string, any, any) error {
 		return &providerAPIError{StatusCode: http.StatusTooManyRequests}
 	}
 	for i, err := range SendGmailFlagBatch(throttled, "https://gmail.test", storage.MessageMutationRead, true, flagMessages(3)) {
-		if err == nil || errors.Is(err, ErrFlagBatchRefused) {
+		if err == nil || errors.Is(err, ErrBatchRefused) {
 			t.Fatalf("failures[%d] = %v, want a retryable error, not one-by-one", i, err)
 		}
 	}
@@ -70,9 +70,9 @@ func TestSendOutlookFlagBatchGivesEachMessageItsOwnResult(t *testing.T) {
 	// 19 single messages, then one with a copy, which must not be split
 	// across calls, then one with more copies than a $batch takes.
 	messages := flagMessages(19)
-	messages = append(messages, ProviderFlagMessage{IDs: []string{"pair-a", "pair-b"}})
-	oversized := ProviderFlagMessage{}
-	for i := range outlookFlagBatchRequests + 1 {
+	messages = append(messages, ProviderBatchMessage{IDs: []string{"pair-a", "pair-b"}})
+	oversized := ProviderBatchMessage{}
+	for i := range outlookBatchRequests + 1 {
 		oversized.IDs = append(oversized.IDs, fmt.Sprintf("copy%d", i))
 	}
 	messages = append(messages, oversized)
@@ -119,12 +119,12 @@ func TestSendOutlookFlagBatchGivesEachMessageItsOwnResult(t *testing.T) {
 	for i, err := range failures {
 		switch {
 		case i == 5 || i == 19:
-			if err == nil || errors.Is(err, ErrFlagBatchRefused) {
+			if err == nil || errors.Is(err, ErrBatchRefused) {
 				t.Fatalf("failures[%d] = %v, want its update's error", i, err)
 			}
 		case i == 20:
-			if !errors.Is(err, ErrFlagBatchRefused) {
-				t.Fatalf("oversized message failure = %v, want ErrFlagBatchRefused", err)
+			if !errors.Is(err, ErrBatchRefused) {
+				t.Fatalf("oversized message failure = %v, want ErrBatchRefused", err)
 			}
 		case err != nil:
 			// m3 answered 404, which counts as done.
@@ -137,5 +137,69 @@ func TestSendOutlookFlagBatchGivesEachMessageItsOwnResult(t *testing.T) {
 		if err == nil {
 			t.Fatalf("failures[%d] = nil after the $batch call failed", i)
 		}
+	}
+}
+
+func TestSendGmailDeleteBatchUsesBatchDelete(t *testing.T) {
+	var calls []map[string][]string
+	request := func(method, endpoint string, body, _ any) error {
+		if method != http.MethodPost || endpoint != "https://gmail.test/users/me/messages/batchDelete" {
+			t.Fatalf("request %s %s", method, endpoint)
+		}
+		calls = append(calls, body.(map[string][]string))
+		return nil
+	}
+	messages := flagMessages(1001)
+	for i, err := range SendGmailDeleteBatch(request, "https://gmail.test", messages) {
+		if err != nil {
+			t.Fatalf("failures[%d] = %v", i, err)
+		}
+	}
+	if len(calls) != 2 || len(calls[0]["ids"]) != 1000 || len(calls[1]["ids"]) != 1 || len(calls[0]) != 1 {
+		t.Fatalf("batchDelete calls = %#v, want 1000 ids then 1 and nothing but ids", len(calls))
+	}
+}
+
+func TestSendOutlookDeleteBatchSaysWhichMessagesWereGone(t *testing.T) {
+	messages := []ProviderBatchMessage{
+		{IDs: []string{"kept", "kept-copy"}},
+		{IDs: []string{"half", "half-gone"}},
+		{IDs: []string{"gone", "gone-copy"}},
+	}
+	missing := map[string]bool{"/me/messages/half-gone": true, "/me/messages/gone": true, "/me/messages/gone-copy": true}
+	request := func(method, endpoint string, body, out any) error {
+		raw, _ := json.Marshal(body)
+		var batch struct {
+			Requests []graphBatchRequest `json:"requests"`
+		}
+		if err := json.Unmarshal(raw, &batch); err != nil {
+			t.Fatal(err)
+		}
+		var answer graphBatchResponse
+		for _, r := range batch.Requests {
+			if r.Method != http.MethodDelete || r.Body != nil || r.Headers["Content-Type"] != "" {
+				t.Fatalf("delete request = %#v, want a bare DELETE", r)
+			}
+			status := http.StatusNoContent
+			if missing[r.URL] {
+				status = http.StatusNotFound
+			}
+			answer.Responses = append(answer.Responses, struct {
+				ID     string          `json:"id"`
+				Status int             `json:"status"`
+				Body   json.RawMessage `json:"body"`
+			}{ID: r.ID, Status: status})
+		}
+		*out.(*graphBatchResponse) = answer
+		return nil
+	}
+	failures, gone := SendOutlookDeleteBatch(request, "https://graph.test/v1.0", messages)
+	for i, err := range failures {
+		if err != nil {
+			t.Fatalf("failures[%d] = %v", i, err)
+		}
+	}
+	if gone[0] || gone[1] || !gone[2] {
+		t.Fatalf("gone = %v, want only the message with no copy left", gone)
 	}
 }

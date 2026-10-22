@@ -644,11 +644,12 @@ func markMessageMutationsProcessingTx(ctx context.Context, tx *sql.Tx, mutations
 	return nil
 }
 
-// MessageFlagBatchable reports whether a claimed change can travel with
-// others in one provider request: any read or starred change.
-// ClaimMessageFlagBatch finds the ones that can join it.
-func MessageFlagBatchable(m MessageMutation) bool {
-	if m.Kind != MessageMutationRead && m.Kind != MessageMutationStarred {
+// MessageMutationBatchable reports whether a claimed change can travel with
+// others in one provider request: any read, starred or permanent delete.
+// Moves change a message's identity and go one by one.
+// ClaimMessageMutationBatch finds the ones that can join it.
+func MessageMutationBatchable(m MessageMutation) bool {
+	if m.Kind != MessageMutationRead && m.Kind != MessageMutationStarred && m.Kind != MessageMutationDelete {
 		return false
 	}
 	switch m.ProviderType {
@@ -661,12 +662,13 @@ func MessageFlagBatchable(m MessageMutation) bool {
 	return false
 }
 
-// ClaimMessageFlagBatch claims up to limit further due changes that set the
-// same flag to the same value as lead, in the same account and folder scope,
-// so they can go to the provider in one request. Each row is its message's
-// latest intent, so sending them together keeps every message's order.
-func (db *DB) ClaimMessageFlagBatch(ctx context.Context, lead MessageMutation, now time.Time, limit int) ([]MessageMutation, error) {
-	if !MessageFlagBatchable(lead) || limit <= 0 {
+// ClaimMessageMutationBatch claims up to limit further due changes of the
+// same kind and value as lead, in the same account and folder scope, and for
+// deletes against the same IMAP UIDVALIDITY, so they can go to the provider
+// in one request. Each row is its message's latest intent, so sending them
+// together keeps every message's order.
+func (db *DB) ClaimMessageMutationBatch(ctx context.Context, lead MessageMutation, now time.Time, limit int) ([]MessageMutation, error) {
+	if !MessageMutationBatchable(lead) || limit <= 0 {
 		return nil, nil
 	}
 	tx, err := db.Write().BeginTx(ctx, nil)
@@ -677,13 +679,14 @@ func (db *DB) ClaimMessageFlagBatch(ctx context.Context, lead MessageMutation, n
 	rows, err := tx.QueryContext(ctx, messageMutationSelect+`
 		WHERE status IN (?, ?) AND next_attempt_at <= ? AND id != ?
 		  AND account_id = ? AND provider_type = ? AND kind = ? AND target_value = ? AND folder_id = ?
+		  AND source_uid_validity = ?
 		  AND EXISTS (
 			SELECT 1 FROM accounts a JOIN users u ON u.id = a.user_id
 			WHERE a.id = message_mutations.account_id AND COALESCE(a.is_deleting, 0) = 0 AND u.status = 'active'
 		  )
 		ORDER BY created_at ASC, id ASC LIMIT ?`,
 		MessageMutationPending, MessageMutationFailed, now.UTC(), lead.ID,
-		lead.AccountID, lead.ProviderType, lead.Kind, boolInt(lead.TargetValue), lead.FolderID, limit)
+		lead.AccountID, lead.ProviderType, lead.Kind, boolInt(lead.TargetValue), lead.FolderID, lead.SourceUIDValidity, limit)
 	if err != nil {
 		return nil, err
 	}

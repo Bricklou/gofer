@@ -108,25 +108,25 @@ func (h *Handler) runDueMessageMutations(ctx context.Context) {
 		if len(mutations) == 0 {
 			return
 		}
-		// Read and starred changes of one folder and value go together.
+		// Read, starred and delete changes of one folder and value go together.
 		batched := make(map[string]bool)
 		for i, mutation := range mutations {
-			if !storage.MessageFlagBatchable(mutation) {
+			if !storage.MessageMutationBatchable(mutation) {
 				h.applyQueuedMessageMutation(ctx, mutation)
 				continue
 			}
-			key := messageFlagBatchKey(mutation)
+			key := messageMutationBatchKey(mutation)
 			if batched[key] {
 				continue
 			}
 			batched[key] = true
 			group := []storage.MessageMutation{mutation}
 			for _, other := range mutations[i+1:] {
-				if storage.MessageFlagBatchable(other) && messageFlagBatchKey(other) == key {
+				if storage.MessageMutationBatchable(other) && messageMutationBatchKey(other) == key {
 					group = append(group, other)
 				}
 			}
-			h.applyQueuedMessageFlagBatch(ctx, group)
+			h.applyQueuedMessageMutationBatch(ctx, group)
 		}
 	}
 }
