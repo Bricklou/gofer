@@ -1938,6 +1938,18 @@ func (db *DB) UpsertProviderSyncMessages(ctx context.Context, msgs []ProviderSyn
 				m.ProviderThreadID, m.ProviderThreadID, boolInt(m.HasAttachments), m.SizeBytes, m.SizeBytes, msgID); err != nil {
 				return nil, fmt.Errorf("update provider message: %w", err)
 			}
+			// A draft edited elsewhere keeps its id, so the body and
+			// attachments stored for it are stale; opening it fetches them
+			// again.
+			if m.IsDraft {
+				if _, err := tx.ExecContext(ctx, `DELETE FROM attachments WHERE message_id = ?`, msgID); err != nil {
+					return nil, fmt.Errorf("clear edited draft attachments: %w", err)
+				}
+				if _, err := tx.ExecContext(ctx,
+					`UPDATE messages SET body_text_path = NULL, body_html_path = NULL, body_html_original_path = NULL, raw_path = NULL WHERE id = ?`, msgID); err != nil {
+					return nil, fmt.Errorf("clear edited draft body: %w", err)
+				}
+			}
 		}
 
 		isRead, isStarred := m.IsRead, m.IsStarred
