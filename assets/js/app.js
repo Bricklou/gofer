@@ -1474,7 +1474,9 @@ document.addEventListener("DOMContentLoaded", function () {
       var selectionAction = e.target.closest && e.target.closest("[data-mail-selection-action]")
       if (selectionAction) {
         e.preventDefault()
-        if (!selectionAction.disabled) performMailSelectionAction(mailSelectionActionName(selectionAction))
+        if (selectionAction.disabled) return
+        if (selectionAction.hasAttribute("data-mail-delete-all")) deleteAllInMailFolder(selectionAction.dataset.mailDeleteAllFolder)
+        else performMailSelectionAction(mailSelectionActionName(selectionAction))
         return
       }
 
@@ -1505,7 +1507,11 @@ document.addEventListener("DOMContentLoaded", function () {
       if (path && path.match(/^\/folder\//)) clearMailSelection()
     })
 
-    document.addEventListener("gofer:mail-folder-clicked", function () {
+    document.addEventListener("gofer:mail-folder-clicked", function (evt) {
+      // Delete learns the new folder first: going to Trash or Spam, it stays in
+      // the toolbar and slides over as the other actions leave, instead of
+      // starting to hide only to show again once the folder loads.
+      syncMailDeleteActionState(evt.detail && evt.detail.folderID)
       clearMailSelection()
     })
 
@@ -2102,6 +2108,7 @@ document.addEventListener("DOMContentLoaded", function () {
     }
 
     function syncMailSelectionControls() {
+      var deleteSlotFrom = mailDeleteSlotLeft()
       syncMailSelectAllControls(selectedMailIds.size)
       var rows = renderedMailRows()
       var visibleSelected = 0
@@ -2131,8 +2138,108 @@ document.addEventListener("DOMContentLoaded", function () {
 
       var list = document.getElementById("mail-list")
       if (list) list.toggleAttribute("data-mail-has-selection", count > 0)
+      syncMailDeleteAllAction(count)
       syncMailSelectionToggles(count)
       syncMailActionOverflow()
+      slideMailDeleteSlot(deleteSlotFrom)
+    }
+
+    // syncMailDeleteActionState, outside this scope, follows a folder switch with this.
+    window.syncMailDeleteAllAction = function () { syncMailDeleteAllAction(selectedMailIds.size) }
+
+    // In Trash and Spam with nothing selected, Delete acts on the whole folder.
+    function syncMailDeleteAllAction(count) {
+      var button = document.querySelector('.mail-list-toolbar [data-mail-selection-action="delete"]')
+      if (!button) return
+      var all = MAIL_DELETE_ALL[button.dataset.mailDeleteAllFolder || ""]
+      var whole = !!all && count === 0 && !mailSelectionModeActive()
+      var permanent = button.dataset.mailDeletePermanent === "true"
+      button.toggleAttribute("data-mail-delete-all", whole)
+      if (whole) button.disabled = mailSelectionBusy
+      button.setAttribute("aria-label", whole ? all.label : permanent ? "Permanently delete selected messages" : "Delete selected messages")
+      var root = button.closest("[data-tui-popover-root]")
+      var tooltip = root && root.querySelector("[data-mail-delete-tooltip]")
+      if (tooltip) tooltip.textContent = whole ? all.tooltip : permanent ? "Permanently delete" : "Delete"
+    }
+
+    // Where the Delete slot sits while it shows, or null while it is hidden.
+    function mailDeleteSlotLeft() {
+      var slot = document.querySelector(".mail-list-toolbar [data-mail-delete-action]")
+      if (!slot || getComputedStyle(slot).visibility === "hidden") return null
+      return slot.getBoundingClientRect().left
+    }
+
+    // The other actions showing or hiding move the Delete slot; it slides from
+    // where it was instead of jumping, in step with their 180ms fade. Syncs
+    // repeat while it slides: one that leaves its place alone leaves the slide
+    // alone too, and a new place is reached by the time the first slide ends.
+    var MAIL_DELETE_SLIDE_MS = 180
+
+    function slideMailDeleteSlot(from) {
+      if (from === null) return
+      var slot = document.querySelector(".mail-list-toolbar [data-mail-delete-action]")
+      if (!slot || typeof slot.animate !== "function") return
+      var running = slot._mailSlide && slot._mailSlide.playState === "running" ? slot._mailSlide : null
+      var shift = running ? new DOMMatrixReadOnly(getComputedStyle(slot).transform).m41 : 0
+      var to = mailDeleteSlotLeft()
+      if (to === null) return
+      to -= shift
+      if (running && Math.abs(to - slot._mailSlideTo) < 0.5) return
+      if (running) running.cancel()
+      if (Math.abs(from - to) < 0.5) return
+      var now = performance.now()
+      var duration = running ? Math.max(slot._mailSlideEnd - now, 0) : MAIL_DELETE_SLIDE_MS
+      if (!running) slot._mailSlideEnd = now + MAIL_DELETE_SLIDE_MS
+      slot._mailSlideTo = to
+      if (duration < 16) return
+      slot._mailSlide = slot.animate([{ transform: "translateX(" + (from - to) + "px)" }, { transform: "translateX(0)" }], { duration: duration, easing: "ease" })
+    }
+
+    function deleteAllInMailFolder(kind) {
+      var all = MAIL_DELETE_ALL[kind]
+      var folderID = currentMailListFolderID()
+      if (!all || !folderID || mailSelectionBusy) return
+      window.goferConfirm({
+        title: all.title,
+        message: all.message,
+        destructive: all.destructive,
+        confirmLabel: all.confirm,
+      }).then(function (accepted) {
+        if (!accepted) return
+        mailSelectionBusy = true
+        syncMailSelectionControls()
+        return fetch("/mail/folder/" + encodeURIComponent(folderID) + "/ids", { headers: { Accept: "application/json" } })
+          .then(function (response) {
+            if (!response.ok) throw new Error("delete all in " + kind + ": " + response.status)
+            return response.json()
+          })
+          .then(function (data) {
+            var items = (data && data.ids) || []
+            if (!items.length) return
+            var ids = items.map(function (item) { return item.id })
+            var current = virtualMailList && virtualMailList.selectedEmailId
+            if (current && ids.indexOf(current) !== -1) setMailViewEmpty()
+            applyOptimisticRemove(ids)
+            var targets = items.map(function (item) { return { id: item.id, thread: !!item.thread } })
+            return sendBulkMessageAction("/api/messages/delete", targets, { folder_id: folderID }).then(function () {
+              if (virtualMailList && typeof virtualMailList.refreshCurrentFolder === "function") {
+                virtualMailList.refreshCurrentFolder().catch(function () {})
+              }
+              refreshSidebarUnread()
+              if (data.truncated) {
+                showGoferToast({ id: "mail-delete-all-more", title: all.more, description: all.limit(formatMailCount(ids.length)), variant: "warning", position: "bottom-right", duration: 8000, dismissible: true })
+              }
+            })
+          })
+          .catch(function (err) {
+            console.warn(err)
+            showGoferToast({ id: "mail-delete-all-error", title: all.failed, description: "Try again in a moment.", variant: "error", icon: "error", position: "bottom-right", duration: 6000, dismissible: true })
+          })
+          .finally(function () {
+            mailSelectionBusy = false
+            syncMailSelectionControls()
+          })
+      })
     }
 
     // The read and star buttons undo the state when every selected message already has it.
@@ -5964,11 +6071,10 @@ document.addEventListener("DOMContentLoaded", function () {
       e.preventDefault()
       e.stopPropagation()
       e.stopImmediatePropagation()
-      // Any folder click, the open folder included, drops the selection.
-      document.dispatchEvent(new CustomEvent("gofer:mail-folder-clicked"))
-
       var target = sidebarFolderLinkTarget(link)
       var folderID = target.folderID
+      // Any folder click, the open folder included, drops the selection.
+      document.dispatchEvent(new CustomEvent("gofer:mail-folder-clicked", { detail: { folderID: folderID } }))
       var sidebarTag = sidebarTagForLink(link)
       var toggledFolderGroup = toggleSidebarFolderBranch(link)
       if (virtualMailList && typeof virtualMailList.setSidebarTag === "function") {
@@ -16265,6 +16371,33 @@ function mailActionCurrentFolderID() {
   return active ? (active.getAttribute("hx-get") || "").replace("/folder/", "") : ""
 }
 
+// What Delete says and asks when it acts on a whole folder: Trash is
+// emptied for good, Spam goes to Trash.
+var MAIL_DELETE_ALL = {
+  trash: {
+    tooltip: "Empty trash permanently",
+    label: "Empty trash permanently",
+    title: "Empty trash?",
+    message: "Every message in Trash will be deleted permanently. This can't be undone.",
+    destructive: true,
+    confirm: "Empty trash",
+    failed: "Couldn't empty the trash",
+    more: "Trash still has messages",
+    limit: function (n) { return "Only " + n + " can be deleted at once. Empty it again for the rest." },
+  },
+  spam: {
+    tooltip: "Move all to Trash",
+    label: "Move all spam to Trash",
+    title: "Move all spam to Trash?",
+    message: "Every message in Spam will be moved to Trash.",
+    destructive: false,
+    confirm: "Move to Trash",
+    failed: "Couldn't move the spam to Trash",
+    more: "Spam still has messages",
+    limit: function (n) { return "Only " + n + " can be moved at once. Run it again for the rest." },
+  },
+}
+
 var mailPermanentDeleteClasses = [
   "border",
   "border-red-500/35",
@@ -16287,6 +16420,18 @@ function mailFolderIsTrash(folderID) {
   for (var i = 0; i < links.length; i++) {
     if ((links[i].getAttribute("hx-get") || "") !== "/folder/" + folderID) continue
     return String(links[i].dataset.folderRole || "").toLowerCase() === "trash"
+  }
+  return false
+}
+
+function mailFolderIsSpam(folderID) {
+  folderID = String(folderID || "").trim()
+  if (!folderID) return false
+  if (folderID.toLowerCase() === "spam") return true
+  var links = document.querySelectorAll('aside a[hx-get^="/folder/"]')
+  for (var i = 0; i < links.length; i++) {
+    if ((links[i].getAttribute("hx-get") || "") !== "/folder/" + folderID) continue
+    return String(links[i].dataset.folderRole || "").toLowerCase() === "spam"
   }
   return false
 }
@@ -16319,18 +16464,24 @@ function syncMailArchiveActionState() {
   if (tooltip) tooltip.textContent = unarchive ? "Move to Inbox" : "Archive"
 }
 
-function syncMailDeleteActionState() {
+// folderID is the folder the list is switching to, when it is not loaded yet.
+function syncMailDeleteActionState(folderID) {
   var button = document.querySelector('[data-mail-selection-action="delete"]')
   if (!button) return
-  var permanent = mailFolderIsTrash(mailActionCurrentFolderID())
+  folderID = folderID || mailActionCurrentFolderID()
+  var permanent = mailFolderIsTrash(folderID)
   for (var i = 0; i < mailPermanentDeleteClasses.length; i++) {
     button.classList.toggle(mailPermanentDeleteClasses[i], permanent)
   }
   button.dataset.mailDeletePermanent = permanent ? "true" : "false"
+  // Trash and Spam keep Delete in the toolbar to act on the whole folder.
+  button.dataset.mailDeleteAllFolder = permanent ? "trash" : mailFolderIsSpam(folderID) ? "spam" : ""
   button.setAttribute("aria-label", permanent ? "Permanently delete selected messages" : "Delete selected messages")
   var root = button.closest("[data-tui-popover-root]")
   var tooltip = root && root.querySelector("[data-mail-delete-tooltip]")
   if (tooltip) tooltip.textContent = permanent ? "Permanently delete" : "Delete"
+  // Entering Trash or Spam with nothing selected turns Delete into a whole-folder action.
+  if (typeof window.syncMailDeleteAllAction === "function") window.syncMailDeleteAllAction()
 }
 
 function mailViewRequestURL(emailID, single) {

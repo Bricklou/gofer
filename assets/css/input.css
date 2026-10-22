@@ -1338,7 +1338,8 @@ html[data-theme="classic"] .mail-list-search-input-wrap {
   position: relative;
 }
 
-[data-mail-selection-actions] {
+[data-mail-selection-actions],
+[data-mail-delete-action] {
   position: absolute;
   right: 1rem;
   display: inline-flex;
@@ -1350,8 +1351,22 @@ html[data-theme="classic"] .mail-list-search-input-wrap {
   transition: opacity 180ms ease, transform 180ms ease, visibility 180ms;
 }
 
+/* Delete sits first, apart from the other actions. In Trash and Spam, where it
+   acts on the whole folder with nothing selected, it always shows, as a fixed
+   part of the toolbar: no entrance, which a page load would otherwise play
+   more than once. */
+[data-mail-delete-action]:has([data-mail-delete-all-folder="trash"], [data-mail-delete-all-folder="spam"]) {
+  position: static;
+  opacity: 1;
+  visibility: visible;
+  pointer-events: auto;
+  transform: none;
+}
+
 #mail-list[data-mail-has-selection] [data-mail-selection-actions],
-#mail-list[data-mail-selecting] [data-mail-selection-actions] {
+#mail-list[data-mail-selecting] [data-mail-selection-actions],
+#mail-list[data-mail-has-selection] [data-mail-delete-action],
+#mail-list[data-mail-selecting] [data-mail-delete-action] {
   position: static;
   opacity: 1;
   visibility: visible;

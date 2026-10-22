@@ -240,6 +240,35 @@ templ MailListToolbar(accounts []models.Account, activeFolder string, viewMode s
 			}
 		}
 		<div class="mail-list-toolbar-spacer flex-1"></div>
+		<div class="mail-delete-action items-center" data-mail-delete-action>
+			@tooltip.Tooltip() {
+				@tooltip.Trigger() {
+					@button.Button(button.Props{
+						Variant:  button.VariantGhost,
+						Size:     button.SizeIcon,
+						Class:    mailDeleteActionClass("h-7 w-7", "", mailFolderIDIsTrash(activeFolder, accounts)),
+						Disabled: mailDeleteAllFolder(activeFolder, accounts) == "",
+						Attributes: templ.Attributes{
+							"data-mail-selection-action":  "delete",
+							"data-mail-delete-permanent":  fmt.Sprintf("%t", mailFolderIDIsTrash(activeFolder, accounts)),
+							"data-mail-delete-all-folder": mailDeleteAllFolder(activeFolder, accounts),
+							"data-mail-delete-all":        mailDeleteAllFolder(activeFolder, accounts) != "",
+							"aria-label":                  mailDeleteAllLabel(mailDeleteAllFolder(activeFolder, accounts)),
+						},
+					}) {
+						@icon.Trash2(icon.Props{Class: "size-3.5"})
+					}
+				}
+				@tooltip.Content(tooltip.ContentProps{
+					Position:  tooltip.PositionBottom,
+					ShowArrow: true,
+				}) {
+					<span data-mail-delete-tooltip>
+						{ mailDeleteAllTooltip(mailDeleteAllFolder(activeFolder, accounts)) }
+					</span>
+				}
+			}
+		</div>
 		<div class="items-center gap-1" data-mail-selection-actions>
 			@tooltip.Tooltip() {
 				@tooltip.Trigger() {
@@ -267,35 +296,6 @@ templ MailListToolbar(accounts []models.Account, activeFolder string, viewMode s
 							Move to Inbox
 						} else {
 							Archive
-						}
-					</span>
-				}
-			}
-			@tooltip.Tooltip() {
-				@tooltip.Trigger() {
-					@button.Button(button.Props{
-						Variant:  button.VariantGhost,
-						Size:     button.SizeIcon,
-						Class:    mailDeleteActionClass("h-7 w-7", "", mailFolderIDIsTrash(activeFolder, accounts)),
-						Disabled: true,
-						Attributes: templ.Attributes{
-							"data-mail-selection-action": "delete",
-							"data-mail-delete-permanent": fmt.Sprintf("%t", mailFolderIDIsTrash(activeFolder, accounts)),
-							"aria-label":                 mailDeleteSelectionLabel(mailFolderIDIsTrash(activeFolder, accounts)),
-						},
-					}) {
-						@icon.Trash2(icon.Props{Class: "size-3.5"})
-					}
-				}
-				@tooltip.Content(tooltip.ContentProps{
-					Position:  tooltip.PositionBottom,
-					ShowArrow: true,
-				}) {
-					<span data-mail-delete-tooltip>
-						if mailFolderIDIsTrash(activeFolder, accounts) {
-							Permanently delete
-						} else {
-							Delete
 						}
 					</span>
 				}

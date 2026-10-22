@@ -213,11 +213,38 @@ func mailHiddenClass(class string, hidden bool) string {
 	return class
 }
 
-func mailDeleteSelectionLabel(permanent bool) string {
-	if permanent {
-		return "Permanently delete selected messages"
+// mailDeleteAllFolder names the folder kind whose list toolbar Delete acts on
+// the whole folder while nothing is selected: "trash", "spam" or "".
+func mailDeleteAllFolder(activeFolder string, accounts []models.Account) string {
+	switch {
+	case mailFolderIDIsTrash(activeFolder, accounts):
+		return "trash"
+	case mailFolderIDIsSpam(activeFolder, accounts):
+		return "spam"
+	}
+	return ""
+}
+
+// Nothing is selected at first, so Delete starts out acting on the whole
+// folder where it can. app.js keeps these in step with the selection.
+func mailDeleteAllLabel(folder string) string {
+	switch folder {
+	case "trash":
+		return "Empty trash permanently"
+	case "spam":
+		return "Move all spam to Trash"
 	}
 	return "Delete selected messages"
+}
+
+func mailDeleteAllTooltip(folder string) string {
+	switch folder {
+	case "trash":
+		return "Empty trash permanently"
+	case "spam":
+		return "Move all to Trash"
+	}
+	return "Delete"
 }
 
 func mailViewPartialURL(emailID, folderID string, single bool) templ.SafeURL {

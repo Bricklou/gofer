@@ -18,7 +18,7 @@ func TestTrashDeleteActionsLookDestructiveAndSayPermanent(t *testing.T) {
 	if err := MailListToolbar(accounts, "acc-trash", "cards", models.EmailFilters{}).Render(context.Background(), &list); err != nil {
 		t.Fatalf("MailListToolbar.Render() error = %v", err)
 	}
-	for _, want := range []string{"Permanently delete", "Permanently delete selected messages", "data-mail-delete-permanent=\"true\"", "data-mail-delete-tooltip", "border-red-500/35", "bg-red-500/12", "text-red-700"} {
+	for _, want := range []string{"Empty trash permanently", "data-mail-delete-all-folder=\"trash\"", "data-mail-delete-permanent=\"true\"", "data-mail-delete-tooltip", "border-red-500/35", "bg-red-500/12", "text-red-700"} {
 		if !strings.Contains(list.String(), want) {
 			t.Fatalf("Trash toolbar missing %q: %s", want, list.String())
 		}
@@ -33,6 +33,25 @@ func TestTrashDeleteActionsLookDestructiveAndSayPermanent(t *testing.T) {
 		if !strings.Contains(message.String(), want) {
 			t.Fatalf("Trash message action missing %q: %s", want, message.String())
 		}
+	}
+}
+
+func TestSpamDeleteActionMovesAllToTrashWithoutLookingDestructive(t *testing.T) {
+	accounts := []models.Account{{
+		ID:      "acc",
+		Folders: []models.Folder{{ID: "acc-spam", Name: "Spam", Role: "spam"}},
+	}}
+	var list bytes.Buffer
+	if err := MailListToolbar(accounts, "acc-spam", "cards", models.EmailFilters{}).Render(context.Background(), &list); err != nil {
+		t.Fatalf("MailListToolbar.Render() error = %v", err)
+	}
+	for _, want := range []string{"Move all to Trash", "Move all spam to Trash", "data-mail-delete-all-folder=\"spam\"", "data-mail-delete-permanent=\"false\""} {
+		if !strings.Contains(list.String(), want) {
+			t.Fatalf("Spam toolbar missing %q: %s", want, list.String())
+		}
+	}
+	if strings.Contains(list.String(), "border-red-500/35") {
+		t.Fatalf("Spam toolbar Delete looks destructive: %s", list.String())
 	}
 }
 

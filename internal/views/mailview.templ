@@ -155,10 +155,10 @@ templ MailViewLoading() {
 							@icon.ArrowLeft(icon.Props{Class: "size-5"})
 						</button>
 						@mailViewLoadingToolbarButton() {
-							@icon.Archive(icon.Props{Class: "size-4"})
+							@icon.Trash2(icon.Props{Class: "size-4"})
 						}
 						@mailViewLoadingToolbarButton() {
-							@icon.Trash2(icon.Props{Class: "size-4"})
+							@icon.Archive(icon.Props{Class: "size-4"})
 						}
 						<div>
 							<button type="button" disabled tabindex="-1" data-mail-action="spam" class="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-ink opacity-25">
@@ -469,28 +469,6 @@ templ MailViewThreadItemMiniHeader(item *models.ThreadItem) {
 				@button.Button(button.Props{
 					Variant:    button.VariantGhost,
 					Size:       button.SizeIcon,
-					Class:      "h-7 w-7",
-					Attributes: templ.Attributes{"data-on-click": onAction("toggleStar", item.ID), "data-star-email": item.ID},
-				}) {
-					if item.IsStarred {
-						@icon.Star(icon.Props{Class: "size-3.5 text-amber-500 fill-amber-500 drop-shadow-[0_1px_1px_rgba(180,120,0,0.3)]"})
-					} else {
-						@icon.Star(icon.Props{Class: "size-3.5 text-icon"})
-					}
-				}
-			}
-			@tooltip.Content(tooltip.ContentProps{
-				Position:  tooltip.PositionBottom,
-				ShowArrow: true,
-			}) {
-				Star
-			}
-		}
-		@tooltip.Tooltip() {
-			@tooltip.Trigger() {
-				@button.Button(button.Props{
-					Variant:    button.VariantGhost,
-					Size:       button.SizeIcon,
 					Class:      mailDeleteActionClass("h-7 w-7", "text-icon hover:text-ink hover:bg-ink/5", mailThreadItemIsTrash(item)),
 					Attributes: templ.Attributes{"data-on-click": onAction("deleteMessage", item.ID)},
 				}) {
@@ -506,6 +484,28 @@ templ MailViewThreadItemMiniHeader(item *models.ThreadItem) {
 				} else {
 					Delete
 				}
+			}
+		}
+		@tooltip.Tooltip() {
+			@tooltip.Trigger() {
+				@button.Button(button.Props{
+					Variant:    button.VariantGhost,
+					Size:       button.SizeIcon,
+					Class:      "h-7 w-7",
+					Attributes: templ.Attributes{"data-on-click": onAction("toggleStar", item.ID), "data-star-email": item.ID},
+				}) {
+					if item.IsStarred {
+						@icon.Star(icon.Props{Class: "size-3.5 text-amber-500 fill-amber-500 drop-shadow-[0_1px_1px_rgba(180,120,0,0.3)]"})
+					} else {
+						@icon.Star(icon.Props{Class: "size-3.5 text-icon"})
+					}
+				}
+			}
+			@tooltip.Content(tooltip.ContentProps{
+				Position:  tooltip.PositionBottom,
+				ShowArrow: true,
+			}) {
+				Star
 			}
 		}
 		@tooltip.Tooltip() {
@@ -692,6 +692,28 @@ templ MailViewHeader(email *models.Email, thread []models.ThreadItem) {
 			</button>
 			@tooltip.Tooltip() {
 				@tooltip.Trigger() {
+					@button.Button(button.Props{
+						Variant:    button.VariantGhost,
+						Size:       button.SizeIcon,
+						Class:      mailDeleteActionClass("h-8 w-8", "text-icon hover:text-ink hover:bg-ink/5", mailEmailIsTrash(email)),
+						Attributes: templ.Attributes{"data-on-click": threadAwareAction("deleteMessage", "deleteThread", email)},
+					}) {
+						@icon.Trash2(icon.Props{Class: "size-4"})
+					}
+				}
+				@tooltip.Content(tooltip.ContentProps{
+					Position:  tooltip.PositionBottom,
+					ShowArrow: true,
+				}) {
+					if mailEmailIsTrash(email) {
+						{ threadAwareLabel("Permanently delete", "Permanently delete thread", email) }
+					} else {
+						{ threadAwareLabel("Delete", "Delete thread", email) }
+					}
+				}
+				}
+			@tooltip.Tooltip() {
+				@tooltip.Trigger() {
 					if mailEmailIsArchived(email) {
 						@button.Button(button.Props{
 							Variant:    button.VariantGhost,
@@ -723,28 +745,6 @@ templ MailViewHeader(email *models.Email, thread []models.ThreadItem) {
 					}
 				}
 			}
-			@tooltip.Tooltip() {
-				@tooltip.Trigger() {
-					@button.Button(button.Props{
-						Variant:    button.VariantGhost,
-						Size:       button.SizeIcon,
-						Class:      mailDeleteActionClass("h-8 w-8", "text-icon hover:text-ink hover:bg-ink/5", mailEmailIsTrash(email)),
-						Attributes: templ.Attributes{"data-on-click": threadAwareAction("deleteMessage", "deleteThread", email)},
-					}) {
-						@icon.Trash2(icon.Props{Class: "size-4"})
-					}
-				}
-				@tooltip.Content(tooltip.ContentProps{
-					Position:  tooltip.PositionBottom,
-					ShowArrow: true,
-				}) {
-					if mailEmailIsTrash(email) {
-						{ threadAwareLabel("Permanently delete", "Permanently delete thread", email) }
-					} else {
-						{ threadAwareLabel("Delete", "Delete thread", email) }
-					}
-				}
-				}
 				@tooltip.Tooltip() {
 					@tooltip.Trigger() {
 						if mailEmailIsSpam(email) {
