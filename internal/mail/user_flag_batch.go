@@ -16,9 +16,10 @@ const mutationFlagBatchLimit = 500
 
 // applyFlagBatch sends lead and the account's other due changes of the same
 // flag, value and folder to the provider in one request: one IMAP STORE over
-// their UIDs, or Email/set calls naming many emails on JMAP. A change whose
-// message must be looked up on the server first takes the one-by-one path,
-// and one whose message is gone is dropped. It gives back the changes that
+// their UIDs, Email/set calls naming many emails on JMAP, messages.batchModify
+// on Gmail and Graph $batch on Outlook. A change whose message must be looked
+// up on the server first, or that a batch cannot carry, takes the one-by-one
+// path, and one whose message is gone is dropped. It gives back the changes that
 // failed; err is set when the queue itself could not be read or written.
 func (s *UserIMAP) applyFlagBatch(ctx context.Context, scope *userIMAPScope, lead storage.MessageMutation) (failed []mutationFailure, err error) {
 	batch := []storage.MessageMutation{lead}
@@ -62,7 +63,7 @@ func (s *UserIMAP) applyFlagBatch(ctx context.Context, scope *userIMAPScope, lea
 			// As applyMutation checks: the account is still the same IMAP or JMAP one.
 			failed = append(failed, mutationFailure{m, errors.New("queued mutation account or provider changed")})
 		case m.ProviderType == storage.MessageMutationProviderIMAP && info.RemoteUID == 0,
-			m.ProviderType == storage.MessageMutationProviderJMAP && info.RemoteMessageID == "":
+			m.ProviderType != storage.MessageMutationProviderIMAP && info.RemoteMessageID == "":
 			single = append(single, m)
 		case m.ProviderType == storage.MessageMutationProviderIMAP && info.FolderRemoteID == "":
 			failed = append(failed, mutationFailure{m, errors.New("message has no remote IMAP folder identity")})
@@ -106,18 +107,36 @@ func (s *UserIMAP) applyFlagBatch(ctx context.Context, scope *userIMAPScope, lea
 		if sendErr != nil {
 			groupFailures = sameError(len(grouped), sendErr)
 		}
+	case storage.MessageMutationProviderGmail, storage.MessageMutationProviderOutlook:
+		groupFailures = s.sendProviderFlagBatch(ctx, scope, lead, groupedInfos)
 	}
-	var applied []storage.MessageMutation
+	var applied []int
 	for i, m := range grouped {
-		if groupFailures[i] != nil {
+		switch {
+		case errors.Is(groupFailures[i], ErrFlagBatchRefused):
+			if err := s.applyMutation(ctx, scope, m); err != nil {
+				failed = append(failed, mutationFailure{m, err})
+			}
+		case groupFailures[i] != nil:
 			failed = append(failed, mutationFailure{m, groupFailures[i]})
-		} else {
-			applied = append(applied, m)
+		default:
+			applied = append(applied, i)
 		}
 	}
 	if err := scope.call(ctx, func(db *storage.DB) error {
-		for _, m := range applied {
-			if err := db.CompleteMessageMutation(ctx, m.ID); err != nil {
+		for _, i := range applied {
+			m, info := grouped[i], groupedInfos[i]
+			var err error
+			if m.ProviderType == storage.MessageMutationProviderGmail || m.ProviderType == storage.MessageMutationProviderOutlook {
+				// As applyProviderMutation records it, checking the attempt.
+				err = db.CompleteProviderMutation(ctx, m, scope.config.ProviderAccountID, info.RemoteMessageID, info.InternetMessageID, info.RemoteMessageID, "", false)
+				if errors.Is(err, storage.ErrMessageMutationSuperseded) {
+					err = nil
+				}
+			} else {
+				err = db.CompleteMessageMutation(ctx, m.ID)
+			}
+			if err != nil {
 				return err
 			}
 		}
@@ -126,6 +145,26 @@ func (s *UserIMAP) applyFlagBatch(ctx context.Context, scope *userIMAPScope, lea
 		return failed, err
 	}
 	return failed, nil
+}
+
+// sendProviderFlagBatch sends a Gmail or Outlook batch with the account's
+// token, through the same request path single changes use.
+func (s *UserIMAP) sendProviderFlagBatch(ctx context.Context, scope *userIMAPScope, lead storage.MessageMutation, infos []storage.MessageMutationInfo) []error {
+	if scope.config.Provider != lead.ProviderType {
+		return sameError(len(infos), errors.New("queued mutation account or provider changed"))
+	}
+	request, err := userProviderMutationRequest(ctx, scope)
+	if err != nil {
+		return sameError(len(infos), err)
+	}
+	messages := make([]ProviderFlagMessage, len(infos))
+	for i, info := range infos {
+		messages[i] = ProviderFlagMessage{IDs: append([]string{info.RemoteMessageID}, info.FolderCopyIDs...)}
+	}
+	if lead.ProviderType == storage.MessageMutationProviderGmail {
+		return SendGmailFlagBatch(ProviderRequest(request), gmailAPIBaseURL, lead.Kind, lead.TargetValue, messages)
+	}
+	return SendOutlookFlagBatch(ProviderRequest(request), outlookGraphBaseURL, lead.Kind, lead.TargetValue, messages)
 }
 
 // storeIMAPFlagBatch sets or clears the flag on every message's UID in the

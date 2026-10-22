@@ -27,9 +27,11 @@ func messageFlagBatchKey(m storage.MessageMutation) string {
 
 // applyQueuedMessageFlagBatch sends claimed read or starred changes of one
 // account, folder and value, with any further due ones, to the provider in
-// one request: one IMAP STORE over their UIDs, or Email/set calls naming
-// many emails on JMAP. A change whose message must be looked up on the
-// server first goes one by one, and one whose message is gone is dropped.
+// one request: one IMAP STORE over their UIDs, Email/set calls naming many
+// emails on JMAP, messages.batchModify on Gmail and Graph $batch on Outlook.
+// A change whose message must be looked up on the server first, or that a
+// batch cannot carry, goes one by one, and one whose message is gone is
+// dropped.
 func (h *Handler) applyQueuedMessageFlagBatch(parent context.Context, group []storage.MessageMutation) {
 	ctx, cancel := context.WithTimeout(parent, 2*time.Minute)
 	defer cancel()
@@ -62,7 +64,7 @@ func (h *Handler) applyQueuedMessageFlagBatch(parent context.Context, group []st
 		case messageMutationProvider(info.AccountProvider) != m.ProviderType:
 			h.finishQueuedMessageMutation(m, fmt.Errorf("message provider changed from %s", m.ProviderType))
 		case m.ProviderType == storage.MessageMutationProviderIMAP && info.RemoteUID == 0,
-			m.ProviderType == storage.MessageMutationProviderJMAP && info.RemoteMessageID == "":
+			m.ProviderType != storage.MessageMutationProviderIMAP && strings.TrimSpace(info.RemoteMessageID) == "":
 			h.applyQueuedMessageMutation(ctx, m)
 		case m.ProviderType == storage.MessageMutationProviderIMAP && strings.TrimSpace(info.FolderRemoteID) == "":
 			h.finishQueuedMessageMutation(m, errors.New("message has no remote IMAP folder identity"))
@@ -81,12 +83,56 @@ func (h *Handler) applyQueuedMessageFlagBatch(parent context.Context, group []st
 		failures = h.storeIMAPFlagBatch(ctx, lead, infos)
 	case storage.MessageMutationProviderJMAP:
 		failures = h.setJMAPFlagBatch(ctx, lead, infos)
+	case storage.MessageMutationProviderGmail, storage.MessageMutationProviderOutlook:
+		failures = h.sendProviderFlagBatch(ctx, lead, infos)
 	default:
 		failures = sameMutationError(len(grouped), fmt.Errorf("unsupported batched provider %q", lead.ProviderType))
 	}
 	for i, m := range grouped {
+		if errors.Is(failures[i], mail.ErrFlagBatchRefused) {
+			h.applyQueuedMessageMutation(ctx, m)
+			continue
+		}
 		h.finishQueuedMessageMutation(m, failures[i])
 	}
+}
+
+// sendProviderFlagBatch sends a Gmail or Outlook batch with the account's
+// token, through the request helpers single changes use.
+func (h *Handler) sendProviderFlagBatch(ctx context.Context, lead storage.MessageMutation, infos []storage.MessageMutationInfo) []error {
+	if h.mailCredentials() == nil {
+		return sameMutationError(len(infos), fmt.Errorf("%s authentication is not available", lead.ProviderType))
+	}
+	messages := make([]mail.ProviderFlagMessage, len(infos))
+	for i, info := range infos {
+		messages[i] = mail.ProviderFlagMessage{IDs: append([]string{strings.TrimSpace(info.RemoteMessageID)}, info.FolderCopyIDs...)}
+	}
+	if lead.ProviderType == storage.MessageMutationProviderGmail {
+		token, err := h.mailCredentials().GetOAuthTokenForAccount(ctx, lead.AccountID)
+		if err != nil {
+			return sameMutationError(len(infos), fmt.Errorf("get Gmail token: %w", err))
+		}
+		request := func(method, endpoint string, body, out any) error {
+			err := doGoogleJSON(ctx, method, endpoint, token, body, out)
+			if apiErr, ok := err.(googleAPIError); ok {
+				return mail.ProviderStatusError(apiErr.Status, err)
+			}
+			return err
+		}
+		return mail.SendGmailFlagBatch(request, gmailAPIBaseURL, lead.Kind, lead.TargetValue, messages)
+	}
+	token, err := h.mailCredentials().GetMicrosoftGraphMailTokenForAccount(ctx, lead.AccountID)
+	if err != nil {
+		return sameMutationError(len(infos), fmt.Errorf("get Outlook token: %w", err))
+	}
+	request := func(method, endpoint string, body, out any) error {
+		err := h.doOutlookJSON(ctx, method, endpoint, token, body, out)
+		if apiErr, ok := err.(outlookAPIError); ok {
+			return mail.ProviderStatusError(apiErr.Status, err)
+		}
+		return err
+	}
+	return mail.SendOutlookFlagBatch(request, outlookGraphBaseURL, lead.Kind, lead.TargetValue, messages)
 }
 
 // finishQueuedMessageMutation records a change's result as

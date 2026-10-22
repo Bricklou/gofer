@@ -136,6 +136,8 @@ func (a *routedGmailAPI) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			history = append(history, map[string]any{"id": cursor, "messagesAdded": []map[string]any{{"message": map[string]string{"id": id}}}, "messagesDeleted": []map[string]any{{"message": map[string]string{"id": "m1"}}}})
 		}
 		_ = json.NewEncoder(w).Encode(map[string]any{"history": history, "historyId": cursor})
+	case r.Method == http.MethodPost && r.URL.Path == "/users/me/messages/batchModify":
+		w.WriteHeader(http.StatusNoContent)
 	case strings.HasPrefix(r.URL.Path, "/users/me/messages/"):
 		messageID := strings.TrimPrefix(r.URL.Path, "/users/me/messages/")
 		if strings.HasSuffix(messageID, "/modify") {
@@ -525,6 +527,37 @@ func TestUserGmailRefreshesUnauthorizedTokensAndReplaysLabels(t *testing.T) {
 	if f.api.count("alice", "/token", "") != 1 {
 		t.Fatal("refreshed token was not retained for body fetching")
 	}
+}
+
+// A read change replays through messages.batchModify, with the owner's
+// token, and is recorded as applied.
+func TestUserGmailReplaysReadChangesInABatch(t *testing.T) {
+	f := newUserGmailFixture(t)
+	if err := f.worker.Sync(t.Context(), "alice", f.ids["alice"]); err != nil {
+		t.Fatal(err)
+	}
+	id := f.messageID(t, "alice", "m1")
+	f.local(t, "alice", func(db *storage.DB) error {
+		return db.SetMessageReadAndQueue(t.Context(), id, true)
+	})
+	if err := f.worker.Sync(t.Context(), "alice", f.ids["alice"]); err != nil {
+		t.Fatal(err)
+	}
+	if f.api.count("alice", "/users/me/messages/batchModify", "") != 1 || f.api.count("alice", "/users/me/messages/m1/modify", "") != 0 {
+		t.Fatalf("batchModify calls = %d, single modifies = %d; want the change in one batch",
+			f.api.count("alice", "/users/me/messages/batchModify", ""), f.api.count("alice", "/users/me/messages/m1/modify", ""))
+	}
+	if f.api.count("bob", "/users/me/messages/batchModify", "") != 0 {
+		t.Fatal("the batch escaped its owner")
+	}
+	f.local(t, "alice", func(db *storage.DB) error {
+		var pending int
+		err := db.Read().QueryRow(`SELECT COUNT(*) FROM message_mutations WHERE status != 'applied'`).Scan(&pending)
+		if err == nil && pending != 0 {
+			err = fmt.Errorf("%d changes not applied", pending)
+		}
+		return err
+	})
 }
 
 func TestUserGmailColdBodyRefreshesUnauthorizedToken(t *testing.T) {

@@ -95,6 +95,32 @@ func TestOutlookGraphMutationUsesProviderMessageIDAndCachesMovedID(t *testing.T)
 			}
 			sawReadPatch = true
 			w.WriteHeader(http.StatusOK)
+		case r.Method == http.MethodPost && r.URL.Path == "/$batch":
+			// Read and starred changes go in Graph batches.
+			if got := r.Header.Get("Authorization"); got != "Bearer graph-token" {
+				t.Fatalf("Authorization = %q", got)
+			}
+			var batch struct {
+				Requests []struct {
+					ID      string            `json:"id"`
+					Method  string            `json:"method"`
+					URL     string            `json:"url"`
+					Headers map[string]string `json:"headers"`
+					Body    map[string]bool   `json:"body"`
+				} `json:"requests"`
+			}
+			if err := json.NewDecoder(r.Body).Decode(&batch); err != nil {
+				t.Fatalf("decode $batch: %v", err)
+			}
+			if len(batch.Requests) != 1 {
+				t.Fatalf("$batch requests = %#v, want one", batch.Requests)
+			}
+			update := batch.Requests[0]
+			if update.Method != http.MethodPatch || update.URL != "/me/messages/graph-message-1" || !strings.Contains(update.Headers["Prefer"], `IdType="ImmutableId"`) || update.Body["isRead"] {
+				t.Fatalf("$batch update = %#v, want an immutable-id PATCH setting isRead false", update)
+			}
+			sawReadPatch = true
+			_ = json.NewEncoder(w).Encode(map[string]any{"responses": []map[string]any{{"id": update.ID, "status": 200}}})
 		case r.Method == http.MethodPost && r.URL.Path == "/me/messages/graph-message-1/move":
 			if got := r.Header.Get("Authorization"); got != "Bearer graph-token" {
 				t.Fatalf("Authorization = %q", got)

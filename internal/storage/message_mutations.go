@@ -645,8 +645,8 @@ func markMessageMutationsProcessingTx(ctx context.Context, tx *sql.Tx, mutations
 }
 
 // MessageFlagBatchable reports whether a claimed change can travel with
-// others in one provider request: a read or starred change of an IMAP or
-// JMAP account. ClaimMessageFlagBatch finds the ones that can join it.
+// others in one provider request: any read or starred change.
+// ClaimMessageFlagBatch finds the ones that can join it.
 func MessageFlagBatchable(m MessageMutation) bool {
 	if m.Kind != MessageMutationRead && m.Kind != MessageMutationStarred {
 		return false
@@ -655,7 +655,7 @@ func MessageFlagBatchable(m MessageMutation) bool {
 	case MessageMutationProviderIMAP:
 		// An IMAP change is scoped to the folder its request selects.
 		return m.FolderID != ""
-	case MessageMutationProviderJMAP:
+	case MessageMutationProviderJMAP, MessageMutationProviderGmail, MessageMutationProviderOutlook:
 		return true
 	}
 	return false

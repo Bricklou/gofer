@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/base64"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -91,12 +92,17 @@ func TestGmailAPIMutationUsesProviderMessageIDAndLabels(t *testing.T) {
 		if got := r.Header.Get("Authorization"); got != "Bearer gmail-token" {
 			t.Fatalf("Authorization = %q", got)
 		}
-		if r.Method != http.MethodPost || r.URL.Path != "/users/me/messages/gmail-msg-1/modify" {
+		// Read and starred changes go in batches; moves one by one.
+		batch := r.URL.Path == "/users/me/messages/batchModify"
+		if r.Method != http.MethodPost || (!batch && r.URL.Path != "/users/me/messages/gmail-msg-1/modify") {
 			t.Fatalf("unexpected request %s %s", r.Method, r.URL.String())
 		}
 		var payload map[string][]string
 		if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
 			t.Fatalf("decode modify payload: %v", err)
+		}
+		if batch && (len(payload["ids"]) != 1 || payload["ids"][0] != "gmail-msg-1") {
+			t.Fatalf("batchModify ids = %v, want the provider message id", payload["ids"])
 		}
 		switch {
 		case containsString(payload["addLabelIds"], "UNREAD"):
@@ -390,4 +396,59 @@ func containsString(values []string, needle string) bool {
 		}
 	}
 	return false
+}
+
+// Gmail turns down a whole batchModify when one id is bad; the changes then
+// go one by one, so the good ones still land.
+func TestGmailRefusedBatchFallsBackToSingleChanges(t *testing.T) {
+	ctx := context.Background()
+	h, db := newGmailAPITestHandler(t, ctx)
+	if err := db.UpsertFolders(ctx, []storage.UpsertFolderInput{
+		{ID: "acc_inbox", AccountID: "acc", RemoteID: "INBOX", ProviderRemoteID: "INBOX", Name: "Inbox", Role: "inbox", Selectable: true},
+	}); err != nil {
+		t.Fatalf("UpsertFolders() error = %v", err)
+	}
+	var messages []storage.ProviderSyncMessage
+	for i, subject := range []string{"Orchard visit", "Cycling route"} {
+		messages = append(messages, storage.ProviderSyncMessage{
+			AccountID: "acc", FolderID: "acc_inbox", ProviderMessageID: fmt.Sprintf("gmail-batch-%d", i),
+			InternetMessageID: fmt.Sprintf("<gmail-batch-%d@example.com>", i), Subject: subject,
+			FromEmail: "omar@example.com", DateSent: time.Now(), DateReceived: time.Now(),
+		})
+	}
+	ids, err := db.UpsertProviderSyncMessages(ctx, messages)
+	if err != nil {
+		t.Fatalf("UpsertProviderSyncMessages() error = %v", err)
+	}
+	var batches int
+	singles := map[string]bool{}
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/users/me/messages/batchModify":
+			batches++
+			http.Error(w, `{"error":{"code":400,"message":"Invalid id value"}}`, http.StatusBadRequest)
+		case "/users/me/messages/gmail-batch-0/modify", "/users/me/messages/gmail-batch-1/modify":
+			singles[r.URL.Path] = true
+			w.WriteHeader(http.StatusOK)
+		default:
+			t.Fatalf("unexpected request %s %s", r.Method, r.URL.String())
+		}
+	}))
+	defer server.Close()
+	previousBase := gmailAPIBaseURL
+	gmailAPIBaseURL = server.URL
+	t.Cleanup(func() { gmailAPIBaseURL = previousBase })
+
+	if err := db.SetMessagesReadAndQueue(ctx, []int64{ids["gmail-batch-0"], ids["gmail-batch-1"]}, true); err != nil {
+		t.Fatalf("SetMessagesReadAndQueue() error = %v", err)
+	}
+	h.runDueMessageMutations(ctx)
+
+	if batches != 1 || len(singles) != 2 {
+		t.Fatalf("batchModify calls = %d, single modifies = %v; want one refused batch, then both alone", batches, singles)
+	}
+	var pending int
+	if err := db.Read().QueryRow(`SELECT COUNT(*) FROM message_mutations WHERE status != 'applied'`).Scan(&pending); err != nil || pending != 0 {
+		t.Fatalf("changes not applied = %d, %v", pending, err)
+	}
 }
