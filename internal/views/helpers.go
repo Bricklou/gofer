@@ -213,6 +213,18 @@ func mailHiddenClass(class string, hidden bool) string {
 	return class
 }
 
+// menuDestructiveClass gives a menu item that deletes the red highlight the
+// account menu's Delete has, instead of the ordinary one.
+const menuDestructiveClass = "hover:bg-destructive/10 hover:text-destructive focus:bg-destructive/10 focus:text-destructive"
+
+// mailContextItemClass highlights the message menu's Delete in red.
+func mailContextItemClass(action string) string {
+	if action == "delete" {
+		return menuDestructiveClass
+	}
+	return ""
+}
+
 // mailDeleteAllFolder names the folder kind whose list toolbar Delete acts on
 // the whole folder while nothing is selected: "trash", "spam" or "".
 func mailDeleteAllFolder(activeFolder string, accounts []models.Account) string {

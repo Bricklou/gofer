@@ -862,7 +862,7 @@ templ MailViewHeader(email *models.Email, thread []models.ThreadItem) {
 								Continue editing
 							</span>
 						}
-						@dropdown.Item(dropdown.ItemProps{Attributes: templ.Attributes{"data-on-click": onAction("discardReadPaneDraft", email.ID)}}) {
+						@dropdown.Item(dropdown.ItemProps{Class: menuDestructiveClass, Attributes: templ.Attributes{"data-on-click": onAction("discardReadPaneDraft", email.ID)}}) {
 							<span class="flex items-center gap-2 text-destructive">
 								@icon.Trash2(icon.Props{Class: "size-4"})
 								Discard draft

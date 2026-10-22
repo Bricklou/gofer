@@ -63,7 +63,7 @@ templ SidebarContextMenu() {
 			@sidebarContextItem("mark-read", "Mark all as read", "") {
 				@icon.CheckCheck(icon.Props{Class: "size-4"})
 			}
-			@sidebarContextItem("empty-trash", "Empty trash", "text-destructive") {
+			@sidebarContextItem("empty-trash", "Empty trash", "text-destructive "+menuDestructiveClass) {
 				@icon.Trash2(icon.Props{Class: "size-4"})
 			}
 			@sidebarContextItem("spam-to-trash", "Move all to Trash", "") {

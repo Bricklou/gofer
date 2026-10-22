@@ -144,7 +144,7 @@ templ mailContextSpamItems() {
 }
 
 templ mailContextItem(action string, label string) {
-	@dropdown.Item(dropdown.ItemProps{Attributes: templ.Attributes{"role": "menuitem", "data-mail-context-action": action}}) {
+	@dropdown.Item(dropdown.ItemProps{Class: mailContextItemClass(action), Attributes: templ.Attributes{"role": "menuitem", "data-mail-context-action": action}}) {
 		<span class="flex items-center gap-2">
 			{ children... }
 			<span data-mail-context-label>{ label }</span>
