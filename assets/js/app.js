@@ -12998,6 +12998,12 @@ document.addEventListener("contextmenu", function (event) {
   fillCalendarContextMenu(root, null)
   if (loading) loading.hidden = true
   calendarContextClose()
+  // Low in the calendar, the menu opens upward from the start, so it grows
+  // up as its items arrive instead of opening down and then flipping.
+  var content = root.querySelector(":scope > [data-tui-popover-content]")
+  var area = document.getElementById("calendar-main")
+  var bounds = area ? area.getBoundingClientRect() : {top: 0, height: window.innerHeight}
+  if (content) content.setAttribute("data-tui-popover-placement", event.clientY > bounds.top + bounds.height * 2 / 3 ? "top-start" : "bottom-start")
   placePointPopover(root, event.clientX, event.clientY)
   window.tui.popover.open("calendar-context-menu")
   // A quick answer just grows the menu; a slow one first says it's loading.
