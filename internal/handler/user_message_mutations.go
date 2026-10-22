@@ -141,6 +141,7 @@ func (h *Handler) registerUserMessageMutations(private func(string, http.Handler
 		{"POST /api/messages/spam", func(h *Handler) http.HandlerFunc { return h.handleMarkMessagesSpam }},
 		{"POST /api/messages/not-spam", func(h *Handler) http.HandlerFunc { return h.handleMarkMessagesNotSpam }},
 		{"POST /api/messages/read", func(h *Handler) http.HandlerFunc { return h.handleMarkMessagesRead }},
+		{"POST /api/folders/{id}/mark-read", func(h *Handler) http.HandlerFunc { return h.handleMarkFolderRead }},
 		{"POST /api/messages/star", func(h *Handler) http.HandlerFunc { return h.handleMarkMessagesStarred }},
 		{"POST /api/messages/archive", func(h *Handler) http.HandlerFunc { return h.handleArchiveMessages }},
 		{"POST /api/messages/unarchive", func(h *Handler) http.HandlerFunc { return h.handleUnarchiveMessages }},

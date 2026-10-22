@@ -218,6 +218,37 @@ func foreignMessageActionRequests(fixture messageActionOwnershipFixture) []messa
 		{name: "bulk label", method: http.MethodPost, path: "/api/messages/label", body: bulk(`,"label":"Projects"`), contentType: "application/json", handle: fixture.handler.handleLabelMessages},
 		{name: "bulk unlabel", method: http.MethodPost, path: "/api/messages/unlabel", body: bulk(`,"label":"Projects"`), contentType: "application/json", handle: fixture.handler.handleUnlabelMessages},
 		{name: "bulk move", method: http.MethodPost, path: "/api/messages/move", body: bulk(`,"folder_id":"attacker-archive"`), contentType: "application/json", handle: fixture.handler.handleMoveMessages},
+		{name: "mark folder read", method: http.MethodPost, path: "/api/folders/victim-inbox/mark-read", pathValues: map[string]string{"id": "victim-inbox"}, handle: fixture.handler.handleMarkFolderRead},
+	}
+}
+
+func TestMarkFolderReadMarksTheOwnersFolder(t *testing.T) {
+	fixture := newMessageActionOwnershipFixture(t)
+	rec := executeMessageActionRequest(t, messageActionRequest{
+		method:     http.MethodPost,
+		path:       "/api/folders/victim-inbox/mark-read",
+		pathValues: map[string]string{"id": "victim-inbox"},
+		handle:     fixture.handler.handleMarkFolderRead,
+	}, ownerRequest)
+	if rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), `"marked":1`) {
+		t.Fatalf("status = %d body = %q, want 200 with one message marked", rec.Code, rec.Body.String())
+	}
+	var isRead, queued int
+	if err := fixture.db.Read().QueryRowContext(t.Context(), `SELECT is_read FROM message_folder_state WHERE message_id = ? AND folder_id = 'victim-inbox'`, fixture.victimMessageID).Scan(&isRead); err != nil || isRead != 1 {
+		t.Fatalf("victim is_read = %d, %v; want 1", isRead, err)
+	}
+	if err := fixture.db.Read().QueryRowContext(t.Context(), `SELECT COUNT(*) FROM message_mutations WHERE message_id = ? AND kind = 'read' AND target_value = 1`, fixture.victimMessageID).Scan(&queued); err != nil || queued != 1 {
+		t.Fatalf("queued read mutations = %d, %v; want 1", queued, err)
+	}
+
+	starred := executeMessageActionRequest(t, messageActionRequest{
+		method:     http.MethodPost,
+		path:       "/api/folders/starred/mark-read",
+		pathValues: map[string]string{"id": "starred"},
+		handle:     fixture.handler.handleMarkFolderRead,
+	}, ownerRequest)
+	if starred.Code != http.StatusBadRequest {
+		t.Fatalf("Starred status = %d body = %q, want 400", starred.Code, starred.Body.String())
 	}
 }
 
