@@ -298,7 +298,9 @@ document.addEventListener("DOMContentLoaded", function () {
             buttons[i].setAttribute("aria-pressed", active ? "true" : "false")
           }
           var indicator = group.querySelector("[data-contact-list-view-indicator]")
-          if (indicator) indicator.style.transform = mode === "table" ? "translateX(calc(100% + 2px))" : "translateX(0)"
+          // As contactViewIndicatorStyle places it: the toggle's padding already
+          // keeps it clear of the border, unlike mail's unpadded one.
+          if (indicator) indicator.style.transform = mode === "table" ? "translateX(100%)" : "translateX(0)"
         }
         var list = currentList()
         if (list) list.switchViewMode(mode).catch(function () {})
