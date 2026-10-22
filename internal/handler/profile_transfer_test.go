@@ -647,13 +647,27 @@ func TestProfileJMAPAccountRoundTrip(t *testing.T) {
 	if err != nil || cfg.Provider != "jmap" || cfg.AuthMethod != "plain" || cfg.JMAPSessionURL != sessionURL || cfg.Username != "sam@jmap.example.test" {
 		t.Fatalf("imported account config = %+v, %v", cfg, err)
 	}
+	if push, err := target.db.ProviderPushEnabled(ctx, id); err != nil || !push {
+		t.Fatalf("imported account notifications = %t, %v", push, err)
+	}
 	if calendar, err := target.accountStore.GetCalendarSyncConfig(ctx, "default", id); err != nil || calendar.CalDAVBaseURL != "https://jmap.example.test/dav/cal/" {
 		t.Fatalf("imported CalDAV = %+v, %v", calendar, err)
 	}
 
-	// Replacing the account from the profile keeps it a JMAP account.
-	if err := target.replaceProfileAccount(ctx, "default", id, file.Accounts[0], nil); err != nil {
+	// Replacing the account from the profile keeps it a JMAP account, and
+	// brings the choice of scheduled checks.
+	if err := source.db.SetProviderPushEnabled(ctx, "default", created.ID, false); err != nil {
+		t.Fatal(err)
+	}
+	checks, err := parseProfile(exportProfileForTest(t, source, false))
+	if err != nil || !checks.Accounts[0].ScheduledChecks {
+		t.Fatalf("exported scheduled checks = %+v, %v", checks.Accounts, err)
+	}
+	if err := target.replaceProfileAccount(ctx, "default", id, checks.Accounts[0], nil); err != nil {
 		t.Fatalf("replace: %v", err)
+	}
+	if push, err := target.db.ProviderPushEnabled(ctx, id); err != nil || push {
+		t.Fatalf("replaced account notifications = %t, %v", push, err)
 	}
 	if cfg, err := target.accountStore.GetConfig(ctx, id); err != nil || cfg.Provider != "jmap" || cfg.JMAPSessionURL != sessionURL {
 		t.Fatalf("replaced account config = %+v, %v", cfg, err)

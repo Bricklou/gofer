@@ -29,6 +29,7 @@ CREATE TABLE IF NOT EXISTS accounts (
     encrypted_smtp_password BLOB,
     jmap_session_url TEXT NOT NULL DEFAULT '',
     email_sync_enabled INTEGER NOT NULL DEFAULT 1,
+    provider_push_enabled INTEGER NOT NULL DEFAULT 1 CHECK (provider_push_enabled IN (0, 1)),
     email_sync_error TEXT NOT NULL DEFAULT '',
     email_sync_error_at DATETIME,
     is_deleting INTEGER NOT NULL DEFAULT 0,
@@ -1676,4 +1677,4 @@ CREATE TABLE IF NOT EXISTS calendar_invitation_messages (
 );
 
 -- Schema version marker for fresh installs
-INSERT OR REPLACE INTO schema_version (version) VALUES (121);
+INSERT OR REPLACE INTO schema_version (version) VALUES (122);
